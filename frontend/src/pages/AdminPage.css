@@ -1,0 +1,21 @@
+.admin-header {
+  margin-bottom: 24px;
+}
+.admin-header h1 { font-size: 1.75rem; font-weight: 700; }
+.admin-header p { color: var(--text-secondary); margin-top: 4px; }
+
+.admin-user-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.admin-username {
+  display: block;
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+.admin-handle {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}

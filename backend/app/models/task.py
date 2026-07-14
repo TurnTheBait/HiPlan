@@ -1,0 +1,39 @@
+import enum
+from sqlalchemy import Column, String, Date, Integer, Float, Enum, ForeignKey
+from sqlalchemy.orm import relationship
+from app.models.base import Base, TimestampMixin, uuid_pk, uuid_fk
+
+
+class TaskType(str, enum.Enum):
+    TASK = "task"
+    MILESTONE = "milestone"
+    PROJECT = "project"
+
+
+class TaskPriority(str, enum.Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class Task(Base, TimestampMixin):
+    __tablename__ = "tasks"
+
+    id = uuid_pk()
+    project_id = Column(uuid_fk(), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    parent_id = Column(uuid_fk(), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    text = Column(String(500), nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=True)
+    duration = Column(Integer, nullable=False, default=1)
+    progress = Column(Float, default=0.0, nullable=False)
+    type = Column(Enum(TaskType), default=TaskType.TASK, nullable=False)
+    priority = Column(Enum(TaskPriority), default=TaskPriority.MEDIUM, nullable=False)
+    assigned_to = Column(uuid_fk(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    sort_order = Column(Integer, default=0, nullable=False)
+    open = Column(Integer, default=1, nullable=False)  # DHTMLX: 1=expanded, 0=collapsed
+
+    project = relationship("Project", back_populates="tasks")
+    parent = relationship("Task", remote_side="Task.id")
+    assignee = relationship("User", foreign_keys=[assigned_to])

@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ganttflow_db
+    restart: always
+    environment:
+      POSTGRES_USER: ganttflow
+      POSTGRES_PASSWORD: ganttflow_secret_password
+      POSTGRES_DB: ganttflow_prod
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ganttflow -d ganttflow_prod"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ganttflow_backend
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PROJECT_NAME: "GanttFlow Enterprise"
+      SECRET_KEY: "super-secret-jwt-key-change-this-in-production-deploy"
+      DATABASE_URL: "postgresql+asyncpg://ganttflow:ganttflow_secret_password@db:5432/ganttflow_prod"
+      CORS_ORIGINS: "[\"http://localhost\", \"http://localhost:80\", \"http://127.0.0.1\"]"
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ganttflow_frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:

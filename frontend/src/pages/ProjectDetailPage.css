@@ -1,0 +1,50 @@
+.project-detail {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--header-height) - 56px);
+}
+
+.project-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.project-detail-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.project-detail-info h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.project-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.zoom-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.export-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.gantt-wrapper {
+  flex: 1;
+  min-height: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
