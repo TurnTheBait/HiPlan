@@ -1,103 +1,174 @@
 .gantt-container {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   height: 100%;
-  min-height: 500px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-default);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-md);
 }
 
-/* Override tema DHTMLX Gantt per dark mode */
+/* Override generale tema DHTMLX Gantt per dark mode elegante */
 .gantt_container {
+  width: 100% !important;
+  max-width: 100% !important;
   background: var(--bg-secondary) !important;
   border: none !important;
   font-family: 'Inter', sans-serif !important;
 }
 
-.gantt_grid {
+.gantt_grid,
+.gantt_task,
+.gantt_data_area {
   background: var(--bg-secondary) !important;
+}
+
+/* ==========================================
+   TESTATA DELLA GRIGLIA A SINISTRA & TIMELINE
+   ========================================== */
+.gantt_grid_scale,
+.gantt_grid_head_cell,
+.gantt_scale_line,
+.gantt_scale_row,
+.gantt_scale_cell {
+  background: var(--bg-tertiary) !important;
+  color: #cbd5e1 !important;
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.03em !important;
+  border-bottom: 1px solid var(--border-default) !important;
+  border-right: 1px solid var(--border-subtle) !important;
 }
 
 .gantt_grid_head_cell {
-  background: var(--bg-tertiary) !important;
-  color: var(--text-muted) !important;
-  font-size: 0.75rem !important;
-  font-weight: 600 !important;
   text-transform: uppercase !important;
-  letter-spacing: 0.04em !important;
-  border-bottom: 1px solid var(--border-subtle) !important;
-  border-right: 1px solid var(--border-subtle) !important;
 }
 
+.gantt_scale_cell {
+  text-align: center !important;
+}
+
+/* ==========================================
+   RIGHE DELLA GRIGLIA A SINISTRA (ATTIVITÀ)
+   ========================================== */
+.gantt_row,
 .gantt_grid_data .gantt_cell {
+  background: var(--bg-secondary) !important;
   color: var(--text-primary) !important;
-  font-size: 0.8125rem !important;
+  font-size: 0.85rem !important;
   border-bottom: 1px solid var(--border-subtle) !important;
   border-right: 1px solid var(--border-subtle) !important;
+  line-height: 38px !important;
 }
 
-.gantt_row {
-  background: var(--bg-secondary) !important;
-  border-bottom: 1px solid var(--border-subtle) !important;
-}
-.gantt_row:hover, .gantt_row.odd:hover {
-  background: var(--bg-hover) !important;
-}
-.gantt_row.odd {
+.gantt_row.odd,
+.gantt_row.odd .gantt_cell {
   background: var(--bg-card) !important;
 }
-.gantt_row.gantt_selected, .gantt_row.odd.gantt_selected {
+
+.gantt_row:hover,
+.gantt_row.odd:hover,
+.gantt_row:hover .gantt_cell,
+.gantt_row.odd:hover .gantt_cell {
+  background: var(--bg-hover) !important;
+}
+
+.gantt_row.gantt_selected,
+.gantt_row.odd.gantt_selected,
+.gantt_row.gantt_selected .gantt_cell,
+.gantt_row.odd.gantt_selected .gantt_cell {
   background: var(--accent-glow) !important;
 }
 
-/* Timeline header */
-.gantt_scale_cell {
-  background: var(--bg-tertiary) !important;
+/* Rientro albero e frecce */
+.gantt_tree_icon {
+  background-image: none !important;
   color: var(--text-secondary) !important;
-  font-size: 0.75rem !important;
-  border-right: 1px solid var(--border-subtle) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* ==========================================
+   RIGHE DELLA TIMELINE A DESTRA (BARRE)
+   ========================================== */
+.gantt_task_row,
+.gantt_task_bg {
+  background: var(--bg-secondary) !important;
   border-bottom: 1px solid var(--border-subtle) !important;
 }
 
-/* Task bars */
+.gantt_task_row.odd {
+  background: var(--bg-card) !important;
+}
+
+.gantt_task_row:hover,
+.gantt_task_row.odd:hover {
+  background: var(--bg-hover) !important;
+}
+
+.gantt_task_row.gantt_selected,
+.gantt_task_row.odd.gantt_selected {
+  background: var(--accent-glow) !important;
+}
+
+/* Celle verticali nella timeline dei giorni */
+.gantt_task_cell {
+  border-right: 1px solid var(--border-subtle) !important;
+  background: transparent !important;
+}
+
+/* ==========================================
+   BARRE DELLE ATTIVITÀ (TASKS & MILESTONES)
+   ========================================== */
 .gantt_task_line {
   border-radius: 6px !important;
   border: none !important;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+  height: 24px !important;
+  line-height: 24px !important;
+  background: linear-gradient(135deg, var(--accent-600), var(--accent-400)) !important;
 }
 
 .gantt_task_line .gantt_task_progress {
   border-radius: 6px !important;
-  opacity: 0.7;
+  background: rgba(255, 255, 255, 0.22) !important;
 }
 
 .gantt_task_line .gantt_task_content {
-  font-size: 0.75rem !important;
-  font-weight: 500 !important;
-  color: white !important;
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  color: #ffffff !important;
+  padding: 0 8px !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
-/* Priorità colori */
+/* Priorità colori personalizzati */
 .gantt-priority-low .gantt_task_line,
 .gantt_task_line.gantt-priority-low {
   background: linear-gradient(135deg, #059669, #10b981) !important;
 }
+
 .gantt-priority-medium .gantt_task_line,
 .gantt_task_line.gantt-priority-medium {
   background: linear-gradient(135deg, #2563eb, #3b82f6) !important;
 }
+
 .gantt-priority-high .gantt_task_line,
 .gantt_task_line.gantt-priority-high {
   background: linear-gradient(135deg, #d97706, #f59e0b) !important;
 }
+
 .gantt-priority-critical .gantt_task_line,
 .gantt_task_line.gantt-priority-critical {
   background: linear-gradient(135deg, #dc2626, #ef4444) !important;
-}
-
-/* Default task color */
-.gantt_task_line {
-  background: linear-gradient(135deg, var(--accent-600), var(--accent-400)) !important;
 }
 
 .gantt_task_line.gantt_milestone {
@@ -105,13 +176,17 @@
   border: 2px solid var(--accent-200) !important;
 }
 
-/* Links */
+/* ==========================================
+   DIPENDENZE (LINKS) & SCROLLBAR
+   ========================================== */
 .gantt_task_link .gantt_line_wrapper div {
-  background-color: var(--accent-400) !important;
+  background-color: #60a5fa !important;
 }
-.gantt_link_arrow_right, .gantt_link_arrow_left {
-  border-left-color: var(--accent-400) !important;
-  border-right-color: var(--accent-400) !important;
+
+.gantt_link_arrow_right,
+.gantt_link_arrow_left {
+  border-left-color: #60a5fa !important;
+  border-right-color: #60a5fa !important;
 }
 
 /* Splitter */
@@ -121,47 +196,38 @@
 }
 
 /* Scrollbar */
-.gantt_hor_scroll, .gantt_ver_scroll {
+.gantt_hor_scroll,
+.gantt_ver_scroll {
   background: var(--bg-tertiary) !important;
 }
 
 /* Add button */
 .gantt_add {
-  opacity: 0.5;
+  opacity: 0.7;
   transition: opacity 0.2s;
+  color: #60a5fa !important;
+  font-weight: bold;
 }
 .gantt_add:hover {
   opacity: 1;
 }
 
-/* Tooltip */
+/* Tooltip elegante */
 .gantt_tooltip {
   background: var(--bg-card) !important;
   color: var(--text-primary) !important;
   border: 1px solid var(--border-default) !important;
   border-radius: var(--radius-md) !important;
-  padding: 10px 14px !important;
-  font-size: 0.8125rem !important;
+  padding: 12px 16px !important;
+  font-size: 0.85rem !important;
   box-shadow: var(--shadow-lg) !important;
   font-family: 'Inter', sans-serif !important;
+  z-index: 10000 !important;
 }
 
-/* Task area background */
-.gantt_task {
-  background: var(--bg-secondary) !important;
-}
-.gantt_task_bg {
-  background: transparent !important;
-}
-.gantt_task_row {
-  border-bottom: 1px solid var(--border-subtle) !important;
-}
-.gantt_task_row.odd {
-  background: rgba(255, 255, 255, 0.01) !important;
-}
-
-/* Today marker */
+/* Linea del marker di oggi */
 .gantt_marker {
-  background: var(--accent-500) !important;
-  opacity: 0.6;
+  background: #3b82f6 !important;
+  opacity: 0.4;
 }
+

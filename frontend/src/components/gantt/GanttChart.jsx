@@ -25,6 +25,8 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.config.scale_height = 50;
     gantt.config.min_column_width = 40;
     gantt.config.fit_tasks = true;
+    gantt.config.autosize = false;
+    gantt.config.autoscroll = true;
     gantt.config.auto_scheduling = false;
     gantt.config.drag_links = true;
     gantt.config.drag_progress = true;
@@ -105,7 +107,13 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       handleLinkDelete(id);
     });
 
+    const handleResize = () => {
+      if (initialized.current) gantt.setSizes();
+    };
+    window.addEventListener('resize', handleResize);
+
     return () => {
+      window.removeEventListener('resize', handleResize);
       gantt.clearAll();
       initialized.current = false;
     };

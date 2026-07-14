@@ -92,7 +92,7 @@ export default function ProjectsPage() {
   }
 
   const filtered = filter === 'all' ? projects : projects.filter((p) => p.status === filter);
-  const canCreate = user?.role === 'admin' || user?.role === 'pm';
+  const canCreate = user?.role === 'admin' || user?.role === 'editor';
 
   if (loading) return <div className="loading-screen"><div className="spinner" /></div>;
 

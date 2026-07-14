@@ -21,7 +21,7 @@ async def list_projects(
 async def create_project(
     data: ProjectCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.PM)),
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.EDITOR)),
 ):
     project = await project_service.create_project(db, data, current_user)
     return ProjectOut(
@@ -76,7 +76,7 @@ async def backup_json(
 async def restore_json(
     payload: dict,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.PM)),
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.EDITOR)),
 ):
     from app.models.project import Project
     from app.models.task import Task

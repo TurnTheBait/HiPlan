@@ -78,7 +78,7 @@ export default function AdminPage() {
                     style={{ padding: '6px 10px', fontSize: '0.8125rem', minWidth: 100 }}
                   >
                     <option value="admin">Admin</option>
-                    <option value="pm">PM</option>
+                    <option value="editor">Editor</option>
                     <option value="viewer">Viewer</option>
                   </select>
                 </td>

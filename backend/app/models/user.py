@@ -5,7 +5,7 @@ from app.models.base import Base, TimestampMixin, uuid_pk
 
 class UserRole(str, enum.Enum):
     ADMIN = "admin"
-    PM = "pm"
+    EDITOR = "editor"
     VIEWER = "viewer"
 
 

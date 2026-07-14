@@ -373,33 +373,6 @@ export default function ProjectDetailPage() {
           <h1>{project?.name}</h1>
           <span className={`badge badge-${project?.status}`}>{project?.status}</span>
         </div>
-
-        <div className="project-detail-actions">
-          <button className="btn btn-primary btn-sm" onClick={openNewTaskModal}>
-            + Nuova Fase Lavorazione
-          </button>
-          {activeTab === 'gantt' && (
-            <div className="zoom-controls">
-              {['day', 'week', 'month', 'quarter'].map((z) => (
-                <button
-                  key={z}
-                  className={`filter-chip ${viewMode === z ? 'active' : ''}`}
-                  onClick={() => handleZoom(z)}
-                >
-                  {z === 'day' ? 'Giorno' : z === 'week' ? 'Settimana' : z === 'month' ? 'Mese' : 'Trimestre'}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="export-buttons">
-            <button className="btn btn-secondary btn-sm" onClick={() => handleExport('pdf')}>
-              📄 PDF
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => handleExport('excel')}>
-              📊 Excel
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* 4 Tabs Interattive Ufficio Tecnico */}
@@ -433,9 +406,42 @@ export default function ProjectDetailPage() {
         </button>
       </div>
 
+      {/* TOOLBAR DI AZIONE POSIZIONATA SOTTO ALLE TABS */}
+      <div className="project-toolbar">
+        <div className="toolbar-left">
+          <button className="btn btn-primary btn-sm" onClick={openNewTaskModal}>
+            + Nuova Fase
+          </button>
+        </div>
+
+        <div className="toolbar-right">
+          {activeTab === 'gantt' && (
+            <div className="zoom-controls">
+              {['day', 'week', 'month', 'quarter'].map((z) => (
+                <button
+                  key={z}
+                  className={`zoom-chip ${viewMode === z ? 'active' : ''}`}
+                  onClick={() => handleZoom(z)}
+                >
+                  {z === 'day' ? 'Giorno' : z === 'week' ? 'Settimana' : z === 'month' ? 'Mese' : 'Trimestre'}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="export-buttons">
+            <button className="btn btn-secondary btn-sm" onClick={() => handleExport('pdf')} title="Esporta PDF">
+              📄 PDF
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => handleExport('excel')} title="Esporta Excel">
+              📊 Excel
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* TAB 1: GANTT */}
       {activeTab === 'gantt' && (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, width: '100%', maxWidth: '100%' }}>
           <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
             <span>💡 Clicca e trascina per modificare le fasi. Per registrare le ore effettive di lavoro o consuntivare per singolo addetto, passa alla tab <strong>Consuntivazione Ore</strong> o clicca sul pulsante <code>+ Nuova Fase</code> per aggiungere un task normato.</span>
           </div>
