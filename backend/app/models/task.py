@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, String, Date, Integer, Float, Enum, ForeignKey
+from sqlalchemy import Column, String, Date, Integer, Float, Enum, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from app.models.base import Base, TimestampMixin, uuid_pk, uuid_fk
 
@@ -33,6 +33,9 @@ class Task(Base, TimestampMixin):
     assigned_to = Column(uuid_fk(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     sort_order = Column(Integer, default=0, nullable=False)
     open = Column(Integer, default=1, nullable=False)  # DHTMLX: 1=expanded, 0=collapsed
+    planned_hours = Column(Float, default=8.0, nullable=False)
+    workers = Column(Text, nullable=True, default="[]")  # JSON list di addetti (es. Alessio, Edoardo)
+    actual_hours = Column(Text, nullable=True, default="{}")  # JSON dict consuntivazione per data e addetto
 
     project = relationship("Project", back_populates="tasks")
     parent = relationship("Task", remote_side="Task.id")

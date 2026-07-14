@@ -19,6 +19,9 @@ class TaskCreate(BaseModel):
     assigned_to: Optional[str] = None
     sort_order: int = 0
     open: int = 1
+    planned_hours: float = 8.0
+    workers: List[str] = []
+    actual_hours: dict = {}
 
 
 class TaskUpdate(BaseModel):
@@ -33,10 +36,13 @@ class TaskUpdate(BaseModel):
     assigned_to: Optional[str] = None
     sort_order: Optional[int] = None
     open: Optional[int] = None
+    planned_hours: Optional[float] = None
+    workers: Optional[List[str]] = None
+    actual_hours: Optional[dict] = None
 
 
 class TaskOut(BaseModel):
-    """Formato compatibile DHTMLX Gantt."""
+    """Formato compatibile DHTMLX Gantt + Ufficio Tecnico."""
     id: str
     text: str
     start_date: str  # DHTMLX vuole stringhe "YYYY-MM-DD HH:MM"
@@ -49,6 +55,9 @@ class TaskOut(BaseModel):
     assigned_to: Optional[str] = None
     sort_order: int
     open: int
+    planned_hours: float = 8.0
+    workers: List[str] = []
+    actual_hours: dict = {}
 
     class Config:
         from_attributes = True

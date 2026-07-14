@@ -21,6 +21,9 @@ class Project(Base, TimestampMixin):
     __tablename__ = "projects"
 
     id = uuid_pk()
+    code = Column(String(50), nullable=True)
+    client = Column(String(200), nullable=True)
+    color = Column(String(30), nullable=True, default="#185FA5")
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
     start_date = Column(Date, nullable=True)

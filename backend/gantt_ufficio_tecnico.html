@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gantt Ufficio Tecnico</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --bg:#ffffff;--bg2:#f5f4f0;--bg-info:#e6f1fb;--bg-ok:#eaf3de;--bg-warn:#faeeda;--bg-err:#fcebeb;
+  --tx:#1a1917;--tx2:#57554e;--tx3:#888780;--tx-info:#185fa5;--tx-ok:#3b6d11;--tx-warn:#854f0b;--tx-err:#a32d2d;
+  --bd:#dddbd4;--bd-info:#a8c8ef;--bd-ok:#b8d98a;--bd-warn:#e8c880;--bd-err:#e8aaaa;
+  --r:6px;--rl:10px;
+}
+body{font-family:var(--font);font-size:13px;background:#e8e5de;min-height:100vh;padding:16px}
+.wrap{background:var(--bg);border-radius:14px;box-shadow:0 2px 20px rgba(0,0,0,.12);overflow:hidden;display:grid;grid-template-columns:320px 1fr;min-height:calc(100vh - 32px)}
+.sidebar{border-right:0.5px solid var(--bd);background:var(--bg2);display:flex;flex-direction:column;overflow-y:auto;max-height:calc(100vh - 32px)}
+.sb-head{padding:.75rem 1rem .6rem;border-bottom:0.5px solid var(--bd)}
+.sb-head h1{font-size:14px;font-weight:600;color:var(--tx);display:flex;align-items:center;gap:6px}
+.sb-head p{font-size:11px;color:var(--tx3);margin-top:2px}
+.save-bar{display:flex;gap:6px;padding:.6rem 1rem;border-bottom:0.5px solid var(--bd);background:var(--bg2)}
+.si{padding:.75rem 1rem 1.5rem;display:flex;flex-direction:column;gap:.75rem}
+.main{padding:1rem 1.25rem;overflow:auto}
+.stit{font-size:10px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);margin-bottom:.4rem}
+.card{background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--rl);padding:.85rem 1rem}
+label{font-size:12px;color:var(--tx2);display:block;margin-bottom:3px;margin-top:.5rem}
+label:first-child{margin-top:0}
+input,select,textarea{width:100%;font-size:12px;border:0.5px solid var(--bd);border-radius:var(--r);padding:5px 8px;background:var(--bg);color:var(--tx);margin-bottom:0}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--bd-info)}
+select[multiple]{height:90px}
+.r2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btn{padding:7px 12px;border-radius:var(--r);font-size:12px;font-weight:500;cursor:pointer;width:100%;margin-top:.5rem;display:flex;align-items:center;justify-content:center;gap:5px;transition:opacity .15s}
+.btn:hover{opacity:.82}
+.b-blue{background:var(--bg-info);color:var(--tx-info);border:0.5px solid var(--bd-info)}
+.b-green{background:var(--bg-ok);color:var(--tx-ok);border:0.5px solid var(--bd-ok)}
+.b-save{background:#185fa5;color:#fff;border:0.5px solid #185fa5;flex:1;margin-top:0;padding:6px 10px;font-size:11px}
+.b-load{background:var(--bg2);color:var(--tx2);border:0.5px solid var(--bd);flex:1;margin-top:0;padding:6px 10px;font-size:11px}
+.btn-del{background:none;border:none;color:var(--tx-err);cursor:pointer;padding:2px 5px;border-radius:4px;font-size:15px;line-height:1}
+.btn-del:hover{background:var(--bg-err)}
+.btn-edit{background:none;border:0.5px solid var(--bd);color:var(--tx2);cursor:pointer;padding:2px 6px;border-radius:4px;font-size:12px;line-height:1.4}
+.btn-edit:hover{background:var(--bg2)}
+.btn-sm{padding:3px 7px;font-size:11px;border-radius:var(--r);cursor:pointer;border:0.5px solid var(--bd);background:none;color:var(--tx2)}
+.btn-sm:hover{background:var(--bg2)}
+.tabs{display:flex;gap:4px;margin-bottom:1rem;border-bottom:0.5px solid var(--bd);padding-bottom:.65rem}
+.tab{padding:5px 12px;font-size:12px;font-weight:500;border-radius:var(--r);cursor:pointer;border:0.5px solid transparent;color:var(--tx2);background:none;transition:all .15s}
+.tab.active{background:var(--bg-info);color:var(--tx-info);border-color:var(--bd-info)}
+.tab-alert-on{background:var(--bg-err)!important;color:var(--tx-err)!important;border-color:var(--bd-err)!important}
+.view{display:none}.view.active{display:block}
+.empty{color:var(--tx3);text-align:center;padding:3rem 1rem;font-size:13px}
+.badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:2px 7px;border-radius:20px;font-weight:500}
+.binfo{background:var(--bg-info);color:var(--tx-info)}
+.berr{background:var(--bg-err);color:var(--tx-err)}
+.bwarn{background:var(--bg-warn);color:var(--tx-warn)}
+.bok{background:var(--bg-ok);color:var(--tx-ok)}
+.alert-box{border-left:3px solid;border-radius:0 var(--rl) var(--rl) 0;padding:.5rem .75rem;margin-bottom:.5rem;font-size:12px;display:flex;align-items:flex-start;gap:8px}
+.a-red{border-color:#E24B4A;background:var(--bg-err);color:var(--tx-err)}
+.a-amber{border-color:#EF9F27;background:var(--bg-warn);color:var(--tx-warn)}
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:.5rem 0}
+.stat{background:var(--bg2);border-radius:var(--r);padding:.6rem .5rem;text-align:center}
+.stat-v{font-size:18px;font-weight:500}
+.stat-l{font-size:10px;color:var(--tx3);margin-top:1px}
+.bar-bg{flex:1;height:6px;background:var(--bg2);border-radius:3px;overflow:hidden;min-width:60px}
+.bar-fill{height:100%;border-radius:3px}
+.toast{position:fixed;bottom:24px;right:24px;background:#1a1917;color:#fff;padding:10px 18px;border-radius:var(--rl);font-size:12px;font-weight:500;opacity:0;transition:opacity .3s;z-index:200;pointer-events:none;display:flex;align-items:center;gap:8px}
+.toast.show{opacity:1}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:var(--bg);border:0.5px solid var(--bd);border-radius:var(--rl);padding:1.25rem;width:640px;max-width:96vw;max-height:88vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.18)}
+.modal-sm{width:480px}
+.mtit{font-size:14px;font-weight:500;margin-bottom:.75rem;display:flex;justify-content:space-between;align-items:center}
+.day-table{width:100%;border-collapse:collapse;font-size:12px}
+.day-table th{font-size:10px;font-weight:500;color:var(--tx3);padding:4px 6px;text-align:center;border-bottom:0.5px solid var(--bd)}
+.day-table th:first-child{text-align:left}
+.day-table td{padding:3px 4px;text-align:center;border-bottom:0.5px solid var(--bd)}
+.day-table td:first-child{text-align:left;font-size:11px;padding-left:2px}
+.day-table input[type=number]{width:46px;text-align:center;font-size:11px;padding:2px;border:0.5px solid var(--bd);border-radius:4px}
+.oc{color:#E24B4A;font-weight:500}
+.wc{color:#EF9F27;font-weight:500}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sb-head">
+    <h1><i class="ti ti-chart-gantt"></i> Gantt Ufficio Tecnico</h1>
+    <p>Gestione commesse e fasi di lavorazione</p>
+  </div>
+
+  <!-- BARRA SALVA / CARICA -->
+  <div class="save-bar">
+    <button class="btn b-save" onclick="salvaJSON()"><i class="ti ti-device-floppy"></i> Salva dati</button>
+    <button class="btn b-load" onclick="document.getElementById('file-input').click()"><i class="ti ti-upload"></i> Carica dati</button>
+    <input type="file" id="file-input" accept=".json" style="display:none" onchange="caricaJSON(event)">
+  </div>
+
+  <div class="si">
+
+  <div>
+  <div class="stit">Nuova commessa</div>
+  <div class="card">
+    <label>Codice commessa</label><input id="cod" placeholder="es. UT-2026-001">
+    <label>Cliente</label><input id="cli" placeholder="Nome cliente">
+    <label>Data inizio</label><input type="date" id="dstart">
+    <label>Note</label><textarea id="note" rows="2" placeholder="Descrizione..."></textarea>
+    <button class="btn b-blue" onclick="addCommessa()"><i class="ti ti-plus"></i> Aggiungi commessa</button>
+  </div>
+  </div>
+
+  <div>
+  <div class="stit">Aggiungi fase</div>
+  <div class="card">
+    <label>Commessa</label>
+    <select id="sel-com"><option value="">— seleziona —</option></select>
+    <label>Fase</label>
+    <select id="sel-fase">
+      <option>Layout - Invio al cliente per approvazione</option>
+      <option>Approvazione cliente</option>
+      <option>Utenze elettriche</option>
+      <option>Calcolo strutturale</option>
+      <option>Progettazione esecutiva - Messa in tavola - Codifica - Distinta base</option>
+      <option>Targhette</option>
+      <option>Documentazione tecnica (Manuali)</option>
+      <option>Certificati</option>
+      <option>Certificati - Approvazione Responsabile</option>
+      <option>Compilazione modulo check list</option>
+      <option>Inserimento costi in Higest</option>
+      <option value="__c">— Personalizzata —</option>
+    </select>
+    <input id="fase-custom" placeholder="Nome fase" style="display:none;margin-top:4px">
+    <label>Addetti</label>
+    <select id="sel-add" multiple>
+      <option>Alessio</option><option>Edoardo</option><option>Ermal</option>
+      <option>Luca</option><option>Marco</option><option>Michelangelo</option><option>Cliente</option>
+    </select>
+    <div class="r2" style="margin-top:.4rem">
+      <div><label>Data inizio fase</label><input type="date" id="f-start"></div>
+      <div><label>Data fine fase</label><input type="date" id="f-end"></div>
+    </div>
+    <label>Ore previste totali</label>
+    <input type="number" id="ore-prev" value="8" min="1">
+    <button class="btn b-green" onclick="addFase()"><i class="ti ti-calendar-plus"></i> Aggiungi fase</button>
+  </div>
+  </div>
+
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('gantt',this)"><i class="ti ti-chart-gantt"></i> Gantt</button>
+    <button class="tab" onclick="showTab('commesse',this)"><i class="ti ti-briefcase"></i> Commesse</button>
+    <button class="tab" onclick="showTab('ore',this)"><i class="ti ti-clock"></i> Ore</button>
+    <button class="tab" id="tab-alert" onclick="showTab('alert',this)"><i class="ti ti-alert-triangle"></i> Ritardi</button>
+  </div>
+  <div id="view-gantt" class="view active"><div id="g-cont"><div class="empty"><i class="ti ti-chart-gantt" style="font-size:32px;display:block;margin-bottom:.5rem"></i>Nessuna commessa inserita.<br><small style="margin-top:.4rem;display:block;font-size:11px">Aggiungi una commessa oppure carica un file JSON salvato in precedenza.</small></div></div></div>
+  <div id="view-commesse" class="view"><div id="c-cont"><div class="empty">Nessuna commessa inserita.</div></div></div>
+  <div id="view-ore" class="view"><div id="o-cont"><div class="empty">Inserisci fasi per registrare le ore.</div></div></div>
+  <div id="view-alert" class="view"><div id="a-cont"><div class="empty"><i class="ti ti-check" style="font-size:32px;display:block;margin-bottom:.5rem;color:#3b6d11"></i>Nessun ritardo rilevato.</div></div></div>
+</div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- MODAL ORE -->
+<div class="modal-bg" id="modal-ore">
+<div class="modal">
+  <div class="mtit"><span id="mo-title">Ore effettive</span><button class="btn-del" onclick="closeModal('modal-ore')"><i class="ti ti-x"></i></button></div>
+  <p id="mo-sub" style="font-size:11px;color:var(--tx3);margin-bottom:.5rem"></p>
+  <p style="font-size:11px;color:var(--tx2);margin-bottom:.75rem;padding:.4rem .6rem;background:var(--bg2);border-radius:var(--r)"><i class="ti ti-info-circle"></i> <strong>Attenzione</strong> se ore effettive 50–99% di quelle previste. <strong>Ritardo</strong> se &lt;50% o giorno passato senza ore inserite.</p>
+  <div id="mo-body"></div>
+  <button class="btn b-blue" onclick="saveOre()" style="margin-top:.75rem"><i class="ti ti-device-floppy"></i> Salva e chiudi</button>
+</div>
+</div>
+
+<!-- MODAL MODIFICA COMMESSA -->
+<div class="modal-bg" id="modal-com">
+<div class="modal modal-sm">
+  <div class="mtit"><span>Modifica commessa</span><button class="btn-del" onclick="closeModal('modal-com')"><i class="ti ti-x"></i></button></div>
+  <label>Codice commessa</label><input id="ec-cod">
+  <label>Cliente</label><input id="ec-cli">
+  <label>Data inizio</label><input type="date" id="ec-ds">
+  <label>Note</label><textarea id="ec-note" rows="2"></textarea>
+  <button class="btn b-blue" onclick="saveCommessa()" style="margin-top:.75rem"><i class="ti ti-device-floppy"></i> Salva modifiche</button>
+</div>
+</div>
+
+<!-- MODAL MODIFICA FASE -->
+<div class="modal-bg" id="modal-fase">
+<div class="modal modal-sm">
+  <div class="mtit"><span>Modifica fase</span><button class="btn-del" onclick="closeModal('modal-fase')"><i class="ti ti-x"></i></button></div>
+  <label>Nome fase</label><input id="ef-nome">
+  <label>Addetti</label>
+  <select id="ef-add" multiple>
+    <option>Alessio</option><option>Edoardo</option><option>Ermal</option>
+    <option>Luca</option><option>Marco</option><option>Michelangelo</option><option>Cliente</option>
+  </select>
+  <div class="r2" style="margin-top:.4rem">
+    <div><label>Data inizio</label><input type="date" id="ef-start"></div>
+    <div><label>Data fine</label><input type="date" id="ef-end"></div>
+  </div>
+  <label>Ore previste totali</label>
+  <input type="number" id="ef-ore" min="1">
+  <button class="btn b-blue" onclick="saveFase()" style="margin-top:.75rem"><i class="ti ti-device-floppy"></i> Salva modifiche</button>
+</div>
+</div>
+
+<script>
+const COLORS=[{bar:'#185FA5'},{bar:'#0F6E56'},{bar:'#993C1D'},{bar:'#533FB7'},{bar:'#854F0B'},{bar:'#993556'},{bar:'#3B6D11'},{bar:'#5F5E5A'}];
+let commesse=[],nextId=1,oreCtx={},comCtx={},faseCtx={};
+
+document.getElementById('sel-fase').addEventListener('change',function(){
+  document.getElementById('fase-custom').style.display=this.value==='__c'?'block':'none';
+});
+
+/* ── TOAST ── */
+let toastTimer;
+function toast(msg,ico='ti-check'){
+  const el=document.getElementById('toast');
+  el.innerHTML=`<i class="ti ${ico}"></i> ${msg}`;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.classList.remove('show'),2800);
+}
+
+/* ── SALVA / CARICA JSON ── */
+function salvaJSON(){
+  if(!commesse.length){toast('Nessun dato da salvare','ti-alert-triangle');return;}
+  const payload={version:1,savedAt:new Date().toISOString(),nextId,commesse};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  const d=new Date();
+  a.download=`commesse_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.json`;
+  a.click();URL.revokeObjectURL(a.href);
+  toast('Dati salvati correttamente');
+}
+
+function caricaJSON(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      const payload=JSON.parse(ev.target.result);
+      if(!payload.commesse||!Array.isArray(payload.commesse))throw new Error('Formato non valido');
+      commesse=payload.commesse;
+      nextId=payload.nextId||commesse.reduce((m,c)=>Math.max(m,c.id),0)+1;
+      updateSel();renderAll();
+      toast(`Caricati ${commesse.length} commesse`);
+    }catch(err){
+      toast('Errore nel file JSON','ti-alert-circle');
+    }
+    e.target.value='';
+  };
+  reader.readAsText(file);
+}
+
+/* ── UTILS ── */
+function parseDate(s){const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);}
+function fmtDate(d){return d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'2-digit'});}
+function fmtShort(d){return d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit'});}
+function isWE(d){const w=d.getDay();return w===0||w===6;}
+function dateKey(d){return d.toISOString().slice(0,10);}
+function addDays(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r;}
+function allDays(s,e){const a=[];let d=new Date(s);while(d<=e){a.push(new Date(d));d=addDays(d,1);}return a;}
+function workDays(s,e){return allDays(s,e).filter(d=>!isWE(d)).length;}
+function showTab(id,btn){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('view-'+id).classList.add('active');btn.classList.add('active');
+}
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');}));
+
+/* ── STATO ── */
+function statoGiorno(eff,prev){
+  if(prev<=0)return'ok';if(eff>=prev)return'ok';if(eff>=prev*0.5)return'attenzione';return'ritardo';
+}
+function computeStato(f){
+  const oggi=new Date();oggi.setHours(0,0,0,0);
+  const fs=parseDate(f.start),fe=parseDate(f.end);
+  const wdays=workDays(fs,fe);if(wdays===0)return'ok';
+  const oreGg=f.orePrev/wdays;
+  const days=allDays(fs,fe).filter(d=>!isWE(d)&&d<=oggi&&d<=fe);
+  let worst='ok';
+  for(const d of days){
+    const k=dateKey(d);let eff=0;
+    f.addetti.forEach(a=>eff+=(f.oreEff[a]&&f.oreEff[a][k])||0);
+    const s=eff===0&&oreGg>0?'ritardo':statoGiorno(eff,oreGg);
+    if(s==='ritardo'){worst='ritardo';break;}if(s==='attenzione')worst='attenzione';
+  }
+  return worst;
+}
+function totEff(f){let t=0;f.addetti.forEach(a=>Object.values(f.oreEff[a]||{}).forEach(v=>t+=v));return t;}
+
+/* ── AGGIUNGI ── */
+function addCommessa(){
+  const cod=document.getElementById('cod').value.trim();
+  const cli=document.getElementById('cli').value.trim();
+  const ds=document.getElementById('dstart').value;
+  const note=document.getElementById('note').value.trim();
+  if(!cod||!cli||!ds){toast('Inserisci codice, cliente e data inizio','ti-alert-triangle');return;}
+  commesse.push({id:nextId++,cod,cli,ds,note,fasi:[],color:COLORS[commesse.length%COLORS.length]});
+  ['cod','cli','note'].forEach(x=>document.getElementById(x).value='');
+  updateSel();renderAll();
+  toast('Commessa aggiunta');
+}
+function addFase(){
+  const cid=parseInt(document.getElementById('sel-com').value);
+  if(!cid){toast('Seleziona una commessa','ti-alert-triangle');return;}
+  const c=commesse.find(x=>x.id===cid);
+  let fase=document.getElementById('sel-fase').value;
+  if(fase==='__c')fase=document.getElementById('fase-custom').value.trim();
+  if(!fase){toast('Inserisci il nome della fase','ti-alert-triangle');return;}
+  const addetti=Array.from(document.getElementById('sel-add').selectedOptions).map(o=>o.value);
+  if(!addetti.length){toast('Seleziona almeno un addetto','ti-alert-triangle');return;}
+  const fs=document.getElementById('f-start').value,fe=document.getElementById('f-end').value;
+  if(!fs||!fe||fs>fe){toast('Date non valide','ti-alert-triangle');return;}
+  const orePrev=parseInt(document.getElementById('ore-prev').value)||8;
+  const oreEff={};addetti.forEach(a=>oreEff[a]={});
+  c.fasi.push({fase,addetti,start:fs,end:fe,orePrev,oreEff});
+  renderAll();
+  toast('Fase aggiunta');
+}
+function updateSel(){
+  const sel=document.getElementById('sel-com');
+  sel.innerHTML='<option value="">— seleziona —</option>';
+  commesse.forEach(c=>{const o=document.createElement('option');o.value=c.id;o.textContent=c.cod+' – '+c.cli;sel.appendChild(o);});
+}
+
+/* ── MODIFICA COMMESSA ── */
+function editCommessa(id){
+  const c=commesse.find(x=>x.id===id);comCtx={id};
+  document.getElementById('ec-cod').value=c.cod;
+  document.getElementById('ec-cli').value=c.cli;
+  document.getElementById('ec-ds').value=c.ds;
+  document.getElementById('ec-note').value=c.note||'';
+  openModal('modal-com');
+}
+function saveCommessa(){
+  const c=commesse.find(x=>x.id===comCtx.id);
+  const cod=document.getElementById('ec-cod').value.trim();
+  const cli=document.getElementById('ec-cli').value.trim();
+  const ds=document.getElementById('ec-ds').value;
+  if(!cod||!cli||!ds){toast('Campi obbligatori mancanti','ti-alert-triangle');return;}
+  c.cod=cod;c.cli=cli;c.ds=ds;c.note=document.getElementById('ec-note').value.trim();
+  closeModal('modal-com');updateSel();renderAll();
+  toast('Commessa aggiornata');
+}
+
+/* ── MODIFICA FASE ── */
+function editFase(cid,fi){
+  const c=commesse.find(x=>x.id===cid);const f=c.fasi[fi];faseCtx={cid,fi};
+  document.getElementById('ef-nome').value=f.fase;
+  document.getElementById('ef-start').value=f.start;
+  document.getElementById('ef-end').value=f.end;
+  document.getElementById('ef-ore').value=f.orePrev;
+  const sel=document.getElementById('ef-add');
+  Array.from(sel.options).forEach(o=>o.selected=f.addetti.includes(o.value));
+  openModal('modal-fase');
+}
+function saveFase(){
+  const c=commesse.find(x=>x.id===faseCtx.cid);const f=c.fasi[faseCtx.fi];
+  const nome=document.getElementById('ef-nome').value.trim();
+  const fs=document.getElementById('ef-start').value,fe=document.getElementById('ef-end').value;
+  const addetti=Array.from(document.getElementById('ef-add').selectedOptions).map(o=>o.value);
+  if(!nome||!fs||!fe||fs>fe||!addetti.length){toast('Controlla i campi','ti-alert-triangle');return;}
+  const orePrev=parseInt(document.getElementById('ef-ore').value)||f.orePrev;
+  const newOreEff={};addetti.forEach(a=>newOreEff[a]=f.oreEff[a]||{});
+  f.fase=nome;f.start=fs;f.end=fe;f.orePrev=orePrev;f.addetti=addetti;f.oreEff=newOreEff;
+  closeModal('modal-fase');renderAll();
+  toast('Fase aggiornata');
+}
+
+/* ── ELIMINA ── */
+function delFase(cid,fi){if(!confirm('Eliminare questa fase?'))return;const c=commesse.find(x=>x.id===cid);if(c)c.fasi.splice(fi,1);renderAll();toast('Fase eliminata');}
+function delCommessa(id){if(!confirm('Eliminare la commessa e tutte le sue fasi?'))return;commesse=commesse.filter(x=>x.id!==id);updateSel();renderAll();toast('Commessa eliminata');}
+
+/* ── RENDER ── */
+function renderAll(){renderGantt();renderCommesse();renderOre();renderAlert();updateAlertTab();}
+
+function updateAlertTab(){
+  const has=commesse.some(c=>c.fasi.some(f=>computeStato(f)!=='ok'));
+  document.getElementById('tab-alert').classList.toggle('tab-alert-on',has);
+}
+
+function renderGantt(){
+  const el=document.getElementById('g-cont');
+  const allFasi=commesse.flatMap(c=>c.fasi);
+  if(!allFasi.length){el.innerHTML='<div class="empty"><i class="ti ti-chart-gantt" style="font-size:32px;display:block;margin-bottom:.5rem"></i>Nessuna commessa inserita.<br><small style="margin-top:.4rem;display:block;font-size:11px">Aggiungi una commessa oppure carica un file JSON.</small></div>';return;}
+  const minD=allFasi.reduce((m,f)=>f.start<m?f.start:m,allFasi[0].start);
+  const maxD=allFasi.reduce((m,f)=>f.end>m?f.end:m,allFasi[0].end);
+  const startD=parseDate(minD),endD=addDays(parseDate(maxD),4);
+  const days=allDays(startD,endD);
+  const DW=32,oggi=new Date();oggi.setHours(0,0,0,0);
+  let html='<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:11px">';
+  html+='<thead><tr><th style="min-width:210px;text-align:left;padding:4px 8px 4px 0;font-size:10px;font-weight:500;color:var(--tx3);position:sticky;left:0;background:var(--bg);z-index:2">Fase</th>';
+  days.forEach(d=>{
+    const we=isWE(d),isT=dateKey(d)===dateKey(oggi);
+    html+=`<th style="width:${DW}px;min-width:${DW}px;text-align:center;font-size:9px;font-weight:${isT?700:400};color:${isT?'#185fa5':'var(--tx3)'};padding:2px 0;${we?'opacity:.4':''}vertical-align:bottom" title="${fmtDate(d)}">${fmtShort(d).replace('/','\n')}</th>`;
+  });
+  html+='</tr></thead><tbody>';
+  commesse.forEach(c=>{
+    if(!c.fasi.length)return;
+    html+=`<tr><td colspan="${days.length+1}" style="padding:6px 0 2px;border-top:0.5px solid var(--bd);position:sticky;left:0;background:var(--bg)"><span style="font-size:11px;font-weight:500;color:var(--tx2);display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:${c.color.bar};display:inline-block"></span>${c.cod} — ${c.cli}</span></td></tr>`;
+    c.fasi.forEach((f,fi)=>{
+      const stato=computeStato(f),fs=parseDate(f.start),fe=parseDate(f.end);
+      const wdays=workDays(fs,fe),oreGg=wdays>0?f.orePrev/wdays:0;
+      html+='<tr>';
+      html+=`<td style="padding:3px 8px 3px 0;vertical-align:middle;position:sticky;left:0;background:var(--bg);z-index:1"><div style="font-size:11px;line-height:1.3;max-width:205px;display:flex;align-items:flex-start;justify-content:space-between;gap:4px"><div>${f.fase}`;
+      if(stato==='ritardo')html+=` <span class="badge berr" style="font-size:9px">ritardo</span>`;
+      else if(stato==='attenzione')html+=` <span class="badge bwarn" style="font-size:9px">attenzione</span>`;
+      html+=`<div style="font-size:9px;color:var(--tx3)">${f.addetti.join(', ')}</div></div><button class="btn-edit" onclick="editFase(${c.id},${fi})" title="Modifica"><i class="ti ti-pencil"></i></button></div></td>`;
+      days.forEach(d=>{
+        const we=isWE(d),inRange=d>=fs&&d<=fe,k=dateKey(d),isT=dateKey(d)===dateKey(oggi),isPast=d<oggi;
+        if(!inRange){html+=`<td style="background:${we?'var(--bg2)':'var(--bg)'};${we?'opacity:.4':''}${isT?';outline:1px solid var(--bd-info)':''}"></td>`;return;}
+        let dayEff=0;f.addetti.forEach(a=>dayEff+=(f.oreEff[a]&&f.oreEff[a][k])||0);
+        const effectiveSg=isPast&&dayEff===0&&oreGg>0?'ritardo':statoGiorno(dayEff,oreGg);
+        let bg=c.color.bar;
+        if(we)bg='var(--bg2)';
+        else if(isPast){if(effectiveSg==='ritardo')bg='#E24B4A';else if(effectiveSg==='attenzione')bg='#EF9F27';}
+        const op=we?.4:(!isPast&&dayEff===0)?.5:1;
+        let txt='';
+        if(!we&&dayEff>0)txt=`<div style="font-size:9px;font-weight:500;color:rgba(255,255,255,.95)">${dayEff}h</div>`;
+        else if(!we)txt=`<div style="font-size:9px;color:rgba(255,255,255,.4)">·</div>`;
+        html+=`<td onclick="openOre(${c.id},${fi},'${k}')" style="background:${bg};opacity:${op};border-left:0.5px solid rgba(255,255,255,.15);cursor:pointer;text-align:center;vertical-align:middle;height:28px;${isT?'outline:2px solid var(--bd-info);outline-offset:-1px':''}" title="${fmtDate(d)}: ${dayEff}h eff / ${oreGg.toFixed(1)}h prev">${txt}</td>`;
+      });
+      html+='</tr>';
+    });
+  });
+  html+='</tbody></table></div>';
+  el.innerHTML=html;
+}
+
+function renderCommesse(){
+  const el=document.getElementById('c-cont');
+  if(!commesse.length){el.innerHTML='<div class="empty">Nessuna commessa inserita.</div>';return;}
+  let html='';
+  commesse.forEach(c=>{
+    const totP=c.fasi.reduce((s,f)=>s+f.orePrev,0),totE=c.fasi.reduce((s,f)=>s+totEff(f),0);
+    const stati=c.fasi.map(f=>computeStato(f)),hasR=stati.includes('ritardo'),hasA=stati.includes('attenzione');
+    html+=`<div class="card" style="margin-bottom:.75rem${hasR?';border-left:3px solid #E24B4A':hasA?';border-left:3px solid #EF9F27':''}">`;
+    html+=`<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.4rem"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-weight:500;font-size:14px">${c.cod}</span><span style="color:var(--tx2);font-size:12px">— ${c.cli}</span>`;
+    if(hasR)html+=`<span class="badge berr"><i class="ti ti-alert-circle"></i> Ritardo</span>`;
+    else if(hasA)html+=`<span class="badge bwarn"><i class="ti ti-alert-triangle"></i> Attenzione</span>`;
+    else if(c.fasi.length)html+=`<span class="badge bok"><i class="ti ti-check"></i> OK</span>`;
+    html+=`</div><div style="display:flex;gap:4px"><button class="btn-edit" onclick="editCommessa(${c.id})" title="Modifica"><i class="ti ti-pencil"></i></button><button class="btn-del" onclick="delCommessa(${c.id})"><i class="ti ti-trash"></i></button></div></div>`;
+    html+=`<div style="font-size:11px;color:var(--tx3);margin-bottom:.5rem">Inizio: ${new Date(c.ds).toLocaleDateString('it-IT')}${c.note?' — '+c.note:''}</div>`;
+    html+=`<div class="stat-grid"><div class="stat"><div class="stat-v">${c.fasi.length}</div><div class="stat-l">fasi</div></div><div class="stat"><div class="stat-v">${totP}h</div><div class="stat-l">ore previste</div></div><div class="stat"><div class="stat-v" style="${totE<totP&&totP>0?'color:var(--tx-err)':''}">${totE}h</div><div class="stat-l">ore effettive</div></div></div>`;
+    c.fasi.forEach((f,fi)=>{
+      const stato=computeStato(f),eff=totEff(f),pct=f.orePrev>0?Math.min(100,Math.round(eff/f.orePrev*100)):0;
+      html+=`<div style="border-top:0.5px solid var(--bd);padding:.4rem 0;display:flex;align-items:center;gap:8px"><div style="flex:1;min-width:0"><div style="font-size:11px;margin-bottom:2px;display:flex;align-items:center;gap:4px;flex-wrap:wrap">${f.fase}`;
+      if(stato==='ritardo')html+=`<span class="badge berr" style="font-size:9px">ritardo</span>`;
+      else if(stato==='attenzione')html+=`<span class="badge bwarn" style="font-size:9px">attenzione</span>`;
+      html+=`</div><div style="font-size:10px;color:var(--tx3)">${fmtDate(parseDate(f.start))} → ${fmtDate(parseDate(f.end))} | ${f.addetti.join(', ')}</div>`;
+      html+=`<div style="display:flex;align-items:center;gap:6px;margin-top:3px"><div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${stato==='ritardo'?'#E24B4A':stato==='attenzione'?'#EF9F27':c.color.bar}"></div></div><span style="font-size:10px;color:var(--tx3);white-space:nowrap">${eff}/${f.orePrev}h</span></div></div>`;
+      html+=`<div style="display:flex;gap:4px;flex-shrink:0"><button class="btn-sm" onclick="openOre(${c.id},${fi},null)"><i class="ti ti-clock-edit"></i></button><button class="btn-edit" onclick="editFase(${c.id},${fi})"><i class="ti ti-pencil"></i></button><button class="btn-del" onclick="delFase(${c.id},${fi})"><i class="ti ti-x"></i></button></div></div>`;
+    });
+    html+='</div>';
+  });
+  el.innerHTML=html;
+}
+
+function renderOre(){
+  const el=document.getElementById('o-cont');
+  if(!commesse.some(c=>c.fasi.length)){el.innerHTML='<div class="empty">Inserisci fasi per registrare le ore.</div>';return;}
+  let html='';
+  commesse.forEach(c=>{
+    if(!c.fasi.length)return;
+    html+=`<div class="card" style="margin-bottom:.75rem"><div style="font-weight:500;font-size:13px;margin-bottom:.5rem;display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:${c.color.bar};display:inline-block"></span>${c.cod} — ${c.cli}</div>`;
+    c.fasi.forEach((f,fi)=>{
+      const stato=computeStato(f),eff=totEff(f),pct=f.orePrev>0?Math.min(100,Math.round(eff/f.orePrev*100)):0;
+      html+=`<div style="border-top:0.5px solid var(--bd);padding:.4rem 0"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px"><span style="font-size:11px">${f.fase}</span><div style="display:flex;align-items:center;gap:6px"><span style="font-size:11px;${eff<f.orePrev?'color:var(--tx-err)':''}">${eff}h / ${f.orePrev}h</span><button class="btn-sm" onclick="openOre(${c.id},${fi},null)"><i class="ti ti-edit"></i></button></div></div>`;
+      html+=`<div style="display:flex;align-items:center;gap:6px"><div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${stato==='ritardo'?'#E24B4A':stato==='attenzione'?'#EF9F27':c.color.bar}"></div></div><span style="font-size:10px;color:var(--tx3)">${pct}%</span></div>`;
+      html+=`<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">`;
+      f.addetti.forEach(a=>{const ah=Object.values(f.oreEff[a]||{}).reduce((s,v)=>s+v,0);html+=`<span style="font-size:10px;background:var(--bg2);padding:1px 7px;border-radius:20px;color:var(--tx2)">${a}: ${ah}h</span>`;});
+      html+='</div></div>';
+    });
+    html+='</div>';
+  });
+  el.innerHTML=html;
+}
+
+function renderAlert(){
+  const el=document.getElementById('a-cont');
+  let html='',count=0;
+  commesse.forEach(c=>{
+    c.fasi.forEach((f,fi)=>{
+      const stato=computeStato(f);if(stato==='ok')return;count++;
+      const isR=stato==='ritardo',eff=totEff(f),wdays=workDays(parseDate(f.start),parseDate(f.end)),oreGg=wdays>0?(f.orePrev/wdays).toFixed(1):'-';
+      html+=`<div class="alert-box ${isR?'a-red':'a-amber'}"><i class="ti ${isR?'ti-alert-circle':'ti-alert-triangle'}" style="font-size:16px;flex-shrink:0;margin-top:1px"></i><div style="flex:1"><strong>${c.cod} — ${c.cli}</strong><br>${f.fase}<br><span style="font-size:11px;opacity:.85">Addetti: ${f.addetti.join(', ')} | ${fmtDate(parseDate(f.start))} → ${fmtDate(parseDate(f.end))} | Prev: ${f.orePrev}h (${oreGg}h/gg) | Eff: ${eff}h</span></div><div style="display:flex;gap:4px;flex-shrink:0"><button class="btn-sm" onclick="openOre(${c.id},${fi},null)"><i class="ti ti-clock-edit"></i></button><button class="btn-edit" onclick="editFase(${c.id},${fi})"><i class="ti ti-pencil"></i></button></div></div>`;
+    });
+  });
+  if(!count)html='<div class="empty"><i class="ti ti-check" style="font-size:32px;display:block;margin-bottom:.5rem;color:#3b6d11"></i>Nessun ritardo rilevato.</div>';
+  el.innerHTML=html;
+}
+
+/* ── MODAL ORE ── */
+function openOre(cid,fi,focusKey){
+  const c=commesse.find(x=>x.id===cid);const f=c.fasi[fi];
+  oreCtx={cid,fi};
+  const wdays=workDays(parseDate(f.start),parseDate(f.end)),oreGg=wdays>0?f.orePrev/wdays:0;
+  document.getElementById('mo-title').textContent=`Ore effettive — ${f.fase}`;
+  document.getElementById('mo-sub').textContent=`${c.cod} — ${c.cli} | Totale: ${f.orePrev}h | Per giorno: ≈${oreGg.toFixed(1)}h`;
+  const oggi=new Date();oggi.setHours(0,0,0,0);
+  const days=allDays(parseDate(f.start),parseDate(f.end)).filter(d=>!isWE(d));
+  let html='<table class="day-table"><thead><tr><th>Data</th>';
+  f.addetti.forEach(a=>html+=`<th>${a}</th>`);
+  html+='<th>Totale</th><th>Previste</th><th>Stato</th></tr></thead><tbody>';
+  days.forEach(d=>{
+    const k=dateKey(d),isPast=d<oggi,isT=k===dateKey(oggi);
+    let dayEff=0;f.addetti.forEach(a=>dayEff+=(f.oreEff[a]&&f.oreEff[a][k])||0);
+    const sg=statoGiorno(dayEff,oreGg),effectiveSg=isPast&&dayEff===0&&oreGg>0?'ritardo':sg;
+    const statoHtml=effectiveSg==='ritardo'?`<span class="badge berr" style="font-size:9px">ritardo</span>`:effectiveSg==='attenzione'?`<span class="badge bwarn" style="font-size:9px">attenzione</span>`:dayEff>0?`<span class="badge bok" style="font-size:9px">ok</span>`:'';
+    html+=`<tr style="${isT?'background:var(--bg-info);':''}"><td style="white-space:nowrap;font-weight:${isT?600:400}">${fmtDate(d)}${isT?' ◀':''}</td>`;
+    f.addetti.forEach(a=>{
+      const val=(f.oreEff[a]&&f.oreEff[a][k])||0;
+      html+=`<td><input type="number" min="0" max="24" step="0.5" data-a="${a}" data-k="${k}" value="${val||''}" placeholder="0" oninput="liveUpdate(this)"></td>`;
+    });
+    const totCls=effectiveSg==='ritardo'?'oc':effectiveSg==='attenzione'?'wc':'';
+    html+=`<td id="tot-${k}" class="${totCls}" style="font-weight:500">${dayEff||''}</td><td style="color:var(--tx3)">${oreGg.toFixed(1)}</td><td id="sg-${k}">${statoHtml}</td></tr>`;
+  });
+  html+='</tbody></table>';
+  document.getElementById('mo-body').innerHTML=html;
+  openModal('modal-ore');
+}
+function liveUpdate(inp){
+  const {cid,fi}=oreCtx,c=commesse.find(x=>x.id===cid),f=c.fasi[fi];
+  const a=inp.dataset.a,k=inp.dataset.k;
+  if(!f.oreEff[a])f.oreEff[a]={};
+  f.oreEff[a][k]=parseFloat(inp.value)||0;
+  const wdays=workDays(parseDate(f.start),parseDate(f.end)),oreGg=wdays>0?f.orePrev/wdays:0;
+  let dayEff=0;f.addetti.forEach(aa=>dayEff+=(f.oreEff[aa]&&f.oreEff[aa][k])||0);
+  const oggi=new Date();oggi.setHours(0,0,0,0);
+  const isPast=parseDate(k)<oggi,sg=statoGiorno(dayEff,oreGg),effectiveSg=isPast&&dayEff===0&&oreGg>0?'ritardo':sg;
+  const totEl=document.getElementById('tot-'+k),sgEl=document.getElementById('sg-'+k);
+  if(totEl){totEl.textContent=dayEff||'';totEl.className=effectiveSg==='ritardo'?'oc':effectiveSg==='attenzione'?'wc':'';}
+  if(sgEl){sgEl.innerHTML=effectiveSg==='ritardo'?`<span class="badge berr" style="font-size:9px">ritardo</span>`:effectiveSg==='attenzione'?`<span class="badge bwarn" style="font-size:9px">attenzione</span>`:dayEff>0?`<span class="badge bok" style="font-size:9px">ok</span>`:'';}
+  updateAlertTab();
+}
+function saveOre(){closeModal('modal-ore');renderAll();toast('Ore salvate');}
+
+/* ── INIT DATE ── */
+const today=new Date();
+const ty=today.getFullYear(),tm=String(today.getMonth()+1).padStart(2,'0'),td=String(today.getDate()).padStart(2,'0');
+document.getElementById('dstart').value=`${ty}-${tm}-${td}`;
+document.getElementById('f-start').value=`${ty}-${tm}-${td}`;
+const nw=addDays(today,7);
+document.getElementById('f-end').value=`${nw.getFullYear()}-${String(nw.getMonth()+1).padStart(2,'0')}-${String(nw.getDate()).padStart(2,'0')}`;
+</script>
+</body>
+</html>

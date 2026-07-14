@@ -1,0 +1,15 @@
+[tool.pyrefly]
+python-version = "3.13"
+python-path = "venv/bin/python"
+search-paths = [
+    ".",
+    "venv/lib/python3.13/site-packages"
+]
+
+[tool.pyright]
+venvPath = "."
+venv = "venv"
+extraPaths = [
+    ".",
+    "venv/lib/python3.13/site-packages"
+]

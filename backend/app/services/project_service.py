@@ -37,7 +37,8 @@ async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
         member_count = member_result.scalar()
 
         out = ProjectOut(
-            id=p.id, name=p.name, description=p.description,
+            id=p.id, name=p.name, code=p.code, client=p.client, color=p.color or "#185FA5",
+            description=p.description,
             start_date=p.start_date, end_date=p.end_date,
             status=p.status, owner_id=p.owner_id,
             created_at=p.created_at, updated_at=p.updated_at,
@@ -50,7 +51,8 @@ async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
 
 async def create_project(db: AsyncSession, data: ProjectCreate, owner: User) -> Project:
     project = Project(
-        name=data.name, description=data.description,
+        name=data.name, code=data.code, client=data.client, color=data.color or "#185FA5",
+        description=data.description,
         start_date=data.start_date, end_date=data.end_date,
         status=data.status, owner_id=owner.id,
     )

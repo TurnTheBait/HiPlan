@@ -1,3 +1,4 @@
+import json
 from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -5,6 +6,17 @@ from app.models.task import Task
 from app.models.link import Link
 from app.schemas.task import TaskCreate, TaskUpdate, TaskOut, LinkCreate, LinkOut, GanttData
 from fastapi import HTTPException, status
+
+
+def _parse_json(val, default):
+    if not val:
+        return default
+    if isinstance(val, (list, dict)):
+        return val
+    try:
+        return json.loads(val)
+    except Exception:
+        return default
 
 
 def _task_to_out(task: Task) -> TaskOut:
@@ -21,6 +33,9 @@ def _task_to_out(task: Task) -> TaskOut:
         assigned_to=task.assigned_to,
         sort_order=task.sort_order,
         open=task.open,
+        planned_hours=task.planned_hours or 8.0,
+        workers=_parse_json(task.workers, []),
+        actual_hours=_parse_json(task.actual_hours, {}),
     )
 
 
@@ -62,6 +77,9 @@ async def create_task(db: AsyncSession, project_id: str, data: TaskCreate) -> Ta
         assigned_to=data.assigned_to,
         sort_order=data.sort_order,
         open=data.open,
+        planned_hours=data.planned_hours,
+        workers=json.dumps(data.workers),
+        actual_hours=json.dumps(data.actual_hours),
     )
     db.add(task)
     await db.commit()
@@ -79,10 +97,13 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate) -> TaskO
     for key, value in update_data.items():
         if key == "parent_id" and value == "0":
             value = None
+        if key in ("workers", "actual_hours"):
+            value = json.dumps(value)
         setattr(task, key, value)
     await db.commit()
     await db.refresh(task)
     return _task_to_out(task)
+
 
 
 async def delete_task(db: AsyncSession, task_id: str):

@@ -6,6 +6,9 @@ from app.models.project import ProjectStatus, MemberRole
 
 class ProjectCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
+    code: Optional[str] = None
+    client: Optional[str] = None
+    color: Optional[str] = "#185FA5"
     description: Optional[str] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
@@ -14,6 +17,9 @@ class ProjectCreate(BaseModel):
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
+    code: Optional[str] = None
+    client: Optional[str] = None
+    color: Optional[str] = None
     description: Optional[str] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
@@ -40,6 +46,9 @@ class MemberOut(BaseModel):
 class ProjectOut(BaseModel):
     id: str
     name: str
+    code: Optional[str] = None
+    client: Optional[str] = None
+    color: Optional[str] = "#185FA5"
     description: Optional[str] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
@@ -57,3 +66,4 @@ class ProjectOut(BaseModel):
 
 class ProjectDetail(ProjectOut):
     members: List[MemberOut] = []
+
