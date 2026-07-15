@@ -36,9 +36,17 @@ export default function LoginPage() {
       <div className="login-bg-gradient" />
       <div className="login-container animate-slideUp">
         <div className="login-logo">
-          <div className="login-logo-icon">📊</div>
-          <h1>GanttFlow</h1>
-          <p>Gestione progetti intelligente</p>
+          <img
+            src="/hiway-logo.png"
+            alt="HiWay - Leader in bulk material handling"
+            className="hiway-login-logo"
+            style={{ maxHeight: 64, maxWidth: '100%', objectFit: 'contain', marginBottom: 16 }}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 4 }}>
+            <h1 style={{ margin: 0 }}>GanttFlow</h1>
+            <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '2px 8px', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.2)', color: 'var(--accent-200)', border: '1px solid rgba(99, 102, 241, 0.4)' }}>by HiWay</span>
+          </div>
+          <p>Gestione commesse e pianificazione tecnica</p>
         </div>
 
         <form className="login-form" onSubmit={handleSubmit}>

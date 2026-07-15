@@ -1,0 +1,12 @@
+
+> frontend@0.0.0 dev
+> vite --host
+
+
+  VITE v5.4.21  ready in 161 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://192.168.2.132:5173/
+8:44:48 AM [vite] hmr update /src/pages/ProjectsPage.jsx
+8:45:05 AM [vite] hmr update /src/pages/DashboardPage.jsx
+8:45:40 AM [vite] hmr update /src/pages/ProjectDetailPage.jsx

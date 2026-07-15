@@ -15,25 +15,29 @@
 }
 
 .filter-chip {
-  padding: 6px 16px;
-  border-radius: 20px;
+  padding: 8px 18px;
+  border-radius: var(--radius-md, 8px);
   border: 1px solid var(--border-default);
-  background: transparent;
+  background: var(--bg-tertiary);
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 .filter-chip:hover {
-  border-color: var(--accent-500);
+  border-color: var(--border-focus, rgba(255, 255, 255, 0.2));
+  background: var(--bg-hover);
   color: var(--text-primary);
+  transform: translateY(-1px);
 }
 .filter-chip.active {
-  background: var(--accent-glow);
-  border-color: var(--accent-500);
-  color: var(--accent-200);
+  background: linear-gradient(135deg, var(--accent-600), var(--accent-700));
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
+  font-weight: 600;
 }
 
 .projects-grid {

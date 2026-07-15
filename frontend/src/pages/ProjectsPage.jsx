@@ -4,6 +4,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import './ProjectsPage.css';
+import { STATUS_LABELS_IT, STATUS_OPTIONS } from '../utils/statusLabels';
 
 export default function ProjectsPage() {
   const { user } = useAuth();
@@ -14,7 +15,7 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [filter, setFilter] = useState('all');
-  const [form, setForm] = useState({ name: '', code: '', client: '', color: '#185FA5', description: '', start_date: '', end_date: '' });
+  const [form, setForm] = useState({ name: '', code: '', client: '', color: '#185FA5', status: 'planning', description: '', start_date: '', end_date: '' });
 
   useEffect(() => { loadProjects(); }, []);
 
@@ -36,7 +37,7 @@ export default function ProjectsPage() {
       });
       toast.success('Commessa creata con successo!');
       setShowModal(false);
-      setForm({ name: '', code: '', client: '', color: '#185FA5', description: '', start_date: '', end_date: '' });
+      setForm({ name: '', code: '', client: '', color: '#185FA5', status: 'planning', description: '', start_date: '', end_date: '' });
       loadProjects();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Errore nella creazione');
@@ -134,7 +135,7 @@ export default function ProjectsPage() {
             className={`filter-chip ${filter === f ? 'active' : ''}`}
             onClick={() => setFilter(f)}
           >
-            {f === 'all' ? 'Tutte' : f.charAt(0).toUpperCase() + f.slice(1)}
+            {STATUS_LABELS_IT[f] || f}
           </button>
         ))}
       </div>
@@ -161,7 +162,7 @@ export default function ProjectsPage() {
                   </span>
                   <h3>{project.name}</h3>
                 </div>
-                <span className={`badge badge-${project.status}`}>{project.status}</span>
+                <span className={`badge badge-${project.status}`}>{STATUS_LABELS_IT[project.status] || project.status}</span>
               </div>
               <div style={{ fontSize: 12, color: '#aaa', marginBottom: 6 }}>
                 🏢 <strong>Cliente:</strong> {project.client || 'Non specificato'}
@@ -230,7 +231,7 @@ export default function ProjectsPage() {
               </div>
 
               <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-                <div className="input-group" style={{ flex: 3 }}>
+                <div className="input-group" style={{ flex: 2 }}>
                   <label htmlFor="project-name">Nome Progetto / Commessa *</label>
                   <input
                     id="project-name"
@@ -241,7 +242,20 @@ export default function ProjectsPage() {
                     placeholder="es. Impianto linea automatica"
                   />
                 </div>
-                <div className="input-group" style={{ flex: 1 }}>
+                <div className="input-group" style={{ flex: 1.5 }}>
+                  <label htmlFor="project-status">Stato Iniziale</label>
+                  <select
+                    id="project-status"
+                    className="input"
+                    value={form.status}
+                    onChange={(e) => setForm({ ...form, status: e.target.value })}
+                  >
+                    {STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="input-group" style={{ flex: 0.8 }}>
                   <label htmlFor="project-color">Colore</label>
                   <input
                     id="project-color"

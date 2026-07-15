@@ -33,10 +33,19 @@ export default function MainLayout() {
       <aside className="sidebar">
         <div className="sidebar-header">
           <div className="sidebar-logo">
-            <span className="sidebar-logo-icon">📊</span>
-            {!collapsed && <span className="sidebar-logo-text">GanttFlow</span>}
+            <img
+              src="/hiway-logo.png"
+              alt="HiWay"
+              className="hiway-sidebar-img"
+            />
+            {!collapsed && (
+              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+                <span className="sidebar-logo-text" style={{ fontSize: '1.05rem', background: 'linear-gradient(135deg, #ffffff, var(--accent-200))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>GanttFlow</span>
+                <span style={{ fontSize: '0.62rem', color: 'var(--accent-400)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>by HiWay</span>
+              </div>
+            )}
           </div>
-          <button className="btn-icon btn-ghost sidebar-toggle" onClick={() => setCollapsed(!collapsed)}>
+          <button className="sidebar-toggle" onClick={() => setCollapsed(!collapsed)} title={collapsed ? 'Espandi' : 'Comprimi'}>
             {collapsed ? '→' : '←'}
           </button>
         </div>

@@ -39,6 +39,21 @@
   overflow: hidden;
 }
 
+.hiway-sidebar-img {
+  height: 28px;
+  max-width: 85px;
+  object-fit: contain;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.sidebar-collapsed .hiway-sidebar-img {
+  height: 24px;
+  max-width: 32px;
+  object-fit: cover;
+  object-position: left;
+}
+
 .sidebar-logo-icon {
   font-size: 1.5rem;
   flex-shrink: 0;
@@ -56,7 +71,24 @@
 
 .sidebar-toggle {
   flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
   font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.sidebar-toggle:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-500);
+  color: var(--text-primary);
+  transform: scale(1.05);
 }
 
 /* ====== NAV ====== */
@@ -150,7 +182,31 @@
 
 .sidebar-logout {
   width: 100%;
+  display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.sidebar-logout:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+  transform: translateY(-1px);
+}
+.sidebar-collapsed .sidebar-logout {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  margin: 0 auto;
 }
 
 /* ====== MAIN ====== */
@@ -192,7 +248,24 @@
 
 .header-notification {
   position: relative;
-  font-size: 1.125rem;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 1.15rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.header-notification:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-500);
+  color: var(--text-primary);
+  transform: translateY(-1px);
 }
 
 .notification-badge {

@@ -60,17 +60,18 @@
 }
 
 .zoom-controls {
-  display: flex;
+  display: inline-flex;
+  align-items: center;
   background: var(--bg-tertiary, #1e293b);
   padding: 4px;
-  border-radius: 8px;
+  border-radius: var(--radius-md, 8px);
   border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
   gap: 4px;
   flex-wrap: wrap;
 }
 
 .zoom-chip {
-  padding: 5px 12px;
+  padding: 6px 14px;
   border-radius: 6px;
   border: none;
   background: transparent;
@@ -79,7 +80,7 @@
   font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-fast);
 }
 
 .zoom-chip:hover {
@@ -88,10 +89,10 @@
 }
 
 .zoom-chip.active {
-  background: var(--accent-600, #4f46e5);
+  background: linear-gradient(135deg, var(--accent-600), var(--accent-700));
   color: #ffffff;
   font-weight: 600;
-  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.4);
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.35);
 }
 
 .export-buttons {
@@ -103,10 +104,10 @@
 /* Tabs Ufficio Tecnico */
 .ut-tabs {
   display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--border-color, #334155);
-  padding-bottom: 10px;
+  gap: 10px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+  padding-bottom: 14px;
   flex-wrap: wrap;
 }
 
@@ -119,7 +120,7 @@
   background: var(--bg-card, #1a1a26);
   border: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
   border-radius: var(--radius-lg, 14px);
-  padding: 10px 16px;
+  padding: 14px 20px;
   margin-bottom: 16px;
   flex-wrap: wrap;
   box-shadow: var(--shadow-sm);
@@ -134,36 +135,39 @@
 }
 
 .ut-tab-btn {
-  background: var(--bg-secondary, #1e293b);
-  color: #94a3b8;
-  border: 1px solid var(--border-color, #334155);
-  padding: 8px 16px;
-  border-radius: 6px;
+  background: var(--bg-tertiary, #1e293b);
+  color: var(--text-secondary, #94a3b8);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.1));
+  padding: 8px 18px;
+  border-radius: var(--radius-md, 8px);
   cursor: pointer;
-  font-weight: 600;
-  font-size: 0.9rem;
-  transition: all 0.2s ease;
-  display: flex;
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all var(--transition-fast);
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .ut-tab-btn:hover {
-  background: var(--bg-tertiary, #334155);
-  color: #f8fafc;
+  background: var(--bg-hover, #252536);
+  border-color: var(--border-focus, rgba(255, 255, 255, 0.2));
+  color: var(--text-primary, #f8fafc);
+  transform: translateY(-1px);
 }
 
 .ut-tab-btn.active {
-  background: #2563eb;
+  background: linear-gradient(135deg, var(--accent-600), var(--accent-700));
   color: #ffffff;
-  border-color: #3b82f6;
-  box-shadow: 0 0 12px rgba(37, 99, 235, 0.4);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
+  font-weight: 600;
 }
 
 .tab-badge {
   background: rgba(255, 255, 255, 0.2);
-  padding: 2px 6px;
-  border-radius: 10px;
+  padding: 2px 8px;
+  border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 700;
 }
@@ -288,6 +292,16 @@
 
 .phases-table tr:hover {
   background: rgba(255, 255, 255, 0.02);
+}
+
+.phases-table .project-delete {
+  opacity: 0.7;
+  transition: all var(--transition-fast);
+}
+
+.phases-table tr:hover .project-delete {
+  opacity: 1;
+  color: #ef4444;
 }
 
 /* Griglia Ore nel Modale */

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import './DashboardPage.css';
+import { STATUS_LABELS_IT } from '../utils/statusLabels';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -102,7 +103,7 @@ export default function DashboardPage() {
                 >
                   <div className="recent-project-info">
                     <span className="recent-project-name">{project.name}</span>
-                    <span className={`badge badge-${project.status}`}>{project.status}</span>
+                    <span className={`badge badge-${project.status}`}>{STATUS_LABELS_IT[project.status] || project.status}</span>
                   </div>
                   <div className="progress-bar" style={{ width: '100%' }}>
                     <div

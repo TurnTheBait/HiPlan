@@ -1,0 +1,18 @@
+INFO:     Started server process [3596]
+INFO:     Waiting for application startup.
+2026-07-15 08:40:51,212 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-07-15 08:40:51,212 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("users")
+2026-07-15 08:40:51,212 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-15 08:40:51,212 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("projects")
+2026-07-15 08:40:51,212 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-15 08:40:51,212 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("project_members")
+2026-07-15 08:40:51,212 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-15 08:40:51,213 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("tasks")
+2026-07-15 08:40:51,213 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-15 08:40:51,213 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("links")
+2026-07-15 08:40:51,213 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-15 08:40:51,213 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("notifications")
+2026-07-15 08:40:51,213 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-15 08:40:51,213 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)

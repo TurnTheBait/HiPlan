@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { gantt } from 'dhtmlx-gantt';
 import GanttChart from '../components/gantt/GanttChart';
 import './ProjectDetailPage.css';
+import { STATUS_LABELS_IT, STATUS_OPTIONS } from '../utils/statusLabels';
 
 const PREDEFINED_PHASES = [
   'Layout - Invio al cliente per approvazione',
@@ -68,6 +69,20 @@ export default function ProjectDetailPage() {
       navigate('/projects');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleStatusChange(newStatus) {
+    if (!project) return;
+    try {
+      const { data } = await api.put(`/projects/${project.id}`, {
+        ...project,
+        status: newStatus,
+      });
+      setProject(data);
+      toast.success(`Stato commessa aggiornato a "${STATUS_LABELS_IT[newStatus] || newStatus}"`);
+    } catch {
+      toast.error("Errore nell'aggiornamento dello stato della commessa");
     }
   }
 
@@ -362,7 +377,7 @@ export default function ProjectDetailPage() {
     <div className="project-detail animate-fadeIn">
       <div className="project-detail-header">
         <div className="project-detail-info">
-          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/projects')}>
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/projects')}>
             ← Commesse
           </button>
           <div className="commessa-meta" style={{ borderLeft: `4px solid ${project?.color || '#185FA5'}` }}>
@@ -371,7 +386,38 @@ export default function ProjectDetailPage() {
             <span className="commessa-client">🏢 {project?.client || 'Cliente'}</span>
           </div>
           <h1>{project?.name}</h1>
-          <span className={`badge badge-${project?.status}`}>{project?.status}</span>
+          <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+            <select
+              className={`badge badge-${project?.status}`}
+              style={{
+                cursor: 'pointer',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                paddingTop: 5,
+                paddingBottom: 5,
+                paddingLeft: 12,
+                paddingRight: 28,
+                borderRadius: '16px',
+                appearance: 'none',
+                WebkitAppearance: 'none',
+                fontFamily: 'inherit',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                transition: 'all 0.15s ease',
+              }}
+              value={project?.status || 'planning'}
+              onChange={(e) => handleStatusChange(e.target.value)}
+              title="Clicca per cambiare lo stato della commessa"
+            >
+              {STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value} style={{ background: '#1e1e2a', color: '#f0f0f5', textTransform: 'none', fontWeight: 500 }}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <span style={{ position: 'absolute', right: 10, pointerEvents: 'none', fontSize: '0.6rem', opacity: 0.8, color: 'inherit' }}>▼</span>
+          </div>
         </div>
       </div>
 
@@ -409,7 +455,7 @@ export default function ProjectDetailPage() {
       {/* TOOLBAR DI AZIONE POSIZIONATA SOTTO ALLE TABS */}
       <div className="project-toolbar">
         <div className="toolbar-left">
-          <button className="btn btn-primary btn-sm" onClick={openNewTaskModal}>
+          <button className="btn btn-primary" onClick={openNewTaskModal}>
             + Nuova Fase
           </button>
         </div>
@@ -429,10 +475,10 @@ export default function ProjectDetailPage() {
             </div>
           )}
           <div className="export-buttons">
-            <button className="btn btn-secondary btn-sm" onClick={() => handleExport('pdf')} title="Esporta PDF">
+            <button className="btn btn-secondary" onClick={() => handleExport('pdf')} title="Esporta PDF">
               📄 PDF
             </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => handleExport('excel')} title="Esporta Excel">
+            <button className="btn btn-secondary" onClick={() => handleExport('excel')} title="Esporta Excel">
               📊 Excel
             </button>
           </div>

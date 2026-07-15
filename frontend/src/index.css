@@ -87,6 +87,15 @@
   padding: 0;
 }
 
+button {
+  font-family: inherit;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  outline: none;
+}
+
 html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
@@ -203,10 +212,15 @@ a:hover {
 .btn-ghost {
   background: transparent;
   color: var(--text-secondary);
-  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
 .btn-ghost:hover {
   background: var(--bg-hover);
+  border-color: var(--border-subtle);
   color: var(--text-primary);
 }
 
@@ -219,7 +233,11 @@ a:hover {
   width: 36px;
   height: 36px;
   padding: 0;
-  border-radius: var(--radius-sm);
+  border: none;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ======================================
