@@ -64,7 +64,7 @@ async def create_project(db: AsyncSession, data: ProjectCreate, owner: User) -> 
 
 async def get_project(db: AsyncSession, project_id: str, user: User) -> Project:
     result = await db.execute(
-        select(Project).options(selectinload(Project.members)).where(Project.id == project_id)
+        select(Project).options(selectinload(Project.members)).where(Project.id == project_id).execution_options(populate_existing=True)
     )
     project = result.scalar_one_or_none()
     if not project:
@@ -88,8 +88,7 @@ async def update_project(db: AsyncSession, project_id: str, data: ProjectUpdate,
     for key, value in update_data.items():
         setattr(project, key, value)
     await db.commit()
-    await db.refresh(project)
-    return project
+    return await get_project(db, project_id, user)
 
 
 async def delete_project(db: AsyncSession, project_id: str, user: User):

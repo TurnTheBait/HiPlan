@@ -14,6 +14,9 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', code: '', client: '', color: '#185FA5', description: '' });
   const [filter, setFilter] = useState('all');
   const [form, setForm] = useState({ name: '', code: '', client: '', color: '#185FA5', status: 'planning', description: '', start_date: '', end_date: '' });
 
@@ -52,6 +55,32 @@ export default function ProjectsPage() {
       toast.success('Commessa eliminata');
       loadProjects();
     } catch { toast.error('Errore nell\'eliminazione'); }
+  }
+
+  function openEditProject(project, e) {
+    e.stopPropagation();
+    setEditingProject(project);
+    setEditForm({
+      name: project.name || '',
+      code: project.code || '',
+      client: project.client || '',
+      color: project.color || '#185FA5',
+      description: project.description || '',
+    });
+    setShowEditModal(true);
+  }
+
+  async function handleEditSubmit(e) {
+    e.preventDefault();
+    if (!editingProject) return;
+    try {
+      await api.put(`/projects/${editingProject.id}`, editForm);
+      toast.success('Commessa modificata con successo!');
+      setShowEditModal(false);
+      loadProjects();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Errore durante la modifica');
+    }
   }
 
   async function handleBackupJson() {
@@ -183,13 +212,23 @@ export default function ProjectsPage() {
                 <span>📋 {project.task_count} fasi</span>
                 <span>👥 {project.member_count} addetti</span>
                 {(user?.role === 'admin' || project.owner_id === user?.id) && (
-                  <button
-                    className="btn-ghost btn-sm project-delete"
-                    onClick={(e) => handleDelete(project.id, e)}
-                    title="Elimina commessa"
-                  >
-                    🗑
-                  </button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      className="btn-ghost btn-sm"
+                      onClick={(e) => openEditProject(project, e)}
+                      title="Modifica commessa (titolo, cliente, codice)"
+                      style={{ fontSize: 14 }}
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      className="btn-ghost btn-sm project-delete"
+                      onClick={(e) => handleDelete(project.id, e)}
+                      title="Elimina commessa"
+                    >
+                      🗑
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -206,7 +245,7 @@ export default function ProjectsPage() {
             </div>
             <form onSubmit={handleCreate}>
               <div style={{ display: 'flex', gap: 12 }}>
-                <div className="input-group" style={{ flex: 1 }}>
+                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
                   <label htmlFor="project-code">Codice Commessa *</label>
                   <input
                     id="project-code"
@@ -217,7 +256,7 @@ export default function ProjectsPage() {
                     placeholder="es. UT-2026-001"
                   />
                 </div>
-                <div className="input-group" style={{ flex: 2 }}>
+                <div className="input-group" style={{ flex: 2, minWidth: 0 }}>
                   <label htmlFor="project-client">Cliente *</label>
                   <input
                     id="project-client"
@@ -231,7 +270,7 @@ export default function ProjectsPage() {
               </div>
 
               <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-                <div className="input-group" style={{ flex: 2 }}>
+                <div className="input-group" style={{ flex: 2, minWidth: 0 }}>
                   <label htmlFor="project-name">Nome Progetto / Commessa *</label>
                   <input
                     id="project-name"
@@ -242,7 +281,7 @@ export default function ProjectsPage() {
                     placeholder="es. Impianto linea automatica"
                   />
                 </div>
-                <div className="input-group" style={{ flex: 1.5 }}>
+                <div className="input-group" style={{ flex: 1.5, minWidth: 0 }}>
                   <label htmlFor="project-status">Stato Iniziale</label>
                   <select
                     id="project-status"
@@ -255,13 +294,13 @@ export default function ProjectsPage() {
                     ))}
                   </select>
                 </div>
-                <div className="input-group" style={{ flex: 0.8 }}>
+                <div className="input-group" style={{ flex: 0.8, minWidth: 0 }}>
                   <label htmlFor="project-color">Colore</label>
                   <input
                     id="project-color"
                     type="color"
                     className="input"
-                    style={{ height: 38, padding: 2 }}
+                    style={{ height: 38, padding: 2, flexShrink: 0 }}
                     value={form.color}
                     onChange={(e) => setForm({ ...form, color: e.target.value })}
                   />
@@ -281,7 +320,7 @@ export default function ProjectsPage() {
               </div>
 
               <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-                <div className="input-group" style={{ flex: 1 }}>
+                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
                   <label htmlFor="project-start">Data inizio</label>
                   <input
                     id="project-start"
@@ -291,7 +330,7 @@ export default function ProjectsPage() {
                     onChange={(e) => setForm({ ...form, start_date: e.target.value })}
                   />
                 </div>
-                <div className="input-group" style={{ flex: 1 }}>
+                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
                   <label htmlFor="project-end">Data fine prevista</label>
                   <input
                     id="project-end"
@@ -308,6 +347,98 @@ export default function ProjectsPage() {
                   Annulla
                 </button>
                 <button type="submit" className="btn btn-primary">Aggiungi Commessa</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showEditModal && (
+        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+            <div className="modal-header">
+              <h2>Modifica Dati Commessa</h2>
+              <button className="btn-ghost btn-icon" onClick={() => setShowEditModal(false)}>✕</button>
+            </div>
+            <form onSubmit={handleEditSubmit}>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                  <label htmlFor="card-edit-code">Codice Commessa *</label>
+                  <input
+                    id="card-edit-code"
+                    className="input"
+                    value={editForm.code}
+                    onChange={(e) => setEditForm({ ...editForm, code: e.target.value })}
+                    required
+                    placeholder="es. UT-COMM"
+                  />
+                </div>
+                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                  <label htmlFor="card-edit-client">Cliente</label>
+                  <input
+                    id="card-edit-client"
+                    className="input"
+                    value={editForm.client}
+                    onChange={(e) => setEditForm({ ...editForm, client: e.target.value })}
+                    placeholder="es. HiWay s.r.l."
+                  />
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label htmlFor="card-edit-name">Titolo Commessa *</label>
+                <input
+                  id="card-edit-name"
+                  className="input"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  required
+                  placeholder="es. Lancio ERP e GanttFlow Q3"
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                  <label htmlFor="card-edit-color">Colore Identificativo</label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      id="card-edit-color"
+                      type="color"
+                      value={editForm.color}
+                      onChange={(e) => setEditForm({ ...editForm, color: e.target.value })}
+                      style={{ width: 44, height: 38, padding: 2, borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', cursor: 'pointer', flexShrink: 0 }}
+                    />
+                    <input
+                      className="input"
+                      value={editForm.color}
+                      onChange={(e) => setEditForm({ ...editForm, color: e.target.value })}
+                      placeholder="#185FA5"
+                      style={{ flex: 1, minWidth: 0 }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label htmlFor="card-edit-desc">Descrizione / Note</label>
+                <textarea
+                  id="card-edit-desc"
+                  className="input"
+                  rows={3}
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  placeholder="Dettagli e obiettivo della commessa..."
+                  style={{ resize: 'vertical' }}
+                />
+              </div>
+
+              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 20 }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>
+                  Annulla
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Salva Modifiche
+                </button>
               </div>
             </form>
           </div>

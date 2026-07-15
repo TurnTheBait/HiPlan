@@ -54,6 +54,16 @@ export default function ProjectDetailPage() {
   const [selectedTaskForHours, setSelectedTaskForHours] = useState(null);
   const [actualHoursMap, setActualHoursMap] = useState({});
 
+  // Stato Modale Modifica Dati Commessa
+  const [showEditProjectModal, setShowEditProjectModal] = useState(false);
+  const [projectForm, setProjectForm] = useState({
+    name: '',
+    code: '',
+    client: '',
+    description: '',
+    color: '#185FA5',
+  });
+
   useEffect(() => { loadProject(); }, [id]);
 
   async function loadProject() {
@@ -219,6 +229,7 @@ export default function ProjectDetailPage() {
       customText: '',
       start_date: project?.start_date || new Date().toISOString().split('T')[0],
       end_date: project?.end_date || new Date().toISOString().split('T')[0],
+      duration_days: 1,
       planned_hours: 8.0,
       workers: ['Alessio'],
       customWorker: '',
@@ -229,16 +240,83 @@ export default function ProjectDetailPage() {
   function openEditTaskModal(task) {
     setEditingTask(task);
     const isPredefined = PREDEFINED_PHASES.includes(task.text);
+    const s = task.start_date ? task.start_date.split(' ')[0] : new Date().toISOString().split('T')[0];
+    const e = task.end_date ? task.end_date.split(' ')[0] : new Date().toISOString().split('T')[0];
+    const diff = Math.max(1, Math.ceil((new Date(e) - new Date(s)) / (1000 * 60 * 60 * 24)) + 1);
     setTaskForm({
       faseSel: isPredefined ? task.text : '__custom__',
       customText: isPredefined ? '' : task.text,
-      start_date: task.start_date ? task.start_date.split(' ')[0] : new Date().toISOString().split('T')[0],
-      end_date: task.end_date ? task.end_date.split(' ')[0] : new Date().toISOString().split('T')[0],
-      planned_hours: Number(task.planned_hours) || 8.0,
+      start_date: s,
+      end_date: e,
+      duration_days: task.duration || diff,
+      planned_hours: Number(task.planned_hours) || (task.duration ? task.duration * 8 : diff * 8),
       workers: Array.isArray(task.workers) ? [...task.workers] : [],
       customWorker: '',
     });
     setShowTaskModal(true);
+  }
+
+  function handleStartDateChange(newStart) {
+    const sDate = new Date(newStart);
+    let days = Math.max(1, Number(taskForm.duration_days) || 1);
+    const eDate = new Date(sDate);
+    eDate.setDate(sDate.getDate() + (days - 1));
+    const newEnd = eDate.toISOString().split('T')[0];
+    setTaskForm({ ...taskForm, start_date: newStart, end_date: newEnd });
+  }
+
+  function handleEndDateChange(newEnd) {
+    const sDate = new Date(taskForm.start_date);
+    const eDate = new Date(newEnd);
+    const diffDays = Math.max(1, Math.ceil((eDate - sDate) / (1000 * 60 * 60 * 24)) + 1);
+    setTaskForm({
+      ...taskForm,
+      end_date: newEnd,
+      duration_days: diffDays,
+      planned_hours: diffDays * 8.0,
+    });
+  }
+
+  function handleDurationDaysChange(daysVal) {
+    const days = Math.max(1, Number(daysVal) || 1);
+    const sDate = new Date(taskForm.start_date || new Date());
+    const eDate = new Date(sDate);
+    eDate.setDate(sDate.getDate() + (days - 1));
+    const newEnd = eDate.toISOString().split('T')[0];
+    setTaskForm({
+      ...taskForm,
+      duration_days: daysVal,
+      end_date: newEnd,
+      planned_hours: days * 8.0,
+    });
+  }
+
+  function handlePlannedHoursChange(hoursVal) {
+    const hours = Number(hoursVal) || 0;
+    const days = Math.max(1, Math.ceil(hours / 8.0));
+    const sDate = new Date(taskForm.start_date || new Date());
+    const eDate = new Date(sDate);
+    eDate.setDate(sDate.getDate() + (days - 1));
+    const newEnd = eDate.toISOString().split('T')[0];
+    setTaskForm({
+      ...taskForm,
+      planned_hours: hoursVal,
+      duration_days: days,
+      end_date: newEnd,
+    });
+  }
+
+  function applyDurationPreset(days, hours) {
+    const sDate = new Date(taskForm.start_date || new Date());
+    const eDate = new Date(sDate);
+    eDate.setDate(sDate.getDate() + (days - 1));
+    const newEnd = eDate.toISOString().split('T')[0];
+    setTaskForm({
+      ...taskForm,
+      duration_days: days,
+      planned_hours: hours,
+      end_date: newEnd,
+    });
   }
 
   async function handleSaveTaskForm(e) {
@@ -251,13 +329,14 @@ export default function ProjectDetailPage() {
     const sDate = new Date(taskForm.start_date);
     const eDate = new Date(taskForm.end_date);
     const diffDays = Math.max(1, Math.ceil((eDate - sDate) / (1000 * 60 * 60 * 24)) + 1);
+    const finalDays = Math.max(1, Number(taskForm.duration_days) || diffDays);
 
     const payload = {
       text: taskName.trim(),
       start_date: taskForm.start_date,
       end_date: taskForm.end_date,
-      duration: diffDays,
-      planned_hours: Number(taskForm.planned_hours) || 8.0,
+      duration: finalDays,
+      planned_hours: Number(taskForm.planned_hours) || (finalDays * 8.0),
       workers: taskForm.workers,
     };
 
@@ -297,6 +376,31 @@ export default function ProjectDetailPage() {
       loadProject();
     } catch {
       toast.error('Errore durante il salvataggio ore');
+    }
+  }
+
+  function openEditProjectModal() {
+    if (!project) return;
+    setProjectForm({
+      name: project.name || '',
+      code: project.code || '',
+      client: project.client || '',
+      description: project.description || '',
+      color: project.color || '#185FA5',
+    });
+    setShowEditProjectModal(true);
+  }
+
+  async function handleSaveProject(e) {
+    e.preventDefault();
+    try {
+      const { data } = await api.put(`/projects/${id}`, projectForm);
+      setProject(prev => ({ ...prev, ...data }));
+      setShowEditProjectModal(false);
+      toast.success('Dati commessa aggiornati con successo!');
+      loadProject();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Errore durante la modifica della commessa');
     }
   }
 
@@ -380,12 +484,36 @@ export default function ProjectDetailPage() {
           <button className="btn btn-secondary btn-sm" onClick={() => navigate('/projects')}>
             ← Commesse
           </button>
-          <div className="commessa-meta" style={{ borderLeft: `4px solid ${project?.color || '#185FA5'}` }}>
+          <div className="commessa-meta" style={{ borderLeft: `4px solid ${project?.color || '#185FA5'}`, display: 'flex', alignItems: 'center', gap: 10 }}>
             <span className="commessa-code">{project?.code || 'UT-COMM'}</span>
             <span>—</span>
             <span className="commessa-client">🏢 {project?.client || 'Cliente'}</span>
           </div>
-          <h1>{project?.name}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <h1 style={{ margin: 0 }}>{project?.name}</h1>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={openEditProjectModal}
+              title="Modifica Titolo, Codice, Cliente, Colore e Descrizione della commessa"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '5px 12px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                borderRadius: '8px',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                color: '#f8fafc',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              ✏️ Modifica
+            </button>
+          </div>
           <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
             <select
               className={`badge badge-${project?.status}`}
@@ -500,6 +628,8 @@ export default function ProjectDetailPage() {
               onTaskDelete={handleTaskDelete}
               onLinkCreate={handleLinkCreate}
               onLinkDelete={handleLinkDelete}
+              onEditTask={openEditTaskModal}
+              onNewTask={() => openNewTaskModal()}
             />
           </div>
         </div>
@@ -594,7 +724,10 @@ export default function ProjectDetailPage() {
                           )}
                         </td>
                         <td style={{ fontSize: 13, color: '#cbd5e1' }}>
-                          {task.start_date ? task.start_date.split(' ')[0] : ''} → {task.end_date ? task.end_date.split(' ')[0] : ''}
+                          <div>{task.start_date ? task.start_date.split(' ')[0] : ''} → {task.end_date ? task.end_date.split(' ')[0] : ''}</div>
+                          <div style={{ fontSize: 11, color: '#60a5fa', fontWeight: 600, marginTop: 2 }}>
+                            🗓️ Durata: {task.duration || 1} {task.duration === 1 ? 'giorno' : 'giorni'}
+                          </div>
                         </td>
                         <td>
                           <strong>{task.planned_hours || 8}h</strong> prev /{' '}
@@ -826,34 +959,101 @@ export default function ProjectDetailPage() {
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-                <div className="input-group" style={{ flex: 1 }}>
-                  <label>Data Avvio Lavorazione</label>
-                  <input
-                    type="date"
-                    className="input"
-                    value={taskForm.start_date}
-                    onChange={(e) => setTaskForm({ ...taskForm, start_date: e.target.value })}
-                  />
+              {/* Sezione Pianificazione Temporale e Durate sincronizzate */}
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', padding: 14, marginTop: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+                  🗓️ Pianificazione e Durata (Impostabile in Giorni e in Ore)
                 </div>
-                <div className="input-group" style={{ flex: 1 }}>
-                  <label>Data Fine Lavorazione</label>
-                  <input
-                    type="date"
-                    className="input"
-                    value={taskForm.end_date}
-                    onChange={(e) => setTaskForm({ ...taskForm, end_date: e.target.value })}
-                  />
+
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Data Avvio Lavorazione</label>
+                    <input
+                      type="date"
+                      className="input"
+                      value={taskForm.start_date}
+                      onChange={(e) => handleStartDateChange(e.target.value)}
+                    />
+                  </div>
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Data Fine Lavorazione</label>
+                    <input
+                      type="date"
+                      className="input"
+                      value={taskForm.end_date}
+                      onChange={(e) => handleEndDateChange(e.target.value)}
+                    />
+                  </div>
                 </div>
-                <div className="input-group" style={{ width: 120 }}>
-                  <label>Ore Previste</label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    className="input"
-                    value={taskForm.planned_hours}
-                    onChange={(e) => setTaskForm({ ...taskForm, planned_hours: e.target.value })}
-                  />
+
+                <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Durata in Giorni (Calendario)</label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        className="input"
+                        style={{ fontWeight: 600, color: '#60a5fa' }}
+                        value={taskForm.duration_days}
+                        onChange={(e) => handleDurationDaysChange(e.target.value)}
+                      />
+                      <span style={{ position: 'absolute', right: 12, top: 9, fontSize: 12, color: '#94a3b8', pointerEvents: 'none' }}>giorni</span>
+                    </div>
+                  </div>
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Durata in Ore (Budget Lavoro)</label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type="number"
+                        min="0.5"
+                        step="0.5"
+                        className="input"
+                        style={{ fontWeight: 600, color: '#34d399' }}
+                        value={taskForm.planned_hours}
+                        onChange={(e) => handlePlannedHoursChange(e.target.value)}
+                      />
+                      <span style={{ position: 'absolute', right: 12, top: 9, fontSize: 12, color: '#94a3b8', pointerEvents: 'none' }}>ore</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Preset veloci cliccabili */}
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+                  <span style={{ fontSize: 11, color: '#94a3b8', marginRight: 4 }}>Preset veloci:</span>
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm"
+                    style={{ border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 8px', fontSize: 11 }}
+                    onClick={() => applyDurationPreset(1, 4)}
+                  >
+                    ⚡ Mezza giornata (1g / 4h)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm"
+                    style={{ border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 8px', fontSize: 11 }}
+                    onClick={() => applyDurationPreset(1, 8)}
+                  >
+                    ⚡ 1 Giorno (8h)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm"
+                    style={{ border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 8px', fontSize: 11 }}
+                    onClick={() => applyDurationPreset(2, 16)}
+                  >
+                    ⚡ 2 Giorni (16h)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm"
+                    style={{ border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 8px', fontSize: 11 }}
+                    onClick={() => applyDurationPreset(5, 40)}
+                  >
+                    ⚡ 1 Settimana (5g / 40h)
+                  </button>
                 </div>
               </div>
 
@@ -890,10 +1090,73 @@ export default function ProjectDetailPage() {
                     placeholder="Aggiungi altro addetto..."
                     value={taskForm.customWorker}
                     onChange={(e) => setTaskForm({ ...taskForm, customWorker: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addCustomWorker();
+                      }
+                    }}
                   />
                   <button type="button" className="btn btn-secondary btn-sm" onClick={addCustomWorker}>
                     Aggiungi Addetto
                   </button>
+                </div>
+
+                {/* Sezione addetti attualmente assegnati (sotto al campo aggiungi altro addetto) */}
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed rgba(255, 255, 255, 0.15)' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>✅ Addetti Assegnati a questa fase ({taskForm.workers.length}):</span>
+                  </div>
+                  {taskForm.workers.length === 0 ? (
+                    <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', padding: '6px 0' }}>
+                      Nessun addetto assegnato al momento. Clicca sui pulsanti sopra o scrivi un nome nel campo qui sopra.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {taskForm.workers.map(w => (
+                        <div
+                          key={w}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            background: 'linear-gradient(135deg, #1e40af, #2563eb)',
+                            color: '#ffffff',
+                            padding: '6px 12px',
+                            borderRadius: '20px',
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                            boxShadow: '0 2px 5px rgba(0,0,0,0.25)',
+                            border: '1px solid rgba(255,255,255,0.2)'
+                          }}
+                        >
+                          <span>👤 {w}</span>
+                          <button
+                            type="button"
+                            onClick={() => toggleWorkerSelection(w)}
+                            style={{
+                              background: 'rgba(255,255,255,0.2)',
+                              border: 'none',
+                              color: '#fff',
+                              width: 20,
+                              height: 20,
+                              borderRadius: '50%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              fontSize: '11px',
+                              fontWeight: 'bold',
+                              lineHeight: 1
+                            }}
+                            title={`Rimuovi ${w}`}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1028,6 +1291,99 @@ export default function ProjectDetailPage() {
                 </div>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* Modale Modifica Dati Commessa */}
+      {showEditProjectModal && (
+        <div className="modal-overlay" onClick={() => setShowEditProjectModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+            <div className="modal-header">
+              <h2>Modifica Dati Commessa</h2>
+              <button className="btn-ghost btn-icon" onClick={() => setShowEditProjectModal(false)}>✕</button>
+            </div>
+            <form onSubmit={handleSaveProject}>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                  <label htmlFor="edit-proj-code">Codice Commessa *</label>
+                  <input
+                    id="edit-proj-code"
+                    className="input"
+                    value={projectForm.code}
+                    onChange={(e) => setProjectForm({ ...projectForm, code: e.target.value })}
+                    required
+                    placeholder="es. UT-COMM"
+                  />
+                </div>
+                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                  <label htmlFor="edit-proj-client">Cliente</label>
+                  <input
+                    id="edit-proj-client"
+                    className="input"
+                    value={projectForm.client}
+                    onChange={(e) => setProjectForm({ ...projectForm, client: e.target.value })}
+                    placeholder="es. HiWay s.r.l."
+                  />
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label htmlFor="edit-proj-name">Titolo Commessa *</label>
+                <input
+                  id="edit-proj-name"
+                  className="input"
+                  value={projectForm.name}
+                  onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
+                  required
+                  placeholder="es. Lancio ERP e GanttFlow Q3"
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                  <label htmlFor="edit-proj-color">Colore Identificativo</label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      id="edit-proj-color"
+                      type="color"
+                      value={projectForm.color}
+                      onChange={(e) => setProjectForm({ ...projectForm, color: e.target.value })}
+                      style={{ width: 44, height: 38, padding: 2, borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', cursor: 'pointer', flexShrink: 0 }}
+                    />
+                    <input
+                      className="input"
+                      value={projectForm.color}
+                      onChange={(e) => setProjectForm({ ...projectForm, color: e.target.value })}
+                      placeholder="#185FA5"
+                      style={{ flex: 1, minWidth: 0 }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label htmlFor="edit-proj-desc">Descrizione / Note</label>
+                <textarea
+                  id="edit-proj-desc"
+                  className="input"
+                  rows={3}
+                  value={projectForm.description}
+                  onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
+                  placeholder="Dettagli e obiettivo della commessa..."
+                  style={{ resize: 'vertical' }}
+                />
+              </div>
+
+              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 20 }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditProjectModal(false)}>
+                  Annulla
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Salva Modifiche
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

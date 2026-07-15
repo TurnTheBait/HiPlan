@@ -141,7 +141,8 @@ async def get_project(
     project = await project_service.get_project(db, project_id, current_user)
     members = await project_service.get_project_members(db, project_id)
     return ProjectDetail(
-        id=project.id, name=project.name, description=project.description,
+        id=project.id, name=project.name, code=project.code, client=project.client, color=project.color or "#185FA5",
+        description=project.description,
         start_date=project.start_date, end_date=project.end_date,
         status=project.status, owner_id=project.owner_id,
         created_at=project.created_at, updated_at=project.updated_at,
@@ -157,12 +158,7 @@ async def update_project(
     current_user: User = Depends(get_current_user),
 ):
     project = await project_service.update_project(db, project_id, data, current_user)
-    return ProjectOut(
-        id=project.id, name=project.name, description=project.description,
-        start_date=project.start_date, end_date=project.end_date,
-        status=project.status, owner_id=project.owner_id,
-        created_at=project.created_at, updated_at=project.updated_at,
-    )
+    return project
 
 
 @router.delete("/{project_id}", status_code=204)

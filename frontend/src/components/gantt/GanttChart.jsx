@@ -3,7 +3,7 @@ import { gantt } from 'dhtmlx-gantt';
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css';
 import './GanttChart.css';
 
-export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete }) {
+export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onNewTask }) {
   const containerRef = useRef(null);
   const initialized = useRef(false);
 
@@ -12,6 +12,8 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
   const handleTaskDelete = useCallback(onTaskDelete, [onTaskDelete]);
   const handleLinkCreate = useCallback(onLinkCreate, [onLinkCreate]);
   const handleLinkDelete = useCallback(onLinkDelete, [onLinkDelete]);
+  const handleEditTask = useCallback((t) => onEditTask && onEditTask(t), [onEditTask]);
+  const handleNewTask = useCallback((p) => onNewTask && onNewTask(p), [onNewTask]);
 
   useEffect(() => {
     if (!containerRef.current || initialized.current) return;
@@ -38,9 +40,17 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
 
     // Colonne della griglia a sinistra
     gantt.config.columns = [
-      { name: "text", label: "Attività", tree: true, width: 220, resize: true },
-      { name: "start_date", label: "Inizio", align: "center", width: 90, resize: true },
-      { name: "duration", label: "Durata", align: "center", width: 60 },
+      { name: "text", label: "Attività", tree: true, width: 210, resize: true },
+      { name: "start_date", label: "Inizio", align: "center", width: 85, resize: true },
+      { 
+        name: "duration", 
+        label: "Durata (g/h)", 
+        align: "center", 
+        width: 105,
+        template: function (task) {
+          return `${task.duration || 1}g (${task.planned_hours || (task.duration ? task.duration * 8 : 8)}h)`;
+        }
+      },
       { name: "add", label: "", width: 36 },
     ];
 
@@ -56,7 +66,8 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       return `<b>${task.text}</b><br/>
         Inizio: ${gantt.templates.tooltip_date_format(start)}<br/>
         Fine: ${gantt.templates.tooltip_date_format(end)}<br/>
-        Progresso: ${Math.round(task.progress * 100)}%`;
+        Durata: <b>${task.duration || 1} giorni</b> (${task.planned_hours || (task.duration ? task.duration * 8 : 8)} ore previste)<br/>
+        Progresso: ${Math.round((task.progress || 0) * 100)}%`;
     };
 
     // Colori barre per priorità
@@ -71,6 +82,29 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     };
 
     gantt.init(containerRef.current);
+
+    // Intercettazione doppio click e tasto "+" per aprire il modal React in italiano (con giorni, ore e addetti)
+    gantt.attachEvent("onTaskDblClick", (id, e) => {
+      const task = gantt.getTask(id);
+      if (task && handleEditTask) {
+        handleEditTask(task);
+        return false;
+      }
+      return true;
+    });
+
+    gantt.attachEvent("onBeforeLightbox", (id) => {
+      const task = gantt.getTask(id);
+      if (task && task.$new) {
+        gantt.deleteTask(id);
+        if (handleNewTask) {
+          handleNewTask(task.parent && task.parent !== 0 ? String(task.parent) : null);
+        }
+      } else if (task && handleEditTask) {
+        handleEditTask(task);
+      }
+      return false; // Blocca 100% la lightbox inglese di DHTMLX
+    });
 
     // Event handlers
     gantt.attachEvent("onAfterTaskDrag", (id, mode) => {
