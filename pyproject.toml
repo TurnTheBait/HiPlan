@@ -1,15 +1,15 @@
 [tool.pyrefly]
 python-version = "3.13"
-python-path = "backend/venv/bin/python"
+python-path = "/Users/davidegirolamo/Programming/Gantt/backend/venv/bin/python"
 search-paths = [
-    "backend",
-    "backend/venv/lib/python3.13/site-packages"
+    "/Users/davidegirolamo/Programming/Gantt/backend",
+    "/Users/davidegirolamo/Programming/Gantt/backend/venv/lib/python3.13/site-packages"
 ]
 
 [tool.pyright]
-venvPath = "."
+venvPath = "/Users/davidegirolamo/Programming/Gantt"
 venv = "backend/venv"
 extraPaths = [
-    "backend",
-    "backend/venv/lib/python3.13/site-packages"
+    "/Users/davidegirolamo/Programming/Gantt/backend",
+    "/Users/davidegirolamo/Programming/Gantt/backend/venv/lib/python3.13/site-packages"
 ]
