@@ -33,11 +33,13 @@ export default function MainLayout() {
       <aside className="sidebar">
         <div className="sidebar-header">
           <div className="sidebar-logo">
-            <img
-              src="/hiway-logo.png"
-              alt="HiWay"
-              className="hiway-sidebar-img"
-            />
+            {!collapsed && (
+              <img
+                src="/hiway-logo.png"
+                alt="HiWay"
+                className="hiway-sidebar-img"
+              />
+            )}
             {!collapsed && (
               <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
                 <span className="sidebar-logo-text" style={{ fontSize: '1.05rem', background: 'linear-gradient(135deg, #ffffff, var(--accent-200))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>GanttFlow</span>
@@ -52,26 +54,32 @@ export default function MainLayout() {
 
         <nav className="sidebar-nav">
           <NavLink to="/dashboard" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            <span className="sidebar-link-icon">◫</span>
+            <span className="sidebar-link-icon">📊</span>
             {!collapsed && <span>Dashboard</span>}
           </NavLink>
           <NavLink to="/projects" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            <span className="sidebar-link-icon">☰</span>
+            <span className="sidebar-link-icon">📂</span>
             {!collapsed && <span>Progetti</span>}
           </NavLink>
           <NavLink to="/calendar" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            <span className="sidebar-link-icon">▦</span>
+            <span className="sidebar-link-icon">📅</span>
             {!collapsed && <span>Calendario</span>}
           </NavLink>
           <NavLink to="/notes" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            <span className="sidebar-link-icon">▤</span>
+            <span className="sidebar-link-icon">📝</span>
             {!collapsed && <span>Blocchi Note</span>}
           </NavLink>
           {user?.role === 'admin' && (
-            <NavLink to="/admin" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-              <span className="sidebar-link-icon">⚙</span>
-              {!collapsed && <span>Admin</span>}
-            </NavLink>
+            <>
+              <NavLink to="/admin/conflicts" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+                <span className="sidebar-link-icon">👷‍♂️</span>
+                {!collapsed && <span>Panoramica addetti</span>}
+              </NavLink>
+              <NavLink to="/admin" end className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+                <span className="sidebar-link-icon">⚙️</span>
+                {!collapsed && <span>Admin</span>}
+              </NavLink>
+            </>
           )}
         </nav>
 

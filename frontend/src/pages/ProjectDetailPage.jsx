@@ -22,9 +22,7 @@ const PREDEFINED_PHASES = [
   '__custom__', // Personalizzata
 ];
 
-const PREDEFINED_WORKERS_DEFAULT = [
-  'Alessio', 'Edoardo', 'Ermal', 'Luca', 'Marco', 'Michelangelo', 'Cliente'
-];
+const PREDEFINED_WORKERS_DEFAULT = [];
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
@@ -47,7 +45,8 @@ export default function ProjectDetailPage() {
     end_date: new Date().toISOString().split('T')[0],
     duration_days: 1,
     planned_hours: 8.0,
-    workers: ['Alessio'],
+    workers: [],
+    worker_hours: {},
     customWorker: ''
   });
 
@@ -64,18 +63,24 @@ export default function ProjectDetailPage() {
     client: '',
     description: '',
     color: '#185FA5',
+    start_date: '',
+    end_date: '',
   });
 
   useEffect(() => { loadProject(); }, [id]);
 
   async function loadProject() {
     try {
-      const [projRes, ganttRes] = await Promise.all([
+      const [projRes, ganttRes, workersRes] = await Promise.all([
         api.get(`/projects/${id}`),
         api.get(`/projects/${id}/gantt`),
+        api.get('/workers').catch(() => ({ data: [] }))
       ]);
       setProject(projRes.data);
       setGanttData(ganttRes.data);
+      if (Array.isArray(workersRes.data)) {
+        setPredefinedWorkers(workersRes.data.map(w => w.name));
+      }
     } catch {
       toast.error('Progetto non trovato');
       navigate('/projects');
@@ -233,7 +238,8 @@ export default function ProjectDetailPage() {
       end_date: project?.end_date || new Date().toISOString().split('T')[0],
       duration_days: 1,
       planned_hours: 8.0,
-      workers: ['Alessio'],
+      workers: [],
+      worker_hours: {},
       customWorker: '',
     });
     setShowTaskModal(true);
@@ -251,8 +257,9 @@ export default function ProjectDetailPage() {
       start_date: s,
       end_date: e,
       duration_days: task.duration || diff,
-      planned_hours: Number(task.planned_hours) || (task.duration ? task.duration * 8 : diff * 8),
-      workers: Array.isArray(task.workers) ? [...task.workers] : [],
+      planned_hours: task.planned_hours || 8.0,
+      workers: Array.isArray(task.workers) ? task.workers : [],
+      worker_hours: typeof task.worker_hours === 'object' ? task.worker_hours : {},
       customWorker: '',
     });
     setShowTaskModal(true);
@@ -340,6 +347,8 @@ export default function ProjectDetailPage() {
       duration: finalDays,
       planned_hours: Number(taskForm.planned_hours) || (finalDays * 8.0),
       workers: taskForm.workers,
+      worker_hours: taskForm.worker_hours,
+      type: editingTask ? editingTask.type : 'task',
     };
 
     try {
@@ -389,6 +398,8 @@ export default function ProjectDetailPage() {
       client: project.client || '',
       description: project.description || '',
       color: project.color || '#185FA5',
+      start_date: project.start_date || '',
+      end_date: project.end_date || '',
     });
     setShowEditProjectModal(true);
   }
@@ -407,23 +418,27 @@ export default function ProjectDetailPage() {
   }
 
   function toggleWorkerSelection(w) {
-    setTaskForm(prev => {
-      const exists = prev.workers.includes(w);
-      return {
-        ...prev,
-        workers: exists ? prev.workers.filter(x => x !== w) : [...prev.workers, w]
-      };
-    });
+    const isSelected = taskForm.workers.includes(w);
+    let newWorkers, newWorkerHours = { ...taskForm.worker_hours };
+    if (isSelected) {
+      newWorkers = taskForm.workers.filter(x => x !== w);
+      delete newWorkerHours[w];
+    } else {
+      newWorkers = [...taskForm.workers, w];
+      newWorkerHours[w] = 8.0;
+    }
+    setTaskForm({ ...taskForm, workers: newWorkers, worker_hours: newWorkerHours });
   }
 
   function addCustomWorker() {
     const w = taskForm.customWorker.trim();
     if (w && !taskForm.workers.includes(w)) {
-      setTaskForm(prev => ({
-        ...prev,
-        workers: [...prev.workers, w],
-        customWorker: ''
-      }));
+      setTaskForm({ 
+        ...taskForm, 
+        workers: [...taskForm.workers, w], 
+        worker_hours: { ...taskForm.worker_hours, [w]: 8.0 },
+        customWorker: '' 
+      });
     }
   }
 
@@ -997,11 +1012,11 @@ export default function ProjectDetailPage() {
                         min="1"
                         step="1"
                         className="input"
-                        style={{ fontWeight: 600, color: '#60a5fa' }}
+                        style={{ fontWeight: 600, color: '#60a5fa', paddingRight: '56px' }}
                         value={taskForm.duration_days}
                         onChange={(e) => handleDurationDaysChange(e.target.value)}
                       />
-                      <span style={{ position: 'absolute', right: 12, top: 9, fontSize: 12, color: '#94a3b8', pointerEvents: 'none' }}>giorni</span>
+                      <span style={{ position: 'absolute', right: 30, top: 9, fontSize: 12, color: '#94a3b8', pointerEvents: 'none' }}>giorni</span>
                     </div>
                   </div>
                   <div className="input-group" style={{ flex: 1 }}>
@@ -1012,11 +1027,11 @@ export default function ProjectDetailPage() {
                         min="0.5"
                         step="0.5"
                         className="input"
-                        style={{ fontWeight: 600, color: '#34d399' }}
+                        style={{ fontWeight: 600, color: '#34d399', paddingRight: '48px' }}
                         value={taskForm.planned_hours}
                         onChange={(e) => handlePlannedHoursChange(e.target.value)}
                       />
-                      <span style={{ position: 'absolute', right: 12, top: 9, fontSize: 12, color: '#94a3b8', pointerEvents: 'none' }}>ore</span>
+                      <span style={{ position: 'absolute', right: 30, top: 9, fontSize: 12, color: '#94a3b8', pointerEvents: 'none' }}>ore</span>
                     </div>
                   </div>
                 </div>
@@ -1110,50 +1125,43 @@ export default function ProjectDetailPage() {
                     <span>✅ Addetti Assegnati a questa fase ({taskForm.workers.length}):</span>
                   </div>
                   {taskForm.workers.length === 0 ? (
-                    <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', padding: '6px 0' }}>
-                      Nessun addetto assegnato al momento. Clicca sui pulsanti sopra o scrivi un nome nel campo qui sopra.
-                    </div>
+                    <span style={{ fontSize: '0.8125rem', color: '#64748b', fontStyle: 'italic' }}>Nessun addetto ancora selezionato. Scegline uno qui sopra.</span>
                   ) : (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                       {taskForm.workers.map(w => (
-                        <div
-                          key={w}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            background: 'linear-gradient(135deg, #1e40af, #2563eb)',
-                            color: '#ffffff',
-                            padding: '6px 12px',
-                            borderRadius: '20px',
-                            fontSize: '0.85rem',
-                            fontWeight: 600,
-                            boxShadow: '0 2px 5px rgba(0,0,0,0.25)',
-                            border: '1px solid rgba(255,255,255,0.2)'
-                          }}
-                        >
-                          <span>👤 {w}</span>
+                        <div key={w} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#3b82f61a', border: '1px solid #3b82f666', padding: '6px 12px', borderRadius: 8 }}>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#60a5fa' }}>{w}</span>
+                          <span style={{ fontSize: '0.8rem', color: '#94a3b8', marginLeft: 4 }}>Ore:</span>
+                          <input
+                            type="number"
+                            min="0.5"
+                            step="0.5"
+                            style={{
+                              width: 60,
+                              height: 24,
+                              background: 'var(--bg-secondary)',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: 4,
+                              color: 'var(--text-primary)',
+                              padding: '0 4px',
+                              fontSize: '0.8rem',
+                              textAlign: 'center'
+                            }}
+                            value={taskForm.worker_hours?.[w] || ''}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              setTaskForm({
+                                ...taskForm,
+                                worker_hours: { ...taskForm.worker_hours, [w]: val }
+                              });
+                            }}
+                          />
                           <button
                             type="button"
                             onClick={() => toggleWorkerSelection(w)}
-                            style={{
-                              background: 'rgba(255,255,255,0.2)',
-                              border: 'none',
-                              color: '#fff',
-                              width: 20,
-                              height: 20,
-                              borderRadius: '50%',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              fontSize: '11px',
-                              fontWeight: 'bold',
-                              lineHeight: 1
-                            }}
-                            title={`Rimuovi ${w}`}
+                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.9rem', marginLeft: 4 }}
                           >
-                            ✕
+                            ×
                           </button>
                         </div>
                       ))}
@@ -1340,6 +1348,29 @@ export default function ProjectDetailPage() {
                   required
                   placeholder="es. Lancio ERP e GanttFlow Q3"
                 />
+              </div>
+
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                  <label htmlFor="edit-proj-start">Data di Inizio</label>
+                  <input
+                    id="edit-proj-start"
+                    type="date"
+                    className="input"
+                    value={projectForm.start_date}
+                    onChange={(e) => setProjectForm({ ...projectForm, start_date: e.target.value })}
+                  />
+                </div>
+                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                  <label htmlFor="edit-proj-end">Data di Fine</label>
+                  <input
+                    id="edit-proj-end"
+                    type="date"
+                    className="input"
+                    value={projectForm.end_date}
+                    onChange={(e) => setProjectForm({ ...projectForm, end_date: e.target.value })}
+                  />
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: 12 }}>

@@ -6,6 +6,7 @@
    ====================================== */
 
 :root {
+  color-scheme: dark;
   /* Colori base */
   --bg-primary: #0f0f14;
   --bg-secondary: #16161e;
@@ -280,6 +281,15 @@ a:hover {
 }
 .input::placeholder {
   color: var(--text-muted);
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity var(--transition-fast);
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
 }
 
 select.input {

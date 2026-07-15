@@ -35,6 +35,7 @@ def _task_to_out(task: Task) -> TaskOut:
         open=task.open,
         planned_hours=task.planned_hours or 8.0,
         workers=_parse_json(task.workers, []),
+        worker_hours=_parse_json(task.worker_hours, {}),
         actual_hours=_parse_json(task.actual_hours, {}),
     )
 
@@ -79,6 +80,7 @@ async def create_task(db: AsyncSession, project_id: str, data: TaskCreate) -> Ta
         open=data.open,
         planned_hours=data.planned_hours,
         workers=json.dumps(data.workers),
+        worker_hours=json.dumps(data.worker_hours),
         actual_hours=json.dumps(data.actual_hours),
     )
     db.add(task)
@@ -97,7 +99,7 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate) -> TaskO
     for key, value in update_data.items():
         if key == "parent_id" and value == "0":
             value = None
-        if key in ("workers", "actual_hours"):
+        if key in ("workers", "worker_hours", "actual_hours"):
             value = json.dumps(value)
         setattr(task, key, value)
     await db.commit()

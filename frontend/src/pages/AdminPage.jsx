@@ -74,6 +74,17 @@ export default function AdminPage() {
     }
   }
 
+  async function handleCreateWorkerFromUser(user) {
+    const workerName = user.full_name || user.username;
+    try {
+      await api.post('/workers', { name: workerName });
+      toast.success(`Addetto '${workerName}' creato con successo!`);
+      loadWorkers();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Errore durante la creazione dell'addetto (potrebbe già esistere)");
+    }
+  }
+
   async function handleDeleteWorker(worker) {
     if (!window.confirm(`Rimuovere '${worker.name}' dagli addetti selezionabili nel sistema?`)) return;
     try {
@@ -149,12 +160,21 @@ export default function AdminPage() {
                     {u.created_at ? new Date(u.created_at).toLocaleDateString('it-IT') : '-'}
                   </td>
                   <td>
-                    <button
-                      className={`btn btn-sm ${u.is_active ? 'btn-danger' : 'btn-primary'}`}
-                      onClick={() => handleToggleActive(u.id, u.is_active)}
-                    >
-                      {u.is_active ? 'Disattiva' : 'Attiva'}
-                    </button>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        className={`btn btn-sm ${u.is_active ? 'btn-danger' : 'btn-primary'}`}
+                        onClick={() => handleToggleActive(u.id, u.is_active)}
+                      >
+                        {u.is_active ? 'Disattiva' : 'Attiva'}
+                      </button>
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => handleCreateWorkerFromUser(u)}
+                        title="Crea un addetto per il Gantt con il nome di questo utente"
+                      >
+                        👷‍♂️ Crea Addetto
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

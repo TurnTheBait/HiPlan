@@ -16,7 +16,7 @@ export default function ProjectsPage() {
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
-  const [editForm, setEditForm] = useState({ name: '', code: '', client: '', color: '#185FA5', description: '' });
+  const [editForm, setEditForm] = useState({ name: '', code: '', client: '', color: '#185FA5', description: '', start_date: '', end_date: '' });
   const [filter, setFilter] = useState('all');
   const [form, setForm] = useState({ name: '', code: '', client: '', color: '#185FA5', status: 'planning', description: '', start_date: '', end_date: '' });
 
@@ -66,6 +66,8 @@ export default function ProjectsPage() {
       client: project.client || '',
       color: project.color || '#185FA5',
       description: project.description || '',
+      start_date: project.start_date || '',
+      end_date: project.end_date || '',
     });
     setShowEditModal(true);
   }
@@ -134,12 +136,12 @@ export default function ProjectsPage() {
           <p>{projects.length} commesse gestite (Ufficio Tecnico)</p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button className="btn btn-secondary btn-sm" onClick={handleBackupJson}>
+          <button className="btn btn-secondary" style={{ width: '190px' }} onClick={handleBackupJson}>
             💾 Salva Dati (JSON)
           </button>
           {canCreate && (
             <>
-              <button className="btn btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()}>
+              <button className="btn btn-secondary" style={{ width: '190px' }} onClick={() => fileInputRef.current?.click()}>
                 📂 Carica Dati (JSON)
               </button>
               <input
@@ -149,7 +151,7 @@ export default function ProjectsPage() {
                 style={{ display: 'none' }}
                 onChange={handleRestoreJson}
               />
-              <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+              <button className="btn btn-primary" style={{ width: '190px' }} onClick={() => setShowModal(true)}>
                 + Nuova Commessa
               </button>
             </>
@@ -395,6 +397,29 @@ export default function ProjectsPage() {
                   required
                   placeholder="es. Lancio ERP e GanttFlow Q3"
                 />
+              </div>
+
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                  <label htmlFor="card-edit-start">Data di Inizio</label>
+                  <input
+                    id="card-edit-start"
+                    type="date"
+                    className="input"
+                    value={editForm.start_date}
+                    onChange={(e) => setEditForm({ ...editForm, start_date: e.target.value })}
+                  />
+                </div>
+                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                  <label htmlFor="card-edit-end">Data di Fine</label>
+                  <input
+                    id="card-edit-end"
+                    type="date"
+                    className="input"
+                    value={editForm.end_date}
+                    onChange={(e) => setEditForm({ ...editForm, end_date: e.target.value })}
+                  />
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: 12 }}>

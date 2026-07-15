@@ -35,6 +35,7 @@ class Task(Base, TimestampMixin):
     open = Column(Integer, default=1, nullable=False)  # DHTMLX: 1=expanded, 0=collapsed
     planned_hours = Column(Float, default=8.0, nullable=False)
     workers = Column(Text, nullable=True, default="[]")  # JSON list di addetti (es. Alessio, Edoardo)
+    worker_hours = Column(Text, nullable=True, default="{}")  # JSON dict ore assegnate specifiche {worker: ore}
     actual_hours = Column(Text, nullable=True, default="{}")  # JSON dict consuntivazione per data e addetto
 
     project = relationship("Project", back_populates="tasks")

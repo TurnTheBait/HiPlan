@@ -10,6 +10,7 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [myTasksToday, setMyTasksToday] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -18,12 +19,14 @@ export default function DashboardPage() {
 
   async function loadData() {
     try {
-      const [projRes, notifRes] = await Promise.all([
+      const [projRes, notifRes, tasksRes] = await Promise.all([
         api.get('/projects'),
         api.get('/notifications'),
+        api.get('/workers/me/tasks/today'),
       ]);
       setProjects(projRes.data);
       setNotifications(notifRes.data);
+      setMyTasksToday(tasksRes.data);
     } catch { /* ignore */ }
     finally { setLoading(false); }
   }
@@ -82,6 +85,49 @@ export default function DashboardPage() {
       </div>
 
       <div className="dashboard-grid">
+        <div className="card dashboard-section" style={{ gridColumn: '1 / -1' }}>
+          <h2>I Miei Task di Oggi</h2>
+          {myTasksToday.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-icon">🎉</div>
+              <h3>Nessun task per oggi!</h3>
+              <p>Hai la giornata libera oppure i tuoi task sono già completati.</p>
+            </div>
+          ) : (
+            <div className="recent-projects" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+              {myTasksToday.map(task => (
+                <div
+                  key={task.id}
+                  className="recent-project-item"
+                  onClick={() => navigate(`/projects/${task.project_id}`)}
+                  style={{ borderLeft: '4px solid var(--accent-500)', padding: '16px' }}
+                >
+                  <div className="recent-project-info" style={{ marginBottom: '8px' }}>
+                    <span className="recent-project-name" style={{ fontSize: '1.1rem' }}>{task.text}</span>
+                  </div>
+                  <div className="recent-project-meta" style={{ marginBottom: '12px' }}>
+                    <span style={{ color: 'var(--accent-400)' }}>🏢 {task.project_name}</span>
+                    {task.my_assigned_hours ? (
+                      <span style={{ color: '#10b981', fontWeight: 600 }}>⏱ {task.my_assigned_hours}h a te (su {task.planned_hours}h totali)</span>
+                    ) : (
+                      <span>⏱ {task.planned_hours}h stimate (totali)</span>
+                    )}
+                  </div>
+                  <div className="progress-bar" style={{ width: '100%' }}>
+                    <div
+                      className="progress-bar-fill"
+                      style={{ width: `${task.progress}%`, background: task.progress === 100 ? 'var(--success-color)' : 'var(--accent-500)' }}
+                    />
+                  </div>
+                  <div style={{ textAlign: 'right', marginTop: '4px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    {task.progress}% completato
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="card dashboard-section">
           <h2>Progetti Recenti</h2>
           {projects.length === 0 ? (

@@ -43,7 +43,7 @@ export default function CalendarPage() {
   const [filterWorker, setFilterWorker] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedProjects, setExpandedProjects] = useState({});
-  const [systemWorkers, setSystemWorkers] = useState(['Alessio', 'Edoardo', 'Ermal', 'Luca', 'Marco', 'Michelangelo', 'Cliente']);
+  const [systemWorkers, setSystemWorkers] = useState([]);
 
   // Modali dettaglio
   const [selectedProject, setSelectedProject] = useState(null);
@@ -60,7 +60,7 @@ export default function CalendarPage() {
         api.get('/projects'),
         api.get('/workers').catch(() => ({ data: [] }))
       ]);
-      if (Array.isArray(workersRes.data) && workersRes.data.length > 0) {
+      if (Array.isArray(workersRes.data)) {
         setSystemWorkers(workersRes.data.map(w => w.name));
       }
       const projectsWithTasks = await Promise.all(
@@ -81,22 +81,11 @@ export default function CalendarPage() {
     }
   }
 
-  // Elenco completo degli addetti dinamico + predefiniti
+  // Elenco degli addetti attualmente presenti a sistema (dal backend)
   const allWorkers = useMemo(() => {
     const setW = new Set(systemWorkers);
-    projects.forEach(p => {
-      if (Array.isArray(p.tasks)) {
-        p.tasks.forEach(t => {
-          if (Array.isArray(t.workers)) {
-            t.workers.forEach(w => {
-              if (w && typeof w === 'string' && w.trim()) setW.add(w.trim());
-            });
-          }
-        });
-      }
-    });
     return Array.from(setW).sort((a, b) => a.localeCompare(b));
-  }, [projects, systemWorkers]);
+  }, [systemWorkers]);
 
   // Filtra commesse per stato, addetto e ricerca
   const filteredProjects = useMemo(() => {

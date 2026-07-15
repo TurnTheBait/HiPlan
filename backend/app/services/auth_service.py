@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.user import User, UserRole
+from app.models.worker import PhaseWorker
 from app.schemas.user import UserCreate
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 from fastapi import HTTPException, status
@@ -26,6 +27,14 @@ async def register_user(db: AsyncSession, data: UserCreate) -> User:
         role=assigned_role,
     )
     db.add(user)
+    
+    # Crea in automatico l'addetto associato (PhaseWorker)
+    worker_name = data.full_name or data.username
+    if worker_name:
+        existing_worker = await db.execute(select(PhaseWorker).where(PhaseWorker.name == worker_name))
+        if not existing_worker.scalar_one_or_none():
+            db.add(PhaseWorker(name=worker_name))
+
     await db.commit()
     await db.refresh(user)
     return user

@@ -9,6 +9,7 @@ import ProjectDetailPage from './pages/ProjectDetailPage';
 import CalendarPage from './pages/CalendarPage';
 import NotesPage from './pages/NotesPage';
 import AdminPage from './pages/AdminPage';
+import ConflictMonitoringPage from './pages/ConflictMonitoringPage';
 import './index.css';
 
 function ProtectedRoute({ children, adminOnly = false }) {
@@ -60,6 +61,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute adminOnly>
               <AdminPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/conflicts"
+          element={
+            <ProtectedRoute adminOnly>
+              <ConflictMonitoringPage />
             </ProtectedRoute>
           }
         />

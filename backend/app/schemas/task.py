@@ -21,6 +21,7 @@ class TaskCreate(BaseModel):
     open: int = 1
     planned_hours: float = 8.0
     workers: List[str] = []
+    worker_hours: dict = {}
     actual_hours: dict = {}
 
 
@@ -38,6 +39,7 @@ class TaskUpdate(BaseModel):
     open: Optional[int] = None
     planned_hours: Optional[float] = None
     workers: Optional[List[str]] = None
+    worker_hours: Optional[dict] = None
     actual_hours: Optional[dict] = None
 
 
@@ -57,6 +59,7 @@ class TaskOut(BaseModel):
     open: int
     planned_hours: float = 8.0
     workers: List[str] = []
+    worker_hours: dict = {}
     actual_hours: dict = {}
 
     class Config:
