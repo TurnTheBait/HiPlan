@@ -5,6 +5,7 @@ from app.models.task import Task, TaskType, TaskPriority
 from app.models.link import Link, LinkType
 from app.models.notification import Notification, NotificationType
 from app.models.worker import PhaseWorker
+from app.models.note import Note
 
 __all__ = [
     "Base", "engine", "AsyncSessionLocal",
@@ -14,4 +15,5 @@ __all__ = [
     "Link", "LinkType",
     "Notification", "NotificationType",
     "PhaseWorker",
+    "Note",
 ]

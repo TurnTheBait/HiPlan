@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage';
 import ProjectsPage from './pages/ProjectsPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import CalendarPage from './pages/CalendarPage';
+import NotesPage from './pages/NotesPage';
 import AdminPage from './pages/AdminPage';
 import './index.css';
 
@@ -53,6 +54,7 @@ function AppRoutes() {
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/projects/:id" element={<ProjectDetailPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/notes" element={<NotesPage />} />
         <Route
           path="/admin"
           element={
