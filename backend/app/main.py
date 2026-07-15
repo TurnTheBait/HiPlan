@@ -3,7 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.models.base import Base, engine
-from app.api import auth, users, projects, tasks, notifications, export
+import app.models  # Assicura il caricamento di tutti i modelli per create_all
+from app.api import auth, users, projects, tasks, notifications, export, workers
 
 
 @asynccontextmanager
@@ -44,6 +45,7 @@ app.include_router(projects.router)
 app.include_router(tasks.router)
 app.include_router(notifications.router)
 app.include_router(export.router)
+app.include_router(workers.router)
 
 
 @app.get("/api/health")

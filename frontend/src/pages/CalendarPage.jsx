@@ -43,6 +43,7 @@ export default function CalendarPage() {
   const [filterWorker, setFilterWorker] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedProjects, setExpandedProjects] = useState({});
+  const [systemWorkers, setSystemWorkers] = useState(['Alessio', 'Edoardo', 'Ermal', 'Luca', 'Marco', 'Michelangelo', 'Cliente']);
 
   // Modali dettaglio
   const [selectedProject, setSelectedProject] = useState(null);
@@ -55,9 +56,15 @@ export default function CalendarPage() {
   async function loadProjects() {
     setLoading(true);
     try {
-      const { data } = await api.get('/projects');
+      const [projRes, workersRes] = await Promise.all([
+        api.get('/projects'),
+        api.get('/workers').catch(() => ({ data: [] }))
+      ]);
+      if (Array.isArray(workersRes.data) && workersRes.data.length > 0) {
+        setSystemWorkers(workersRes.data.map(w => w.name));
+      }
       const projectsWithTasks = await Promise.all(
-        data.map(async (p) => {
+        projRes.data.map(async (p) => {
           try {
             const { data: gData } = await api.get(`/projects/${p.id}/gantt`);
             return { ...p, tasks: Array.isArray(gData.tasks) ? gData.tasks : [] };
@@ -76,7 +83,7 @@ export default function CalendarPage() {
 
   // Elenco completo degli addetti dinamico + predefiniti
   const allWorkers = useMemo(() => {
-    const setW = new Set(['Alessio', 'Edoardo', 'Ermal', 'Luca', 'Marco', 'Michelangelo', 'Cliente']);
+    const setW = new Set(systemWorkers);
     projects.forEach(p => {
       if (Array.isArray(p.tasks)) {
         p.tasks.forEach(t => {
@@ -89,7 +96,7 @@ export default function CalendarPage() {
       }
     });
     return Array.from(setW).sort((a, b) => a.localeCompare(b));
-  }, [projects]);
+  }, [projects, systemWorkers]);
 
   // Filtra commesse per stato, addetto e ricerca
   const filteredProjects = useMemo(() => {

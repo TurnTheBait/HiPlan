@@ -22,7 +22,7 @@ const PREDEFINED_PHASES = [
   '__custom__', // Personalizzata
 ];
 
-const PREDEFINED_WORKERS = [
+const PREDEFINED_WORKERS_DEFAULT = [
   'Alessio', 'Edoardo', 'Ermal', 'Luca', 'Marco', 'Michelangelo', 'Cliente'
 ];
 
@@ -32,6 +32,7 @@ export default function ProjectDetailPage() {
   const toast = useToast();
   const [project, setProject] = useState(null);
   const [ganttData, setGanttData] = useState({ tasks: [], links: [] });
+  const [predefinedWorkers, setPredefinedWorkers] = useState(PREDEFINED_WORKERS_DEFAULT);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('day');
   const [activeTab, setActiveTab] = useState('gantt');
@@ -44,9 +45,10 @@ export default function ProjectDetailPage() {
     customText: '',
     start_date: new Date().toISOString().split('T')[0],
     end_date: new Date().toISOString().split('T')[0],
+    duration_days: 1,
     planned_hours: 8.0,
     workers: ['Alessio'],
-    customWorker: '',
+    customWorker: ''
   });
 
   // Stato Modale Consuntivo Ore
@@ -1060,7 +1062,7 @@ export default function ProjectDetailPage() {
               <div className="input-group" style={{ marginTop: 16 }}>
                 <label>Addetti Assegnati (Multi-selezione)</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                  {PREDEFINED_WORKERS.map(w => {
+                  {predefinedWorkers.map(w => {
                     const sel = taskForm.workers.includes(w);
                     return (
                       <button
