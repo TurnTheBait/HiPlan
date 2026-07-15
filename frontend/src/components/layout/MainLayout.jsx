@@ -59,6 +59,10 @@ export default function MainLayout() {
             <span className="sidebar-link-icon">☰</span>
             {!collapsed && <span>Progetti</span>}
           </NavLink>
+          <NavLink to="/calendar" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon">▦</span>
+            {!collapsed && <span>Calendario</span>}
+          </NavLink>
           {user?.role === 'admin' && (
             <NavLink to="/admin" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <span className="sidebar-link-icon">⚙</span>

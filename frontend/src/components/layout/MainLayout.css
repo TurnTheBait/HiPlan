@@ -1,6 +1,9 @@
 .app-layout {
   display: flex;
   min-height: 100vh;
+  width: 100vw;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 /* ====== SIDEBAR ====== */
@@ -217,10 +220,16 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-width: 0;
+  width: calc(100vw - var(--sidebar-width));
+  max-width: calc(100vw - var(--sidebar-width));
+  box-sizing: border-box;
 }
 
 .sidebar-collapsed .main-content {
   margin-left: var(--sidebar-collapsed);
+  width: calc(100vw - var(--sidebar-collapsed));
+  max-width: calc(100vw - var(--sidebar-collapsed));
 }
 
 .main-header {
@@ -289,4 +298,6 @@
   flex: 1;
   padding: 28px;
   overflow-y: auto;
+  min-width: 0;
+  max-width: 100%;
 }
