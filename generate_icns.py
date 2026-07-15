@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+# pyrefly: ignore [missing-import]
 from PIL import Image, ImageDraw
 
 
@@ -124,3 +125,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+# end of script
