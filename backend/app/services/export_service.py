@@ -1,16 +1,25 @@
 import io
 import json
 from typing import List, Tuple
+# pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
+# pyrefly: ignore [missing-import]
 from sqlalchemy import select
 from app.models.task import Task
 from app.models.project import Project
+# pyrefly: ignore [missing-import]
 from reportlab.lib import colors
+# pyrefly: ignore [missing-import]
 from reportlab.lib.pagesizes import A4, landscape
+# pyrefly: ignore [missing-import]
 from reportlab.lib.units import mm
+# pyrefly: ignore [missing-import]
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+# pyrefly: ignore [missing-import]
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+# pyrefly: ignore [missing-import]
 from openpyxl import Workbook
+# pyrefly: ignore [missing-import]
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 
@@ -76,10 +85,11 @@ async def export_excel(db: AsyncSession, project_id: str) -> io.BytesIO:
     ws.append([f"COMMESSA: {proj.code or ''} - {proj.name}"])
     ws.cell(row=1, column=1).font = Font(size=14, bold=True, color="1E3A8A")
     if proj.client:
-        ws.append([f"Cliente: {proj.client}"])
+        ws.append([f"Cliente: {proj.client} | Stato: {proj.status.value if proj.status else '-'} | Periodo: {proj.start_date or '-'} al {proj.end_date or '-'}"])
         ws.cell(row=2, column=1).font = Font(size=11, italic=True)
     else:
-        ws.append([])
+        ws.append([f"Stato: {proj.status.value if proj.status else '-'} | Periodo: {proj.start_date or '-'} al {proj.end_date or '-'}"])
+        ws.cell(row=2, column=1).font = Font(size=11, italic=True)
     ws.append([])
 
     headers = [
@@ -91,6 +101,7 @@ async def export_excel(db: AsyncSession, project_id: str) -> io.BytesIO:
         "Ore Budget (h)",
         "Ore Consuntivate (h)",
         "Saldo Ore (h)",
+        "Reparto",
         "Addetti Assegnati",
         "Progresso %",
         "Tipo",
@@ -125,6 +136,7 @@ async def export_excel(db: AsyncSession, project_id: str) -> io.BytesIO:
             round(planned, 1),
             round(t_eff, 1),
             round(diff, 1),
+            task.department if task.department else "-",
             workers_str,
             f"{task.progress * 100:.0f}%",
             task.type.value if task.type else "",
@@ -155,6 +167,7 @@ async def export_excel(db: AsyncSession, project_id: str) -> io.BytesIO:
         "",
         "",
         "",
+        "",
         ""
     ]
     ws.append(tot_row)
@@ -176,10 +189,11 @@ async def export_excel(db: AsyncSession, project_id: str) -> io.BytesIO:
     ws.column_dimensions["F"].width = 16
     ws.column_dimensions["G"].width = 20
     ws.column_dimensions["H"].width = 15
-    ws.column_dimensions["I"].width = 30
-    ws.column_dimensions["J"].width = 14
-    ws.column_dimensions["K"].width = 12
+    ws.column_dimensions["I"].width = 20
+    ws.column_dimensions["J"].width = 30
+    ws.column_dimensions["K"].width = 14
     ws.column_dimensions["L"].width = 12
+    ws.column_dimensions["M"].width = 12
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -238,9 +252,12 @@ async def export_pdf(db: AsyncSession, project_id: str) -> io.BytesIO:
 
     # Titolo
     elements.append(Paragraph(f"<b>{proj.code or ''} {proj.name}</b> — Report Dettagliato Fasi e Consuntivazione Ore", styles["Title"]))
-    if proj.client or proj.description:
-        s = f"<b>Cliente:</b> {proj.client or '-'} | <b>Descrizione:</b> {proj.description or '-'}"
-        elements.append(Paragraph(s, styles["Normal"]))
+    info_str = f"<b>Stato:</b> {proj.status.value if proj.status else '-'} | <b>Periodo:</b> {proj.start_date or '-'} al {proj.end_date or '-'}"
+    if proj.client:
+        info_str += f" | <b>Cliente:</b> {proj.client}"
+    if proj.description:
+        info_str += f" | <b>Descrizione:</b> {proj.description}"
+    elements.append(Paragraph(info_str, styles["Normal"]))
     elements.append(Spacer(1, 4 * mm))
 
     # Calcolo totali prima della tabella
@@ -294,6 +311,7 @@ async def export_pdf(db: AsyncSession, project_id: str) -> io.BytesIO:
         Paragraph("Ore<br/>Budget", header_style),
         Paragraph("Ore<br/>Effett.", header_style),
         Paragraph("Saldo<br/>Ore", header_style),
+        Paragraph("Reparto", header_style),
         Paragraph("Addetti Assegnati", header_style),
         Paragraph("Prog.", header_style),
         Paragraph("Priorità", header_style)
@@ -313,6 +331,7 @@ async def export_pdf(db: AsyncSession, project_id: str) -> io.BytesIO:
             Paragraph(f"{planned:.1f}h", cell_center),
             Paragraph(f"{t_eff:.1f}h", cell_center),
             Paragraph(diff_str, cell_center),
+            Paragraph(task.department if task.department else "-", cell_center),
             Paragraph(workers_str, cell_left),
             Paragraph(f"{task.progress * 100:.0f}%", cell_center),
             Paragraph(task.priority.value if task.priority else "-", cell_center)
@@ -329,14 +348,14 @@ async def export_pdf(db: AsyncSession, project_id: str) -> io.BytesIO:
         Paragraph(f"<b>{tot_planned:.1f}h</b>", cell_bold_center),
         Paragraph(f"<b>{tot_actual:.1f}h</b>", cell_bold_center),
         Paragraph(f"<b>{tot_diff_str}</b>", cell_bold_center),
+        Paragraph("", cell_center),
         Paragraph("", cell_left),
         Paragraph("", cell_center),
         Paragraph("", cell_center)
     ])
 
     # Larghezze per un totale di 760 pt (268 mm circa, perfetto per A4 orizzontale)
-    # 22 + 155 + 58 + 58 + 42 + 52 + 52 + 52 + 165 + 48 + 56 = 760
-    col_widths = [22, 155, 58, 58, 42, 52, 52, 52, 165, 48, 56]
+    col_widths = [20, 130, 55, 55, 38, 48, 48, 48, 70, 150, 42, 56]
     table = Table(data, colWidths=col_widths)
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2563EB")),

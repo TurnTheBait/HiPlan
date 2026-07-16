@@ -29,7 +29,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      PROJECT_NAME: "GanttFlow Enterprise"
+      PROJECT_NAME: "HiPlan Enterprise"
       SECRET_KEY: "super-secret-jwt-key-change-this-in-production-deploy"
       DATABASE_URL: "postgresql+asyncpg://ganttflow:ganttflow_secret_password@db:5432/ganttflow_prod"
       CORS_ORIGINS: "[\"http://localhost\", \"http://localhost:80\", \"http://127.0.0.1\"]"

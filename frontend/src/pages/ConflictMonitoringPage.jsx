@@ -17,7 +17,7 @@ export default function ConflictMonitoringPage() {
   async function loadConflicts() {
     try {
       setLoading(true);
-      const { data } = await api.get('/workers/conflicts');
+      const { data } = await api.get('/users/conflicts');
       setConflicts(data);
     } catch (err) {
       toast.error('Errore durante il caricamento dei conflitti');

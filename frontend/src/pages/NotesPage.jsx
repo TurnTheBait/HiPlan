@@ -362,7 +362,7 @@ export default function NotesPage() {
       <aside className="notes-sidebar">
         <div className="notes-sidebar-top">
           <div className="notes-sidebar-title">
-            <span>▤ Blocchi Note</span>
+            <span>📋 Blocchi Note</span>
           </div>
           <button
             className="btn btn-primary btn-sm"

@@ -117,13 +117,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  padding: 14px 20px;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
   flex-wrap: wrap;
-  box-shadow: var(--shadow-sm);
 }
 
 .toolbar-left,

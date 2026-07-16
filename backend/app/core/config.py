@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     CORS_ORIGINS: str = '["http://localhost:5173"]'
-    APP_NAME: str = "GanttFlow"
+    APP_NAME: str = "HiPlan"
     DEBUG: bool = True
 
     @property

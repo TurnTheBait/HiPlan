@@ -1,0 +1,18 @@
+{
+  "venvPath": "/Users/davidegirolamo/Programming/Gantt",
+  "venv": "backend/venv",
+  "pythonVersion": "3.13",
+  "extraPaths": [
+    "backend",
+    "backend/venv/lib/python3.13/site-packages"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "backend",
+      "extraPaths": [
+        "backend",
+        "backend/venv/lib/python3.13/site-packages"
+      ]
+    }
+  ]
+}

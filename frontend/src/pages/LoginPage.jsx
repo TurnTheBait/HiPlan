@@ -3,12 +3,19 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import './LoginPage.css';
 
+const DEPARTMENT_OPTIONS = [
+  { value: 'ufficio_tecnico', label: '🔧 Ufficio Tecnico' },
+  { value: 'produzione', label: '🏭 Produzione' },
+  { value: 'acquisti', label: '🛒 Acquisti' },
+];
+
 export default function LoginPage() {
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [department, setDepartment] = useState('ufficio_tecnico');
   const [loading, setLoading] = useState(false);
   const { login, register } = useAuth();
   const toast = useToast();
@@ -18,7 +25,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       if (isRegister) {
-        await register(email, username, password, fullName);
+        await register(email, username, password, fullName, department);
         toast.success('Account creato con successo!');
       } else {
         await login(email, password);
@@ -42,9 +49,9 @@ export default function LoginPage() {
             className="hiway-login-logo"
             style={{ maxHeight: 64, maxWidth: '100%', objectFit: 'contain', marginBottom: 16 }}
           />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 4 }}>
-            <h1 style={{ margin: 0 }}>GanttFlow</h1>
-            <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '2px 8px', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.2)', color: 'var(--accent-200)', border: '1px solid rgba(99, 102, 241, 0.4)' }}>by HiWay</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+            <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.03em', lineHeight: 1 }}>HiPlan</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '2px 8px', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.2)', color: 'var(--accent-200)', border: '1px solid rgba(99, 102, 241, 0.4)' }}>for HiWay</span>
           </div>
           <p>Gestione commesse e pianificazione tecnica</p>
         </div>
@@ -90,6 +97,20 @@ export default function LoginPage() {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                 />
+              </div>
+              <div className="input-group">
+                <label htmlFor="department">Reparto</label>
+                <select
+                  id="department"
+                  className="input"
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  required
+                >
+                  {DEPARTMENT_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
               </div>
             </>
           )}

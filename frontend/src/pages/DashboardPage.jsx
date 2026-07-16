@@ -22,7 +22,7 @@ export default function DashboardPage() {
       const [projRes, notifRes, tasksRes] = await Promise.all([
         api.get('/projects'),
         api.get('/notifications'),
-        api.get('/workers/me/tasks/today'),
+        api.get('/users/me/tasks/today'),
       ]);
       setProjects(projRes.data);
       setNotifications(notifRes.data);

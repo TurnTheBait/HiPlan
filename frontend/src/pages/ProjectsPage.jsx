@@ -395,7 +395,7 @@ export default function ProjectsPage() {
                   value={editForm.name}
                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                   required
-                  placeholder="es. Lancio ERP e GanttFlow Q3"
+                  placeholder="es. Lancio ERP e HiPlan Q3"
                 />
               </div>
 

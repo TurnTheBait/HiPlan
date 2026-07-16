@@ -9,6 +9,7 @@ class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=100)
     password: str = Field(..., min_length=6, max_length=128)
     full_name: Optional[str] = None
+    department: Optional[str] = None  # ufficio_tecnico | produzione | acquisti
 
 
 class UserLogin(BaseModel):
@@ -23,6 +24,7 @@ class UserOut(BaseModel):
     full_name: Optional[str] = None
     role: UserRole
     is_active: bool
+    department: Optional[str] = None
     created_at: Optional[datetime] = None
 
     class Config:
@@ -33,6 +35,7 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
+    department: Optional[str] = None
 
 
 class TokenPair(BaseModel):

@@ -43,9 +43,10 @@ export default function CalendarPage() {
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'timeline'
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterWorker, setFilterWorker] = useState('all');
+  const [filterDepartment, setFilterDepartment] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedProjects, setExpandedProjects] = useState({});
-  const [systemWorkers, setSystemWorkers] = useState([]);
+  const [systemUsers, setSystemUsers] = useState([]);
 
   // Modali dettaglio
   const [selectedProject, setSelectedProject] = useState(null);
@@ -58,12 +59,12 @@ export default function CalendarPage() {
   async function loadProjects() {
     setLoading(true);
     try {
-      const [projRes, workersRes] = await Promise.all([
+      const [projRes, usersRes] = await Promise.all([
         api.get('/projects'),
-        api.get('/workers').catch(() => ({ data: [] }))
+        api.get('/users').catch(() => ({ data: [] }))
       ]);
-      if (Array.isArray(workersRes.data)) {
-        setSystemWorkers(workersRes.data.map(w => w.name));
+      if (Array.isArray(usersRes.data)) {
+        setSystemUsers(usersRes.data);
       }
       const projectsWithTasks = await Promise.all(
         projRes.data.map(async (p) => {
@@ -83,20 +84,28 @@ export default function CalendarPage() {
     }
   }
 
-  // Elenco degli addetti attualmente presenti a sistema (dal backend)
+  // Elenco degli utenti attualmente presenti a sistema (dal backend)
   const allWorkers = useMemo(() => {
-    const setW = new Set(systemWorkers);
-    return Array.from(setW).sort((a, b) => a.localeCompare(b));
-  }, [systemWorkers]);
+    return systemUsers.map(u => ({ username: u.username, name: u.full_name || u.username, department: u.department })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [systemUsers]);
 
-  // Filtra commesse per stato, addetto e ricerca
+  // Filtra commesse per stato, addetto, reparto e ricerca
   const filteredProjects = useMemo(() => {
     return projects.filter(p => {
       if (filterStatus !== 'all' && p.status !== filterStatus) return false;
-      if (filterWorker !== 'all') {
-        const hasWorkerTask = Array.isArray(p.tasks) && p.tasks.some(t => Array.isArray(t.workers) && t.workers.includes(filterWorker));
-        if (!hasWorkerTask) return false;
+      
+      // Filtro per addetto (utente) e/o reparto
+      if (filterWorker !== 'all' || filterDepartment !== 'all') {
+        const hasMatchingTask = Array.isArray(p.tasks) && p.tasks.some(t => {
+          // Se task.department è settato, controlla se combacia
+          const deptMatch = filterDepartment === 'all' || t.department === filterDepartment;
+          // Controlla addetti assegnati
+          const workerMatch = filterWorker === 'all' || (Array.isArray(t.workers) && t.workers.includes(filterWorker));
+          return deptMatch && workerMatch;
+        });
+        if (!hasMatchingTask) return false;
       }
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const code = (p.code || '').toLowerCase();
@@ -271,12 +280,24 @@ export default function CalendarPage() {
           <select
             className="input"
             style={{ width: 170, minWidth: 130, maxWidth: '100%', flex: '0 1 auto', padding: '8px 12px' }}
+            value={filterDepartment}
+            onChange={(e) => setFilterDepartment(e.target.value)}
+          >
+            <option value="all">🏢 Tutti i reparti</option>
+            <option value="ufficio_tecnico">🔧 Ufficio Tecnico</option>
+            <option value="produzione">🏭 Produzione</option>
+            <option value="acquisti">🛒 Acquisti</option>
+          </select>
+
+          <select
+            className="input"
+            style={{ width: 170, minWidth: 130, maxWidth: '100%', flex: '0 1 auto', padding: '8px 12px' }}
             value={filterWorker}
             onChange={(e) => setFilterWorker(e.target.value)}
           >
-            <option value="all">👥 Tutti gli addetti</option>
+            <option value="all">👥 Tutti gli utenti</option>
             {allWorkers.map(w => (
-              <option key={w} value={w}>👤 {w}</option>
+              <option key={w.username} value={w.username}>👤 {w.name}</option>
             ))}
           </select>
 

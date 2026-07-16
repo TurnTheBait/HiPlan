@@ -24,6 +24,7 @@ class TaskCreate(BaseModel):
     worker_hours: dict = {}
     actual_hours: dict = {}
     color: Optional[str] = None
+    department: Optional[str] = None
 
 
 class TaskUpdate(BaseModel):
@@ -43,6 +44,7 @@ class TaskUpdate(BaseModel):
     worker_hours: Optional[dict] = None
     actual_hours: Optional[dict] = None
     color: Optional[str] = None
+    department: Optional[str] = None
 
 
 class TaskOut(BaseModel):
@@ -64,6 +66,7 @@ class TaskOut(BaseModel):
     worker_hours: dict = {}
     actual_hours: dict = {}
     color: Optional[str] = None
+    department: Optional[str] = None
 
 
     class Config:

@@ -36,12 +36,13 @@ export function AuthProvider({ children }) {
     await fetchUser();
   }
 
-  async function register(email, username, password, fullName) {
+  async function register(email, username, password, fullName, department) {
     await api.post('/auth/register', {
       email,
       username,
       password,
       full_name: fullName || null,
+      department: department || null,
     });
     await login(email, password);
   }

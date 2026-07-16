@@ -1,6 +1,6 @@
-# 📊 GanttFlow — Piattaforma Enterprise per Gestione Commesse e Diagrammi di Gantt
+# 📊 HiPlan — Piattaforma Enterprise per Gestione Commesse e Diagrammi di Gantt
 
-**GanttFlow ** è una piattaforma web moderna, interattiva e multi-utente progettata per la pianificazione operativa delle commesse aziendali, il monitoraggio avanzato tramite **diagrammi di Gantt custom ad alta flessibilità**, la gestione dei turni del personale su **Calendario** e la collaborazione tramite **Blocchi Note interattivi in stile Notion**.
+**HiPlan ** è una piattaforma web moderna, interattiva e multi-utente progettata per la pianificazione operativa delle commesse aziendali, il monitoraggio avanzato tramite **diagrammi di Gantt custom ad alta flessibilità**, la gestione dei turni del personale su **Calendario** e la collaborazione tramite **Blocchi Note interattivi in stile Notion**.
 
 ---
 

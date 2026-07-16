@@ -9,6 +9,14 @@ class UserRole(str, enum.Enum):
     VIEWER = "viewer"
 
 
+DEPARTMENT_LABELS = {
+    "ufficio_tecnico": "Ufficio Tecnico",
+    "produzione": "Produzione",
+    "acquisti": "Acquisti",
+    "admin": "Admin",
+}
+
+
 class User(Base, TimestampMixin):
     __tablename__ = "users"
 
@@ -19,3 +27,4 @@ class User(Base, TimestampMixin):
     full_name = Column(String(200), nullable=True)
     role = Column(Enum(UserRole), default=UserRole.VIEWER, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    department = Column(String(50), nullable=True)  # ufficio_tecnico | produzione | acquisti | admin

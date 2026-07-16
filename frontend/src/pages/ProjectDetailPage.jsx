@@ -2,12 +2,19 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import { gantt } from 'dhtmlx-gantt';
 import GanttChart from '../components/gantt/GanttChart';
 import './ProjectDetailPage.css';
 import { STATUS_LABELS_IT, STATUS_OPTIONS } from '../utils/statusLabels';
 import { PREDEFINED_PHASES, PHASE_DEFAULT_COLORS, getTaskColor } from '../utils/phaseColors';
 
+const DEPT_OPTIONS = [
+  { value: 'ufficio_tecnico', label: '🔧 Ufficio Tecnico', color: '#3b82f6' },
+  { value: 'produzione', label: '🏭 Produzione', color: '#10b981' },
+  { value: 'acquisti', label: '🛒 Acquisti', color: '#f59e0b' },
+];
+const ALL_DEPTS = DEPT_OPTIONS.map(d => d.value);
 
 const PREDEFINED_WORKERS_DEFAULT = [];
 
@@ -15,6 +22,7 @@ export default function ProjectDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
   const [project, setProject] = useState(null);
   const [ganttData, setGanttData] = useState({ tasks: [], links: [] });
   const [predefinedWorkers, setPredefinedWorkers] = useState(PREDEFINED_WORKERS_DEFAULT);
@@ -26,11 +34,37 @@ export default function ProjectDetailPage() {
     return saved ? JSON.parse(saved) : ['start_date', 'duration'];
   });
   const [showColumnsMenu, setShowColumnsMenu] = useState(false);
+
+  // STATO PER COLONNE TABELLA FASI
+  const [tableVisibleColumns, setTableVisibleColumns] = useState(() => {
+    const saved = localStorage.getItem('tableVisibleColumns');
+    return saved ? JSON.parse(saved) : ['reparto', 'addetti', 'date', 'ore', 'semaforo', 'azioni'];
+  });
+  const [showTableColumnsMenu, setShowTableColumnsMenu] = useState(false);
+
+  // STATO PER COLONNE TABELLA ORE
+  const [oreVisibleColumns, setOreVisibleColumns] = useState(() => {
+    const saved = localStorage.getItem('oreVisibleColumns');
+    return saved ? JSON.parse(saved) : ['addetti', 'giorni', 'ore_giorno', 'totale', 'semaforo', 'azioni'];
+  });
+  const [showOreColumnsMenu, setShowOreColumnsMenu] = useState(false);
+
+  function toggleTableColumn(col) {
+    setTableVisibleColumns(prev => prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col]);
+  }
+
+  function toggleOreColumn(col) {
+    setOreVisibleColumns(prev => prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col]);
+  }
+
+  const [showDeptMenu, setShowDeptMenu] = useState(false);
+  const [activeDepartments, setActiveDepartments] = useState(ALL_DEPTS);
   const [viewMode, setViewMode] = useState('day');
   const [activeTab, setActiveTab] = useState('gantt');
 
   // Stato Modale Nuova / Modifica Fase
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [budgetMode, setBudgetMode] = useState('days'); // 'days' o 'hours'
   const [editingTask, setEditingTask] = useState(null);
   const [taskForm, setTaskForm] = useState({
     faseSel: PREDEFINED_PHASES[0],
@@ -42,7 +76,8 @@ export default function ProjectDetailPage() {
     planned_hours: 8.0,
     workers: [],
     worker_hours: {},
-    customWorker: ''
+    customWorker: '',
+    department: null,
   });
 
 
@@ -65,17 +100,25 @@ export default function ProjectDetailPage() {
 
   useEffect(() => { loadProject(); }, [id]);
 
+  useEffect(() => {
+    localStorage.setItem('tableVisibleColumns', JSON.stringify(tableVisibleColumns));
+  }, [tableVisibleColumns]);
+
+  useEffect(() => {
+    localStorage.setItem('oreVisibleColumns', JSON.stringify(oreVisibleColumns));
+  }, [oreVisibleColumns]);
+
   async function loadProject() {
     try {
-      const [projRes, ganttRes, workersRes] = await Promise.all([
+      const [projRes, ganttRes, usersRes] = await Promise.all([
         api.get(`/projects/${id}`),
         api.get(`/projects/${id}/gantt`),
-        api.get('/workers').catch(() => ({ data: [] }))
+        api.get('/users').catch(() => ({ data: [] }))
       ]);
       setProject(projRes.data);
       setGanttData(ganttRes.data);
-      if (Array.isArray(workersRes.data)) {
-        setPredefinedWorkers(workersRes.data.map(w => w.name));
+      if (Array.isArray(usersRes.data)) {
+        setPredefinedWorkers(usersRes.data.map(u => u.username));
       }
     } catch {
       toast.error('Progetto non trovato');
@@ -102,8 +145,10 @@ export default function ProjectDetailPage() {
   // Calcolo stato semaforo e ore giornaliere previste (algoritmo prototipo Ufficio Tecnico)
   function computeStato(task) {
     if (!task || !task.start_date) return 'ok';
-    const start = new Date(task.start_date);
-    const end = task.end_date ? new Date(task.end_date) : start;
+    const startStr = task.start_date.split(' ')[0];
+    const endStr = task.end_date ? task.end_date.split(' ')[0] : startStr;
+    const start = new Date(startStr + 'T00:00:00');
+    const end = new Date(endStr + 'T00:00:00');
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -124,7 +169,11 @@ export default function ProjectDetailPage() {
     while (cur <= end && cur <= today) {
       const dayOfWeek = cur.getDay();
       if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-        const dateStr = cur.toISOString().split('T')[0];
+        const y = cur.getFullYear();
+        const m = String(cur.getMonth() + 1).padStart(2, '0');
+        const d = String(cur.getDate()).padStart(2, '0');
+        const dateStr = `${y}-${m}-${d}`;
+        
         let totDayEff = 0;
         if (task.actual_hours && typeof task.actual_hours === 'object') {
           Object.values(task.actual_hours).forEach(dayMap => {
@@ -149,13 +198,16 @@ export default function ProjectDetailPage() {
   function getWorkDatesBetween(startStr, endStr) {
     const dates = [];
     if (!startStr) return dates;
-    const start = new Date(startStr);
-    const end = endStr ? new Date(endStr) : new Date(startStr);
+    const start = new Date(startStr + 'T00:00:00');
+    const end = endStr ? new Date(endStr + 'T00:00:00') : new Date(startStr + 'T00:00:00');
     let cur = new Date(start);
     while (cur <= end) {
       const dayOfWeek = cur.getDay();
       if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-        dates.push(cur.toISOString().split('T')[0]);
+        const y = cur.getFullYear();
+        const m = String(cur.getMonth() + 1).padStart(2, '0');
+        const d = String(cur.getDate()).padStart(2, '0');
+        dates.push(`${y}-${m}-${d}`);
       }
       cur.setDate(cur.getDate() + 1);
     }
@@ -246,9 +298,11 @@ export default function ProjectDetailPage() {
       end_date: project?.end_date || new Date().toISOString().split('T')[0],
       duration_days: 1,
       planned_hours: 8.0,
+      budgetMode: 'days',
       workers: [],
       worker_hours: {},
       customWorker: '',
+      department: user?.department && user.department !== 'admin' ? user.department : 'ufficio_tecnico',
     });
     setShowTaskModal(true);
   }
@@ -267,9 +321,11 @@ export default function ProjectDetailPage() {
       end_date: e,
       duration_days: task.duration || diff,
       planned_hours: task.planned_hours || 8.0,
+      budgetMode: 'days',
       workers: Array.isArray(task.workers) ? task.workers : [],
       worker_hours: typeof task.worker_hours === 'object' ? task.worker_hours : {},
       customWorker: '',
+      department: task.department || (user?.department && user.department !== 'admin' ? user.department : 'ufficio_tecnico'),
     });
     setShowTaskModal(true);
   }
@@ -288,11 +344,12 @@ export default function ProjectDetailPage() {
     const sDate = new Date(taskForm.start_date);
     const eDate = new Date(newEnd);
     const diffDays = Math.max(1, Math.ceil((eDate - sDate) / (1000 * 60 * 60 * 24)) + 1);
-    setTaskForm({
-      ...taskForm,
-      end_date: newEnd,
-      duration_days: diffDays,
-      planned_hours: diffDays * 8.0,
+    setTaskForm(prev => {
+      const updates = { end_date: newEnd, duration_days: diffDays };
+      if (budgetMode === 'days') {
+        updates.planned_hours = diffDays * 8.0;
+      }
+      return { ...prev, ...updates };
     });
   }
 
@@ -302,26 +359,28 @@ export default function ProjectDetailPage() {
     const eDate = new Date(sDate);
     eDate.setDate(sDate.getDate() + (days - 1));
     const newEnd = eDate.toISOString().split('T')[0];
-    setTaskForm({
-      ...taskForm,
-      duration_days: daysVal,
-      end_date: newEnd,
-      planned_hours: days * 8.0,
+    setTaskForm(prev => {
+      const updates = { duration_days: daysVal, end_date: newEnd };
+      if (budgetMode === 'days') {
+        updates.planned_hours = days * 8.0;
+      }
+      return { ...prev, ...updates };
     });
   }
 
   function handlePlannedHoursChange(hoursVal) {
     const hours = Number(hoursVal) || 0;
-    const days = Math.max(1, Math.ceil(hours / 8.0));
-    const sDate = new Date(taskForm.start_date || new Date());
-    const eDate = new Date(sDate);
-    eDate.setDate(sDate.getDate() + (days - 1));
-    const newEnd = eDate.toISOString().split('T')[0];
-    setTaskForm({
-      ...taskForm,
-      planned_hours: hoursVal,
-      duration_days: days,
-      end_date: newEnd,
+    setTaskForm(prev => {
+      const updates = { planned_hours: hoursVal };
+      if (budgetMode === 'hours') {
+        const days = Math.max(1, Math.ceil(hours / 8.0));
+        const sDate = new Date(prev.start_date || new Date());
+        const eDate = new Date(sDate);
+        eDate.setDate(sDate.getDate() + (days - 1));
+        updates.duration_days = days;
+        updates.end_date = eDate.toISOString().split('T')[0];
+      }
+      return { ...prev, ...updates };
     });
   }
 
@@ -360,6 +419,7 @@ export default function ProjectDetailPage() {
       worker_hours: taskForm.worker_hours,
       type: editingTask ? editingTask.type : 'task',
       color: taskForm.color,
+      department: taskForm.department || null,
     };
 
 
@@ -412,6 +472,7 @@ export default function ProjectDetailPage() {
       color: project.color || '#185FA5',
       start_date: project.start_date || '',
       end_date: project.end_date || '',
+      status: project.status || 'planning',
     });
     setShowEditProjectModal(true);
   }
@@ -441,18 +502,6 @@ export default function ProjectDetailPage() {
       newWorkerHours[w] = 8.0;
     }
     setTaskForm({ ...taskForm, workers: newWorkers, worker_hours: newWorkerHours });
-  }
-
-  function addCustomWorker() {
-    const w = taskForm.customWorker.trim();
-    if (w && !taskForm.workers.includes(w)) {
-      setTaskForm({ 
-        ...taskForm, 
-        workers: [...taskForm.workers, w], 
-        worker_hours: { ...taskForm.worker_hours, [w]: 8.0 },
-        customWorker: '' 
-      });
-    }
   }
 
   function handleZoom(mode) {
@@ -528,60 +577,6 @@ export default function ProjectDetailPage() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <h1 style={{ margin: 0 }}>{project?.name}</h1>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={openEditProjectModal}
-              title="Modifica Titolo, Codice, Cliente, Colore e Descrizione della commessa"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '5px 12px',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                borderRadius: '8px',
-                background: 'var(--bg-tertiary)',
-                border: '1px solid var(--border-default)',
-                color: 'var(--text-primary)',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              ✏️ Modifica
-            </button>
-          </div>
-          <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-            <select
-              className={`badge badge-${project?.status}`}
-              style={{
-                cursor: 'pointer',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                paddingTop: 5,
-                paddingBottom: 5,
-                paddingLeft: 12,
-                paddingRight: 28,
-                borderRadius: '16px',
-                appearance: 'none',
-                WebkitAppearance: 'none',
-                fontFamily: 'inherit',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                transition: 'all 0.15s ease',
-              }}
-              value={project?.status || 'planning'}
-              onChange={(e) => handleStatusChange(e.target.value)}
-              title="Clicca per cambiare lo stato della commessa"
-            >
-              {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', textTransform: 'none', fontWeight: 500 }}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <span style={{ position: 'absolute', right: 10, pointerEvents: 'none', fontSize: '0.6rem', opacity: 0.8, color: 'inherit' }}>▼</span>
           </div>
         </div>
       </div>
@@ -614,6 +609,27 @@ export default function ProjectDetailPage() {
           {delaysList.length > 0 && (
             <span className="tab-badge tab-badge-danger">{delaysList.length}</span>
           )}
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm badge-${project?.status || 'planning'}`}
+          onClick={openEditProjectModal}
+          title="Modifica commessa e cambia stato"
+          style={{
+            marginLeft: 'auto',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 14px',
+            fontSize: '0.85rem',
+            fontWeight: 700,
+            borderRadius: '8px',
+            border: '1px solid currentColor',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          ✏️ Modifica
         </button>
       </div>
 
@@ -665,6 +681,53 @@ export default function ProjectDetailPage() {
               )}
             </div>
           )}
+
+          {activeTab === 'gantt' && (
+            <div style={{ position: 'relative' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => { setShowDeptMenu(!showDeptMenu); setShowColumnsMenu(false); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                🏢 Reparto
+                {activeDepartments.length < ALL_DEPTS.length && (
+                  <span style={{ background: '#6366f1', color: '#fff', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px' }}>
+                    {activeDepartments.length}/{ALL_DEPTS.length}
+                  </span>
+                )}
+              </button>
+              {showDeptMenu && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, marginTop: 4,
+                  background: 'var(--bg-card)', border: '1px solid var(--border-default)',
+                  borderRadius: 10, padding: 12, zIndex: 200, minWidth: 200,
+                  boxShadow: 'var(--shadow-md)'
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>FILTRA PER REPARTO:</div>
+                  {DEPT_OPTIONS.map(dept => (
+                    <label key={dept.value} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+                      <input
+                        type="checkbox"
+                        checked={activeDepartments.includes(dept.value)}
+                        onChange={(e) => {
+                          setActiveDepartments(e.target.checked
+                            ? [...activeDepartments, dept.value]
+                            : activeDepartments.filter(d => d !== dept.value)
+                          );
+                        }}
+                      />
+                      <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: dept.color, flexShrink: 0 }} />
+                      {dept.label}
+                    </label>
+                  ))}
+                  <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 8, paddingTop: 8, display: 'flex', gap: 8 }}>
+                    <button className="btn btn-sm btn-secondary" onClick={() => setActiveDepartments(ALL_DEPTS)} style={{ flex: 1, fontSize: 11 }}>Tutti</button>
+                    <button className="btn btn-sm btn-secondary" onClick={() => setActiveDepartments([])} style={{ flex: 1, fontSize: 11 }}>Nessuno</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="toolbar-right">
@@ -700,7 +763,7 @@ export default function ProjectDetailPage() {
           </div>
           <div className="gantt-wrapper">
             <GanttChart
-              tasks={ganttData.tasks}
+              tasks={ganttData.tasks.filter(t => !t.department || activeDepartments.includes(t.department))}
               links={ganttData.links}
               visibleColumns={visibleColumns}
               onTaskUpdate={handleTaskUpdate}
@@ -761,22 +824,50 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10, position: 'relative' }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setShowTableColumnsMenu(!showTableColumnsMenu)}
+            >
+              ⚙️ Colonne ▾
+            </button>
+            {showTableColumnsMenu && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-default)', 
+                borderRadius: 8, padding: 10, zIndex: 100, minWidth: 200, boxShadow: 'var(--shadow-md)', textAlign: 'left'
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>MOSTRA/NASCONDI:</div>
+                {[{ id: 'reparto', label: 'Reparto' }, { id: 'addetti', label: 'Addetti Assegnati' }, { id: 'date', label: 'Inizio / Fine' }, { id: 'ore', label: 'Ore Prev vs Eff' }, { id: 'semaforo', label: 'Semaforo Avanzamento' }, { id: 'azioni', label: 'Azioni' }].map(col => (
+                  <label key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+                    <input
+                      type="checkbox"
+                      checked={tableVisibleColumns.includes(col.id)}
+                      onChange={() => toggleTableColumn(col.id)}
+                    />
+                    {col.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="phases-table-container">
             <table className="phases-table">
               <thead>
                 <tr>
                   <th>Fase Lavorazione</th>
-                  <th>Addetti Assegnati</th>
-                  <th>Inizio / Fine</th>
-                  <th>Ore Prev vs Eff</th>
-                  <th>Semaforo Avanzamento</th>
-                  <th style={{ textAlign: 'right' }}>Azioni</th>
+                  {tableVisibleColumns.includes('reparto') && <th>Reparto</th>}
+                  {tableVisibleColumns.includes('addetti') && <th>Addetti Assegnati</th>}
+                  {tableVisibleColumns.includes('date') && <th>Inizio / Fine</th>}
+                  {tableVisibleColumns.includes('ore') && <th>Ore Prev vs Eff</th>}
+                  {tableVisibleColumns.includes('semaforo') && <th>Semaforo Avanzamento</th>}
+                  {tableVisibleColumns.includes('azioni') && <th style={{ textAlign: 'right' }}>Azioni</th>}
                 </tr>
               </thead>
               <tbody>
                 {ganttData.tasks.length === 0 ? (
                   <tr>
-                    <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 32 }}>
+                    <td colSpan={1 + tableVisibleColumns.length} style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 32 }}>
                       Nessuna fase aggiunta. Clicca <strong>+ Nuova Fase Lavorazione</strong> in alto.
                     </td>
                   </tr>
@@ -801,6 +892,23 @@ export default function ProjectDetailPage() {
                             <span>{task.text}</span>
                           </div>
                         </td>
+                        {tableVisibleColumns.includes('reparto') && (
+                        <td>
+                          {task.department ? (() => {
+                            const dept = DEPT_OPTIONS.find(d => d.value === task.department);
+                            return (
+                              <span style={{
+                                display: 'inline-block', padding: '3px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 600,
+                                background: (dept?.color || '#6b7280') + '22', color: dept?.color || '#6b7280',
+                                border: `1px solid ${(dept?.color || '#6b7280')}44`, whiteSpace: 'nowrap'
+                              }}>
+                                {dept?.label || task.department}
+                              </span>
+                            );
+                          })() : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>}
+                        </td>
+                        )}
+                        {tableVisibleColumns.includes('addetti') && (
                         <td>
 
                           {Array.isArray(task.workers) && task.workers.length > 0 ? (
@@ -811,23 +919,31 @@ export default function ProjectDetailPage() {
                             <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>Nessun addetto</span>
                           )}
                         </td>
+                        )}
+                        {tableVisibleColumns.includes('date') && (
                         <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                           <div>{task.start_date ? task.start_date.split(' ')[0] : ''} → {task.end_date ? task.end_date.split(' ')[0] : ''}</div>
                           <div style={{ fontSize: 11, color: 'var(--accent-500)', fontWeight: 600, marginTop: 2 }}>
                             🗓️ Durata: {task.duration || 1} {task.duration === 1 ? 'giorno' : 'giorni'}
                           </div>
                         </td>
+                        )}
+                        {tableVisibleColumns.includes('ore') && (
                         <td>
                           <strong>{task.planned_hours || 8}h</strong> prev /{' '}
                           <span style={{ color: tEff < (task.planned_hours * 0.5) ? 'var(--danger)' : 'var(--success)', fontWeight: 700 }}>
                             {tEff}h eff
                           </span>
                         </td>
+                        )}
+                        {tableVisibleColumns.includes('semaforo') && (
                         <td>
                           {st === 'ok' && <span className="semaforo-ok">🟢 OK (Regolare)</span>}
                           {st === 'attenzione' && <span className="semaforo-attenzione">🟡 Attenzione</span>}
                           {st === 'ritardo' && <span className="semaforo-ritardo">🔴 Ritardo Lavorazione</span>}
                         </td>
+                        )}
+                        {tableVisibleColumns.includes('azioni') && (
                         <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                           <button
                             className="btn btn-secondary btn-sm"
@@ -853,6 +969,7 @@ export default function ProjectDetailPage() {
                             🗑️
                           </button>
                         </td>
+                        )}
                       </tr>
                     );
                   })
@@ -873,23 +990,50 @@ export default function ProjectDetailPage() {
             </p>
           </div>
 
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10, position: 'relative' }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setShowOreColumnsMenu(!showOreColumnsMenu)}
+            >
+              ⚙️ Colonne ▾
+            </button>
+            {showOreColumnsMenu && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-default)', 
+                borderRadius: 8, padding: 10, zIndex: 100, minWidth: 200, boxShadow: 'var(--shadow-md)', textAlign: 'left'
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>MOSTRA/NASCONDI:</div>
+                {[{ id: 'addetti', label: 'Addetti e Spaccato Ore' }, { id: 'giorni', label: 'Giorni Lavorativi Previsti' }, { id: 'ore_giorno', label: 'Ore Previste / Giorno' }, { id: 'totale', label: 'Totale Consuntivato' }, { id: 'semaforo', label: 'Semaforo' }, { id: 'azioni', label: 'Azione' }].map(col => (
+                  <label key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+                    <input
+                      type="checkbox"
+                      checked={oreVisibleColumns.includes(col.id)}
+                      onChange={() => toggleOreColumn(col.id)}
+                    />
+                    {col.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="phases-table-container">
             <table className="phases-table">
               <thead>
                 <tr>
                   <th>Fase Lavorazione</th>
-                  <th>Addetti e Spaccato Ore</th>
-                  <th>Giorni Lavorativi Previsti</th>
-                  <th>Ore Previste / Giorno</th>
-                  <th>Totale Consuntivato</th>
-                  <th>Semaforo</th>
-                  <th style={{ textAlign: 'right' }}>Azione</th>
+                  {oreVisibleColumns.includes('addetti') && <th>Addetti e Spaccato Ore</th>}
+                  {oreVisibleColumns.includes('giorni') && <th>Giorni Lavorativi Previsti</th>}
+                  {oreVisibleColumns.includes('ore_giorno') && <th>Ore Previste / Giorno</th>}
+                  {oreVisibleColumns.includes('totale') && <th>Totale Consuntivato</th>}
+                  {oreVisibleColumns.includes('semaforo') && <th>Semaforo</th>}
+                  {oreVisibleColumns.includes('azioni') && <th style={{ textAlign: 'right' }}>Azione</th>}
                 </tr>
               </thead>
               <tbody>
                 {ganttData.tasks.length === 0 ? (
                   <tr>
-                    <td colSpan="7" style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 32 }}>
+                    <td colSpan={1 + oreVisibleColumns.length} style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 32 }}>
                       Nessuna fase disponibile. Aggiungi fasi per registrare le ore.
                     </td>
                   </tr>
@@ -925,6 +1069,7 @@ export default function ProjectDetailPage() {
                             <span>{task.text}</span>
                           </div>
                         </td>
+                        {oreVisibleColumns.includes('addetti') && (
                         <td>
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -935,18 +1080,24 @@ export default function ProjectDetailPage() {
                             ))}
                           </div>
                         </td>
-                        <td>{dates.length} giorni lavorativi</td>
-                        <td>~{oreGg} h/giorno</td>
+                        )}
+                        {oreVisibleColumns.includes('giorni') && <td>{dates.length} giorni lavorativi</td>}
+                        {oreVisibleColumns.includes('ore_giorno') && <td>~{oreGg} h/giorno</td>}
+                        {oreVisibleColumns.includes('totale') && (
                         <td>
                           <span style={{ fontSize: 15, fontWeight: 700, color: totalTaskEff >= task.planned_hours ? 'var(--success)' : 'var(--accent-500)' }}>
                             {totalTaskEff} h
                           </span> / {task.planned_hours || 8} h prev
                         </td>
+                        )}
+                        {oreVisibleColumns.includes('semaforo') && (
                         <td>
                           {st === 'ok' && <span className="semaforo-ok">🟢 Regolare</span>}
                           {st === 'attenzione' && <span className="semaforo-attenzione">🟡 Attenzione</span>}
                           {st === 'ritardo' && <span className="semaforo-ritardo">🔴 Ritardo</span>}
                         </td>
+                        )}
+                        {oreVisibleColumns.includes('azioni') && (
                         <td style={{ textAlign: 'right' }}>
                           <button
                             className="btn btn-primary btn-sm"
@@ -955,6 +1106,7 @@ export default function ProjectDetailPage() {
                             ⏱️ Consuntiva Ore
                           </button>
                         </td>
+                        )}
                       </tr>
                     );
                   })
@@ -1129,7 +1281,37 @@ export default function ProjectDetailPage() {
                       className="input"
                       value={taskForm.end_date}
                       onChange={(e) => handleEndDateChange(e.target.value)}
+                      disabled={budgetMode === 'hours'}
+                      style={{ opacity: budgetMode === 'hours' ? 0.6 : 1 }}
+                      title={budgetMode === 'hours' ? "Data fine calcolata automaticamente dalle ore" : ""}
                     />
+                  </div>
+                </div>
+
+                {/* Scelta Modalità Budget */}
+                <div style={{ marginTop: 16, marginBottom: 8, padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>Modalità calcolo budget:</label>
+                  <div style={{ display: 'flex', gap: '20px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                      <input 
+                        type="radio" 
+                        name="budgetMode" 
+                        value="days" 
+                        checked={budgetMode === 'days'} 
+                        onChange={() => setBudgetMode('days')} 
+                      />
+                      Inserisci Giorni (Calcola Ore)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                      <input 
+                        type="radio" 
+                        name="budgetMode" 
+                        value="hours" 
+                        checked={budgetMode === 'hours'} 
+                        onChange={() => setBudgetMode('hours')} 
+                      />
+                      Inserisci Ore (Calcola Giorni)
+                    </label>
                   </div>
                 </div>
 
@@ -1142,11 +1324,12 @@ export default function ProjectDetailPage() {
                         min="1"
                         step="1"
                         className="input"
-                        style={{ fontWeight: 600, color: 'var(--accent-500)', paddingRight: '56px' }}
+                        style={{ fontWeight: 600, color: 'var(--accent-500)', paddingRight: '70px', opacity: budgetMode === 'hours' ? 0.6 : 1 }}
                         value={taskForm.duration_days}
                         onChange={(e) => handleDurationDaysChange(e.target.value)}
+                        disabled={budgetMode === 'hours'}
                       />
-                      <span style={{ position: 'absolute', right: 30, top: 9, fontSize: 12, color: 'var(--text-tertiary)', pointerEvents: 'none' }}>giorni</span>
+                      <span style={{ position: 'absolute', right: 40, top: 9, fontSize: 12, color: 'var(--text-tertiary)', pointerEvents: 'none' }}>giorni</span>
                     </div>
                   </div>
                   <div className="input-group" style={{ flex: 1 }}>
@@ -1157,13 +1340,46 @@ export default function ProjectDetailPage() {
                         min="0.5"
                         step="0.5"
                         className="input"
-                        style={{ fontWeight: 600, color: 'var(--success)', paddingRight: '48px' }}
+                        style={{ fontWeight: 600, color: 'var(--success)', paddingRight: '60px', opacity: budgetMode === 'days' ? 0.6 : 1 }}
                         value={taskForm.planned_hours}
                         onChange={(e) => handlePlannedHoursChange(e.target.value)}
+                        disabled={budgetMode === 'days'}
                       />
-                      <span style={{ position: 'absolute', right: 30, top: 9, fontSize: 12, color: 'var(--text-tertiary)', pointerEvents: 'none' }}>ore</span>
+                      <span style={{ position: 'absolute', right: 40, top: 9, fontSize: 12, color: 'var(--text-tertiary)', pointerEvents: 'none' }}>ore</span>
                     </div>
                   </div>
+                </div>
+
+                {/* Reparto */}
+                <div className="input-group" style={{ marginTop: 12 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    🏢 Reparto
+                    {user?.role !== 'admin' && (
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(assegnato automaticamente)</span>
+                    )}
+                  </label>
+                  {user?.role === 'admin' ? (
+                    <select
+                      className="input"
+                      value={taskForm.department || ''}
+                      onChange={(e) => setTaskForm({ ...taskForm, department: e.target.value || null })}
+                    >
+                      <option value="">— Nessun reparto —</option>
+                      {DEPT_OPTIONS.map(d => (
+                        <option key={d.value} value={d.value}>{d.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div style={{
+                      padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                      background: taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') + '18' : 'var(--bg-secondary)',
+                      color: taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') : 'var(--text-muted)',
+                      border: `1px solid ${taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') + '44' : 'var(--border-subtle)'}`,
+                      display: 'flex', alignItems: 'center', gap: 8
+                    }}>
+                      {taskForm.department ? DEPT_OPTIONS.find(d => d.value === taskForm.department)?.label || taskForm.department : '— Nessun reparto —'}
+                    </div>
+                  )}
                 </div>
 
                 {/* Preset veloci cliccabili */}
@@ -1230,24 +1446,7 @@ export default function ProjectDetailPage() {
                     );
                   })}
                 </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  <input
-                    className="input"
-                    style={{ flex: 1, height: 36, fontSize: '0.85rem' }}
-                    placeholder="Aggiungi altro addetto..."
-                    value={taskForm.customWorker}
-                    onChange={(e) => setTaskForm({ ...taskForm, customWorker: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        addCustomWorker();
-                      }
-                    }}
-                  />
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={addCustomWorker}>
-                    Aggiungi Addetto
-                  </button>
-                </div>
+
 
                 {/* Sezione addetti attualmente assegnati (sotto al campo aggiungi altro addetto) */}
                 <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed var(--border-default)' }}>
@@ -1376,8 +1575,7 @@ export default function ProjectDetailPage() {
                                         const newVal = e.target.value;
                                         setActualHoursMap(prev => {
                                           const next = { ...prev };
-                                          if (!next[w]) next[w] = {};
-                                          next[w][d] = newVal;
+                                          next[w] = { ...(next[w] || {}), [d]: newVal };
                                           return next;
                                         });
                                       }}
@@ -1476,7 +1674,7 @@ export default function ProjectDetailPage() {
                   value={projectForm.name}
                   onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
                   required
-                  placeholder="es. Lancio ERP e GanttFlow Q3"
+                  placeholder="es. Lancio ERP e HiPlan Q3"
                 />
               </div>
 
@@ -1522,6 +1720,21 @@ export default function ProjectDetailPage() {
                       style={{ flex: 1, minWidth: 0 }}
                     />
                   </div>
+                </div>
+                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                  <label htmlFor="edit-proj-status">Stato Commessa</label>
+                  <select
+                    id="edit-proj-status"
+                    className="input"
+                    value={projectForm.status}
+                    onChange={(e) => setProjectForm({ ...projectForm, status: e.target.value })}
+                  >
+                    {STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

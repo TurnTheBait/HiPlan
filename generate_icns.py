@@ -76,7 +76,7 @@ def draw_gantt_icon(size):
 
 
 def main():
-    iconset_dir = "GanttFlow.iconset"
+    iconset_dir = "HiPlan.iconset"
     if os.path.exists(iconset_dir):
         shutil.rmtree(iconset_dir)
     os.makedirs(iconset_dir)
@@ -107,10 +107,10 @@ def main():
 
     # Copy to both app destinations
     destinations = [
-        "/Users/davidegirolamo/Desktop/GanttFlow.app/Contents/Resources/applet.icns",
-        "/Users/davidegirolamo/Desktop/GanttFlow.app/Contents/Resources/AppIcon.icns",
-        "/Users/davidegirolamo/Programming/Gantt/GanttFlow.app/Contents/Resources/applet.icns",
-        "/Users/davidegirolamo/Programming/Gantt/GanttFlow.app/Contents/Resources/AppIcon.icns",
+        "/Users/davidegirolamo/Desktop/HiPlan.app/Contents/Resources/applet.icns",
+        "/Users/davidegirolamo/Desktop/HiPlan.app/Contents/Resources/AppIcon.icns",
+        "/Users/davidegirolamo/Programming/Gantt/HiPlan.app/Contents/Resources/applet.icns",
+        "/Users/davidegirolamo/Programming/Gantt/HiPlan.app/Contents/Resources/AppIcon.icns",
     ]
 
     for dest in destinations:

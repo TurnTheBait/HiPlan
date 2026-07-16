@@ -82,8 +82,8 @@ export default function MainLayout() {
             )}
             {!collapsed && (
               <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
-                <span className="sidebar-logo-text" style={{ fontSize: '1.05rem' }}>GanttFlow</span>
-                <span style={{ fontSize: '0.62rem', color: 'var(--sidebar-text)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>by HiWay</span>
+                <span className="sidebar-logo-text" style={{ fontSize: '1.05rem' }}>HiPlan</span>
+                <span style={{ fontSize: '0.62rem', color: 'var(--sidebar-text)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>for HiWay</span>
               </div>
             )}
           </div>

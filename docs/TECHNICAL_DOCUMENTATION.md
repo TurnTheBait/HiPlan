@@ -1,6 +1,6 @@
-# 🛠️ Documentazione Tecnica — GanttFlow
+# 🛠️ Documentazione Tecnica — HiPlan
 
-Questo documento fornisce una panoramica architetturale, tecnica e strutturale completa di **GanttFlow**, rivolta agli sviluppatori, ingegneri del software e system administrator che intendono comprendere a fondo il funzionamento interno, il modello relazionale, le API REST e le scelte progettuali del sistema.
+Questo documento fornisce una panoramica architetturale, tecnica e strutturale completa di **HiPlan**, rivolta agli sviluppatori, ingegneri del software e system administrator che intendono comprendere a fondo il funzionamento interno, il modello relazionale, le API REST e le scelte progettuali del sistema.
 
 ---
 

@@ -1,6 +1,6 @@
-# 📖 Guida Utente Completa — GanttFlow
+# 📖 Guida Utente Completa — HiPlan
 
-Benvenuti nella **Guida Utente di GanttFlow **, la piattaforma web aziendale interattiva progettata per la pianificazione operativa delle commesse, il monitoraggio delle fasi temporali tramite diagramma di Gantt, la pianificazione del personale su calendario e la collaborazione tramite blocchi note in stile Notion.
+Benvenuti nella **Guida Utente di HiPlan **, la piattaforma web aziendale interattiva progettata per la pianificazione operativa delle commesse, il monitoraggio delle fasi temporali tramite diagramma di Gantt, la pianificazione del personale su calendario e la collaborazione tramite blocchi note in stile Notion.
 
 ---
 

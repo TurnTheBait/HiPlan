@@ -25,16 +25,27 @@ async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
 
     output = []
     for p in projects:
-        task_result = await db.execute(
-            select(func.count(Task.id), func.coalesce(func.avg(Task.progress), 0.0))
+        tasks_data = await db.execute(
+            select(Task.id, Task.progress, Task.workers)
             .where(Task.project_id == p.id)
         )
-        task_count, avg_progress = task_result.one()
-
-        member_result = await db.execute(
-            select(func.count(ProjectMember.id)).where(ProjectMember.project_id == p.id)
-        )
-        member_count = member_result.scalar()
+        tasks_rows = tasks_data.all()
+        
+        task_count = len(tasks_rows)
+        avg_progress = sum((row.progress or 0) for row in tasks_rows) / task_count if task_count > 0 else 0.0
+        
+        unique_workers = set()
+        import json
+        for row in tasks_rows:
+            if row.workers:
+                try:
+                    w_list = json.loads(row.workers)
+                    for w in w_list:
+                        unique_workers.add(w)
+                except:
+                    pass
+        
+        worker_count = len(unique_workers)
 
         out = ProjectOut(
             id=p.id, name=p.name, code=p.code, client=p.client, color=p.color or "#185FA5",
@@ -42,8 +53,8 @@ async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
             start_date=p.start_date, end_date=p.end_date,
             status=p.status, owner_id=p.owner_id,
             created_at=p.created_at, updated_at=p.updated_at,
-            task_count=task_count, member_count=member_count + 1,  # +1 per owner
-            progress=round(float(avg_progress), 2),
+            task_count=task_count, member_count=worker_count,
+            progress=round(avg_progress, 2),
         )
         output.append(out)
     return output
