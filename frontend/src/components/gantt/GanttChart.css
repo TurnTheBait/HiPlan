@@ -245,43 +245,22 @@
   z-index: 10000 !important;
 }
 
-/* Linea del marker di oggi */
+/* Linea del marker di oggi (disabilitata per eliminare la linea verticale) */
 .gantt_marker,
 .gantt_today_marker {
-  background: var(--accent-500, #3b82f6) !important;
-  opacity: 0.9 !important;
-  width: 2px !important;
-  z-index: 5 !important;
+  display: none !important;
 }
 
-.gantt_today_marker .gantt_marker_content {
-  background: var(--accent-600, #2563eb) !important;
-  color: #ffffff !important;
-  font-weight: 700 !important;
-  font-size: 0.72rem !important;
-  padding: 2px 8px !important;
-  border-radius: 4px !important;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
-  top: 4px !important;
-  left: 4px !important;
-  white-space: nowrap !important;
-}
-
-/* Evidenziazione colonna/cella del giorno/settimana/mese/trimestre di oggi nella timeline */
+/* Evidenziazione colonna/cella del giorno/settimana/mese/trimestre di oggi nella timeline (solo sfondo, senza linea blu verticale) */
 .gantt_today_cell {
   background-color: rgba(59, 130, 246, 0.12) !important;
-  border-left: 2px solid var(--accent-500, #3b82f6) !important;
-  border-right: 1px solid rgba(59, 130, 246, 0.3) !important;
 }
 
-/* Evidenziazione nell'intestazione della scala temporale per oggi/settimana/mese/trimestre corrente */
+/* Evidenziazione nell'intestazione della scala temporale per oggi/settimana/mese/trimestre corrente (solo sfondo e testo evidenziato) */
 .gantt_today_scale_cell {
   background-color: rgba(59, 130, 246, 0.25) !important;
   color: var(--accent-400, #60a5fa) !important;
   font-weight: 800 !important;
-  border-left: 2px solid var(--accent-500, #3b82f6) !important;
-  border-right: 1px solid rgba(59, 130, 246, 0.4) !important;
-  box-shadow: inset 0 -3px 0 var(--accent-500, #3b82f6) !important;
 }
 
 

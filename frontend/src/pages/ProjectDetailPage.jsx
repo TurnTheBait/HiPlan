@@ -538,9 +538,9 @@ export default function ProjectDetailPage() {
                 fontSize: '0.8rem',
                 fontWeight: 600,
                 borderRadius: '8px',
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                color: '#f8fafc',
+                background: 'var(--bg-tertiary)',
+                border: '1px solid var(--border-default)',
+                color: 'var(--text-primary)',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease'
               }}
@@ -573,7 +573,7 @@ export default function ProjectDetailPage() {
               title="Clicca per cambiare lo stato della commessa"
             >
               {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value} style={{ background: '#1e1e2a', color: '#f0f0f5', textTransform: 'none', fontWeight: 500 }}>
+                <option key={opt.value} value={opt.value} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', textTransform: 'none', fontWeight: 500 }}>
                   {opt.label}
                 </option>
               ))}
@@ -632,10 +632,10 @@ export default function ProjectDetailPage() {
               
               {showColumnsMenu && (
                 <div style={{
-                  position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#1e1e2a', border: '1px solid #333', 
-                  borderRadius: 8, padding: 10, zIndex: 100, minWidth: 200, boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+                  position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-default)', 
+                  borderRadius: 8, padding: 10, zIndex: 100, minWidth: 200, boxShadow: 'var(--shadow-md)'
                 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 8 }}>MOSTRA/NASCONDI:</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>MOSTRA/NASCONDI:</div>
                   {[
                     { id: 'start_date', label: 'Inizio' },
                     { id: 'duration', label: 'Durata' },
@@ -643,7 +643,7 @@ export default function ProjectDetailPage() {
                     { id: 'priority', label: 'Priorità' },
                     { id: 'workers', label: 'Addetti' }
                   ].map(col => (
-                    <label key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer', fontSize: 13, color: '#e2e8f0' }}>
+                    <label key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
                       <input 
                         type="checkbox" 
                         checked={visibleColumns.includes(col.id)}
@@ -692,7 +692,7 @@ export default function ProjectDetailPage() {
       {/* TAB 1: GANTT */}
       {activeTab === 'gantt' && (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, width: '100%', maxWidth: '100%' }}>
-          <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
             <span>💡 Clicca e trascina per modificare le fasi. Per registrare le ore effettive di lavoro o consuntivare per singolo addetto, passa alla tab <strong>Consuntivazione Ore</strong> o clicca sul pulsante <code>+ Nuova Fase</code> per aggiungere un task normato.</span>
           </div>
           <div className="gantt-wrapper">
@@ -716,14 +716,14 @@ export default function ProjectDetailPage() {
       {activeTab === 'commessa' && (
         <div className="animate-fadeIn">
           <div className="commessa-summary-card">
-            <h3 style={{ margin: 0, color: '#f8fafc' }}>Riepilogo Generale Commessa</h3>
+            <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Riepilogo Generale Commessa</h3>
             {project?.description && (
-              <p style={{ color: '#cbd5e1', fontSize: 14, marginTop: 8 }}>{project.description}</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 8 }}>{project.description}</p>
             )}
             <div className="commessa-stats-grid">
               <div className="stat-box">
                 <div className="stat-box-label">Codice Commessa</div>
-                <div className="stat-box-value" style={{ color: '#64b5f6' }}>{project?.code || 'N/D'}</div>
+                <div className="stat-box-value" style={{ color: 'var(--accent-500)' }}>{project?.code || 'N/D'}</div>
               </div>
               <div className="stat-box">
                 <div className="stat-box-label">Cliente</div>
@@ -741,7 +741,7 @@ export default function ProjectDetailPage() {
               </div>
               <div className="stat-box">
                 <div className="stat-box-label">Ore Consuntivate Effettive</div>
-                <div className="stat-box-value" style={{ color: totalEff >= totalPrev ? '#10b981' : '#f8fafc' }}>
+                <div className="stat-box-value" style={{ color: totalEff >= totalPrev ? 'var(--success)' : 'var(--text-primary)' }}>
                   {totalEff} h
                 </div>
               </div>
@@ -773,7 +773,7 @@ export default function ProjectDetailPage() {
               <tbody>
                 {ganttData.tasks.length === 0 ? (
                   <tr>
-                    <td colSpan="6" style={{ textAlign: 'center', color: '#94a3b8', padding: 32 }}>
+                    <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 32 }}>
                       Nessuna fase aggiunta. Clicca <strong>+ Nuova Fase Lavorazione</strong> in alto.
                     </td>
                   </tr>
@@ -805,18 +805,18 @@ export default function ProjectDetailPage() {
                               <span key={w} className="worker-chip">👤 {w}</span>
                             ))
                           ) : (
-                            <span style={{ color: '#64748b', fontSize: 12 }}>Nessun addetto</span>
+                            <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>Nessun addetto</span>
                           )}
                         </td>
-                        <td style={{ fontSize: 13, color: '#cbd5e1' }}>
+                        <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                           <div>{task.start_date ? task.start_date.split(' ')[0] : ''} → {task.end_date ? task.end_date.split(' ')[0] : ''}</div>
-                          <div style={{ fontSize: 11, color: '#60a5fa', fontWeight: 600, marginTop: 2 }}>
+                          <div style={{ fontSize: 11, color: 'var(--accent-500)', fontWeight: 600, marginTop: 2 }}>
                             🗓️ Durata: {task.duration || 1} {task.duration === 1 ? 'giorno' : 'giorni'}
                           </div>
                         </td>
                         <td>
                           <strong>{task.planned_hours || 8}h</strong> prev /{' '}
-                          <span style={{ color: tEff < (task.planned_hours * 0.5) ? '#ef4444' : '#10b981', fontWeight: 700 }}>
+                          <span style={{ color: tEff < (task.planned_hours * 0.5) ? 'var(--danger)' : 'var(--success)', fontWeight: 700 }}>
                             {tEff}h eff
                           </span>
                         </td>
@@ -864,8 +864,8 @@ export default function ProjectDetailPage() {
       {activeTab === 'ore' && (
         <div className="animate-fadeIn">
           <div className="commessa-summary-card">
-            <h3 style={{ margin: 0, color: '#f8fafc' }}>Consuntivazione Ore Effettive per Fase e Addetto</h3>
-            <p style={{ color: '#cbd5e1', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
+            <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Consuntivazione Ore Effettive per Fase e Addetto</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
               Monitoraggio delle ore di lavoro effettivamente svolte da ciascun membro del team nei giorni lavorativi di calendario. Clicca su <strong>Consuntiva Ore</strong> per compilare la scheda consuntivo di una fase.
             </p>
           </div>
@@ -886,7 +886,7 @@ export default function ProjectDetailPage() {
               <tbody>
                 {ganttData.tasks.length === 0 ? (
                   <tr>
-                    <td colSpan="7" style={{ textAlign: 'center', color: '#94a3b8', padding: 32 }}>
+                    <td colSpan="7" style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 32 }}>
                       Nessuna fase disponibile. Aggiungi fasi per registrare le ore.
                     </td>
                   </tr>
@@ -935,7 +935,7 @@ export default function ProjectDetailPage() {
                         <td>{dates.length} giorni lavorativi</td>
                         <td>~{oreGg} h/giorno</td>
                         <td>
-                          <span style={{ fontSize: 15, fontWeight: 700, color: totalTaskEff >= task.planned_hours ? '#10b981' : '#60a5fa' }}>
+                          <span style={{ fontSize: 15, fontWeight: 700, color: totalTaskEff >= task.planned_hours ? 'var(--success)' : 'var(--accent-500)' }}>
                             {totalTaskEff} h
                           </span> / {task.planned_hours || 8} h prev
                         </td>
@@ -966,8 +966,8 @@ export default function ProjectDetailPage() {
       {activeTab === 'alert' && (
         <div className="animate-fadeIn">
           <div className="commessa-summary-card">
-            <h3 style={{ margin: 0, color: '#f8fafc' }}>Motore Semafori & Allarmi Lavorazioni</h3>
-            <p style={{ color: '#cbd5e1', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
+            <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Motore Semafori & Allarmi Lavorazioni</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
               Questo pannello identifica automaticamente tutte le lavorazioni e commesse che non stanno rispettando la consuntivazione oraria attesa (meno del 50% delle ore previste o giorni lavorativi trascorsi con 0 ore registrate).
             </p>
           </div>
@@ -975,8 +975,8 @@ export default function ProjectDetailPage() {
           {delaysList.length === 0 ? (
             <div className="commessa-summary-card" style={{ textAlign: 'center', padding: 48, borderColor: 'rgba(16, 185, 129, 0.4)' }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>🎉</div>
-              <h3 style={{ color: '#10b981', margin: 0 }}>Nessuna Allerta di Ritardo!</h3>
-              <p style={{ color: '#cbd5e1', marginTop: 8 }}>
+              <h3 style={{ color: 'var(--success)', margin: 0 }}>Nessuna Allerta di Ritardo!</h3>
+              <p style={{ color: 'var(--text-secondary)', marginTop: 8 }}>
                 Tutte le {ganttData.tasks.length} fasi di lavorazione della commessa sono regolarmente coperte dalla consuntivazione oraria degli addetti.
               </p>
             </div>
@@ -985,7 +985,7 @@ export default function ProjectDetailPage() {
               <div key={item.task.id} className={`alert-card ${item.stato}`}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                    <span style={{ fontWeight: 700, fontSize: 16, color: '#f8fafc' }}>
+                    <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
                       {item.task.text}
                     </span>
                     {item.stato === 'ritardo' ? (
@@ -994,11 +994,11 @@ export default function ProjectDetailPage() {
                       <span className="semaforo-attenzione">🟡 ATTENZIONE (&lt; ORE ATTESE GIORNALIERE)</span>
                     )}
                   </div>
-                  <div style={{ fontSize: 13, color: '#cbd5e1' }}>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                     📅 Inizio/Fine: <strong>{item.task.start_date?.split(' ')[0]} → {item.task.end_date?.split(' ')[0]}</strong> |{' '}
                     Addetti: <strong>{Array.isArray(item.task.workers) ? item.task.workers.join(', ') : 'Nessuno'}</strong>
                   </div>
-                  <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>
+                  <div style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>
                     📊 Ore Previste: <strong>{item.task.planned_hours || 8}h</strong> | Consuntivate finora: <strong>{item.tEff}h</strong>
                   </div>
                 </div>
@@ -1104,8 +1104,8 @@ export default function ProjectDetailPage() {
 
 
               {/* Sezione Pianificazione Temporale e Durate sincronizzate */}
-              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', padding: 14, marginTop: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+              <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: 14, marginTop: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-500)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
                   🗓️ Pianificazione e Durata (Impostabile in Giorni e in Ore)
                 </div>
 
@@ -1139,11 +1139,11 @@ export default function ProjectDetailPage() {
                         min="1"
                         step="1"
                         className="input"
-                        style={{ fontWeight: 600, color: '#60a5fa', paddingRight: '56px' }}
+                        style={{ fontWeight: 600, color: 'var(--accent-500)', paddingRight: '56px' }}
                         value={taskForm.duration_days}
                         onChange={(e) => handleDurationDaysChange(e.target.value)}
                       />
-                      <span style={{ position: 'absolute', right: 30, top: 9, fontSize: 12, color: '#94a3b8', pointerEvents: 'none' }}>giorni</span>
+                      <span style={{ position: 'absolute', right: 30, top: 9, fontSize: 12, color: 'var(--text-tertiary)', pointerEvents: 'none' }}>giorni</span>
                     </div>
                   </div>
                   <div className="input-group" style={{ flex: 1 }}>
@@ -1154,18 +1154,18 @@ export default function ProjectDetailPage() {
                         min="0.5"
                         step="0.5"
                         className="input"
-                        style={{ fontWeight: 600, color: '#34d399', paddingRight: '48px' }}
+                        style={{ fontWeight: 600, color: 'var(--success)', paddingRight: '48px' }}
                         value={taskForm.planned_hours}
                         onChange={(e) => handlePlannedHoursChange(e.target.value)}
                       />
-                      <span style={{ position: 'absolute', right: 30, top: 9, fontSize: 12, color: '#94a3b8', pointerEvents: 'none' }}>ore</span>
+                      <span style={{ position: 'absolute', right: 30, top: 9, fontSize: 12, color: 'var(--text-tertiary)', pointerEvents: 'none' }}>ore</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Preset veloci cliccabili */}
                 <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-                  <span style={{ fontSize: 11, color: '#94a3b8', marginRight: 4 }}>Preset veloci:</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginRight: 4 }}>Preset veloci:</span>
                   <button
                     type="button"
                     className="btn-ghost btn-sm"
@@ -1212,9 +1212,9 @@ export default function ProjectDetailPage() {
                         key={w}
                         onClick={() => toggleWorkerSelection(w)}
                         style={{
-                          background: sel ? '#2563eb' : 'var(--bg-primary)',
-                          color: sel ? '#fff' : '#cbd5e1',
-                          border: `1px solid ${sel ? '#3b82f6' : 'var(--border-color)'}`,
+                          background: sel ? 'var(--accent-600)' : 'var(--bg-primary)',
+                          color: sel ? '#fff' : 'var(--text-secondary)',
+                          border: `1px solid ${sel ? 'var(--accent-500)' : 'var(--border-default)'}`,
                           padding: '6px 12px',
                           borderRadius: '16px',
                           cursor: 'pointer',
@@ -1247,18 +1247,18 @@ export default function ProjectDetailPage() {
                 </div>
 
                 {/* Sezione addetti attualmente assegnati (sotto al campo aggiungi altro addetto) */}
-                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed rgba(255, 255, 255, 0.15)' }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed var(--border-default)' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-500)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span>✅ Addetti Assegnati a questa fase ({taskForm.workers.length}):</span>
                   </div>
                   {taskForm.workers.length === 0 ? (
-                    <span style={{ fontSize: '0.8125rem', color: '#64748b', fontStyle: 'italic' }}>Nessun addetto ancora selezionato. Scegline uno qui sopra.</span>
+                    <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Nessun addetto ancora selezionato. Scegline uno qui sopra.</span>
                   ) : (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                       {taskForm.workers.map(w => (
-                        <div key={w} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#3b82f61a', border: '1px solid #3b82f666', padding: '6px 12px', borderRadius: 8 }}>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#60a5fa' }}>{w}</span>
-                          <span style={{ fontSize: '0.8rem', color: '#94a3b8', marginLeft: 4 }}>Ore:</span>
+                        <div key={w} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)', padding: '6px 12px', borderRadius: 8 }}>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-500)' }}>{w}</span>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 4 }}>Ore:</span>
                           <input
                             type="number"
                             min="0.5"
@@ -1317,8 +1317,8 @@ export default function ProjectDetailPage() {
             <div className="modal-header">
               <div>
                 <h2 style={{ margin: 0 }}>⏱️ Giornale Ore Consuntivate</h2>
-                <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>
-                  Fase: <strong style={{ color: '#64b5f6' }}>{selectedTaskForHours.text}</strong> |{' '}
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+                  Fase: <strong style={{ color: 'var(--accent-500)' }}>{selectedTaskForHours.text}</strong> |{' '}
                   Ore previste: <strong>{selectedTaskForHours.planned_hours || 8}h</strong>
                 </div>
               </div>
@@ -1345,7 +1345,7 @@ export default function ProjectDetailPage() {
                           {dates.map(d => (
                             <th key={d} style={{ minWidth: 85 }}>
                               {d.split('-')[2]}/{d.split('-')[1]}<br/>
-                              <span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8' }}>({oreGg.toFixed(1)}h prev)</span>
+                              <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-tertiary)' }}>({oreGg.toFixed(1)}h prev)</span>
                             </th>
                           ))}
                           <th style={{ minWidth: 80 }}>Totale Addetto</th>
@@ -1382,7 +1382,7 @@ export default function ProjectDetailPage() {
                                   </td>
                                 );
                               })}
-                              <td style={{ fontWeight: 700, color: '#60a5fa' }}>{totW} h</td>
+                              <td style={{ fontWeight: 700, color: 'var(--accent-500)' }}>{totW} h</td>
                             </tr>
                           );
                         })}
@@ -1406,8 +1406,8 @@ export default function ProjectDetailPage() {
                         const st = computeStato(tempTask);
                         return (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <span style={{ fontSize: 15 }}>
-                              Totale consuntivato finora: <strong style={{ color: '#fff' }}>{totAll} h</strong> / {selectedTaskForHours.planned_hours || 8} h prev
+                            <span style={{ fontSize: 15, color: 'var(--text-primary)' }}>
+                              Totale consuntivato finora: <strong style={{ color: 'var(--accent-500)' }}>{totAll} h</strong> / {selectedTaskForHours.planned_hours || 8} h prev
                             </span>
                             {st === 'ok' && <span className="semaforo-ok">🟢 Stato OK (Regolare)</span>}
                             {st === 'attenzione' && <span className="semaforo-attenzione">🟡 Stato Attenzione</span>}

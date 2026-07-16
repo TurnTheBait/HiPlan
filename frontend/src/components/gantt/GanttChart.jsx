@@ -171,18 +171,6 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
 
     gantt.init(containerRef.current);
 
-    // Aggiunge il marker dinamico se la funzionalità è disponibile nell'istanza corrente
-    if (typeof gantt.getMarker === "function" && typeof gantt.addMarker === "function") {
-      if (!gantt.getMarker("today")) {
-        gantt.addMarker({
-          id: "today",
-          start_date: new Date(),
-          css: "gantt_today_marker",
-          text: "Oggi",
-          title: "Oggi: " + gantt.date.date_to_str("%d/%m/%Y")(new Date())
-        });
-      }
-    }
 
 
     // Intercettazione doppio click e tasto "+" per aprire il modal React in italiano (con giorni, ore e addetti)
@@ -361,19 +349,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       })),
     });
 
-    if (typeof gantt.getMarker === "function" && typeof gantt.addMarker === "function") {
-      if (!gantt.getMarker("today")) {
-        gantt.addMarker({
-          id: "today",
-          start_date: new Date(),
-          css: "gantt_today_marker",
-          text: "Oggi",
-          title: "Oggi: " + gantt.date.date_to_str("%d/%m/%Y")(new Date())
-        });
-      } else if (typeof gantt.renderMarkers === "function") {
-        gantt.renderMarkers();
-      }
-    }
+
   }, [tasks, links]);
 
 
