@@ -49,7 +49,7 @@ export default function ProjectsPage() {
 
   async function handleDelete(id, e) {
     e.stopPropagation();
-    if (!confirm('Eliminare questa commessa e tutte le sue fasi di lavorazione?')) return;
+    if (!window.confirm('Confermi l\'eliminazione definitiva di questa commessa e di tutte le sue fasi di lavorazione?')) return;
     try {
       await api.delete(`/projects/${id}`);
       toast.success('Commessa eliminata');

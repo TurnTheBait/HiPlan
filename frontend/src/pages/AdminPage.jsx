@@ -52,12 +52,24 @@ export default function AdminPage() {
   }
 
   async function handleToggleActive(userId, isActive) {
+    if (!window.confirm(`Confermi la ${isActive ? 'disattivazione' : 'riattivazione'} di questo utente?`)) return;
     try {
       await api.patch(`/users/${userId}`, { is_active: !isActive });
       toast.success(isActive ? 'Utente disattivato' : 'Utente attivato');
       loadUsers();
     } catch {
       toast.error('Errore aggiornamento stato');
+    }
+  }
+
+  async function handleDeleteUser(user) {
+    if (!window.confirm(`Confermi l'eliminazione definitiva dell'utente '${user.username}'?`)) return;
+    try {
+      await api.delete(`/users/${user.id}`);
+      toast.success("Utente eliminato definitivamente");
+      loadUsers();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Errore durante l'eliminazione dell'utente");
     }
   }
 
@@ -173,6 +185,14 @@ export default function AdminPage() {
                         title="Crea un addetto per il Gantt con il nome di questo utente"
                       >
                         👷‍♂️ Crea Addetto
+                      </button>
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        style={{ color: 'var(--danger)', padding: '4px 8px' }}
+                        onClick={() => handleDeleteUser(u)}
+                        title="Elimina definitivamente questo utente"
+                      >
+                        🗑️ Elimina
                       </button>
                     </div>
                   </td>

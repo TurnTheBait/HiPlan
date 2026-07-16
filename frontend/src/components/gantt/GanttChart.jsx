@@ -219,8 +219,15 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       }
     });
 
+    gantt.attachEvent("onBeforeTaskDelete", (id, item) => {
+      if (!window.confirm(`Confermi l'eliminazione della fase di lavorazione "${item.text || 'selezionata'}"?`)) {
+        return false;
+      }
+      return true;
+    });
+
     gantt.attachEvent("onAfterTaskDelete", (id) => {
-      if (onTaskDeleteRef.current) onTaskDeleteRef.current(id);
+      if (onTaskDeleteRef.current) onTaskDeleteRef.current(id, true);
     });
 
     gantt.attachEvent("onBeforeLinkAdd", (id, link) => {
@@ -242,8 +249,15 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       }
     });
 
+    gantt.attachEvent("onBeforeLinkDelete", (id, item) => {
+      if (!window.confirm("Confermi l'eliminazione di questa dipendenza tra fasi?")) {
+        return false;
+      }
+      return true;
+    });
+
     gantt.attachEvent("onAfterLinkDelete", (id) => {
-      if (onLinkDeleteRef.current) onLinkDeleteRef.current(id);
+      if (onLinkDeleteRef.current) onLinkDeleteRef.current(id, true);
     });
 
     const handleResize = () => {

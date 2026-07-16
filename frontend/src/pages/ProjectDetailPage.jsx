@@ -205,7 +205,8 @@ export default function ProjectDetailPage() {
     } catch { toast.error('Errore creazione fase'); }
   }
 
-  async function handleTaskDelete(taskId) {
+  async function handleTaskDelete(taskId, skipConfirm = false) {
+    if (!skipConfirm && !window.confirm("Confermi l'eliminazione di questa fase di lavorazione?")) return;
     try {
       await api.delete(`/projects/${id}/tasks/${taskId}`);
       loadProject();
@@ -227,7 +228,8 @@ export default function ProjectDetailPage() {
     }
   }
 
-  async function handleLinkDelete(linkId) {
+  async function handleLinkDelete(linkId, skipConfirm = false) {
+    if (!skipConfirm && !window.confirm("Confermi l'eliminazione di questa dipendenza tra fasi?")) return;
     try {
       await api.delete(`/projects/${id}/links/${linkId}`);
       loadProject();
@@ -427,8 +429,9 @@ export default function ProjectDetailPage() {
     }
   }
 
-  function toggleWorkerSelection(w) {
+  function toggleWorkerSelection(w, requireConfirm = false) {
     const isSelected = taskForm.workers.includes(w);
+    if (isSelected && requireConfirm && !window.confirm(`Confermi la rimozione dell'addetto "${w}" da questa fase?`)) return;
     let newWorkers, newWorkerHours = { ...taskForm.worker_hours };
     if (isSelected) {
       newWorkers = taskForm.workers.filter(x => x !== w);
@@ -1285,7 +1288,7 @@ export default function ProjectDetailPage() {
                           />
                           <button
                             type="button"
-                            onClick={() => toggleWorkerSelection(w)}
+                            onClick={() => toggleWorkerSelection(w, true)}
                             style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.9rem', marginLeft: 4 }}
                           >
                             ×
