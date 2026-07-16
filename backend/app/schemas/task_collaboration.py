@@ -29,13 +29,3 @@ class TaskChecklistItemOut(BaseModel):
     created_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
-
-class TaskAttachmentOut(BaseModel):
-    id: str
-    task_id: str
-    uploader_id: Optional[str] = None
-    file_name: str
-    file_path: str
-    created_at: datetime
-    
-    model_config = ConfigDict(from_attributes=True)

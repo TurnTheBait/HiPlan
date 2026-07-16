@@ -84,9 +84,25 @@ Per suddividere la commessa in tappe operative:
 5. **Assegnazione Addetti**: Seleziona uno o più operatori dalla lista degli addetti disponibili (es. _Marco Rossi_, _Luca Bianchi_) che eseguiranno la lavorazione sul campo.
 6. Clicca su **"Salva"**.
 
+### Scheda di Dettaglio Interattiva (Modale Fase) e Collaborazione
+
+Cliccando su qualsiasi fase nella tabella o direttamente sulla sua barra nel diagramma di Gantt, si apre la **Scheda di Dettaglio Interattiva**, organizzata in **3 sezioni operative (Tabs)** per una collaborazione a 360 gradi:
+
+1. **`Generale`**:
+   - Permette di modificare titolo, descrizione, date di inizio e fine, priorità e reparto assegnato (`🔧 Ufficio Tecnico`, `🏭 Produzione`, `🛒 Acquisti`).
+   - Consente di gestire e modificare in tempo reale la lista degli **addetti operativi** assegnati alla fase.
+2. **`Checklist` (Sotto-attività e To-Do interattivi)**:
+   - Consente di creare un elenco di sotto-attività specifiche per la fase (es. _Verifica materiale in arrivo_, _Controllo cablaggio quadro_).
+   - Ogni voce presenta una casella di spunta interattiva (`[✓]`): spuntando una voce, una **barra di completamento verde (% e contatore X/Y)** calcola istantaneamente il progresso operativo della checklist per tutto il team.
+3. **`Commenti` (Chat di Fase e Menzioni `@utente`)**:
+   - Una vera e propria chat contestuale legata alla singola fase di lavorazione.
+   - **Balloons Stile Chat**: I commenti scritti da te appaiono allineati a destra in un riquadro evidenziato, mentre quelli dei colleghi appaiono a sinistra con il nome dell'autore e la data/ora.
+   - **Menzioni `@username` e Notifiche in Tempo Reale**: Digitando il simbolo `@` seguito dal nome di un collega (es. `@m.rossi`), il sistema lo notifica in tempo reale nella barra superiore dell'applicazione (badge campanella 🔔), permettendogli di accedere alla fase con un clic.
+   - **Eliminazione rapida (`✕`)**: Ogni utente può rimuovere i propri commenti tramite il pulsante dedicato `✕` presente accanto alla propria bolla (gli amministratori possono rimuovere qualsiasi commento del team).
+
 ### Chiusura e Completamento di una Fase
 
-Quando un team operativa conclude una fase di lavorazione:
+Quando un team operativo conclude una fase di lavorazione:
 
 1. Clicca sull'indicatore o sulla casella di stato della fase per contrassegnarla come **`Chiusa ✓`**.
 2. Il sistema ricalcolerà automaticamente all'istante l'**avanzamento percentuale** dell'intera commessa (es. da 33% a 66%), aggiornando la barra verde sia nella scheda che nella Dashboard generale.

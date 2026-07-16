@@ -84,6 +84,22 @@ erDiagram
         int phase_id FK
     }
 
+    task_comments {
+        uuid id PK
+        uuid task_id FK
+        uuid author_id FK
+        text content
+        datetime created_at
+    }
+
+    task_checklist_items {
+        uuid id PK
+        uuid task_id FK
+        string text
+        boolean is_completed
+        datetime created_at
+    }
+
     notes {
         int id PK
         string title
@@ -97,7 +113,10 @@ erDiagram
     clients ||--o{ projects : "possiede (CASCADE)"
     projects ||--o{ phases : "contiene (CASCADE)"
     phases ||--o{ phase_workers : "ha addetti assegnati (CASCADE)"
+    phases ||--o{ task_comments : "ha commenti di chat (CASCADE)"
+    phases ||--o{ task_checklist_items : "ha voci di checklist (CASCADE)"
     users ||--o{ notes : "crea e possiede"
+    users ||--o{ task_comments : "scrive commenti (SET NULL)"
 ```
 
 ### Dettaglio delle Tabelle Principali
@@ -109,14 +128,18 @@ erDiagram
    - Contiene i dati anagrafici societari e di contatto cui sono associati i progetti.
 3. **`projects` (Commesse / Progetti Aziendali)**
    - Raggruppa le fasi di lavorazione. Ha una relazione `client_id` con eliminazione a cascata (`CASCADE`).
-4. **`phases` (Fasi Operative e Dipendenze temporali)**
+4. **`phases` / `tasks` (Fasi Operative e Dipendenze temporali)**
    - Rappresenta le attività temporali visualizzate sul diagramma di Gantt e sul Calendario.
    - `start_date` / `end_date`: Intervallo temporale di lavorazione della fase.
    - `priority`: Livello prioritario (`Bassa`, `Media`, `Alta`, `Critica`) che determina la colorazione visiva e la marcatura d'urgenza.
    - `is_closed`: Booleano che indica la chiusura o il completamento della fase.
 5. **`phase_workers` (Assegnazione Addetti alle Fasi)**
    - Tabella di collegamento dinamica che associa uno o più addetti alle singole fasi operative. Consente il filtraggio granulare nel modulo Calendario.
-6. **`notes` (Blocchi Note — Notebook Interattivo)**
+6. **`task_comments` (Chat di Fase e Collaborazione)**
+   - Memorizza i messaggi scambiati dal team all'interno della singola fase. Supporta menzioni `@username` e associazione all'autore per consentire l'eliminazione dei propri commenti (`author_id`).
+7. **`task_checklist_items` (Checklist e Sotto-attività)**
+   - Memorizza le singole voci di to-do all'interno di una fase, con tracciamento dello stato (`is_completed`) per il calcolo della barra di avanzamento del task.
+8. **`notes` (Blocchi Note — Notebook Interattivo)**
    - `content`: Testo strutturato HTML/Markdown generato dal modulo editor in stile Notion.
    - `is_shared`: Booleano che determina la visibilità (`false` per nota privata, `true` per nota condivisa con l'intero team).
 
@@ -160,12 +183,13 @@ backend/
 │   │   ├── clients.py       # /api/clients (CRUD clienti)
 │   │   ├── projects.py      # /api/projects (CRUD commesse e calcolo progresso)
 │   │   ├── phases.py        # /api/phases (CRUD fasi operative e addetti assegnati)
+│   │   ├── task_collaboration.py # /api/projects/{p_id}/tasks/{t_id}/comments e /checklist
 │   │   └── notes.py         # /api/notes (CRUD blocchi note e permessi di visibilità)
 │   ├── core/
 │   │   ├── config.py        # Settings e variabili d'ambiente (.env)
 │   │   ├── database.py      # Configurazione AsyncEngine, get_db e Base metadata
 │   │   └── security.py      # Funzioni di hashing bcrypt e generazione token JWT
-│   ├── models/              # Classi SQLAlchemy (User, Client, Project, Phase, PhaseWorker, Note)
+│   ├── models/              # Classi SQLAlchemy (User, Client, Project, Task, TaskComment, TaskChecklistItem, Note)
 │   └── schemas/             # Classi Pydantic (Create, Update, Out per ogni risorsa)
 └── requirements.txt         # Dipendenze Python
 ```

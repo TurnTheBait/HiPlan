@@ -12,12 +12,11 @@ from datetime import datetime
 from app.core.dependencies import get_db, get_current_user
 from app.models.user import User
 from app.models.task import Task
-from app.models.task_collaboration import TaskComment, TaskChecklistItem, TaskAttachment
+from app.models.task_collaboration import TaskComment, TaskChecklistItem
 from app.models.notification import Notification, NotificationType
 from app.schemas.task_collaboration import (
     TaskCommentCreate, TaskCommentOut,
-    TaskChecklistItemCreate, TaskChecklistItemUpdate, TaskChecklistItemOut,
-    TaskAttachmentOut
+    TaskChecklistItemCreate, TaskChecklistItemUpdate, TaskChecklistItemOut
 )
 
 router = APIRouter(prefix="/api/projects/{project_id}/tasks/{task_id}", tags=["task-collaboration"])
@@ -144,46 +143,3 @@ async def delete_checklist_item(
         await db.commit()
     return None
 
-
-# --- ATTACHMENTS ---
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-@router.get("/attachments", response_model=List[TaskAttachmentOut])
-async def get_attachments(project_id: str, task_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    result = await db.execute(select(TaskAttachment).where(TaskAttachment.task_id == task_id).order_by(TaskAttachment.created_at.asc()))
-    return result.scalars().all()
-
-@router.post("/attachments", response_model=TaskAttachmentOut)
-async def add_attachment(
-    project_id: str,
-    task_id: str,
-    file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    # Ensure task exists
-    task_res = await db.execute(select(Task).where(Task.id == task_id))
-    if not task_res.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    ext = os.path.splitext(file.filename)[1]
-    safe_filename = f"{uuid.uuid4()}{ext}"
-    file_path = os.path.join(UPLOAD_DIR, safe_filename)
-    
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
-    url_path = f"/uploads/{safe_filename}"
-    
-    attachment = TaskAttachment(
-        task_id=task_id,
-        uploader_id=current_user.id,
-        file_name=file.filename,
-        file_path=url_path
-    )
-    
-    db.add(attachment)
-    await db.commit()
-    await db.refresh(attachment)
-    return attachment

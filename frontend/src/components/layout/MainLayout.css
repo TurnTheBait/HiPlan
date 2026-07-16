@@ -50,9 +50,26 @@
   flex-shrink: 0;
 }
 
+.sidebar-collapsed .sidebar-header {
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 16px 8px;
+  gap: 12px;
+}
+
+.sidebar-collapsed .sidebar-logo {
+  justify-content: center;
+  width: 100%;
+}
+
 .sidebar-collapsed .hiway-sidebar-img {
   height: 28px;
   width: 28px;
+  margin: 0 auto;
+}
+
+.sidebar-collapsed .sidebar-toggle {
   margin: 0 auto;
 }
 

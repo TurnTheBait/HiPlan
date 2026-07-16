@@ -10,7 +10,6 @@ import { STATUS_LABELS_IT, STATUS_OPTIONS } from '../utils/statusLabels';
 import { PREDEFINED_PHASES, PHASE_DEFAULT_COLORS, getTaskColor } from '../utils/phaseColors';
 import TaskComments from '../components/tasks/TaskComments';
 import TaskChecklist from '../components/tasks/TaskChecklist';
-import TaskAttachments from '../components/tasks/TaskAttachments';
 
 const DEPT_OPTIONS = [
   { value: 'ufficio_tecnico', label: '🔧 Ufficio Tecnico', color: '#3b82f6' },

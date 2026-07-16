@@ -23,15 +23,3 @@ class TaskChecklistItem(Base, TimestampMixin):
     is_completed = Column(Boolean, default=False, nullable=False)
     
     task = relationship("Task", backref="checklist_items")
-
-class TaskAttachment(Base, TimestampMixin):
-    __tablename__ = "task_attachments"
-
-    id = uuid_pk()
-    task_id = Column(uuid_fk(), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
-    uploader_id = Column(uuid_fk(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    file_name = Column(String(255), nullable=False)
-    file_path = Column(String(500), nullable=False)
-    
-    task = relationship("Task", backref="attachments")
-    uploader = relationship("User", foreign_keys=[uploader_id])

@@ -10,7 +10,7 @@ Il progetto dispone di una documentazione completa e approfondita, suddivisa in 
 
 1. **[🛠️ Documentazione Tecnica per Sviluppatori (TECHNICAL_DOCUMENTATION.md)]**
    - Panoramica architetturale asincrona (FastAPI + SQLAlchemy 2.0 + React 18).
-   - Diagrammi entità-relazione (ER) dettagliati delle tabelle (`users`, `clients`, `projects`, `phases`, `phase_workers`, `notes`).
+   - Diagrammi entità-relazione (ER) dettagliati delle tabelle (`users`, `clients`, `projects`, `phases`, `phase_workers`, `task_comments`, `task_checklist_items`, `notes`).
    - Meccanismo di sicurezza, hashing industriali `bcrypt`, token JWT e politiche di controllo accessi **RBAC**.
    - Specifiche tecniche dell'editor visuale WYSIWYG `contentEditable` per le note e del motore Gantt Custom.
    - Riferimento rapido degli endpoint REST API e guida al setup locale e in produzione via Docker.
@@ -18,6 +18,7 @@ Il progetto dispone di una documentazione completa e approfondita, suddivisa in 
 2. **[📖 Guida Utente Completa (USER_GUIDE.md)]**
    - Manuale d'uso pratico per **Amministratori**, **Project Manager** e **Operatori/Visualizzatori**.
    - Spiegazione passo-passo per la creazione di clienti, commesse e suddivisione in fasi temporali.
+   - Istruzioni sulla **Scheda di Dettaglio Interattiva (Modale Fase)** divisa nei 3 tab operativi: `Generale`, `Checklist` (to-do con barra progressiva di completamento) e `Commenti` (chat contestuale di fase con menzioni `@utente` e notifiche in tempo reale).
    - Istruzioni per l'assegnazione degli addetti operativi e la gestione dei turni sul Calendario mensile.
    - Guida all'utilizzo dei Blocchi Note in stile Notion (formattazione istantanea, check-list collaborative interattive e controllo della visibilità `🔒 Privato` / `👥 Condiviso` in tempo reale).
    - Gestione degli account e dell'anagrafica addetti dal pannello `Admin`.
@@ -31,6 +32,12 @@ Il progetto dispone di una documentazione completa e approfondita, suddivisa in 
   - Selettore di risoluzione temporale multi-scala: **Giorni**, **Settimane** o **Mesi**.
   - Visualizzazione di priorità (`Bassa`, `Media`, `Alta`, `Critica`) con colorazione dinamica, date di inizio/fine e addetti sul campo.
   - Calcolo automatico in tempo reale della percentuale di completamento della commessa alla chiusura delle singole fasi.
+
+- **💬 Collaborazione Operativa sulle Singole Fasi (Checklist & Chat)**:
+  - **Checklist Interattiva**: Ogni fase possiede un elenco to-do interattivo; spuntando le voci completate (`[✓]`), una barra percentuale ricalcola e mostra l'avanzamento al team.
+  - **Chat e Commenti Contestuali**: Riquadri stile chat (i propri messaggi allineati a destra, quelli degli altri a sinistra con orario).
+  - **Menzioni `@username` & Notifiche 🔔**: Taggando un collega in un commento, questi riceve un avviso immediato nella barra superiore e può accedere direttamente al task cliccando sulla notifica.
+  - **Eliminazione Rapida**: Pulsante `✕` accanto ai propri commenti per cancellarli con un solo clic in modo sicuro.
 
 - **👥 Calendario Operativo e Filtro Addetti**:
   - Vista mensile intuitiva delle fasi di lavorazione attive su ogni singola giornata.
@@ -91,19 +98,20 @@ Questo avvierà i 3 container Docker per la produzione (`PostgreSQL 16`, `FastAP
 Gantt/
 ├── docs/
 │   ├── TECHNICAL_DOCUMENTATION.md  # Documentazione tecnica completa e schema DB
-│   └── USER_GUIDE.md               # Manuale utente pratico per tutti i ruoli
+│   ├── USER_GUIDE.md               # Manuale utente pratico per tutti i ruoli
+│   └── DEPLOYMENT_GUIDE.md         # Guida al deployment e configurazione di rete
 ├── backend/
 │   ├── app/
-│   │   ├── api/          # Endpoint REST (auth, users, clients, projects, phases, notes)
+│   │   ├── api/          # Endpoint REST (auth, users, clients, projects, phases, task_collaboration, notes)
 │   │   ├── core/         # Configurazione, sicurezza e connessione al DB
-│   │   ├── models/       # Modelli SQLAlchemy 2.0 (User, Client, Project, Phase, PhaseWorker, Note)
+│   │   ├── models/       # Modelli SQLAlchemy 2.0 (User, Client, Project, Task, TaskComment, TaskChecklistItem, Note)
 │   │   └── schemas/      # Schemi Pydantic V2 per input e output
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
 │   │   ├── api/          # Client Axios con interceptor JWT
-│   │   ├── components/   # Componenti UI (MainLayout, Gantt/Timeline Custom)
-│   │   ├── context/      # AuthContext e ToastContext
+│   │   ├── components/   # Componenti UI (MainLayout, Gantt/Timeline Custom, TaskComments, TaskChecklist)
+│   │   ├── context/      # AuthContext, ThemeContext e ToastContext
 │   │   ├── pages/        # Dashboard, Projects, ProjectDetail, Calendar, Notes, Admin
 │   │   └── index.css     # Design System moderno Dark Theme & Glassmorphism
 │   └── package.json
