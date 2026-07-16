@@ -32,6 +32,13 @@ export default function ProjectDetailPage() {
   const [ganttData, setGanttData] = useState({ tasks: [], links: [] });
   const [predefinedWorkers, setPredefinedWorkers] = useState(PREDEFINED_WORKERS_DEFAULT);
   const [loading, setLoading] = useState(true);
+  
+  // STATO PER COLONNE GANTT (leggiamo dal localStorage)
+  const [visibleColumns, setVisibleColumns] = useState(() => {
+    const saved = localStorage.getItem('ganttVisibleColumns');
+    return saved ? JSON.parse(saved) : ['start_date', 'duration'];
+  });
+  const [showColumnsMenu, setShowColumnsMenu] = useState(false);
   const [viewMode, setViewMode] = useState('day');
   const [activeTab, setActiveTab] = useState('gantt');
 
@@ -599,10 +606,52 @@ export default function ProjectDetailPage() {
 
       {/* TOOLBAR DI AZIONE POSIZIONATA SOTTO ALLE TABS */}
       <div className="project-toolbar">
-        <div className="toolbar-left">
+        <div className="toolbar-left" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <button className="btn btn-primary" onClick={openNewTaskModal}>
             + Nuova Fase
           </button>
+          
+          {activeTab === 'gantt' && (
+            <div style={{ position: 'relative' }}>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => setShowColumnsMenu(!showColumnsMenu)}
+              >
+                ⚙️ Colonne
+              </button>
+              
+              {showColumnsMenu && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#1e1e2a', border: '1px solid #333', 
+                  borderRadius: 8, padding: 10, zIndex: 100, minWidth: 200, boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 8 }}>MOSTRA/NASCONDI:</div>
+                  {[
+                    { id: 'start_date', label: 'Inizio' },
+                    { id: 'duration', label: 'Durata' },
+                    { id: 'progress', label: 'Progresso' },
+                    { id: 'priority', label: 'Priorità' },
+                    { id: 'workers', label: 'Addetti' }
+                  ].map(col => (
+                    <label key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer', fontSize: 13, color: '#e2e8f0' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={visibleColumns.includes(col.id)}
+                        onChange={(e) => {
+                          const newCols = e.target.checked 
+                            ? [...visibleColumns, col.id] 
+                            : visibleColumns.filter(c => c !== col.id);
+                          setVisibleColumns(newCols);
+                          localStorage.setItem('ganttVisibleColumns', JSON.stringify(newCols));
+                        }}
+                      />
+                      {col.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="toolbar-right">
@@ -640,6 +689,7 @@ export default function ProjectDetailPage() {
             <GanttChart
               tasks={ganttData.tasks}
               links={ganttData.links}
+              visibleColumns={visibleColumns}
               onTaskUpdate={handleTaskUpdate}
               onTaskCreate={handleTaskCreate}
               onTaskDelete={handleTaskDelete}

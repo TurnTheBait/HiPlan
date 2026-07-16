@@ -3,7 +3,7 @@ import { gantt } from 'dhtmlx-gantt';
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css';
 import './GanttChart.css';
 
-export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onNewTask }) {
+export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onNewTask, visibleColumns }) {
   const containerRef = useRef(null);
   const initialized = useRef(false);
 
@@ -26,7 +26,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.config.bar_height = 24;
     gantt.config.scale_height = 50;
     gantt.config.min_column_width = 40;
-    gantt.config.fit_tasks = true;
+    gantt.config.fit_tasks = false;
     gantt.config.autosize = false;
     gantt.config.autoscroll = true;
     gantt.config.auto_scheduling = false;
@@ -38,21 +38,52 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.config.order_branch = true;
     gantt.config.show_progress = true;
 
-    // Colonne della griglia a sinistra
-    gantt.config.columns = [
+    const baseColumns = [
       { name: "text", label: "Attività", tree: true, width: 210, resize: true },
       { name: "start_date", label: "Inizio", align: "center", width: 85, resize: true },
       { 
         name: "duration", 
-        label: "Durata (g/h)", 
+        label: "Durata", 
         align: "center", 
         width: 105,
         template: function (task) {
           return `${task.duration || 1}g (${task.planned_hours || (task.duration ? task.duration * 8 : 8)}h)`;
         }
       },
+      {
+        name: "progress",
+        label: "Progresso",
+        align: "center",
+        width: 70,
+        template: function(task) { return Math.round((task.progress || 0) * 100) + "%"; }
+      },
+      {
+        name: "priority",
+        label: "Priorità",
+        align: "center",
+        width: 80,
+        template: function(task) { 
+          const p = task.priority || 'medium';
+          if (p === 'low') return 'Bassa';
+          if (p === 'high') return 'Alta';
+          if (p === 'critical') return 'Critica';
+          return 'Media';
+        }
+      },
+      {
+        name: "workers",
+        label: "Addetti",
+        align: "center",
+        width: 120,
+        template: function(task) { return Array.isArray(task.workers) ? task.workers.join(', ') : ''; }
+      },
       { name: "add", label: "", width: 36 },
     ];
+    
+    // Inizializza con le colonne visibili attuali o di default
+    gantt.config.columns = baseColumns.filter(c => 
+      c.name === 'text' || c.name === 'add' || (visibleColumns && visibleColumns.includes(c.name))
+    );
 
     // Scala temporale
     gantt.config.scales = [
@@ -148,10 +179,60 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      gantt.clearAll();
-      initialized.current = false;
     };
-  }, []);
+  }, [handleTaskUpdate, handleTaskCreate, handleTaskDelete, handleLinkCreate, handleLinkDelete, handleEditTask, handleNewTask]);
+
+  // Ascolta i cambiamenti di visibleColumns per aggiornare la griglia
+  useEffect(() => {
+    if (!initialized.current) return;
+    
+    const baseColumns = [
+      { name: "text", label: "Attività", tree: true, width: 210, resize: true },
+      { name: "start_date", label: "Inizio", align: "center", width: 85, resize: true },
+      { 
+        name: "duration", 
+        label: "Durata", 
+        align: "center", 
+        width: 105,
+        template: function (task) {
+          return `${task.duration || 1}g (${task.planned_hours || (task.duration ? task.duration * 8 : 8)}h)`;
+        }
+      },
+      {
+        name: "progress",
+        label: "Progresso",
+        align: "center",
+        width: 70,
+        template: function(task) { return Math.round((task.progress || 0) * 100) + "%"; }
+      },
+      {
+        name: "priority",
+        label: "Priorità",
+        align: "center",
+        width: 80,
+        template: function(task) { 
+          const p = task.priority || 'medium';
+          if (p === 'low') return 'Bassa';
+          if (p === 'high') return 'Alta';
+          if (p === 'critical') return 'Critica';
+          return 'Media';
+        }
+      },
+      {
+        name: "workers",
+        label: "Addetti",
+        align: "center",
+        width: 120,
+        template: function(task) { return Array.isArray(task.workers) ? task.workers.join(', ') : ''; }
+      },
+      { name: "add", label: "", width: 36 },
+    ];
+
+    gantt.config.columns = baseColumns.filter(c => 
+      c.name === 'text' || c.name === 'add' || (visibleColumns && visibleColumns.includes(c.name))
+    );
+    gantt.render();
+  }, [visibleColumns]);
 
   // Aggiorna i dati quando cambiano
   useEffect(() => {
