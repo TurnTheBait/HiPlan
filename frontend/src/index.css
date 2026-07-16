@@ -69,7 +69,7 @@
   /* Dimensioni */
   --sidebar-width: 260px;
   --sidebar-collapsed: 72px;
-  --header-height: 64px;
+  --header-height: 0px;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
@@ -154,7 +154,7 @@
   /* Dimensioni (identiche) */
   --sidebar-width: 260px;
   --sidebar-collapsed: 72px;
-  --header-height: 64px;
+  --header-height: 0px;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;

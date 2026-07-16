@@ -96,6 +96,19 @@ export default function MainLayout() {
           <NavLink to="/dashboard" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon">📊</span>
             {!collapsed && <span>Dashboard</span>}
+            {unreadCount > 0 && (
+              <span
+                className="notification-badge"
+                style={{
+                  position: collapsed ? 'absolute' : 'static',
+                  top: collapsed ? '4px' : 'auto',
+                  right: collapsed ? '4px' : 'auto',
+                  marginLeft: collapsed ? 0 : 'auto',
+                }}
+              >
+                {unreadCount}
+              </span>
+            )}
           </NavLink>
           <NavLink to="/projects" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon">📂</span>
@@ -142,6 +155,7 @@ export default function MainLayout() {
               </div>
             )}
           </div>
+
           <button className="btn-ghost btn-sm sidebar-logout" onClick={handleLogout} title="Esci">
             {collapsed ? '⏻' : '⏻ Esci'}
           </button>
@@ -149,20 +163,6 @@ export default function MainLayout() {
       </aside>
 
       <main className="main-content">
-        <header className="main-header">
-          <div className="header-spacer" />
-          <div className="header-actions">
-            <button
-              className="btn-ghost btn-icon header-notification"
-              onClick={() => navigate('/dashboard')}
-              title="Notifiche"
-            >
-              🔔
-              {unreadCount > 0 && <span className="notification-badge">{unreadCount}</span>}
-            </button>
-          </div>
-        </header>
-
         <div className="main-body">
           <Outlet />
         </div>

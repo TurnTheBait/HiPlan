@@ -330,6 +330,7 @@ export default function NotesPage() {
   // Filtra note per tab e ricerca
   const filteredNotes = useMemo(() => {
     return notes.filter(n => {
+      if (!n.is_shared && n.owner_id !== user?.id) return false;
       if (activeTab === 'private' && n.is_shared) return false;
       if (activeTab === 'shared' && !n.is_shared) return false;
       if (searchQuery.trim()) {
@@ -340,7 +341,7 @@ export default function NotesPage() {
       }
       return true;
     });
-  }, [notes, activeTab, searchQuery]);
+  }, [notes, activeTab, searchQuery, user]);
 
   // Formatta data in modo compatto
   function formatRelativeDate(dateStr) {

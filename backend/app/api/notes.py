@@ -16,10 +16,12 @@ async def list_notes(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = select(Note).options(selectinload(Note.owner))
-    if current_user.role != UserRole.ADMIN:
-        query = query.where((Note.owner_id == current_user.id) | (Note.is_shared == True))
-    query = query.order_by(Note.updated_at.desc())
+    query = (
+        select(Note)
+        .options(selectinload(Note.owner))
+        .where((Note.owner_id == current_user.id) | (Note.is_shared == True))
+        .order_by(Note.updated_at.desc())
+    )
     result = await db.execute(query)
     return result.scalars().all()
 
@@ -60,7 +62,7 @@ async def get_note(
     if not note:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nota non trovata")
     
-    if note.owner_id != current_user.id and not note.is_shared and current_user.role != UserRole.ADMIN:
+    if note.owner_id != current_user.id and not note.is_shared:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Non hai i permessi per visualizzare questa nota privata")
         
     return note
@@ -80,8 +82,11 @@ async def update_note(
     if not note:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nota non trovata")
 
-    if note.owner_id != current_user.id and current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'autore o un amministratore può modificare questa nota")
+    if note.owner_id != current_user.id:
+        if not note.is_shared:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Non hai i permessi per modificare questa nota privata")
+        if current_user.role != UserRole.ADMIN:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'autore o un amministratore può modificare questa nota condivisa")
 
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -110,8 +115,11 @@ async def delete_note(
     if not note:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nota non trovata")
 
-    if note.owner_id != current_user.id and current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'autore o un amministratore può eliminare questa nota")
+    if note.owner_id != current_user.id:
+        if not note.is_shared:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Non hai i permessi per eliminare questa nota privata")
+        if current_user.role != UserRole.ADMIN:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'autore o un amministratore può eliminare questa nota condivisa")
 
     await db.delete(note)
     await db.commit()

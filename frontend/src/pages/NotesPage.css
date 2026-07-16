@@ -1,21 +1,27 @@
 /* Layout della pagina Note in stile Notion */
 .notes-page-container {
   display: flex;
-  height: calc(100vh - 64px);
+  height: 100vh;
   overflow: hidden;
   background: var(--bg-primary);
   color: var(--text-primary);
+  padding: 20px;
+  gap: 20px;
+  box-sizing: border-box;
 }
 
 /* Sidebar di sinistra per la lista note */
 .notes-sidebar {
   width: 360px;
   min-width: 360px;
-  border-right: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
   padding: 20px 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
 }
 
 .notes-sidebar-top {
@@ -185,9 +191,12 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  background: var(--bg-primary);
-  padding: 32px 80px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 32px 64px;
   position: relative;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
 }
 
 @media (max-width: 1100px) {

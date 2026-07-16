@@ -250,7 +250,7 @@ export default function AdminPage() {
                   <tr key={w.id}>
                     <td>
                       <div className="admin-user-cell">
-                        <div className="sidebar-avatar" style={{ width: 30, height: 30, fontSize: '0.75rem', background: 'var(--accent-primary)' }}>
+                        <div className="sidebar-avatar" style={{ width: 30, height: 30, fontSize: '0.75rem', background: 'linear-gradient(135deg, #10b981, #059669)' }}>
                           {w.name?.[0]?.toUpperCase() || '?'}
                         </div>
                         <span className="admin-username" style={{ fontWeight: 600 }}>{w.name}</span>
