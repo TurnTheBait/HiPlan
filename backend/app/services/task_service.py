@@ -37,6 +37,7 @@ def _task_to_out(task: Task) -> TaskOut:
         workers=_parse_json(task.workers, []),
         worker_hours=_parse_json(task.worker_hours, {}),
         actual_hours=_parse_json(task.actual_hours, {}),
+        color=task.color,
     )
 
 
@@ -82,7 +83,9 @@ async def create_task(db: AsyncSession, project_id: str, data: TaskCreate) -> Ta
         workers=json.dumps(data.workers),
         worker_hours=json.dumps(data.worker_hours),
         actual_hours=json.dumps(data.actual_hours),
+        color=data.color,
     )
+
     db.add(task)
     await db.commit()
     await db.refresh(task)

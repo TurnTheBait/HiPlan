@@ -2,7 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useToast } from '../context/ToastContext';
+import { getTaskColor } from '../utils/phaseColors';
 import './CalendarPage.css';
+
 
 const STATUS_LABELS_IT = {
   planning: 'In pianificazione',
@@ -526,13 +528,14 @@ export default function CalendarPage() {
                       const tStartDayNum = tStart < monthStartStr ? 1 : parseInt(tStart.substring(8, 10), 10);
                       const tEndDayNum = tEnd > monthEndStr ? daysInMonth : parseInt(tEnd.substring(8, 10), 10);
                       const tSpanDays = Math.max(1, tEndDayNum - tStartDayNum + 1);
+                      const tColor = getTaskColor(t);
 
                       return (
                         <div key={t.id} className="timeline-project-row timeline-task-subrow">
                           <div
                             className="timeline-project-info timeline-task-info"
                             onClick={() => setSelectedProject({ ...proj, selectedPhase: t })}
-                            style={{ cursor: 'pointer', paddingLeft: 24 }}
+                            style={{ cursor: 'pointer', paddingLeft: 24, borderLeft: `3px solid ${tColor}` }}
                           >
                             <span className="timeline-proj-title" style={{ fontSize: '0.8125rem', color: 'var(--text-primary)' }} title={t.text}>
                               ↳ <strong>{t.text}</strong>
@@ -557,12 +560,13 @@ export default function CalendarPage() {
                               style={{
                                 left: `${(tStartDayNum - 1) * 38 + 2}px`,
                                 width: `${tSpanDays * 38 - 4}px`,
-                                background: `linear-gradient(135deg, ${color}ee, ${color}99)`,
-                                border: `1px solid ${color}`,
+                                background: `linear-gradient(135deg, ${tColor}ee, ${tColor}99)`,
+                                border: `1px solid ${tColor}`,
                               }}
                               onClick={() => setSelectedProject({ ...proj, selectedPhase: t })}
                               title={`[Fase] ${t.text} (${tStart} -> ${tEnd}) - Addetti: ${Array.isArray(t.workers) ? t.workers.join(', ') : ''}`}
                             >
+
                               ↳ {t.text} {filterWorker !== 'all' ? `(${filterWorker})` : ''}
                             </div>
                           </div>

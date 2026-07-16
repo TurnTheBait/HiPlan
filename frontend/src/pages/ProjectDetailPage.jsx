@@ -6,21 +6,8 @@ import { gantt } from 'dhtmlx-gantt';
 import GanttChart from '../components/gantt/GanttChart';
 import './ProjectDetailPage.css';
 import { STATUS_LABELS_IT, STATUS_OPTIONS } from '../utils/statusLabels';
+import { PREDEFINED_PHASES, PHASE_DEFAULT_COLORS, getTaskColor } from '../utils/phaseColors';
 
-const PREDEFINED_PHASES = [
-  'Layout - Invio al cliente per approvazione',
-  'Approvazione cliente',
-  'Utenze elettriche',
-  'Calcolo strutturale',
-  'Progettazione esecutiva - Messa in tavola - Codifica - Distinta base',
-  'Targhette',
-  'Documentazione tecnica (Manuali)',
-  'Certificati',
-  'Certificati - Approvazione Responsabile',
-  'Compilazione modulo check list',
-  'Inserimento costi in Higest',
-  '__custom__', // Personalizzata
-];
 
 const PREDEFINED_WORKERS_DEFAULT = [];
 
@@ -48,6 +35,7 @@ export default function ProjectDetailPage() {
   const [taskForm, setTaskForm] = useState({
     faseSel: PREDEFINED_PHASES[0],
     customText: '',
+    color: PHASE_DEFAULT_COLORS[PREDEFINED_PHASES[0]] || '#3b82f6',
     start_date: new Date().toISOString().split('T')[0],
     end_date: new Date().toISOString().split('T')[0],
     duration_days: 1,
@@ -56,6 +44,7 @@ export default function ProjectDetailPage() {
     worker_hours: {},
     customWorker: ''
   });
+
 
   // Stato Modale Consuntivo Ore
   const [showOreModal, setShowOreModal] = useState(false);
@@ -226,13 +215,22 @@ export default function ProjectDetailPage() {
   async function handleLinkCreate(data, tempId) {
     try {
       const { data: created } = await api.post(`/projects/${id}/links`, data);
-      if (tempId) gantt.changeLinkId(tempId, created.id);
-    } catch { toast.error('Errore creazione dipendenza'); }
+      if (tempId && gantt.isLinkExists && gantt.isLinkExists(tempId)) {
+        gantt.changeLinkId(tempId, created.id);
+      }
+      loadProject();
+    } catch { 
+      toast.error('Errore creazione dipendenza'); 
+      if (tempId && gantt.isLinkExists && gantt.isLinkExists(tempId)) {
+        gantt.deleteLink(tempId);
+      }
+    }
   }
 
   async function handleLinkDelete(linkId) {
     try {
       await api.delete(`/projects/${id}/links/${linkId}`);
+      loadProject();
     } catch { /* già rimosso */ }
   }
 
@@ -241,6 +239,7 @@ export default function ProjectDetailPage() {
     setTaskForm({
       faseSel: PREDEFINED_PHASES[0],
       customText: '',
+      color: PHASE_DEFAULT_COLORS[PREDEFINED_PHASES[0]] || '#3b82f6',
       start_date: project?.start_date || new Date().toISOString().split('T')[0],
       end_date: project?.end_date || new Date().toISOString().split('T')[0],
       duration_days: 1,
@@ -261,6 +260,7 @@ export default function ProjectDetailPage() {
     setTaskForm({
       faseSel: isPredefined ? task.text : '__custom__',
       customText: isPredefined ? '' : task.text,
+      color: getTaskColor(task),
       start_date: s,
       end_date: e,
       duration_days: task.duration || diff,
@@ -271,6 +271,7 @@ export default function ProjectDetailPage() {
     });
     setShowTaskModal(true);
   }
+
 
   function handleStartDateChange(newStart) {
     const sDate = new Date(newStart);
@@ -356,7 +357,9 @@ export default function ProjectDetailPage() {
       workers: taskForm.workers,
       worker_hours: taskForm.worker_hours,
       type: editingTask ? editingTask.type : 'task',
+      color: taskForm.color,
     };
+
 
     try {
       if (editingTask) {
@@ -476,7 +479,14 @@ export default function ProjectDetailPage() {
       case 'quarter':
         gantt.config.scales = [
           { unit: "year", step: 1, format: "%Y" },
-          { unit: "quarter", step: 1, format: "Q%q" },
+          {
+            unit: "quarter",
+            step: 1,
+            format: function (date) {
+              const q = Math.floor(date.getMonth() / 3) + 1;
+              return "Q" + q;
+            }
+          },
         ];
         gantt.config.min_column_width = 100;
         break;
@@ -778,10 +788,18 @@ export default function ProjectDetailPage() {
                         }
                       });
                     }
+                    const tColor = getTaskColor(task);
                     return (
+
                       <tr key={task.id}>
-                        <td style={{ fontWeight: 600 }}>{task.text}</td>
+                        <td style={{ fontWeight: 600 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: tColor, flexShrink: 0, display: 'inline-block', border: '1px solid rgba(255,255,255,0.2)' }} title={`Colore fase: ${tColor}`} />
+                            <span>{task.text}</span>
+                          </div>
+                        </td>
                         <td>
+
                           {Array.isArray(task.workers) && task.workers.length > 0 ? (
                             task.workers.map(w => (
                               <span key={w} className="worker-chip">👤 {w}</span>
@@ -895,10 +913,17 @@ export default function ProjectDetailPage() {
                       totalTaskEff += workerTotals[w];
                     });
 
+                    const tColor = getTaskColor(task);
                     return (
                       <tr key={task.id}>
-                        <td style={{ fontWeight: 600 }}>{task.text}</td>
+                        <td style={{ fontWeight: 600 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: tColor, flexShrink: 0, display: 'inline-block', border: '1px solid rgba(255,255,255,0.2)' }} title={`Colore fase: ${tColor}`} />
+                            <span>{task.text}</span>
+                          </div>
+                        </td>
                         <td>
+
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             {workersList.map(w => (
                               <div key={w} style={{ fontSize: 13 }}>
@@ -1003,7 +1028,14 @@ export default function ProjectDetailPage() {
                 <select
                   className="input"
                   value={taskForm.faseSel}
-                  onChange={(e) => setTaskForm({ ...taskForm, faseSel: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setTaskForm({
+                      ...taskForm,
+                      faseSel: val,
+                      color: val !== '__custom__' ? (PHASE_DEFAULT_COLORS[val] || taskForm.color) : taskForm.color
+                    });
+                  }}
                 >
                   {PREDEFINED_PHASES.map(p => (
                     <option key={p} value={p}>
@@ -1025,6 +1057,51 @@ export default function ProjectDetailPage() {
                   />
                 </div>
               )}
+
+              {/* Colore personalizzato della fase */}
+              <div className="input-group" style={{ marginTop: 14 }}>
+                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>Colore Fase (Gantt & Timeline)</span>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 'normal' }}>Personalizzabile (Default assegna colore univoco)</span>
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
+                  <input
+                    type="color"
+                    value={taskForm.color || '#3b82f6'}
+                    onChange={(e) => setTaskForm({ ...taskForm, color: e.target.value })}
+                    style={{ width: 44, height: 38, padding: 2, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--bg-tertiary)' }}
+                  />
+                  <input
+                    type="text"
+                    className="input"
+                    value={(taskForm.color || '#3b82f6').toUpperCase()}
+                    onChange={(e) => setTaskForm({ ...taskForm, color: e.target.value })}
+                    style={{ width: 100, fontFamily: 'monospace' }}
+                    maxLength={7}
+                  />
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {Object.values(PHASE_DEFAULT_COLORS).slice(0, 8).map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setTaskForm({ ...taskForm, color: c })}
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: '50%',
+                          backgroundColor: c,
+                          border: taskForm.color === c ? '2px solid #fff' : '1px solid var(--border-subtle)',
+                          boxShadow: taskForm.color === c ? '0 0 0 2px var(--accent-500)' : 'none',
+                          cursor: 'pointer',
+                          padding: 0
+                        }}
+                        title={`Colore preset: ${c}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
 
               {/* Sezione Pianificazione Temporale e Durate sincronizzate */}
               <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', padding: 14, marginTop: 16 }}>

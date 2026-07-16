@@ -11,10 +11,17 @@
   position: absolute;
   inset: 0;
   background:
+    radial-gradient(ellipse 60% 50% at 20% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 80% 80%, rgba(139, 92, 246, 0.06) 0%, transparent 60%),
+    var(--bg-primary);
+  z-index: 0;
+}
+
+[data-theme="dark"] .login-bg-gradient {
+  background:
     radial-gradient(ellipse 60% 50% at 20% 20%, rgba(99, 102, 241, 0.12) 0%, transparent 60%),
     radial-gradient(ellipse 50% 40% at 80% 80%, rgba(139, 92, 246, 0.08) 0%, transparent 60%),
     var(--bg-primary);
-  z-index: 0;
 }
 
 .login-container {
@@ -33,15 +40,21 @@
 .login-logo-icon {
   font-size: 3rem;
   margin-bottom: 12px;
-  filter: drop-shadow(0 0 20px rgba(99, 102, 241, 0.4));
+  filter: drop-shadow(0 0 20px rgba(99, 102, 241, 0.3));
 }
 
 .login-logo h1 {
   font-size: 2rem;
   font-weight: 800;
-  background: linear-gradient(135deg, var(--accent-200), var(--accent-400));
+  background: linear-gradient(135deg, var(--accent-600), var(--accent-400));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme="dark"] .login-logo h1 {
+  background: linear-gradient(135deg, var(--accent-200), var(--accent-400));
+  -webkit-background-clip: text;
   background-clip: text;
 }
 
@@ -86,7 +99,7 @@
 .btn-link {
   background: none;
   border: none;
-  color: var(--accent-400);
+  color: var(--accent-500);
   font-family: inherit;
   font-size: inherit;
   font-weight: 600;
@@ -95,5 +108,5 @@
   transition: color var(--transition-fast);
 }
 .btn-link:hover {
-  color: var(--accent-200);
+  color: var(--accent-400);
 }

@@ -23,6 +23,7 @@ class TaskCreate(BaseModel):
     workers: List[str] = []
     worker_hours: dict = {}
     actual_hours: dict = {}
+    color: Optional[str] = None
 
 
 class TaskUpdate(BaseModel):
@@ -41,6 +42,7 @@ class TaskUpdate(BaseModel):
     workers: Optional[List[str]] = None
     worker_hours: Optional[dict] = None
     actual_hours: Optional[dict] = None
+    color: Optional[str] = None
 
 
 class TaskOut(BaseModel):
@@ -61,6 +63,8 @@ class TaskOut(BaseModel):
     workers: List[str] = []
     worker_hours: dict = {}
     actual_hours: dict = {}
+    color: Optional[str] = None
+
 
     class Config:
         from_attributes = True

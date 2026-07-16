@@ -15,7 +15,7 @@
   box-shadow: var(--shadow-md);
 }
 
-/* Override generale tema DHTMLX Gantt per dark mode elegante */
+/* Override generale tema DHTMLX Gantt */
 .gantt_container {
   width: 100% !important;
   max-width: 100% !important;
@@ -39,7 +39,7 @@
 .gantt_scale_row,
 .gantt_scale_cell {
   background: var(--bg-tertiary) !important;
-  color: #cbd5e1 !important;
+  color: var(--text-secondary) !important;
   font-size: 0.78rem !important;
   font-weight: 600 !important;
   letter-spacing: 0.03em !important;
@@ -70,7 +70,7 @@
 
 .gantt_row.odd,
 .gantt_row.odd .gantt_cell {
-  background: var(--bg-card) !important;
+  background: var(--bg-tertiary) !important;
 }
 
 .gantt_row:hover,
@@ -106,7 +106,7 @@
 }
 
 .gantt_task_row.odd {
-  background: var(--bg-card) !important;
+  background: var(--bg-tertiary) !important;
 }
 
 .gantt_task_row:hover,
@@ -126,67 +126,87 @@
 }
 
 /* ==========================================
-   BARRE DELLE ATTIVITÀ (TASKS & MILESTONES)
+   BARRE DELLE ATTIVITÀ — PILL STYLE
    ========================================== */
 .gantt_task_line {
-  border-radius: 6px !important;
+  border-radius: 20px !important;
   border: none !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
-  height: 24px !important;
-  line-height: 24px !important;
-  background: linear-gradient(135deg, var(--accent-600), var(--accent-400)) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+  height: 26px !important;
+  line-height: 26px !important;
+  background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(0, 0, 0, 0.15) 100%) !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.gantt_task_line:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25) !important;
 }
 
 .gantt_task_line .gantt_task_progress {
-  border-radius: 6px !important;
-  background: rgba(255, 255, 255, 0.22) !important;
+  border-radius: 20px !important;
+  background: rgba(255, 255, 255, 0.28) !important;
 }
 
 .gantt_task_line .gantt_task_content {
   font-size: 0.78rem !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
   color: #ffffff !important;
-  padding: 0 8px !important;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  padding: 0 14px !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
-/* Priorità colori personalizzati */
+/* Fallbacks quando non c'è colore specifico */
 .gantt-priority-low .gantt_task_line,
 .gantt_task_line.gantt-priority-low {
-  background: linear-gradient(135deg, #059669, #10b981) !important;
+  background-color: #00c875;
 }
 
 .gantt-priority-medium .gantt_task_line,
 .gantt_task_line.gantt-priority-medium {
-  background: linear-gradient(135deg, #2563eb, #3b82f6) !important;
+  background-color: #579bfc;
 }
 
 .gantt-priority-high .gantt_task_line,
 .gantt_task_line.gantt-priority-high {
-  background: linear-gradient(135deg, #d97706, #f59e0b) !important;
+  background-color: #fdab3d;
 }
 
 .gantt-priority-critical .gantt_task_line,
 .gantt_task_line.gantt-priority-critical {
-  background: linear-gradient(135deg, #dc2626, #ef4444) !important;
+  background-color: #e2445c;
 }
 
 .gantt_task_line.gantt_milestone {
-  background: var(--accent-400) !important;
+  background-image: none !important;
+  background-color: var(--accent-400) !important;
   border: 2px solid var(--accent-200) !important;
+  border-radius: 4px !important;
+}
+
+
+/* ==========================================
+   HANDLE DI RESIZE
+   ========================================== */
+.gantt_task_drag {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.gantt_task_line:hover .gantt_task_drag {
+  opacity: 0.6;
 }
 
 /* ==========================================
    DIPENDENZE (LINKS) & SCROLLBAR
    ========================================== */
 .gantt_task_link .gantt_line_wrapper div {
-  background-color: #60a5fa !important;
+  background-color: var(--accent-400) !important;
 }
 
 .gantt_link_arrow_right,
 .gantt_link_arrow_left {
-  border-left-color: #60a5fa !important;
-  border-right-color: #60a5fa !important;
+  border-left-color: var(--accent-400) !important;
+  border-right-color: var(--accent-400) !important;
 }
 
 /* Splitter */
@@ -205,7 +225,7 @@
 .gantt_add {
   opacity: 0.7;
   transition: opacity 0.2s;
-  color: #60a5fa !important;
+  color: var(--accent-500) !important;
   font-weight: bold;
 }
 .gantt_add:hover {
@@ -226,8 +246,49 @@
 }
 
 /* Linea del marker di oggi */
-.gantt_marker {
-  background: #3b82f6 !important;
-  opacity: 0.4;
+.gantt_marker,
+.gantt_today_marker {
+  background: var(--accent-500, #3b82f6) !important;
+  opacity: 0.9 !important;
+  width: 2px !important;
+  z-index: 5 !important;
 }
 
+.gantt_today_marker .gantt_marker_content {
+  background: var(--accent-600, #2563eb) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  font-size: 0.72rem !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
+  top: 4px !important;
+  left: 4px !important;
+  white-space: nowrap !important;
+}
+
+/* Evidenziazione colonna/cella del giorno/settimana/mese/trimestre di oggi nella timeline */
+.gantt_today_cell {
+  background-color: rgba(59, 130, 246, 0.12) !important;
+  border-left: 2px solid var(--accent-500, #3b82f6) !important;
+  border-right: 1px solid rgba(59, 130, 246, 0.3) !important;
+}
+
+/* Evidenziazione nell'intestazione della scala temporale per oggi/settimana/mese/trimestre corrente */
+.gantt_today_scale_cell {
+  background-color: rgba(59, 130, 246, 0.25) !important;
+  color: var(--accent-400, #60a5fa) !important;
+  font-weight: 800 !important;
+  border-left: 2px solid var(--accent-500, #3b82f6) !important;
+  border-right: 1px solid rgba(59, 130, 246, 0.4) !important;
+  box-shadow: inset 0 -3px 0 var(--accent-500, #3b82f6) !important;
+}
+
+
+/* Dark mode enhanced shadows for bars */
+[data-theme="dark"] .gantt_task_line {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4) !important;
+}
+[data-theme="dark"] .gantt_task_line:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
+}

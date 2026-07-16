@@ -26,6 +26,7 @@
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   transition: all var(--transition-base);
+  box-shadow: var(--shadow-sm);
 }
 .stat-card:hover {
   transform: translateY(-2px);
@@ -93,10 +94,12 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  border: 1px solid var(--border-subtle);
 }
 .recent-project-item:hover {
   background: var(--bg-hover);
   transform: translateX(4px);
+  border-color: var(--border-default);
 }
 
 .recent-project-info {

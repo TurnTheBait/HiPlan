@@ -27,14 +27,14 @@
   transition: all var(--transition-fast);
 }
 .filter-chip:hover {
-  border-color: var(--border-focus, rgba(255, 255, 255, 0.2));
+  border-color: var(--border-focus, rgba(99, 102, 241, 0.3));
   background: var(--bg-hover);
   color: var(--text-primary);
   transform: translateY(-1px);
 }
 .filter-chip.active {
   background: linear-gradient(135deg, var(--accent-600), var(--accent-700));
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: transparent;
   color: #ffffff;
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
   font-weight: 600;
@@ -87,7 +87,7 @@
 .progress-label {
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--accent-400);
+  color: var(--accent-500);
   min-width: 36px;
   text-align: right;
 }

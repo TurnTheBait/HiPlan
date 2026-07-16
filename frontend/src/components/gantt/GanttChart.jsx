@@ -1,23 +1,38 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { gantt } from 'dhtmlx-gantt';
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css';
+import { getTaskColor } from '../../utils/phaseColors';
 import './GanttChart.css';
 
 export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onNewTask, visibleColumns }) {
+
   const containerRef = useRef(null);
   const initialized = useRef(false);
 
-  const handleTaskUpdate = useCallback(onTaskUpdate, [onTaskUpdate]);
-  const handleTaskCreate = useCallback(onTaskCreate, [onTaskCreate]);
-  const handleTaskDelete = useCallback(onTaskDelete, [onTaskDelete]);
-  const handleLinkCreate = useCallback(onLinkCreate, [onLinkCreate]);
-  const handleLinkDelete = useCallback(onLinkDelete, [onLinkDelete]);
-  const handleEditTask = useCallback((t) => onEditTask && onEditTask(t), [onEditTask]);
-  const handleNewTask = useCallback((p) => onNewTask && onNewTask(p), [onNewTask]);
+  const onTaskUpdateRef = useRef(onTaskUpdate);
+  const onTaskCreateRef = useRef(onTaskCreate);
+  const onTaskDeleteRef = useRef(onTaskDelete);
+  const onLinkCreateRef = useRef(onLinkCreate);
+  const onLinkDeleteRef = useRef(onLinkDelete);
+  const onEditTaskRef = useRef(onEditTask);
+  const onNewTaskRef = useRef(onNewTask);
+
+  useEffect(() => {
+    onTaskUpdateRef.current = onTaskUpdate;
+    onTaskCreateRef.current = onTaskCreate;
+    onTaskDeleteRef.current = onTaskDelete;
+    onLinkCreateRef.current = onLinkCreate;
+    onLinkDeleteRef.current = onLinkDelete;
+    onEditTaskRef.current = onEditTask;
+    onNewTaskRef.current = onNewTask;
+  });
 
   useEffect(() => {
     if (!containerRef.current || initialized.current) return;
     initialized.current = true;
+
+    // Disabilita popup nativi di errore DHTMLX
+    gantt.config.show_errors = false;
 
     // Configurazione
     gantt.config.date_format = "%Y-%m-%d %H:%i";
@@ -91,8 +106,8 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       { unit: "day", step: 1, format: "%d" },
     ];
 
-    // Tooltip
-    gantt.plugins({ tooltip: true });
+    // Tooltip e Marker per il giorno di oggi
+    gantt.plugins({ tooltip: true, marker: true });
     gantt.templates.tooltip_text = function (start, end, task) {
       return `<b>${task.text}</b><br/>
         Inizio: ${gantt.templates.tooltip_date_format(start)}<br/>
@@ -101,7 +116,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         Progresso: ${Math.round((task.progress || 0) * 100)}%`;
     };
 
-    // Colori barre per priorità
+    // Colori barre per priorità e fasi
     gantt.templates.task_class = function (start, end, task) {
       return `gantt-priority-${task.priority || 'medium'}`;
     };
@@ -112,13 +127,69 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       return task.text;
     };
 
+    // Abilita l'ereditarietà della classe CSS su tutte le sottoscale dell'header
+    gantt.config.inherit_scale_class = true;
+
+    // Funzione helper per calcolare la fine esatta di una cella temporale (giorno, settimana, mese, trimestre, anno)
+    function getCellEndDate(date, unit, step = 1) {
+      if (unit === "quarter") return gantt.date.add(date, step * 3, "month");
+      if (unit === "week") return gantt.date.add(date, step, "week");
+      if (unit === "month") return gantt.date.add(date, step, "month");
+      if (unit === "year") return gantt.date.add(date, step, "year");
+      return gantt.date.add(date, step, "day");
+    }
+
+    // Evidenziazione della colonna verticale di oggi su tutte le viste (Giorni, Settimane, Mesi, Trimestri)
+    gantt.templates.timeline_cell_class = function (task, date) {
+      const today = new Date();
+      const scales = gantt.config.scales || [];
+      const bottomScale = scales.length > 0 ? scales[scales.length - 1] : { unit: "day", step: 1 };
+      const unit = bottomScale.unit || "day";
+      const step = bottomScale.step || 1;
+      const cellEnd = getCellEndDate(date, unit, step);
+
+      if (date <= today && today < cellEnd) {
+        return "gantt_today_cell";
+      }
+      return "";
+    };
+
+    // Evidenziazione delle celle di intestazione della scala temporale che contengono oggi
+    gantt.templates.scale_cell_class = function (date, scale) {
+      const today = new Date();
+      const scales = gantt.config.scales || [];
+      const bottomScale = scales.length > 0 ? scales[scales.length - 1] : { unit: "day", step: 1 };
+      const unit = (scale && scale.unit) ? scale.unit : (bottomScale.unit || "day");
+      const step = (scale && scale.step) ? scale.step : (bottomScale.step || 1);
+      const cellEnd = getCellEndDate(date, unit, step);
+
+      if (date <= today && today < cellEnd) {
+        return "gantt_today_scale_cell";
+      }
+      return "";
+    };
+
     gantt.init(containerRef.current);
+
+    // Aggiunge il marker dinamico se la funzionalità è disponibile nell'istanza corrente
+    if (typeof gantt.getMarker === "function" && typeof gantt.addMarker === "function") {
+      if (!gantt.getMarker("today")) {
+        gantt.addMarker({
+          id: "today",
+          start_date: new Date(),
+          css: "gantt_today_marker",
+          text: "Oggi",
+          title: "Oggi: " + gantt.date.date_to_str("%d/%m/%Y")(new Date())
+        });
+      }
+    }
+
 
     // Intercettazione doppio click e tasto "+" per aprire il modal React in italiano (con giorni, ore e addetti)
     gantt.attachEvent("onTaskDblClick", (id, e) => {
       const task = gantt.getTask(id);
-      if (task && handleEditTask) {
-        handleEditTask(task);
+      if (task && onEditTaskRef.current) {
+        onEditTaskRef.current(task);
         return false;
       }
       return true;
@@ -128,11 +199,11 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       const task = gantt.getTask(id);
       if (task && task.$new) {
         gantt.deleteTask(id);
-        if (handleNewTask) {
-          handleNewTask(task.parent && task.parent !== 0 ? String(task.parent) : null);
+        if (onNewTaskRef.current) {
+          onNewTaskRef.current(task.parent && task.parent !== 0 ? String(task.parent) : null);
         }
-      } else if (task && handleEditTask) {
-        handleEditTask(task);
+      } else if (task && onEditTaskRef.current) {
+        onEditTaskRef.current(task);
       }
       return false; // Blocca 100% la lightbox inglese di DHTMLX
     });
@@ -140,36 +211,51 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     // Event handlers
     gantt.attachEvent("onAfterTaskDrag", (id, mode) => {
       const task = gantt.getTask(id);
-      handleTaskUpdate(id, {
-        start_date: gantt.date.date_to_str("%Y-%m-%d")(task.start_date),
-        duration: task.duration,
-        progress: task.progress,
-      });
+      if (onTaskUpdateRef.current) {
+        onTaskUpdateRef.current(id, {
+          start_date: gantt.date.date_to_str("%Y-%m-%d")(task.start_date),
+          duration: task.duration,
+          progress: task.progress,
+        });
+      }
     });
 
     gantt.attachEvent("onAfterTaskAdd", (id, item) => {
-      handleTaskCreate({
-        text: item.text,
-        start_date: gantt.date.date_to_str("%Y-%m-%d")(item.start_date),
-        duration: item.duration || 1,
-        parent_id: item.parent && item.parent !== 0 ? String(item.parent) : null,
-      }, id);
+      if (onTaskCreateRef.current) {
+        onTaskCreateRef.current({
+          text: item.text,
+          start_date: gantt.date.date_to_str("%Y-%m-%d")(item.start_date),
+          duration: item.duration || 1,
+          parent_id: item.parent && item.parent !== 0 ? String(item.parent) : null,
+        }, id);
+      }
     });
 
     gantt.attachEvent("onAfterTaskDelete", (id) => {
-      handleTaskDelete(id);
+      if (onTaskDeleteRef.current) onTaskDeleteRef.current(id);
+    });
+
+    gantt.attachEvent("onBeforeLinkAdd", (id, link) => {
+      if (!link.source || !link.target || String(link.source) === String(link.target)) return false;
+      const existing = gantt.getLinks().find(l => 
+        String(l.source) === String(link.source) && String(l.target) === String(link.target) && String(l.id) !== String(id)
+      );
+      if (existing) return false;
+      return true;
     });
 
     gantt.attachEvent("onAfterLinkAdd", (id, item) => {
-      handleLinkCreate({
-        source: String(item.source),
-        target: String(item.target),
-        type: String(item.type),
-      }, id);
+      if (onLinkCreateRef.current) {
+        onLinkCreateRef.current({
+          source: String(item.source),
+          target: String(item.target),
+          type: String(item.type || '0'),
+        }, id);
+      }
     });
 
     gantt.attachEvent("onAfterLinkDelete", (id) => {
-      handleLinkDelete(id);
+      if (onLinkDeleteRef.current) onLinkDeleteRef.current(id);
     });
 
     const handleResize = () => {
@@ -180,7 +266,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [handleTaskUpdate, handleTaskCreate, handleTaskDelete, handleLinkCreate, handleLinkDelete, handleEditTask, handleNewTask]);
+  }, []);
 
   // Ascolta i cambiamenti di visibleColumns per aggiornare la griglia
   useEffect(() => {
@@ -237,27 +323,59 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
   // Aggiorna i dati quando cambiano
   useEffect(() => {
     if (!initialized.current || !tasks) return;
+    const taskList = Array.isArray(tasks) ? tasks : [];
+    const linkList = Array.isArray(links) ? links : [];
+    const taskIds = new Set(taskList.map(t => String(t.id)));
+    const seenLinks = new Set();
+
+    const validLinks = linkList.filter(l => {
+      if (!l || !l.id || !l.source || !l.target) return false;
+      const src = String(l.source);
+      const tgt = String(l.target);
+      if (!taskIds.has(src) || !taskIds.has(tgt)) return false;
+      const linkKey = `${src}->${tgt}->${l.type || '0'}`;
+      if (seenLinks.has(linkKey)) return false;
+      seenLinks.add(linkKey);
+      return true;
+    });
+
     gantt.clearAll();
     gantt.parse({
-      data: tasks.map(t => ({
+      data: taskList.map(t => ({
         ...t,
-        id: t.id,
+        id: String(t.id),
         text: t.text,
         start_date: t.start_date,
         duration: t.duration,
         progress: t.progress,
-        parent: t.parent === '0' ? 0 : t.parent,
+        parent: t.parent === '0' || !t.parent ? 0 : String(t.parent),
         open: Boolean(t.open),
         type: t.type === 'milestone' ? gantt.config.types.milestone : gantt.config.types.task,
+        color: getTaskColor(t),
       })),
-      links: links.map(l => ({
-        id: l.id,
-        source: l.source,
-        target: l.target,
-        type: l.type,
+      links: validLinks.map(l => ({
+        id: String(l.id),
+        source: String(l.source),
+        target: String(l.target),
+        type: String(l.type || '0'),
       })),
     });
+
+    if (typeof gantt.getMarker === "function" && typeof gantt.addMarker === "function") {
+      if (!gantt.getMarker("today")) {
+        gantt.addMarker({
+          id: "today",
+          start_date: new Date(),
+          css: "gantt_today_marker",
+          text: "Oggi",
+          title: "Oggi: " + gantt.date.date_to_str("%d/%m/%Y")(new Date())
+        });
+      } else if (typeof gantt.renderMarkers === "function") {
+        gantt.renderMarkers();
+      }
+    }
   }, [tasks, links]);
+
 
   return <div ref={containerRef} className="gantt-container" />;
 }

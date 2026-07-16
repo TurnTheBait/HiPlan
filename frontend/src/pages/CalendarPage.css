@@ -1,6 +1,6 @@
 /* ==========================================================================
    CALENDAR PAGE STYLES — GanttFlow
-   Design dinamico, dark theme premium con glassmorphism
+   Design dinamico, theme-aware con glassmorphism
    ========================================================================== */
 
 .calendar-page {
@@ -56,7 +56,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  background: var(--bg-primary);
+  background: var(--bg-tertiary);
   padding: 4px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
@@ -76,8 +76,8 @@
   color: var(--text-primary);
 }
 .calendar-nav-btn.today {
-  color: var(--accent-400);
-  background: rgba(99, 102, 241, 0.1);
+  color: var(--accent-500);
+  background: var(--accent-glow);
   border: 1px solid rgba(99, 102, 241, 0.2);
 }
 
@@ -94,7 +94,7 @@
 
 .calendar-view-toggle {
   display: flex;
-  background: var(--bg-primary);
+  background: var(--bg-tertiary);
   padding: 4px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
@@ -185,11 +185,11 @@
   background: var(--bg-hover);
 }
 .calendar-day-cell.other-month {
-  background: rgba(15, 15, 20, 0.4);
-  opacity: 0.6;
+  background: var(--bg-tertiary);
+  opacity: 0.5;
 }
 .calendar-day-cell.weekend-cell {
-  background: rgba(22, 22, 30, 0.7);
+  background: var(--bg-tertiary);
 }
 .calendar-day-cell.today-cell {
   background: rgba(99, 102, 241, 0.04);
@@ -216,7 +216,7 @@
 .today-cell .calendar-day-number {
   background: var(--accent-600);
   color: #ffffff;
-  box-shadow: 0 0 12px rgba(99, 102, 241, 0.6);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
 }
 
 .calendar-day-badge {
@@ -250,7 +250,7 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   border-left: 3px solid transparent;
-  background: var(--bg-primary);
+  background: var(--bg-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -260,7 +260,7 @@
 }
 .calendar-project-pill:hover {
   transform: translateX(2px);
-  filter: brightness(1.2);
+  filter: brightness(1.1);
 }
 
 .pill-text {
@@ -281,8 +281,8 @@
 .calendar-more-pill {
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--accent-400);
-  background: rgba(99, 102, 241, 0.1);
+  color: var(--accent-500);
+  background: var(--accent-glow);
   padding: 3px 8px;
   border-radius: 4px;
   text-align: center;
@@ -333,8 +333,12 @@
   top: 0;
   z-index: 30;
   background: var(--bg-tertiary);
-  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.2);
+  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.08);
   box-sizing: border-box;
+}
+
+[data-theme="dark"] .timeline-project-col {
+  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.2);
 }
 
 .timeline-days-scroll {
@@ -359,14 +363,17 @@
   box-sizing: border-box;
 }
 .timeline-day-col-header.weekend {
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--bg-tertiary);
   color: var(--text-muted);
 }
 .timeline-day-col-header.today {
   background: rgba(99, 102, 241, 0.15);
-  color: var(--accent-400);
+  color: var(--accent-500);
   font-weight: 800;
+  border-left: 2px solid var(--accent-500, #3b82f6) !important;
+  box-shadow: inset 2px 0 0 var(--accent-500);
 }
+
 
 .timeline-project-row {
   display: flex;
@@ -393,8 +400,12 @@
   left: 0;
   z-index: 15;
   background: var(--bg-secondary);
-  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.2);
+  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.08);
   box-sizing: border-box;
+}
+
+[data-theme="dark"] .timeline-project-info {
+  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.2);
 }
 
 .timeline-proj-title {
@@ -431,16 +442,19 @@
   box-sizing: border-box;
 }
 .timeline-cell.weekend {
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--bg-tertiary);
 }
 .timeline-cell.today {
   background: rgba(99, 102, 241, 0.08);
+  border-left: 2px solid var(--accent-500, #3b82f6) !important;
+  box-shadow: inset 2px 0 0 var(--accent-500);
 }
+
 
 .timeline-bar {
   position: absolute;
   height: 32px;
-  border-radius: 8px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
   padding: 0 12px;
@@ -448,7 +462,7 @@
   font-size: 0.75rem;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
   transition: all var(--transition-fast);
   overflow: hidden;
   white-space: nowrap;
@@ -457,13 +471,17 @@
 }
 .timeline-bar:hover {
   transform: translateY(-2px);
-  filter: brightness(1.15);
+  filter: brightness(1.1);
   z-index: 5;
+}
+
+[data-theme="dark"] .timeline-bar {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* Sub-row per le singole Fasi e Addetti in Timeline */
 .timeline-task-subrow {
-  background: rgba(0, 0, 0, 0.12);
+  background: var(--bg-tertiary);
   border-bottom: 1px dashed var(--border-subtle);
 }
 .timeline-task-info {
@@ -473,13 +491,17 @@
 }
 .timeline-task-bar {
   height: 24px;
-  border-radius: 6px;
+  border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 600;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
   display: flex;
   align-items: center;
   padding: 0 8px;
+}
+
+[data-theme="dark"] .timeline-task-bar {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
 }
 
 /* Modale Dettaglio Commessa da Calendario */
@@ -500,7 +522,7 @@
   display: flex;
   justify-content: space-between;
   padding: 10px 14px;
-  background: var(--bg-primary);
+  background: var(--bg-tertiary);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
 }

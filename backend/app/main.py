@@ -12,8 +12,13 @@ async def lifespan(app: FastAPI):
     # Crea le tabelle all'avvio (in sviluppo; in prod usa Alembic)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        try:
+            await conn.exec_driver_sql("ALTER TABLE tasks ADD COLUMN color VARCHAR(50);")
+        except Exception:
+            pass  # Colonna già esistente
     yield
     await engine.dispose()
+
 
 
 app = FastAPI(
