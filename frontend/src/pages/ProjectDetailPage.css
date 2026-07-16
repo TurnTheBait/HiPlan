@@ -101,13 +101,10 @@
   flex-wrap: wrap;
 }
 
-/* Tabs Ufficio Tecnico */
 .ut-tabs {
   display: flex;
   gap: 10px;
   margin-bottom: 16px;
-  border-bottom: 1px solid var(--border-default);
-  padding-bottom: 14px;
   flex-wrap: wrap;
 }
 

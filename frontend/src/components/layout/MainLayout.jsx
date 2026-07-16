@@ -73,13 +73,11 @@ export default function MainLayout() {
       <aside className="sidebar">
         <div className="sidebar-header">
           <div className="sidebar-logo">
-            {!collapsed && (
-              <img
-                src="/hiway-logo.png"
-                alt="HiWay"
-                className="hiway-sidebar-img"
-              />
-            )}
+            <img
+              src="/hiway-icon.png"
+              alt="HiWay"
+              className="hiway-sidebar-img"
+            />
             {!collapsed && (
               <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
                 <span className="sidebar-logo-text" style={{ fontSize: '1.05rem' }}>HiPlan</span>

@@ -4,8 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.models.base import Base, engine
 import app.models  # Assicura il caricamento di tutti i modelli per create_all
-from app.api import auth, users, projects, tasks, notifications, export, notes
-
+from fastapi.staticfiles import StaticFiles
+from app.api import auth, users, projects, tasks, notifications, export, notes, task_collaboration, workload
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -19,14 +19,17 @@ async def lifespan(app: FastAPI):
     yield
     await engine.dispose()
 
-
-
 app = FastAPI(
     title=settings.APP_NAME,
     version="1.0.0",
     description="Software di Project Management con Diagrammi di Gantt",
     lifespan=lifespan,
 )
+
+# Serviamo la cartella uploads
+import os
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,
@@ -48,6 +51,8 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(projects.router)
 app.include_router(tasks.router)
+app.include_router(task_collaboration.router)
+app.include_router(workload.router)
 app.include_router(notifications.router)
 app.include_router(export.router)
 app.include_router(notes.router)

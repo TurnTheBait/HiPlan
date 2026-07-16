@@ -43,19 +43,17 @@
 }
 
 .hiway-sidebar-img {
-  height: 28px;
-  max-width: 85px;
+  height: 30px;
+  width: 30px;
   object-fit: contain;
   transition: all var(--transition-fast);
   flex-shrink: 0;
-  filter: brightness(0) invert(1);
 }
 
 .sidebar-collapsed .hiway-sidebar-img {
-  height: 24px;
-  max-width: 32px;
-  object-fit: cover;
-  object-position: left;
+  height: 28px;
+  width: 28px;
+  margin: 0 auto;
 }
 
 .sidebar-logo-icon {

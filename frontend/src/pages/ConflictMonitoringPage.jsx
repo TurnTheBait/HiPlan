@@ -4,6 +4,8 @@ import api from '../api/client';
 import { useToast } from '../context/ToastContext';
 import './ConflictMonitoringPage.css';
 
+import WorkloadHeatmap from '../components/workload/WorkloadHeatmap';
+
 export default function ConflictMonitoringPage() {
   const [conflicts, setConflicts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -45,6 +47,13 @@ export default function ConflictMonitoringPage() {
             🔄 Aggiorna Dati
           </button>
         </div>
+      </div>
+
+      <WorkloadHeatmap />
+
+      <div style={{ marginTop: '32px', marginBottom: '16px' }}>
+        <h2>Conflitti</h2>
+        <p style={{ color: 'var(--text-secondary)' }}>Dettaglio delle sovrapposizioni critiche di pianificazione sulle fasi.</p>
       </div>
 
       {conflicts.length === 0 ? (

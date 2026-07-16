@@ -1,0 +1,189 @@
+import os
+import re
+import uuid
+import shutil
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
+from typing import List
+from datetime import datetime
+
+from app.core.dependencies import get_db, get_current_user
+from app.models.user import User
+from app.models.task import Task
+from app.models.task_collaboration import TaskComment, TaskChecklistItem, TaskAttachment
+from app.models.notification import Notification, NotificationType
+from app.schemas.task_collaboration import (
+    TaskCommentCreate, TaskCommentOut,
+    TaskChecklistItemCreate, TaskChecklistItemUpdate, TaskChecklistItemOut,
+    TaskAttachmentOut
+)
+
+router = APIRouter(prefix="/api/projects/{project_id}/tasks/{task_id}", tags=["task-collaboration"])
+
+# --- COMMENTS ---
+@router.get("/comments", response_model=List[TaskCommentOut])
+async def get_comments(project_id: str, task_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(TaskComment).where(TaskComment.task_id == task_id).order_by(TaskComment.created_at.asc()))
+    return result.scalars().all()
+
+@router.post("/comments", response_model=TaskCommentOut)
+async def add_comment(
+    project_id: str,
+    task_id: str,
+    data: TaskCommentCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Verify task exists
+    task_res = await db.execute(select(Task).where(Task.id == task_id))
+    task = task_res.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    comment = TaskComment(
+        task_id=task_id,
+        author_id=current_user.id,
+        content=data.content
+    )
+    db.add(comment)
+    
+    # Extract mentions and create notifications
+    mentions = set(re.findall(r"@(\w+)", data.content))
+    if mentions:
+        users_res = await db.execute(select(User).where(User.username.in_(mentions)))
+        mentioned_users = users_res.scalars().all()
+        for u in mentioned_users:
+            if u.id != current_user.id:
+                notif = Notification(
+                    user_id=u.id,
+                    title="Sei stato menzionato",
+                    message=f"{current_user.full_name or current_user.username} ti ha menzionato nel task '{task.text}'",
+                    type=NotificationType.INFO,
+                    related_entity_id=task_id,
+                    link=f"/projects/{project_id}?task={task_id}"
+                )
+                db.add(notif)
+                
+    await db.commit()
+    await db.refresh(comment)
+    return comment
+
+@router.delete("/comments/{comment_id}", status_code=204)
+async def delete_comment(
+    project_id: str,
+    task_id: str,
+    comment_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    res = await db.execute(select(TaskComment).where(TaskComment.id == comment_id))
+    comment = res.scalar_one_or_none()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    
+    # Only author or admin can delete
+    if comment.author_id != current_user.id and current_user.role.value != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to delete this comment")
+        
+    await db.delete(comment)
+    await db.commit()
+    return None
+
+
+# --- CHECKLISTS ---
+@router.get("/checklists", response_model=List[TaskChecklistItemOut])
+async def get_checklists(project_id: str, task_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(TaskChecklistItem).where(TaskChecklistItem.task_id == task_id).order_by(TaskChecklistItem.created_at.asc()))
+    return result.scalars().all()
+
+@router.post("/checklists", response_model=TaskChecklistItemOut)
+async def add_checklist_item(
+    project_id: str,
+    task_id: str,
+    data: TaskChecklistItemCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    item = TaskChecklistItem(task_id=task_id, text=data.text)
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+@router.put("/checklists/{item_id}", response_model=TaskChecklistItemOut)
+async def update_checklist_item(
+    project_id: str,
+    item_id: str,
+    data: TaskChecklistItemUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    res = await db.execute(select(TaskChecklistItem).where(TaskChecklistItem.id == item_id))
+    item = res.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="Checklist item not found")
+        
+    item.is_completed = data.is_completed
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+@router.delete("/checklists/{item_id}", status_code=204)
+async def delete_checklist_item(
+    project_id: str,
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    res = await db.execute(select(TaskChecklistItem).where(TaskChecklistItem.id == item_id))
+    item = res.scalar_one_or_none()
+    if item:
+        await db.delete(item)
+        await db.commit()
+    return None
+
+
+# --- ATTACHMENTS ---
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+@router.get("/attachments", response_model=List[TaskAttachmentOut])
+async def get_attachments(project_id: str, task_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(TaskAttachment).where(TaskAttachment.task_id == task_id).order_by(TaskAttachment.created_at.asc()))
+    return result.scalars().all()
+
+@router.post("/attachments", response_model=TaskAttachmentOut)
+async def add_attachment(
+    project_id: str,
+    task_id: str,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Ensure task exists
+    task_res = await db.execute(select(Task).where(Task.id == task_id))
+    if not task_res.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    ext = os.path.splitext(file.filename)[1]
+    safe_filename = f"{uuid.uuid4()}{ext}"
+    file_path = os.path.join(UPLOAD_DIR, safe_filename)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    url_path = f"/uploads/{safe_filename}"
+    
+    attachment = TaskAttachment(
+        task_id=task_id,
+        uploader_id=current_user.id,
+        file_name=file.filename,
+        file_path=url_path
+    )
+    
+    db.add(attachment)
+    await db.commit()
+    await db.refresh(attachment)
+    return attachment

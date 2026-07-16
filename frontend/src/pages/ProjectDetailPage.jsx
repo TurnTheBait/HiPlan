@@ -8,6 +8,9 @@ import GanttChart from '../components/gantt/GanttChart';
 import './ProjectDetailPage.css';
 import { STATUS_LABELS_IT, STATUS_OPTIONS } from '../utils/statusLabels';
 import { PREDEFINED_PHASES, PHASE_DEFAULT_COLORS, getTaskColor } from '../utils/phaseColors';
+import TaskComments from '../components/tasks/TaskComments';
+import TaskChecklist from '../components/tasks/TaskChecklist';
+import TaskAttachments from '../components/tasks/TaskAttachments';
 
 const DEPT_OPTIONS = [
   { value: 'ufficio_tecnico', label: '🔧 Ufficio Tecnico', color: '#3b82f6' },
@@ -64,6 +67,7 @@ export default function ProjectDetailPage() {
 
   // Stato Modale Nuova / Modifica Fase
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [taskModalTab, setTaskModalTab] = useState('generale');
   const [budgetMode, setBudgetMode] = useState('days'); // 'days' o 'hours'
   const [editingTask, setEditingTask] = useState(null);
   const [taskForm, setTaskForm] = useState({
@@ -290,6 +294,7 @@ export default function ProjectDetailPage() {
 
   function openNewTaskModal() {
     setEditingTask(null);
+    setTaskModalTab('generale');
     setTaskForm({
       faseSel: PREDEFINED_PHASES[0],
       customText: '',
@@ -309,10 +314,21 @@ export default function ProjectDetailPage() {
 
   function openEditTaskModal(task) {
     setEditingTask(task);
+    setTaskModalTab('generale');
     const isPredefined = PREDEFINED_PHASES.includes(task.text);
-    const s = task.start_date ? task.start_date.split(' ')[0] : new Date().toISOString().split('T')[0];
-    const e = task.end_date ? task.end_date.split(' ')[0] : new Date().toISOString().split('T')[0];
+
+    const safeDate = (d) => {
+      if (!d) return new Date().toISOString().split('T')[0];
+      if (d instanceof Date) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      }
+      return String(d).split(' ')[0].split('T')[0];
+    };
+
+    const s = safeDate(task.start_date);
+    const e = safeDate(task.end_date);
     const diff = Math.max(1, Math.ceil((new Date(e) - new Date(s)) / (1000 * 60 * 60 * 24)) + 1);
+
     setTaskForm({
       faseSel: isPredefined ? task.text : '__custom__',
       customText: isPredefined ? '' : task.text,
@@ -1174,9 +1190,25 @@ export default function ProjectDetailPage() {
         <div className="modal-overlay" onClick={() => setShowTaskModal(false)}>
           <div className="modal" style={{ maxWidth: 620 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{editingTask ? 'Modifica Fase Lavorazione' : 'Nuova Fase Lavorazione (Ufficio Tecnico)'}</h2>
+              <h2>{editingTask ? 'Dettagli Fase Lavorazione' : 'Nuova Fase Lavorazione (Ufficio Tecnico)'}</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowTaskModal(false)}>✕</button>
             </div>
+
+            {editingTask && (
+              <div className="ut-tabs" style={{ marginBottom: 16, paddingBottom: 0 }}>
+                <button className={`ut-tab-btn ${taskModalTab === 'generale' ? 'active' : ''}`} onClick={() => setTaskModalTab('generale')}>
+                  Generale
+                </button>
+                <button className={`ut-tab-btn ${taskModalTab === 'checklist' ? 'active' : ''}`} onClick={() => setTaskModalTab('checklist')}>
+                  Checklist
+                </button>
+                <button className={`ut-tab-btn ${taskModalTab === 'commenti' ? 'active' : ''}`} onClick={() => setTaskModalTab('commenti')}>
+                  Commenti
+                </button>
+              </div>
+            )}
+
+            {taskModalTab === 'generale' && (
             <form onSubmit={handleSaveTaskForm}>
               <div className="input-group">
                 <label>Fase di Lavorazione *</label>
@@ -1508,6 +1540,19 @@ export default function ProjectDetailPage() {
                 </button>
               </div>
             </form>
+            )}
+
+            {taskModalTab === 'checklist' && editingTask && (
+              <div style={{ height: 400 }}>
+                <TaskChecklist projectId={id} taskId={editingTask.id} />
+              </div>
+            )}
+
+            {taskModalTab === 'commenti' && editingTask && (
+              <div style={{ height: 400 }}>
+                <TaskComments projectId={id} taskId={editingTask.id} currentUser={user} />
+              </div>
+            )}
           </div>
         </div>
       )}
