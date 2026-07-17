@@ -7,7 +7,7 @@ from app.models.user import UserRole
 class UserCreate(BaseModel):
     email: EmailStr
     username: str = Field(..., min_length=3, max_length=100)
-    password: str = Field(..., min_length=6, max_length=128)
+    password: str = Field(..., min_length=1, max_length=128)
     full_name: Optional[str] = None
     department: Optional[str] = None  # ufficio_tecnico | produzione | acquisti
 

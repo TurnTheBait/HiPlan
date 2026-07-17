@@ -27,3 +27,15 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Risolvi sempre il percorso SQLite come assoluto nella cartella backend/
+# per evitare che su Windows o avviando da cartelle diverse il DB venga creato altrove o non trovato
+if settings.DATABASE_URL.startswith("sqlite+aiosqlite:///"):
+    path_part = settings.DATABASE_URL.split(":///", 1)[1]
+    if path_part.startswith("./") or (not path_part.startswith("/") and not (len(path_part) > 1 and path_part[1] == ":")):
+        clean_rel = path_part[2:] if path_part.startswith("./") else path_part
+        abs_db_path = os.path.abspath(os.path.join(BACKEND_DIR, clean_rel))
+        if os.name == "nt" or (len(abs_db_path) > 1 and abs_db_path[1] == ":"):
+            settings.DATABASE_URL = f"sqlite+aiosqlite:///{abs_db_path.replace(os.sep, '/')}"
+        else:
+            settings.DATABASE_URL = f"sqlite+aiosqlite:///{abs_db_path}"

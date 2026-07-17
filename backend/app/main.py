@@ -20,12 +20,12 @@ async def lifespan(app: FastAPI):
     from app.models.base import AsyncSessionLocal
     from sqlalchemy import select, func
     from app.models.user import User, UserRole
-    from app.core.security import hash_password
+    from app.core.security import hash_password, verify_password
 
     async with AsyncSessionLocal() as session:
-        result = await session.execute(select(func.count(User.id)))
-        user_count = result.scalar() or 0
-        if user_count == 0:
+        result = await session.execute(select(User).where(func.lower(User.username) == "admin"))
+        admin_user = result.scalar_one_or_none()
+        if not admin_user:
             admin_user = User(
                 email="admin@hiway.it",
                 username="admin",
@@ -37,7 +37,11 @@ async def lifespan(app: FastAPI):
             )
             session.add(admin_user)
             await session.commit()
-            print("👑 [INIT] Database vuoto! Creato utente admin predefinito (username: admin / password: admin)")
+            print("👑 [INIT] Database! Creato utente admin predefinito (username: admin / password: admin)")
+        elif not verify_password("admin", admin_user.hashed_password):
+            admin_user.hashed_password = hash_password("admin")
+            await session.commit()
+            print("🔄 [INIT] Aggiornata password utente admin a 'admin'")
 
     yield
     await engine.dispose()

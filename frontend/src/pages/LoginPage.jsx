@@ -185,7 +185,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              minLength={6}
+              minLength={isRegister ? 4 : 1}
             />
           </div>
 
