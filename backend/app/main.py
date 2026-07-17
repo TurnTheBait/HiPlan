@@ -37,11 +37,12 @@ async def lifespan(app: FastAPI):
             )
             session.add(admin_user)
             await session.commit()
-            print("👑 [INIT] Database! Creato utente admin predefinito (username: admin / password: admin)")
-        elif not verify_password("admin", admin_user.hashed_password):
-            admin_user.hashed_password = hash_password("admin")
-            await session.commit()
-            print("🔄 [INIT] Aggiornata password utente admin a 'admin'")
+            print("👑 [INIT] Creato utente admin predefinito (username: admin / password: admin)")
+        else:
+            if not verify_password("admin", admin_user.hashed_password):
+                admin_user.hashed_password = hash_password("admin")
+                await session.commit()
+                print("🔄 [INIT] Password utente admin sincronizzata a 'admin'")
 
     yield
     await engine.dispose()
@@ -68,7 +69,7 @@ app.add_middleware(
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ],
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\..*)(:[0-9]+)?",
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
