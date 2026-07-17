@@ -21,15 +21,17 @@ echo "=================================================================="
 echo "📡 IP rilevato di questo Mac: $MAC_IP"
 echo ""
 
+mkdir -p logs
+
 echo "Avvio Backend API (porta 8000 in ascolto su tutta la LAN)..."
 cd backend
 source venv/bin/activate
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 &
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level error > ../logs/backend_app.log 2>&1 &
 BACKEND_PID=$!
 
 echo "Avvio Frontend Web (porta 5173 in ascolto su tutta la LAN)..."
 cd ../frontend
-npm run dev -- --host 0.0.0.0 &
+npm --silent run dev -- --host 0.0.0.0 --logLevel error > ../logs/frontend_app.log 2>&1 &
 FRONTEND_PID=$!
 
 echo "⏳ Inizializzazione server..."

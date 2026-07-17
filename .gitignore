@@ -42,7 +42,9 @@ Thumbs.db
 *.swp
 *.swo
 
-# Gemini / IDE Agent artifacts
+# Gemini / IDE Agent artifacts & Logs
 .gemini/
 brain/
 scratch/
+logs/
+*.log
