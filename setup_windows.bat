@@ -15,9 +15,10 @@ if not exist "venv" (
 call venv\Scripts\activate.bat
 
 echo.
-echo [2/3] Installazione dipendenze Python...
+echo [2/3] Installazione dipendenze Python e Inizializzazione Database...
 python -m pip install --upgrade pip
 pip install -r requirements.txt
+python seed.py
 
 echo.
 echo [3/3] Installazione dipendenze Frontend (Node.js)...

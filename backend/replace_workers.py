@@ -8,7 +8,9 @@ from app.models.user import User, UserRole
 from app.models.worker import PhaseWorker
 from app.core.security import hash_password
 
-DB_URL = "sqlite+aiosqlite:///./ganttflow.db"
+from app.core.config import settings
+from app.models.base import engine, Base, AsyncSessionLocal
+import app.models
 
 NEW_USERS = [
     {"username": "mario.rossi", "full_name": "Mario Rossi", "email": "mario.rossi@gantt.it"},
@@ -17,10 +19,10 @@ NEW_USERS = [
 ]
 
 async def run_migration():
-    engine = create_async_engine(DB_URL)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    
-    async with async_session() as session:
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with AsyncSessionLocal() as session:
         # 1. Elimina vecchi phase workers per sicurezza
         await session.execute(text("DELETE FROM phase_workers;"))
         

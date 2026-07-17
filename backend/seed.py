@@ -1,6 +1,7 @@
 import asyncio
 import random
 from datetime import date, timedelta
+from typing import Any, Dict, List, cast
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.base import AsyncSessionLocal
@@ -9,13 +10,13 @@ from app.models.project import Project, ProjectStatus
 from app.models.task import Task, TaskType, TaskPriority
 
 # Dati di esempio
-WORKERS = {
+WORKERS: Dict[str, List[str]] = {
     "ufficio_tecnico": ["Marco (UT)", "Anna (UT)", "Luigi (UT)"],
     "produzione": ["Giovanni (Prod)", "Roberto (Prod)", "Franco (Prod)"],
     "acquisti": ["Laura (Acq)", "Elena (Acq)"]
 }
 
-PROJECTS = [
+PROJECTS: List[Dict[str, Any]] = [
     {
         "name": "Impianto Molino 50t/h",
         "code": "COMM-2026-001",
@@ -32,7 +33,7 @@ PROJECTS = [
     }
 ]
 
-PHASES_TEMPLATES = [
+PHASES_TEMPLATES: List[Dict[str, Any]] = [
     {
         "dept": "ufficio_tecnico",
         "tasks": [
@@ -62,17 +63,35 @@ PHASES_TEMPLATES = [
 
 
 async def seed():
+    # 1. Assicurati che tutte le tabelle siano create prima di interrogare il DB
+    from app.models.base import engine, Base
+    import app.models  # Assicura il caricamento di tutti i modelli per create_all
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
     async with AsyncSessionLocal() as db:
         # Get an admin user for owner_id
         from app.models.user import User, UserRole
+        from app.core.security import hash_password
         result = await db.execute(select(User).where(User.role == UserRole.ADMIN))
         admin_user = result.scalars().first()
         if not admin_user:
-            print("Nessun utente admin trovato. Assicurati di registrare almeno un utente.")
-            return
+            print("👑 Nessun utente admin trovato, creazione admin predefinito in seed.py...")
+            admin_user = User(
+                email="admin@hiway.it",
+                username="admin",
+                hashed_password=hash_password("admin"),
+                full_name="Amministratore HiWay",
+                role=UserRole.ADMIN,
+                department="admin",
+                is_active=True
+            )
+            db.add(admin_user)
+            await db.commit()
+            await db.refresh(admin_user)
 
         print("Creazione utenti fittizi (se non esistono)...")
-        workers_ids = {"ufficio_tecnico": [], "produzione": [], "acquisti": []}
+        workers_ids: Dict[str, List[str]] = {"ufficio_tecnico": [], "produzione": [], "acquisti": []}
         
         from app.core.security import hash_password
         
@@ -126,31 +145,32 @@ async def seed():
             import json
             
             for dept_group in PHASES_TEMPLATES:
-                dept = dept_group["dept"]
-                for t_data in dept_group["tasks"]:
-                    duration = t_data["duration"]
+                dept: str = str(dept_group["dept"])
+                tasks_list: List[Dict[str, Any]] = cast(List[Dict[str, Any]], dept_group["tasks"])
+                for t_data in tasks_list:
+                    duration: int = int(t_data["duration"])
                     
                     # Assegna 1 addetto random di quel reparto
-                    worker_assigned = random.choice(workers_ids[dept])
+                    worker_assigned: str = random.choice(workers_ids[dept])
                     
                     task = Task(
                         project_id=project.id,
-                        text=t_data["text"],
+                        text=str(t_data["text"]),
                         start_date=current_date,
-                        end_date=current_date + timedelta(days=duration),
+                        end_date=current_date + timedelta(days=float(duration)),
                         duration=duration,
                         progress=round(random.uniform(0, 0.5), 2), # un po' di progresso
                         type=TaskType.TASK,
                         priority=TaskPriority.MEDIUM,
-                        planned_hours=duration * 8.0,
+                        planned_hours=float(duration * 8.0),
                         department=dept,
-                        color=t_data["color"],
+                        color=str(t_data["color"]),
                         workers=json.dumps([worker_assigned]),
-                        worker_hours=json.dumps({worker_assigned: duration * 8.0}),
+                        worker_hours=json.dumps({worker_assigned: float(duration * 8.0)}),
                         actual_hours=json.dumps({})
                     )
                     db.add(task)
-                    current_date += timedelta(days=duration) # sposta la data inizio della prossima fase
+                    current_date += timedelta(days=float(duration)) # sposta la data inizio della prossima fase
                     
             await db.commit()
             print(f"Commessa {p_data['code']} popolata con le fasi.")
