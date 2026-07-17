@@ -16,6 +16,29 @@ async def lifespan(app: FastAPI):
             await conn.exec_driver_sql("ALTER TABLE tasks ADD COLUMN color VARCHAR(50);")
         except Exception:
             pass  # Colonna già esistente
+
+    from app.models.base import AsyncSessionLocal
+    from sqlalchemy import select, func
+    from app.models.user import User, UserRole
+    from app.core.security import hash_password
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(func.count(User.id)))
+        user_count = result.scalar() or 0
+        if user_count == 0:
+            admin_user = User(
+                email="admin@hiway.it",
+                username="admin",
+                hashed_password=hash_password("admin"),
+                full_name="Amministratore HiWay",
+                role=UserRole.ADMIN,
+                department="admin",
+                is_active=True
+            )
+            session.add(admin_user)
+            await session.commit()
+            print("👑 [INIT] Database vuoto! Creato utente admin predefinito (username: admin / password: admin)")
+
     yield
     await engine.dispose()
 
