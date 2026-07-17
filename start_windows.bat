@@ -12,22 +12,34 @@ if not exist "backend\venv\Scripts\activate.bat" (
     call setup_windows.bat
 )
 
-echo [1/2] Avvio del Backend API sulla porta 8000...
-start "HiPlan - Backend API" cmd /k "cd backend && call venv\Scripts\activate.bat && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+echo [1/2] Avvio del Backend API in background sulla porta 8000...
+wscript run_backend_hidden.vbs
 
-echo [2/2] Avvio del Frontend Web sulla porta 5173...
-start "HiPlan - Frontend Web" cmd /k "cd frontend && call npm run dev -- --host 0.0.0.0"
+echo [2/2] Avvio del Frontend Web in background sulla porta 5173...
+wscript run_frontend_hidden.vbs
+
+echo.
+echo Attendere qualche secondo per l'accensione dei servizi...
+timeout /t 3 /nobreak > nul
 
 echo.
 echo ===================================================================
-echo ✅ SERVER HIPLAN AVVIATO E ACCESSIBILE DA TUTTA LA RETE!
+echo ✅ SERVER HIPLAN AVVIATO IN BACKGROUND CON SUCCESSO!
+echo ===================================================================
 echo.
 echo 🌐 Da qualsiasi PC (Windows o Mac) in ufficio digita nel browser:
 echo    http://192.168.2.10:5173
 echo.
 echo 💻 Direttamente da questo Server Windows digita:
 echo    http://localhost:5173
+echo.
+echo ===================================================================
+echo NOTA SU ARRESTO E LOG:
+echo - I servizi sono attivi in background senza finestre nere aperte.
+echo - Per ARRESTARE l'applicazione in qualsiasi momento, fai doppio
+echo   clic sul file: stop_windows.bat
+echo - I log sono consultabili nei file: backend_app.log e frontend_app.log
 echo ===================================================================
 echo.
-echo NOTA: Per spegnere il gestionale, chiudi le due finestre nere aperte sul desktop.
-pause
+echo Questa finestra di conferma si chiudera' automaticamente tra 10 secondi...
+timeout /t 10 > nul
