@@ -57,19 +57,13 @@ function AppRoutes() {
         <Route path="/projects/:id" element={<ProjectDetailPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/notes" element={<NotesPage />} />
+        <Route path="/conflicts" element={<ConflictMonitoringPage />} />
+        <Route path="/admin/conflicts" element={<ConflictMonitoringPage />} />
         <Route
           path="/admin"
           element={
             <ProtectedRoute adminOnly>
               <AdminPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/conflicts"
-          element={
-            <ProtectedRoute adminOnly>
-              <ConflictMonitoringPage />
             </ProtectedRoute>
           }
         />

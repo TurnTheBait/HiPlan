@@ -125,17 +125,15 @@ export default function MainLayout() {
             <span className="sidebar-link-icon">📝</span>
             {!collapsed && <span>Blocchi Note</span>}
           </NavLink>
+          <NavLink to="/conflicts" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon">👷‍♂️</span>
+            {!collapsed && <span>Panoramica addetti</span>}
+          </NavLink>
           {user?.role === 'admin' && (
-            <>
-              <NavLink to="/admin/conflicts" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-                <span className="sidebar-link-icon">👷‍♂️</span>
-                {!collapsed && <span>Panoramica addetti</span>}
-              </NavLink>
-              <NavLink to="/admin" end className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-                <span className="sidebar-link-icon">⚙️</span>
-                {!collapsed && <span>Admin</span>}
-              </NavLink>
-            </>
+            <NavLink to="/admin" end className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+              <span className="sidebar-link-icon">⚙️</span>
+              {!collapsed && <span>Admin</span>}
+            </NavLink>
           )}
         </nav>
 

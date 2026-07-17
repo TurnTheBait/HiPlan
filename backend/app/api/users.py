@@ -119,7 +119,7 @@ async def get_my_tasks_today(
 @router.get("/conflicts")
 async def get_worker_conflicts(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    current_user: User = Depends(get_current_user),
 ):
     # Fetch all tasks that have start_date and end_date and might have workers
     # We join with project to get project name
