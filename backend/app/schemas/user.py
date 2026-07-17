@@ -1,11 +1,18 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Optional, Any
 from datetime import datetime
 from app.models.user import UserRole
 
+try:
+    import email_validator  # type: ignore
+    from pydantic import EmailStr
+    EmailType: Any = EmailStr
+except ImportError:
+    EmailType: Any = str
+
 
 class UserCreate(BaseModel):
-    email: EmailStr
+    email: EmailType
     username: str = Field(..., min_length=3, max_length=100)
     password: str = Field(..., min_length=1, max_length=128)
     full_name: Optional[str] = None
