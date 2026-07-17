@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -23,6 +23,7 @@ export default function ProjectsPage() {
   useEffect(() => { loadProjects(); }, []);
 
   async function loadProjects() {
+    setLoading(true);
     try {
       const { data } = await api.get('/projects');
       setProjects(data);
@@ -123,7 +124,11 @@ export default function ProjectsPage() {
     reader.readAsText(file);
   }
 
-  const filtered = filter === 'all' ? projects : projects.filter((p) => p.status === filter);
+  const filtered = useMemo(() => {
+    if (filter === 'all') return projects;
+    return projects.filter(p => p.status === filter);
+  }, [projects, filter]);
+
   const canCreate = user?.role === 'admin' || user?.role === 'editor';
 
   if (loading) return <div className="loading-screen"><div className="spinner" /></div>;

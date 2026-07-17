@@ -11,16 +11,7 @@ from fastapi import HTTPException, status
 
 
 async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
-    if user.role == UserRole.ADMIN:
-        result = await db.execute(select(Project).order_by(Project.created_at.desc()))
-    else:
-        result = await db.execute(
-            select(Project)
-            .outerjoin(ProjectMember, ProjectMember.project_id == Project.id)
-            .where((Project.owner_id == user.id) | (ProjectMember.user_id == user.id))
-            .distinct()
-            .order_by(Project.created_at.desc())
-        )
+    result = await db.execute(select(Project).order_by(Project.created_at.desc()))
     projects = result.scalars().all()
 
     output = []
@@ -81,10 +72,6 @@ async def get_project(db: AsyncSession, project_id: str, user: User) -> Project:
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Progetto non trovato")
 
-    if user.role != UserRole.ADMIN and project.owner_id != user.id:
-        is_member = any(m.user_id == user.id for m in project.members)
-        if not is_member:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
     return project
 
 

@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Spostati nella cartella in cui si trova questo script (utile se avviato con doppio clic)
+cd "$(dirname "$0")" || exit
+
 echo "🚀 Avvio del Backend in corso..."
 cd backend
 source venv/bin/activate

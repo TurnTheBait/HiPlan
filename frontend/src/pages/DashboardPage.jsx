@@ -1,17 +1,51 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import TimelineView from '../components/calendar/TimelineView';
 import './DashboardPage.css';
 import { STATUS_LABELS_IT } from '../utils/statusLabels';
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const today = new Date();
+  const [timelineYear, setTimelineYear] = useState(today.getFullYear());
+  const [timelineMonth, setTimelineMonth] = useState(today.getMonth());
   const [projects, setProjects] = useState([]);
+  const [projectsWithTasks, setProjectsWithTasks] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [myTasksToday, setMyTasksToday] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const MONTH_NAMES_IT = [
+    'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+    'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+  ];
+
+  function prevMonth() {
+    if (timelineMonth === 0) {
+      setTimelineMonth(11);
+      setTimelineYear(y => y - 1);
+    } else {
+      setTimelineMonth(m => m - 1);
+    }
+  }
+
+  function nextMonth() {
+    if (timelineMonth === 11) {
+      setTimelineMonth(0);
+      setTimelineYear(y => y + 1);
+    } else {
+      setTimelineMonth(m => m + 1);
+    }
+  }
+
+  function goToToday() {
+    const now = new Date();
+    setTimelineYear(now.getFullYear());
+    setTimelineMonth(now.getMonth());
+  }
 
   useEffect(() => {
     loadData();
@@ -27,6 +61,19 @@ export default function DashboardPage() {
       setProjects(projRes.data);
       setNotifications(notifRes.data);
       setMyTasksToday(tasksRes.data);
+
+      Promise.all(
+        projRes.data.map(async (p) => {
+          try {
+            const { data: gData } = await api.get(`/projects/${p.id}/gantt`);
+            return { ...p, tasks: Array.isArray(gData.tasks) ? gData.tasks : [] };
+          } catch {
+            return { ...p, tasks: [] };
+          }
+        })
+      ).then(fullData => {
+        setProjectsWithTasks(fullData);
+      });
     } catch { /* ignore */ }
     finally { setLoading(false); }
   }
@@ -41,6 +88,14 @@ export default function DashboardPage() {
   const avgProgress = projects.length > 0
     ? Math.round(projects.reduce((acc, p) => acc + (p.progress || 0), 0) / projects.length * 100)
     : 0;
+
+  const timelineProjects = useMemo(() => {
+    if (!projectsWithTasks.length) return [];
+    return projectsWithTasks.filter(p => {
+      if (!p.tasks) return false;
+      return p.tasks.some(t => Array.isArray(t.workers) && t.workers.includes(user?.username));
+    });
+  }, [projectsWithTasks, user?.username]);
 
   if (loading) {
     return <div className="loading-screen"><div className="spinner" /></div>;
@@ -82,6 +137,47 @@ export default function DashboardPage() {
             <span className="stat-label">Progresso Medio</span>
           </div>
         </div>
+      </div>
+
+      <div className="card dashboard-section" style={{ marginTop: 24, marginBottom: 24, overflowX: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+            <span>📅</span> La tua Timeline ({MONTH_NAMES_IT[timelineMonth]} {timelineYear})
+          </h2>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={prevMonth}
+              className="btn btn-secondary"
+              style={{ padding: '4px 10px', fontSize: '0.85rem' }}
+            >
+              &lt; Prec.
+            </button>
+            <button
+              type="button"
+              onClick={goToToday}
+              className="btn btn-primary"
+              style={{ padding: '4px 12px', fontSize: '0.85rem' }}
+            >
+              Oggi
+            </button>
+            <button
+              type="button"
+              onClick={nextMonth}
+              className="btn btn-secondary"
+              style={{ padding: '4px 10px', fontSize: '0.85rem' }}
+            >
+              Succ. &gt;
+            </button>
+          </div>
+        </div>
+        <TimelineView 
+          projects={timelineProjects}
+          currYear={timelineYear}
+          currMonth={timelineMonth}
+          filterWorker={user?.username}
+          onSelectProject={(proj) => navigate(`/projects/${proj.id}`)}
+        />
       </div>
 
       <div className="dashboard-grid">

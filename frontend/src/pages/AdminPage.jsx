@@ -21,6 +21,21 @@ export default function AdminPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // STATO PER COLONNE TABELLA ADMIN
+  const [adminVisibleColumns, setAdminVisibleColumns] = useState(() => {
+    const saved = localStorage.getItem('adminVisibleColumns');
+    return saved ? JSON.parse(saved) : ['utente', 'email', 'ruolo', 'reparto', 'stato', 'registrato', 'azioni'];
+  });
+  const [showAdminColumnsMenu, setShowAdminColumnsMenu] = useState(false);
+
+  function toggleAdminColumn(col) {
+    setAdminVisibleColumns(prev => {
+      const next = prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col];
+      localStorage.setItem('adminVisibleColumns', JSON.stringify(next));
+      return next;
+    });
+  }
+
   useEffect(() => {
     loadData();
   }, []);
@@ -98,91 +113,127 @@ export default function AdminPage() {
 
       {/* SEZIONE 1: UTENTI DI SISTEMA */}
       <div className="admin-section-card">
-        <div className="admin-section-header">
-          <h2>👤 Utenti di Sistema</h2>
-          <p className="admin-section-desc">Utenti registrati con credenziali di login per accedere al gestionale HiPlan ({users.length})</p>
+        <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h2>👤 Utenti di Sistema</h2>
+            <p className="admin-section-desc">Utenti registrati con credenziali di login per accedere al gestionale HiPlan ({users.length})</p>
+          </div>
+          <div style={{ position: 'relative' }}>
+            <button 
+              className="btn btn-secondary btn-sm"
+              onClick={() => setShowAdminColumnsMenu(!showAdminColumnsMenu)}
+            >
+              ⚙️ Colonne
+            </button>
+            {showAdminColumnsMenu && (
+              <div className="dropdown-menu" style={{ position: 'absolute', right: 0, top: '100%', marginTop: 8, zIndex: 50, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, padding: 8, boxShadow: 'var(--shadow-lg)', minWidth: 200 }}>
+                {['utente', 'email', 'ruolo', 'reparto', 'stato', 'registrato', 'azioni'].map(col => (
+                  <label key={col} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', cursor: 'pointer', textTransform: 'capitalize' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={adminVisibleColumns.includes(col)}
+                      onChange={() => toggleAdminColumn(col)}
+                    />
+                    {col}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="table-wrapper">
           <table className="table">
             <thead>
               <tr>
-                <th>Utente</th>
-                <th>Email</th>
-                <th>Ruolo</th>
-                <th>Reparto</th>
-                <th>Stato</th>
-                <th>Registrato</th>
-                <th>Azioni</th>
+                {adminVisibleColumns.includes('utente') && <th>Utente</th>}
+                {adminVisibleColumns.includes('email') && <th>Email</th>}
+                {adminVisibleColumns.includes('ruolo') && <th>Ruolo</th>}
+                {adminVisibleColumns.includes('reparto') && <th>Reparto</th>}
+                {adminVisibleColumns.includes('stato') && <th>Stato</th>}
+                {adminVisibleColumns.includes('registrato') && <th>Registrato</th>}
+                {adminVisibleColumns.includes('azioni') && <th>Azioni</th>}
               </tr>
             </thead>
             <tbody>
               {users.map((u) => (
                 <tr key={u.id}>
-                  <td>
-                    <div className="admin-user-cell">
-                      <div className="sidebar-avatar" style={{ width: 30, height: 30, fontSize: '0.75rem' }}>
-                        {u.username?.[0]?.toUpperCase() || '?'}
+                  {adminVisibleColumns.includes('utente') && (
+                    <td>
+                      <div className="admin-user-cell">
+                        <div className="sidebar-avatar" style={{ width: 30, height: 30, fontSize: '0.75rem' }}>
+                          {u.username?.[0]?.toUpperCase() || '?'}
+                        </div>
+                        <div>
+                          <span className="admin-username">{u.full_name || u.username}</span>
+                          <span className="admin-handle">@{u.username}</span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="admin-username">{u.full_name || u.username}</span>
-                        <span className="admin-handle">@{u.username}</span>
+                    </td>
+                  )}
+                  {adminVisibleColumns.includes('email') && <td>{u.email}</td>}
+                  {adminVisibleColumns.includes('ruolo') && (
+                    <td>
+                      <select
+                        className="input"
+                        value={u.role}
+                        onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                        style={{ padding: '6px 10px', fontSize: '0.8125rem', minWidth: 100 }}
+                      >
+                        <option value="admin">Admin</option>
+                        <option value="editor">Editor</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
+                    </td>
+                  )}
+                  {adminVisibleColumns.includes('reparto') && (
+                    <td>
+                      <select
+                        className="input"
+                        value={u.department || ''}
+                        onChange={(e) => handleDepartmentChange(u.id, e.target.value)}
+                        style={{ padding: '6px 10px', fontSize: '0.8125rem', minWidth: 140 }}
+                      >
+                        <option value="">— Nessun reparto —</option>
+                        <option value="ufficio_tecnico">🔧 Ufficio Tecnico</option>
+                        <option value="produzione">🏭 Produzione</option>
+                        <option value="acquisti">🛒 Acquisti</option>
+                        <option value="admin">⚙️ Admin</option>
+                      </select>
+                    </td>
+                  )}
+                  {adminVisibleColumns.includes('stato') && (
+                    <td>
+                      <span className={`badge ${u.is_active ? 'badge-active' : 'badge-archived'}`}>
+                        {u.is_active ? 'Attivo' : 'Disattivato'}
+                      </span>
+                    </td>
+                  )}
+                  {adminVisibleColumns.includes('registrato') && (
+                    <td style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                      {u.created_at ? new Date(u.created_at).toLocaleDateString('it-IT') : '-'}
+                    </td>
+                  )}
+                  {adminVisibleColumns.includes('azioni') && (
+                    <td>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          className={`btn btn-sm ${u.is_active ? 'btn-danger' : 'btn-primary'}`}
+                          onClick={() => handleToggleActive(u.id, u.is_active)}
+                        >
+                          {u.is_active ? 'Disattiva' : 'Attiva'}
+                        </button>
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          style={{ color: 'var(--danger)', padding: '4px 8px' }}
+                          onClick={() => handleDeleteUser(u)}
+                          title="Elimina definitivamente questo utente"
+                        >
+                          🗑️
+                        </button>
                       </div>
-                    </div>
-                  </td>
-                  <td>{u.email}</td>
-                  <td>
-                    <select
-                      className="input"
-                      value={u.role}
-                      onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                      style={{ padding: '6px 10px', fontSize: '0.8125rem', minWidth: 100 }}
-                    >
-                      <option value="admin">Admin</option>
-                      <option value="editor">Editor</option>
-                      <option value="viewer">Viewer</option>
-                    </select>
-                  </td>
-                  <td>
-                    <select
-                      className="input"
-                      value={u.department || ''}
-                      onChange={(e) => handleDepartmentChange(u.id, e.target.value)}
-                      style={{ padding: '6px 10px', fontSize: '0.8125rem', minWidth: 140 }}
-                    >
-                      <option value="">— Nessun reparto —</option>
-                      <option value="ufficio_tecnico">🔧 Ufficio Tecnico</option>
-                      <option value="produzione">🏭 Produzione</option>
-                      <option value="acquisti">🛒 Acquisti</option>
-                      <option value="admin">⚙️ Admin</option>
-                    </select>
-                  </td>
-                  <td>
-                    <span className={`badge ${u.is_active ? 'badge-active' : 'badge-archived'}`}>
-                      {u.is_active ? 'Attivo' : 'Disattivato'}
-                    </span>
-                  </td>
-                  <td style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-                    {u.created_at ? new Date(u.created_at).toLocaleDateString('it-IT') : '-'}
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        className={`btn btn-sm ${u.is_active ? 'btn-danger' : 'btn-primary'}`}
-                        onClick={() => handleToggleActive(u.id, u.is_active)}
-                      >
-                        {u.is_active ? 'Disattiva' : 'Attiva'}
-                      </button>
-                      <button
-                        className="btn btn-sm btn-ghost"
-                        style={{ color: 'var(--danger)', padding: '4px 8px' }}
-                        onClick={() => handleDeleteUser(u)}
-                        title="Elimina definitivamente questo utente"
-                      >
-                        🗑️ Elimina
-                      </button>
-                    </div>
-                  </td>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
