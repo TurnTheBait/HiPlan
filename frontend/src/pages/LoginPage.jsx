@@ -120,12 +120,12 @@ export default function LoginPage() {
           <h2>{isRegister ? 'Crea un account' : 'Accedi'}</h2>
 
           <div className="input-group">
-            <label htmlFor="email">Email</label>
+            <label htmlFor="email">{isRegister ? 'Email' : 'Email o Username'}</label>
             <input
               id="email"
-              type="email"
+              type={isRegister ? 'email' : 'text'}
               className="input"
-              placeholder="nome@azienda.com"
+              placeholder={isRegister ? 'nome@azienda.com' : 'nome@azienda.com o username'}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required

@@ -72,7 +72,12 @@ export default function MainLayout() {
     <div className={`app-layout ${collapsed ? 'sidebar-collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar-header">
-          <div className="sidebar-logo">
+          <div 
+            className="sidebar-logo" 
+            onClick={() => navigate('/dashboard')} 
+            style={{ cursor: 'pointer' }}
+            title="Torna alla Dashboard"
+          >
             <img
               src="/hiway-icon.png"
               alt="HiWay"
