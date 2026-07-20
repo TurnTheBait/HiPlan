@@ -256,14 +256,31 @@ export default function CalendarPage() {
         </div>
 
         <div className="calendar-actions-section">
-          <input
-            type="text"
-            className="input"
-            style={{ width: 200, minWidth: 140, maxWidth: '100%', flex: '1 1 150px', padding: '8px 12px' }}
-            placeholder="Cerca commessa o cliente..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+          <div className="hiway-search-bar" style={{ position: 'relative', display: 'flex', alignItems: 'center', minWidth: 200, flex: '1 1 220px' }}>
+            <img
+              src="/hiway-icon.png"
+              alt="HiWay"
+              title="Cerca in HiWay GanttFlow"
+              style={{ position: 'absolute', left: 10, width: 18, height: 18, objectFit: 'contain', pointerEvents: 'none' }}
+            />
+            <input
+              type="text"
+              className="input"
+              style={{ width: '100%', paddingLeft: 36, paddingRight: 28, borderRadius: 18, padding: '8px 28px 8px 36px' }}
+              placeholder="Cerca commessa o cliente..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                style={{ position: 'absolute', right: 10, background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 13 }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
 
           <select
             className="input"

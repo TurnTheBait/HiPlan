@@ -15,10 +15,11 @@ from fastapi import HTTPException, status
 
 
 async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
-    result = await db.execute(select(Project).order_by(Project.created_at.desc()))
+    result = await db.execute(select(Project).options(selectinload(Project.responsible)).order_by(Project.created_at.desc()))
     projects = result.scalars().all()
 
     output = []
+    import json
     for p in projects:
         tasks_data = await db.execute(
             select(Task.id, Task.progress, Task.workers)
@@ -30,7 +31,6 @@ async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
         avg_progress = sum((row.progress or 0) for row in tasks_rows) / task_count if task_count > 0 else 0.0
         
         unique_workers = set()
-        import json
         for row in tasks_rows:
             if row.workers:
                 try:
@@ -40,13 +40,38 @@ async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
                 except:
                     pass
         
-        worker_count = len(unique_workers)
+        assigned_workers_list = []
+        if p.assigned_workers:
+            try:
+                parsed_aw = json.loads(p.assigned_workers)
+                if isinstance(parsed_aw, list):
+                    assigned_workers_list = parsed_aw
+            except:
+                pass
+
+        all_workers = unique_workers.union(set(assigned_workers_list))
+        worker_count = len(all_workers)
+
+        is_assigned = (
+            user.id == p.owner_id
+            or user.id == p.responsible_id
+            or (p.responsible and p.responsible.username == user.username)
+            or (user.username in assigned_workers_list)
+            or (user.full_name and user.full_name in assigned_workers_list)
+            or (user.username in unique_workers)
+            or (user.full_name and user.full_name in unique_workers)
+        )
 
         out = ProjectOut(
             id=p.id, name=p.name, code=p.code, client=p.client, color=p.color or "#185FA5",
             description=p.description,
             start_date=p.start_date, end_date=p.end_date,
             status=p.status, owner_id=p.owner_id,
+            responsible_id=p.responsible_id,
+            responsible_username=p.responsible.username if p.responsible else None,
+            responsible_name=p.responsible.full_name if p.responsible else (p.responsible.username if p.responsible else None),
+            assigned_workers=assigned_workers_list,
+            is_assigned=is_assigned,
             created_at=p.created_at, updated_at=p.updated_at,
             task_count=task_count, member_count=worker_count,
             progress=round(avg_progress, 2),
@@ -56,11 +81,14 @@ async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
 
 
 async def create_project(db: AsyncSession, data: ProjectCreate, owner: User) -> Project:
+    import json
     project = Project(
-        name=data.name, code=data.code, client=data.client, color=data.color or "#185FA5",
+        name=data.name or "", code=data.code, client=data.client, color=data.color or "#185FA5",
         description=data.description,
         start_date=data.start_date, end_date=data.end_date,
         status=data.status, owner_id=owner.id,
+        responsible_id=data.responsible_id or owner.id,
+        assigned_workers=json.dumps(data.assigned_workers) if data.assigned_workers else "[]",
     )
     db.add(project)
     await db.commit()
@@ -70,7 +98,7 @@ async def create_project(db: AsyncSession, data: ProjectCreate, owner: User) -> 
 
 async def get_project(db: AsyncSession, project_id: str, user: User) -> Project:
     result = await db.execute(
-        select(Project).options(selectinload(Project.members)).where(Project.id == project_id).execution_options(populate_existing=True)
+        select(Project).options(selectinload(Project.members), selectinload(Project.responsible)).where(Project.id == project_id).execution_options(populate_existing=True)
     )
     project = result.scalar_one_or_none()
     if not project:
@@ -81,13 +109,16 @@ async def get_project(db: AsyncSession, project_id: str, user: User) -> Project:
 
 async def update_project(db: AsyncSession, project_id: str, data: ProjectUpdate, user: User) -> Project:
     project = await get_project(db, project_id, user)
-    if user.role != UserRole.ADMIN and project.owner_id != user.id:
+    if user.role != UserRole.ADMIN and project.owner_id != user.id and project.responsible_id != user.id:
         member = next((m for m in project.members if m.user_id == user.id), None)
         if not member or member.role != MemberRole.MANAGER:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo owner/manager possono modificare")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo owner/manager/responsabile possono modificare")
 
     update_data = data.model_dump(exclude_unset=True)
+    import json
     for key, value in update_data.items():
+        if key == "assigned_workers":
+            value = json.dumps(value) if value is not None else "[]"
         setattr(project, key, value)
     await db.commit()
     return await get_project(db, project_id, user)
@@ -95,8 +126,8 @@ async def update_project(db: AsyncSession, project_id: str, data: ProjectUpdate,
 
 async def delete_project(db: AsyncSession, project_id: str, user: User):
     project = await get_project(db, project_id, user)
-    if user.role != UserRole.ADMIN and project.owner_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo owner/admin possono eliminare")
+    if user.role != UserRole.ADMIN and project.owner_id != user.id and project.responsible_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo owner/responsabile/admin possono eliminare")
     await db.delete(project)
     await db.commit()
 

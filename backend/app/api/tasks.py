@@ -24,7 +24,7 @@ async def create_task(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return await task_service.create_task(db, project_id, data)
+    return await task_service.create_task(db, project_id, data, current_user)
 
 
 @router.put("/tasks/{task_id}", response_model=TaskOut)
@@ -34,7 +34,7 @@ async def update_task(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return await task_service.update_task(db, task_id, data)
+    return await task_service.update_task(db, task_id, data, current_user)
 
 
 @router.delete("/tasks/{task_id}", status_code=204)
@@ -43,7 +43,7 @@ async def delete_task(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    await task_service.delete_task(db, task_id)
+    await task_service.delete_task(db, task_id, current_user)
 
 
 @router.post("/links", response_model=LinkOut, status_code=201)
@@ -53,7 +53,7 @@ async def create_link(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return await task_service.create_link(db, project_id, data)
+    return await task_service.create_link(db, project_id, data, current_user)
 
 
 @router.delete("/links/{link_id}", status_code=204)
@@ -62,4 +62,4 @@ async def delete_link(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    await task_service.delete_link(db, link_id)
+    await task_service.delete_link(db, link_id, current_user)

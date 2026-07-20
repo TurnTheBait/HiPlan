@@ -1,4 +1,5 @@
 export const STATUS_LABELS_IT = {
+  my_projects: '👤 Le Mie Commesse',
   all: 'Tutte',
   planning: 'Pianificazione',
   active: 'In Corso',

@@ -12,15 +12,27 @@ export default function ProjectsPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
   const [projects, setProjects] = useState([]);
+  const [usersList, setUsersList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
-  const [editForm, setEditForm] = useState({ name: '', code: '', client: '', color: '#185FA5', description: '', start_date: '', end_date: '' });
-  const [filter, setFilter] = useState('all');
-  const [form, setForm] = useState({ name: '', code: '', client: '', color: '#185FA5', status: 'planning', description: '', start_date: '', end_date: '' });
+  const [editForm, setEditForm] = useState({ name: '', code: '', client: '', color: '#185FA5', description: '', start_date: '', end_date: '', responsible_id: '', assigned_workers: [] });
+  const [filter, setFilter] = useState('my_projects');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [form, setForm] = useState({ name: '', code: '', client: '', color: '#185FA5', status: 'planning', description: '', start_date: '', end_date: '', responsible_id: '', assigned_workers: [] });
 
-  useEffect(() => { loadProjects(); }, []);
+  useEffect(() => {
+    loadProjects();
+    loadUsers();
+  }, []);
+
+  async function loadUsers() {
+    try {
+      const { data } = await api.get('/users');
+      if (Array.isArray(data)) setUsersList(data);
+    } catch {}
+  }
 
   async function loadProjects() {
     setLoading(true);
@@ -38,10 +50,11 @@ export default function ProjectsPage() {
         ...form,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
+        responsible_id: form.responsible_id || user?.id || null,
       });
       toast.success('Commessa creata con successo!');
       setShowModal(false);
-      setForm({ name: '', code: '', client: '', color: '#185FA5', status: 'planning', description: '', start_date: '', end_date: '' });
+      setForm({ name: '', code: '', client: '', color: '#185FA5', status: 'planning', description: '', start_date: '', end_date: '', responsible_id: '', assigned_workers: [] });
       loadProjects();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Errore nella creazione');
@@ -69,6 +82,8 @@ export default function ProjectsPage() {
       description: project.description || '',
       start_date: project.start_date || '',
       end_date: project.end_date || '',
+      responsible_id: project.responsible_id || '',
+      assigned_workers: Array.isArray(project.assigned_workers) ? [...project.assigned_workers] : [],
     });
     setShowEditModal(true);
   }
@@ -125,11 +140,38 @@ export default function ProjectsPage() {
   }
 
   const filtered = useMemo(() => {
-    if (filter === 'all') return projects;
-    return projects.filter(p => p.status === filter);
-  }, [projects, filter]);
+    let list = projects;
+    if (filter === 'my_projects') {
+      list = list.filter(p => p.is_assigned);
+    } else if (filter !== 'all') {
+      list = list.filter(p => p.status === filter);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(p => 
+        (p.name && p.name.toLowerCase().includes(q)) ||
+        (p.code && p.code.toLowerCase().includes(q)) ||
+        (p.client && p.client.toLowerCase().includes(q)) ||
+        (p.responsible_name && p.responsible_name.toLowerCase().includes(q)) ||
+        (p.responsible_username && p.responsible_username.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [projects, filter, searchQuery]);
 
   const canCreate = user?.role === 'admin' || user?.role === 'editor';
+
+  function toggleWorkerSelection(username, isEdit = false) {
+    if (isEdit) {
+      const current = editForm.assigned_workers || [];
+      const updated = current.includes(username) ? current.filter(w => w !== username) : [...current, username];
+      setEditForm({ ...editForm, assigned_workers: updated });
+    } else {
+      const current = form.assigned_workers || [];
+      const updated = current.includes(username) ? current.filter(w => w !== username) : [...current, username];
+      setForm({ ...form, assigned_workers: updated });
+    }
+  }
 
   if (loading) return <div className="loading-screen"><div className="spinner" /></div>;
 
@@ -164,23 +206,57 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      <div className="projects-filters">
-        {['all', 'planning', 'active', 'completed', 'archived'].map((f) => (
-          <button
-            key={f}
-            className={`filter-chip ${filter === f ? 'active' : ''}`}
-            onClick={() => setFilter(f)}
-          >
-            {STATUS_LABELS_IT[f] || f}
-          </button>
-        ))}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
+        <div className="projects-filters" style={{ marginBottom: 0 }}>
+          {['my_projects', 'all', 'planning', 'active', 'completed', 'archived'].map((f) => (
+            <button
+              key={f}
+              className={`filter-chip ${filter === f ? 'active' : ''}`}
+              onClick={() => setFilter(f)}
+            >
+              {STATUS_LABELS_IT[f] || f}
+            </button>
+          ))}
+        </div>
+
+        {/* BARRA DI RICERCA CON ICONA HIWAY */}
+        <div className="hiway-search-bar" style={{ position: 'relative', display: 'flex', alignItems: 'center', minWidth: 260, flex: '1 1 280px', maxWidth: 400 }}>
+          <img
+            src="/hiway-icon.png"
+            alt="HiWay"
+            title="Cerca in HiWay GanttFlow"
+            style={{ position: 'absolute', left: 12, width: 20, height: 20, objectFit: 'contain', pointerEvents: 'none' }}
+          />
+          <input
+            type="text"
+            className="input"
+            style={{ width: '100%', paddingLeft: 40, paddingRight: 32, borderRadius: 20, background: 'var(--bg-secondary)', border: '1px solid var(--border-default)' }}
+            placeholder="Cerca commessa, cliente o responsabile..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              style={{ position: 'absolute', right: 10, background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 14 }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       {filtered.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon">📂</div>
-          <h3>Nessuna commessa trovata</h3>
-          <p>{filter !== 'all' ? 'Prova a cambiare filtro' : 'Aggiungi la tua prima commessa o carica un file JSON'}</p>
+          <div className="empty-state-icon">{filter === 'my_projects' ? '👤' : '📂'}</div>
+          <h3>{filter === 'my_projects' ? 'Nessuna commessa assegnata a te' : 'Nessuna commessa trovata'}</h3>
+          <p>{filter === 'my_projects' ? 'Non risulti ancora Responsabile o Addetto di alcuna commessa o fase.' : (filter !== 'all' ? 'Prova a cambiare filtro' : 'Aggiungi la tua prima commessa o carica un file JSON')}</p>
+          {filter === 'my_projects' && (
+            <button className="btn btn-secondary" style={{ marginTop: 16 }} onClick={() => setFilter('all')}>
+              📋 Vedi Tutte le Commesse
+            </button>
+          )}
         </div>
       ) : (
         <div className="projects-grid">
@@ -196,12 +272,18 @@ export default function ProjectsPage() {
                   <span style={{ fontWeight: 600, color: '#64b5f6', fontSize: 13 }}>
                     {project.code || 'UT-COMM'}
                   </span>
-                  <h3>{project.name}</h3>
+                  <h3>{project.name || project.code || 'Senza Titolo'}</h3>
                 </div>
                 <span className={`badge badge-${project.status}`}>{STATUS_LABELS_IT[project.status] || project.status}</span>
               </div>
-              <div style={{ fontSize: 12, color: '#aaa', marginBottom: 6 }}>
+              <div style={{ fontSize: 12, color: '#aaa', marginBottom: 4 }}>
                 🏢 <strong>Cliente:</strong> {project.client || 'Non specificato'}
+              </div>
+              <div style={{ fontSize: 12, color: '#bbb', marginBottom: 4 }}>
+                👤 <strong>Responsabile:</strong> {project.responsible_name || project.responsible_username || (project.owner_id === user?.id ? user?.username : 'Non specificato')}
+              </div>
+              <div style={{ fontSize: 12, color: '#bbb', marginBottom: 6 }}>
+                👥 <strong>Addetti Commessa:</strong> {project.assigned_workers?.length > 0 ? project.assigned_workers.join(', ') : 'Vedi fasi'}
               </div>
               {project.description && (
                 <p className="project-card-desc">{project.description}</p>
@@ -217,13 +299,13 @@ export default function ProjectsPage() {
               </div>
               <div className="project-card-footer">
                 <span>📋 {project.task_count} fasi</span>
-                <span>👥 {project.member_count} addetti</span>
-                {(user?.role === 'admin' || project.owner_id === user?.id) && (
+                <span>👥 {project.member_count} totali</span>
+                {(user?.role === 'admin' || user?.role === 'editor' || project.owner_id === user?.id || project.responsible_id === user?.id || project.responsible_username === user?.username) && (
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button
                       className="btn-ghost btn-sm"
                       onClick={(e) => openEditProject(project, e)}
-                      title="Modifica commessa (titolo, cliente, codice)"
+                      title="Modifica commessa (titolo, cliente, codice, responsabile, addetti)"
                       style={{ fontSize: 14 }}
                     >
                       ✏️
@@ -278,13 +360,12 @@ export default function ProjectsPage() {
 
               <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
                 <div className="input-group" style={{ flex: 2, minWidth: 0 }}>
-                  <label htmlFor="project-name">Nome Progetto / Commessa *</label>
+                  <label htmlFor="project-name">Nome Progetto / Commessa</label>
                   <input
                     id="project-name"
                     className="input"
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    required
                     placeholder="es. Impianto linea automatica"
                   />
                 </div>
@@ -311,6 +392,51 @@ export default function ProjectsPage() {
                     value={form.color}
                     onChange={(e) => setForm({ ...form, color: e.target.value })}
                   />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                  <label htmlFor="project-responsible">Responsabile di Commessa</label>
+                  <select
+                    id="project-responsible"
+                    className="input"
+                    value={form.responsible_id || ''}
+                    onChange={(e) => setForm({ ...form, responsible_id: e.target.value })}
+                  >
+                    <option value="">-- Seleziona (Default: Tu) --</option>
+                    {usersList.map(u => (
+                      <option key={u.id} value={u.id}>{u.full_name || u.username} ({u.username})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="input-group" style={{ marginTop: 16 }}>
+                <label>Addetti della Commessa (Multi-selezione)</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                  {usersList.map(u => {
+                    const selected = (form.assigned_workers || []).includes(u.username);
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => toggleWorkerSelection(u.username, false)}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: 20,
+                          border: selected ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                          background: selected ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-tertiary)',
+                          color: selected ? '#60a5fa' : 'var(--text-secondary)',
+                          fontSize: 13,
+                          cursor: 'pointer',
+                          fontWeight: selected ? 600 : 400
+                        }}
+                      >
+                        {selected ? '✓ ' : '+ '}{u.full_name || u.username}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -446,6 +572,49 @@ export default function ProjectsPage() {
                       style={{ flex: 1, minWidth: 0 }}
                     />
                   </div>
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label htmlFor="card-edit-responsible">Responsabile di Commessa</label>
+                <select
+                  id="card-edit-responsible"
+                  className="input"
+                  value={editForm.responsible_id || ''}
+                  onChange={(e) => setEditForm({ ...editForm, responsible_id: e.target.value })}
+                >
+                  <option value="">-- Nessuno / Predefinito --</option>
+                  {usersList.map(u => (
+                    <option key={u.id} value={u.id}>{u.full_name || u.username} ({u.username})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="input-group">
+                <label>Addetti della Commessa (Multi-selezione)</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                  {usersList.map(u => {
+                    const selected = (editForm.assigned_workers || []).includes(u.username);
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => toggleWorkerSelection(u.username, true)}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: 20,
+                          border: selected ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                          background: selected ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-tertiary)',
+                          color: selected ? '#60a5fa' : 'var(--text-secondary)',
+                          fontSize: 13,
+                          cursor: 'pointer',
+                          fontWeight: selected ? 600 : 400
+                        }}
+                      >
+                        {selected ? '✓ ' : '+ '}{u.full_name || u.username}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

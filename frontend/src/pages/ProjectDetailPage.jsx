@@ -28,8 +28,17 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState(null);
   const [ganttData, setGanttData] = useState({ tasks: [], links: [] });
   const [predefinedWorkers, setPredefinedWorkers] = useState(PREDEFINED_WORKERS_DEFAULT);
+  const [usersList, setUsersList] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
+  const canManageProject = useMemo(() => {
+    if (!user || !project) return false;
+    if (user.role === 'admin' || user.role === 'editor') return true;
+    if (user.id === project.owner_id || user.id === project.responsible_id) return true;
+    if (project.responsible_username && project.responsible_username === user.username) return true;
+    return false;
+  }, [user, project]);
+
   // STATO PER COLONNE GANTT (leggiamo dal localStorage)
   const [visibleColumns, setVisibleColumns] = useState(() => {
     const saved = localStorage.getItem('ganttVisibleColumns');
@@ -119,9 +128,19 @@ export default function ProjectDetailPage() {
         api.get('/users').catch(() => ({ data: [] }))
       ]);
       setProject(projRes.data);
-      setGanttData(ganttRes.data);
+      const sortedTasks = Array.isArray(ganttRes.data?.tasks)
+        ? [...ganttRes.data.tasks].sort((a, b) => {
+            const da = new Date(a.start_date ? String(a.start_date).split(' ')[0] : '1970-01-01');
+            const db = new Date(b.start_date ? String(b.start_date).split(' ')[0] : '1970-01-01');
+            if (da < db) return -1;
+            if (da > db) return 1;
+            return (a.id || 0) - (b.id || 0);
+          })
+        : [];
+      setGanttData({ ...ganttRes.data, tasks: sortedTasks });
       if (Array.isArray(usersRes.data)) {
         setPredefinedWorkers(usersRes.data.map(u => u.username));
+        setUsersList(usersRes.data);
       }
     } catch {
       toast.error('Progetto non trovato');
@@ -145,13 +164,26 @@ export default function ProjectDetailPage() {
     }
   }
 
+  function formatDateOnly(d) {
+    if (!d) return '';
+    if (typeof d === 'string') return d.split(' ')[0].split('T')[0];
+    if (d instanceof Date && !isNaN(d)) return d.toISOString().split('T')[0];
+    try {
+      return String(d).split(' ')[0].split('T')[0];
+    } catch {
+      return '';
+    }
+  }
+
   // Calcolo stato semaforo e ore giornaliere previste (algoritmo prototipo Ufficio Tecnico)
   function computeStato(task) {
     if (!task || !task.start_date) return 'ok';
-    const startStr = task.start_date.split(' ')[0];
-    const endStr = task.end_date ? task.end_date.split(' ')[0] : startStr;
+    const startStr = formatDateOnly(task.start_date);
+    const endStr = task.end_date ? formatDateOnly(task.end_date) : startStr;
+    if (!startStr) return 'ok';
     const start = new Date(startStr + 'T00:00:00');
-    const end = new Date(endStr + 'T00:00:00');
+    const end = new Date((endStr || startStr) + 'T00:00:00');
+    if (isNaN(start) || isNaN(end)) return 'ok';
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -176,7 +208,7 @@ export default function ProjectDetailPage() {
         const m = String(cur.getMonth() + 1).padStart(2, '0');
         const d = String(cur.getDate()).padStart(2, '0');
         const dateStr = `${y}-${m}-${d}`;
-        
+
         let totDayEff = 0;
         if (task.actual_hours && typeof task.actual_hours === 'object') {
           Object.values(task.actual_hours).forEach(dayMap => {
@@ -198,11 +230,14 @@ export default function ProjectDetailPage() {
   }
 
   // Helper giorni lavorativi tra due date per tabella ore
-  function getWorkDatesBetween(startStr, endStr) {
+  function getWorkDatesBetween(startInput, endInput) {
     const dates = [];
+    const startStr = formatDateOnly(startInput);
+    const endStr = formatDateOnly(endInput || startInput);
     if (!startStr) return dates;
     const start = new Date(startStr + 'T00:00:00');
     const end = endStr ? new Date(endStr + 'T00:00:00') : new Date(startStr + 'T00:00:00');
+    if (isNaN(start) || isNaN(end)) return dates;
     let cur = new Date(start);
     while (cur <= end) {
       const dayOfWeek = cur.getDay();
@@ -275,8 +310,8 @@ export default function ProjectDetailPage() {
         gantt.changeLinkId(tempId, created.id);
       }
       loadProject();
-    } catch { 
-      toast.error('Errore creazione dipendenza'); 
+    } catch {
+      toast.error('Errore creazione dipendenza');
       if (tempId && gantt.isLinkExists && gantt.isLinkExists(tempId)) {
         gantt.deleteLink(tempId);
       }
@@ -295,6 +330,7 @@ export default function ProjectDetailPage() {
     setEditingTask(null);
     setTaskModalTab('generale');
     setTaskForm({
+      taskType: 'task',
       faseSel: PREDEFINED_PHASES[0],
       customText: '',
       color: PHASE_DEFAULT_COLORS[PREDEFINED_PHASES[0]] || '#3b82f6',
@@ -307,11 +343,16 @@ export default function ProjectDetailPage() {
       worker_hours: {},
       customWorker: '',
       department: user?.department && user.department !== 'admin' ? user.department : 'ufficio_tecnico',
+      completed: 0,
     });
     setShowTaskModal(true);
   }
 
   function openEditTaskModal(task) {
+    if (!canManageProject) {
+      openOreModalForTask(task);
+      return;
+    }
     setEditingTask(task);
     setTaskModalTab('generale');
     const isPredefined = PREDEFINED_PHASES.includes(task.text);
@@ -329,6 +370,7 @@ export default function ProjectDetailPage() {
     const diff = Math.max(1, Math.ceil((new Date(e) - new Date(s)) / (1000 * 60 * 60 * 24)) + 1);
 
     setTaskForm({
+      taskType: task.type === 'milestone' || Number(task.duration) === 0 ? 'milestone' : 'task',
       faseSel: isPredefined ? task.text : '__custom__',
       customText: isPredefined ? '' : task.text,
       color: getTaskColor(task),
@@ -341,6 +383,7 @@ export default function ProjectDetailPage() {
       worker_hours: typeof task.worker_hours === 'object' ? task.worker_hours : {},
       customWorker: '',
       department: task.department || (user?.department && user.department !== 'admin' ? user.department : 'ufficio_tecnico'),
+      completed: Number(task.completed) === 1 || (Number(task.progress) >= 1 && task.completed !== 0 && task.completed !== false) ? 1 : 0,
     });
     setShowTaskModal(true);
   }
@@ -419,6 +462,7 @@ export default function ProjectDetailPage() {
       toast.error('Inserire il nome della fase');
       return;
     }
+    const isMilestone = taskForm.taskType === 'milestone';
     const sDate = new Date(taskForm.start_date);
     const eDate = new Date(taskForm.end_date);
     const diffDays = Math.max(1, Math.ceil((eDate - sDate) / (1000 * 60 * 60 * 24)) + 1);
@@ -427,14 +471,15 @@ export default function ProjectDetailPage() {
     const payload = {
       text: taskName.trim(),
       start_date: taskForm.start_date,
-      end_date: taskForm.end_date,
-      duration: finalDays,
-      planned_hours: Number(taskForm.planned_hours) || (finalDays * 8.0),
-      workers: taskForm.workers,
-      worker_hours: taskForm.worker_hours,
-      type: editingTask ? editingTask.type : 'task',
-      color: taskForm.color,
+      end_date: isMilestone ? taskForm.start_date : taskForm.end_date,
+      duration: isMilestone ? 0 : finalDays,
+      planned_hours: isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDays * 8.0)),
+      workers: isMilestone ? [] : taskForm.workers,
+      worker_hours: isMilestone ? {} : taskForm.worker_hours,
+      type: isMilestone ? 'milestone' : 'task',
+      color: taskForm.color || (isMilestone ? '#f59e0b' : null),
       department: taskForm.department || null,
+      completed: isMilestone ? 0 : (Number(taskForm.completed) || 0),
     };
 
 
@@ -488,8 +533,16 @@ export default function ProjectDetailPage() {
       start_date: project.start_date || '',
       end_date: project.end_date || '',
       status: project.status || 'planning',
+      responsible_id: project.responsible_id || '',
+      assigned_workers: Array.isArray(project.assigned_workers) ? [...project.assigned_workers] : [],
     });
     setShowEditProjectModal(true);
+  }
+
+  function toggleProjectWorkerSelection(username) {
+    const current = projectForm.assigned_workers || [];
+    const updated = current.includes(username) ? current.filter(w => w !== username) : [...current, username];
+    setProjectForm({ ...projectForm, assigned_workers: updated });
   }
 
   async function handleSaveProject(e) {
@@ -591,7 +644,7 @@ export default function ProjectDetailPage() {
             <span className="commessa-client">🏢 {project?.client || 'Cliente'}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <h1 style={{ margin: 0 }}>{project?.name}</h1>
+            <h1 style={{ margin: 0 }}>{project?.name || project?.code || 'Senza Titolo'}</h1>
           </div>
         </div>
       </div>
@@ -625,48 +678,52 @@ export default function ProjectDetailPage() {
             <span className="tab-badge tab-badge-danger">{delaysList.length}</span>
           )}
         </button>
-        <button
-          type="button"
-          className={`btn btn-sm badge-${project?.status || 'planning'}`}
-          onClick={openEditProjectModal}
-          title="Modifica commessa e cambia stato"
-          style={{
-            marginLeft: 'auto',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '6px 14px',
-            fontSize: '0.85rem',
-            fontWeight: 700,
-            borderRadius: '8px',
-            border: '1px solid currentColor',
-            cursor: 'pointer',
-            transition: 'all 0.15s ease'
-          }}
-        >
-          ✏️ Modifica
-        </button>
+        {canManageProject && (
+          <button
+            type="button"
+            className={`btn btn-sm badge-${project?.status || 'planning'}`}
+            onClick={openEditProjectModal}
+            title="Modifica commessa e cambia stato"
+            style={{
+              marginLeft: 'auto',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 14px',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              borderRadius: '8px',
+              border: '1px solid currentColor',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            ✏️ Modifica
+          </button>
+        )}
       </div>
 
       {/* TOOLBAR DI AZIONE POSIZIONATA SOTTO ALLE TABS */}
       <div className="project-toolbar">
         <div className="toolbar-left" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button className="btn btn-primary" onClick={openNewTaskModal}>
-            + Nuova Fase
-          </button>
-          
+          {canManageProject && (
+            <button className="btn btn-primary" onClick={openNewTaskModal}>
+              + Nuova Fase
+            </button>
+          )}
+
           {activeTab === 'gantt' && (
             <div style={{ position: 'relative' }}>
-              <button 
-                className="btn btn-secondary" 
+              <button
+                className="btn btn-secondary"
                 onClick={() => setShowColumnsMenu(!showColumnsMenu)}
               >
                 ⚙️ Colonne
               </button>
-              
+
               {showColumnsMenu && (
                 <div style={{
-                  position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-default)', 
+                  position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-default)',
                   borderRadius: 8, padding: 10, zIndex: 100, minWidth: 200, boxShadow: 'var(--shadow-md)'
                 }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>MOSTRA/NASCONDI:</div>
@@ -678,12 +735,12 @@ export default function ProjectDetailPage() {
                     { id: 'workers', label: 'Addetti' }
                   ].map(col => (
                     <label key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
                         checked={visibleColumns.includes(col.id)}
                         onChange={(e) => {
-                          const newCols = e.target.checked 
-                            ? [...visibleColumns, col.id] 
+                          const newCols = e.target.checked
+                            ? [...visibleColumns, col.id]
                             : visibleColumns.filter(c => c !== col.id);
                           setVisibleColumns(newCols);
                           localStorage.setItem('ganttVisibleColumns', JSON.stringify(newCols));
@@ -774,13 +831,20 @@ export default function ProjectDetailPage() {
       {activeTab === 'gantt' && (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, width: '100%', maxWidth: '100%' }}>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
-            <span>💡 Clicca e trascina per modificare le fasi. Per registrare le ore effettive di lavoro o consuntivare per singolo addetto, passa alla tab <strong>Consuntivazione Ore</strong> o clicca sul pulsante <code>+ Nuova Fase</code> per aggiungere un task normato.</span>
+            <span>
+              {canManageProject
+                ? '💡 Clicca e trascina per modificare le fasi. Per registrare le ore effettive di lavoro o consuntivare per singolo addetto, passa alla tab Consuntivazione Ore o clicca sul pulsante + Nuova Fase.'
+                : '🔒 Gantt in Sola Lettura: Fai doppio click su una fase per aprire il Giornale Ore Consuntivate e inserire le ore realmente svolte per le attività a te assegnate.'}
+            </span>
           </div>
           <div className="gantt-wrapper">
             <GanttChart
               tasks={ganttData.tasks.filter(t => !t.department || activeDepartments.includes(t.department))}
               links={ganttData.links}
               visibleColumns={visibleColumns}
+              readOnly={!canManageProject}
+              projectStartDate={project?.start_date}
+              projectEndDate={project?.end_date}
               onTaskUpdate={handleTaskUpdate}
               onTaskCreate={handleTaskCreate}
               onTaskDelete={handleTaskDelete}
@@ -836,6 +900,20 @@ export default function ProjectDetailPage() {
                   )}
                 </div>
               </div>
+              <div className="stat-box">
+                <div className="stat-box-label">Responsabile Commessa</div>
+                <div className="stat-box-value" style={{ fontSize: '0.95rem' }}>
+                  {project?.responsible?.full_name || project?.responsible?.username || 'N/D'}
+                </div>
+              </div>
+              <div className="stat-box">
+                <div className="stat-box-label">Addetti Commessa</div>
+                <div className="stat-box-value" style={{ fontSize: '0.9rem', whiteSpace: 'normal', lineHeight: '1.3' }}>
+                  {Array.isArray(project?.assigned_workers) && project.assigned_workers.length > 0
+                    ? project.assigned_workers.join(', ')
+                    : 'Nessuno specifico'}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -848,7 +926,7 @@ export default function ProjectDetailPage() {
             </button>
             {showTableColumnsMenu && (
               <div style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-default)', 
+                position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-default)',
                 borderRadius: 8, padding: 10, zIndex: 100, minWidth: 200, boxShadow: 'var(--shadow-md)', textAlign: 'left'
               }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>MOSTRA/NASCONDI:</div>
@@ -904,86 +982,95 @@ export default function ProjectDetailPage() {
                         <td style={{ fontWeight: 600 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: tColor, flexShrink: 0, display: 'inline-block', border: '1px solid rgba(255,255,255,0.2)' }} title={`Colore fase: ${tColor}`} />
-                            <span>{task.text}</span>
+                            <span>
+                              {(Number(task.completed) === 1 || (Number(task.progress) >= 1 && task.completed !== 0 && task.completed !== false)) && (
+                                <span style={{ color: '#10b981', fontWeight: 'bold', marginRight: '6px' }} title="Fase completata">✓</span>
+                              )}
+                              {task.text}
+                            </span>
                           </div>
                         </td>
                         {tableVisibleColumns.includes('reparto') && (
-                        <td>
-                          {task.department ? (() => {
-                            const dept = DEPT_OPTIONS.find(d => d.value === task.department);
-                            return (
-                              <span style={{
-                                display: 'inline-block', padding: '3px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 600,
-                                background: (dept?.color || '#6b7280') + '22', color: dept?.color || '#6b7280',
-                                border: `1px solid ${(dept?.color || '#6b7280')}44`, whiteSpace: 'nowrap'
-                              }}>
-                                {dept?.label || task.department}
-                              </span>
-                            );
-                          })() : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>}
-                        </td>
+                          <td>
+                            {task.department ? (() => {
+                              const dept = DEPT_OPTIONS.find(d => d.value === task.department);
+                              return (
+                                <span style={{
+                                  display: 'inline-block', padding: '3px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 600,
+                                  background: (dept?.color || '#6b7280') + '22', color: dept?.color || '#6b7280',
+                                  border: `1px solid ${(dept?.color || '#6b7280')}44`, whiteSpace: 'nowrap'
+                                }}>
+                                  {dept?.label || task.department}
+                                </span>
+                              );
+                            })() : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>}
+                          </td>
                         )}
                         {tableVisibleColumns.includes('addetti') && (
-                        <td>
+                          <td>
 
-                          {Array.isArray(task.workers) && task.workers.length > 0 ? (
-                            task.workers.map(w => (
-                              <span key={w} className="worker-chip">👤 {w}</span>
-                            ))
-                          ) : (
-                            <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>Nessun addetto</span>
-                          )}
-                        </td>
+                            {Array.isArray(task.workers) && task.workers.length > 0 ? (
+                              task.workers.map(w => (
+                                <span key={w} className="worker-chip">👤 {w}</span>
+                              ))
+                            ) : (
+                              <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>Nessun addetto</span>
+                            )}
+                          </td>
                         )}
                         {tableVisibleColumns.includes('date') && (
-                        <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                          <div>{task.start_date ? task.start_date.split(' ')[0] : ''} → {task.end_date ? task.end_date.split(' ')[0] : ''}</div>
-                          <div style={{ fontSize: 11, color: 'var(--accent-500)', fontWeight: 600, marginTop: 2 }}>
-                            🗓️ Durata: {task.duration || 1} {task.duration === 1 ? 'giorno' : 'giorni'}
-                          </div>
-                        </td>
+                          <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                            <div>{formatDateOnly(task.start_date)} → {formatDateOnly(task.end_date)}</div>
+                            <div style={{ fontSize: 11, color: 'var(--accent-500)', fontWeight: 600, marginTop: 2 }}>
+                              🗓️ Durata: {task.duration || 1} {task.duration === 1 ? 'giorno' : 'giorni'}
+                            </div>
+                          </td>
                         )}
                         {tableVisibleColumns.includes('ore') && (
-                        <td>
-                          <strong>{task.planned_hours || 8}h</strong> prev /{' '}
-                          <span style={{ color: tEff < (task.planned_hours * 0.5) ? 'var(--danger)' : 'var(--success)', fontWeight: 700 }}>
-                            {tEff}h eff
-                          </span>
-                        </td>
+                          <td>
+                            <strong>{task.planned_hours || 8}h</strong> prev /{' '}
+                            <span style={{ color: tEff < (task.planned_hours * 0.5) ? 'var(--danger)' : 'var(--success)', fontWeight: 700 }}>
+                              {tEff}h eff
+                            </span>
+                          </td>
                         )}
                         {tableVisibleColumns.includes('semaforo') && (
-                        <td>
-                          {st === 'ok' && <span className="semaforo-ok">🟢 OK (Regolare)</span>}
-                          {st === 'attenzione' && <span className="semaforo-attenzione">🟡 Attenzione</span>}
-                          {st === 'ritardo' && <span className="semaforo-ritardo">🔴 Ritardo Lavorazione</span>}
-                        </td>
+                          <td>
+                            {st === 'ok' && <span className="semaforo-ok">🟢 OK (Regolare)</span>}
+                            {st === 'attenzione' && <span className="semaforo-attenzione">🟡 Attenzione</span>}
+                            {st === 'ritardo' && <span className="semaforo-ritardo">🔴 Ritardo Lavorazione</span>}
+                          </td>
                         )}
                         {tableVisibleColumns.includes('azioni') && (
-                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                          <button
-                            className="btn btn-secondary btn-sm"
-                            style={{ marginRight: 6 }}
-                            onClick={() => openOreModalForTask(task)}
-                            title="Inserisci ore lavorate (Giornale ore)"
-                          >
-                            ⏱️ Consuntiva
-                          </button>
-                          <button
-                            className="btn btn-secondary btn-sm"
-                            style={{ marginRight: 6 }}
-                            onClick={() => openEditTaskModal(task)}
-                            title="Modifica fase"
-                          >
-                            ✏️
-                          </button>
-                          <button
-                            className="btn-ghost btn-sm project-delete"
-                            onClick={() => handleTaskDelete(task.id)}
-                            title="Elimina fase"
-                          >
-                            🗑️
-                          </button>
-                        </td>
+                          <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              style={{ marginRight: 6 }}
+                              onClick={() => openOreModalForTask(task)}
+                              title="Inserisci ore lavorate (Giornale ore)"
+                            >
+                              ⏱️ Consuntiva
+                            </button>
+                            {canManageProject && (
+                              <>
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ marginRight: 6 }}
+                                  onClick={() => openEditTaskModal(task)}
+                                  title="Modifica fase"
+                                >
+                                  ✏️
+                                </button>
+                                <button
+                                  className="btn-ghost btn-sm project-delete"
+                                  onClick={() => handleTaskDelete(task.id)}
+                                  title="Elimina fase"
+                                >
+                                  🗑️
+                                </button>
+                              </>
+                            )}
+                          </td>
                         )}
                       </tr>
                     );
@@ -1014,7 +1101,7 @@ export default function ProjectDetailPage() {
             </button>
             {showOreColumnsMenu && (
               <div style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-default)', 
+                position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-default)',
                 borderRadius: 8, padding: 10, zIndex: 100, minWidth: 200, boxShadow: 'var(--shadow-md)', textAlign: 'left'
               }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>MOSTRA/NASCONDI:</div>
@@ -1056,8 +1143,8 @@ export default function ProjectDetailPage() {
                   ganttData.tasks.map(task => {
                     const st = computeStato(task);
                     const dates = getWorkDatesBetween(
-                      task.start_date ? task.start_date.split(' ')[0] : '',
-                      task.end_date ? task.end_date.split(' ')[0] : ''
+                      formatDateOnly(task.start_date),
+                      formatDateOnly(task.end_date)
                     );
                     const oreGg = dates.length > 0 ? ((task.planned_hours || 8) / dates.length).toFixed(1) : (task.planned_hours || 8);
 
@@ -1081,46 +1168,51 @@ export default function ProjectDetailPage() {
                         <td style={{ fontWeight: 600 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: tColor, flexShrink: 0, display: 'inline-block', border: '1px solid rgba(255,255,255,0.2)' }} title={`Colore fase: ${tColor}`} />
-                            <span>{task.text}</span>
+                            <span>
+                              {(Number(task.completed) === 1 || (Number(task.progress) >= 1 && task.completed !== 0 && task.completed !== false)) && (
+                                <span style={{ color: '#10b981', fontWeight: 'bold', marginRight: '6px' }} title="Fase completata">✓</span>
+                              )}
+                              {task.text}
+                            </span>
                           </div>
                         </td>
                         {oreVisibleColumns.includes('addetti') && (
-                        <td>
+                          <td>
 
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            {workersList.map(w => (
-                              <div key={w} style={{ fontSize: 13 }}>
-                                <span className="worker-chip">👤 {w}</span>: <strong>{workerTotals[w]}h</strong> fatte
-                              </div>
-                            ))}
-                          </div>
-                        </td>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              {workersList.map(w => (
+                                <div key={w} style={{ fontSize: 13 }}>
+                                  <span className="worker-chip">👤 {w}</span>: <strong>{workerTotals[w]}h</strong> fatte
+                                </div>
+                              ))}
+                            </div>
+                          </td>
                         )}
                         {oreVisibleColumns.includes('giorni') && <td>{dates.length} giorni lavorativi</td>}
                         {oreVisibleColumns.includes('ore_giorno') && <td>~{oreGg} h/giorno</td>}
                         {oreVisibleColumns.includes('totale') && (
-                        <td>
-                          <span style={{ fontSize: 15, fontWeight: 700, color: totalTaskEff >= task.planned_hours ? 'var(--success)' : 'var(--accent-500)' }}>
-                            {totalTaskEff} h
-                          </span> / {task.planned_hours || 8} h prev
-                        </td>
+                          <td>
+                            <span style={{ fontSize: 15, fontWeight: 700, color: totalTaskEff >= task.planned_hours ? 'var(--success)' : 'var(--accent-500)' }}>
+                              {totalTaskEff} h
+                            </span> / {task.planned_hours || 8} h prev
+                          </td>
                         )}
                         {oreVisibleColumns.includes('semaforo') && (
-                        <td>
-                          {st === 'ok' && <span className="semaforo-ok">🟢 Regolare</span>}
-                          {st === 'attenzione' && <span className="semaforo-attenzione">🟡 Attenzione</span>}
-                          {st === 'ritardo' && <span className="semaforo-ritardo">🔴 Ritardo</span>}
-                        </td>
+                          <td>
+                            {st === 'ok' && <span className="semaforo-ok">🟢 Regolare</span>}
+                            {st === 'attenzione' && <span className="semaforo-attenzione">🟡 Attenzione</span>}
+                            {st === 'ritardo' && <span className="semaforo-ritardo">🔴 Ritardo</span>}
+                          </td>
                         )}
                         {oreVisibleColumns.includes('azioni') && (
-                        <td style={{ textAlign: 'right' }}>
-                          <button
-                            className="btn btn-primary btn-sm"
-                            onClick={() => openOreModalForTask(task)}
-                          >
-                            ⏱️ Consuntiva Ore
-                          </button>
-                        </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={() => openOreModalForTask(task)}
+                            >
+                              ⏱️ Consuntiva Ore
+                            </button>
+                          </td>
                         )}
                       </tr>
                     );
@@ -1165,7 +1257,7 @@ export default function ProjectDetailPage() {
                     )}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                    📅 Inizio/Fine: <strong>{item.task.start_date?.split(' ')[0]} → {item.task.end_date?.split(' ')[0]}</strong> |{' '}
+                    📅 Inizio/Fine: <strong>{formatDateOnly(item.task.start_date)} → {formatDateOnly(item.task.end_date)}</strong> |{' '}
                     Addetti: <strong>{Array.isArray(item.task.workers) ? item.task.workers.join(', ') : 'Nessuno'}</strong>
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>
@@ -1208,337 +1300,398 @@ export default function ProjectDetailPage() {
             )}
 
             {taskModalTab === 'generale' && (
-            <form onSubmit={handleSaveTaskForm}>
-              <div className="input-group">
-                <label>Fase di Lavorazione *</label>
-                <select
-                  className="input"
-                  value={taskForm.faseSel}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setTaskForm({
-                      ...taskForm,
-                      faseSel: val,
-                      color: val !== '__custom__' ? (PHASE_DEFAULT_COLORS[val] || taskForm.color) : taskForm.color
-                    });
-                  }}
-                >
-                  {PREDEFINED_PHASES.map(p => (
-                    <option key={p} value={p}>
-                      {p === '__custom__' ? '✏️ Altra lavorazione personalizzata...' : p}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {taskForm.faseSel === '__custom__' && (
-                <div className="input-group" style={{ marginTop: 12 }}>
-                  <label>Nome Lavorazione Personalizzata *</label>
-                  <input
-                    className="input"
-                    value={taskForm.customText}
-                    onChange={(e) => setTaskForm({ ...taskForm, customText: e.target.value })}
-                    required
-                    placeholder="es. Verifica requisiti speciali con fornitore"
-                  />
-                </div>
-              )}
-
-              {/* Colore personalizzato della fase */}
-              <div className="input-group" style={{ marginTop: 14 }}>
-                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span>Colore Fase (Gantt & Timeline)</span>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 'normal' }}>Personalizzabile (Default assegna colore univoco)</span>
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
-                  <input
-                    type="color"
-                    value={taskForm.color || '#3b82f6'}
-                    onChange={(e) => setTaskForm({ ...taskForm, color: e.target.value })}
-                    style={{ width: 44, height: 38, padding: 2, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--bg-tertiary)' }}
-                  />
-                  <input
-                    type="text"
-                    className="input"
-                    value={(taskForm.color || '#3b82f6').toUpperCase()}
-                    onChange={(e) => setTaskForm({ ...taskForm, color: e.target.value })}
-                    style={{ width: 100, fontFamily: 'monospace' }}
-                    maxLength={7}
-                  />
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {Object.values(PHASE_DEFAULT_COLORS).slice(0, 8).map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => setTaskForm({ ...taskForm, color: c })}
-                        style={{
-                          width: 24,
-                          height: 24,
-                          borderRadius: '50%',
-                          backgroundColor: c,
-                          border: taskForm.color === c ? '2px solid #fff' : '1px solid var(--border-subtle)',
-                          boxShadow: taskForm.color === c ? '0 0 0 2px var(--accent-500)' : 'none',
-                          cursor: 'pointer',
-                          padding: 0
-                        }}
-                        title={`Colore preset: ${c}`}
+              <form onSubmit={handleSaveTaskForm}>
+                {/* Scelta Tipo Fase: Normale o Milestone (Linea Verticale / Evento) */}
+                <div style={{ marginBottom: 16, padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Tipo di Voce:</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: taskForm.taskType !== 'milestone' ? 600 : 400 }}>
+                      <input
+                        type="radio"
+                        name="taskType"
+                        value="task"
+                        checked={taskForm.taskType !== 'milestone'}
+                        onChange={() => setTaskForm({ ...taskForm, taskType: 'task' })}
                       />
+                      📋 Fase di Lavorazione (con durata e ore)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: taskForm.taskType === 'milestone' ? 600 : 400 }}>
+                      <input
+                        type="radio"
+                        name="taskType"
+                        value="milestone"
+                        checked={taskForm.taskType === 'milestone'}
+                        onChange={() => setTaskForm({ ...taskForm, taskType: 'milestone', color: taskForm.color === PHASE_DEFAULT_COLORS[PREDEFINED_PHASES[0]] ? '#f59e0b' : taskForm.color })}
+                      />
+                      📍 Evento / Scadenza
+                    </label>
+                  </div>
+                </div>
+
+                {taskForm.taskType !== 'milestone' && (
+                  <div style={{ marginBottom: 16, padding: '10px 14px', background: 'var(--bg-tertiary)', borderRadius: '8px', border: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <input
+                      type="checkbox"
+                      id="taskCompleted"
+                      checked={Boolean(taskForm.completed)}
+                      onChange={(e) => setTaskForm({ ...taskForm, completed: e.target.checked ? 1 : 0 })}
+                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                    />
+                    <label htmlFor="taskCompleted" style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)', margin: 0 }}>
+                      ✅ Fase Completata (segna con spunta verde nel Gantt)
+                    </label>
+                  </div>
+                )}
+
+                <div className="input-group">
+                  <label>{taskForm.taskType === 'milestone' ? 'Nome Evento / Scadenza *' : 'Fase di Lavorazione *'}</label>
+                  <select
+                    className="input"
+                    value={taskForm.faseSel}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTaskForm({
+                        ...taskForm,
+                        faseSel: val,
+                        color: val !== '__custom__' ? (PHASE_DEFAULT_COLORS[val] || taskForm.color) : taskForm.color
+                      });
+                    }}
+                  >
+                    {PREDEFINED_PHASES.map(p => (
+                      <option key={p} value={p}>
+                        {p === '__custom__' ? '✏️ Altra lavorazione personalizzata...' : p}
+                      </option>
                     ))}
-                  </div>
-                </div>
-              </div>
-
-
-              {/* Sezione Pianificazione Temporale e Durate sincronizzate */}
-              <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: 14, marginTop: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-500)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-                  🗓️ Pianificazione e Durata (Impostabile in Giorni e in Ore)
+                  </select>
                 </div>
 
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <div className="input-group" style={{ flex: 1 }}>
-                    <label>Data Avvio Lavorazione</label>
+                {taskForm.faseSel === '__custom__' && (
+                  <div className="input-group" style={{ marginTop: 12 }}>
+                    <label>Nome Lavorazione Personalizzata *</label>
                     <input
-                      type="date"
                       className="input"
-                      value={taskForm.start_date}
-                      onChange={(e) => handleStartDateChange(e.target.value)}
+                      value={taskForm.customText}
+                      onChange={(e) => setTaskForm({ ...taskForm, customText: e.target.value })}
+                      required
+                      placeholder="es. Verifica requisiti speciali con fornitore"
                     />
                   </div>
-                  <div className="input-group" style={{ flex: 1 }}>
-                    <label>Data Fine Lavorazione</label>
-                    <input
-                      type="date"
-                      className="input"
-                      value={taskForm.end_date}
-                      onChange={(e) => handleEndDateChange(e.target.value)}
-                      disabled={budgetMode === 'hours'}
-                      style={{ opacity: budgetMode === 'hours' ? 0.6 : 1 }}
-                      title={budgetMode === 'hours' ? "Data fine calcolata automaticamente dalle ore" : ""}
-                    />
-                  </div>
-                </div>
+                )}
 
-                {/* Scelta Modalità Budget */}
-                <div style={{ marginTop: 16, marginBottom: 8, padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>Modalità calcolo budget:</label>
-                  <div style={{ display: 'flex', gap: '20px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                      <input 
-                        type="radio" 
-                        name="budgetMode" 
-                        value="days" 
-                        checked={budgetMode === 'days'} 
-                        onChange={() => setBudgetMode('days')} 
-                      />
-                      Inserisci Giorni (Calcola Ore)
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                      <input 
-                        type="radio" 
-                        name="budgetMode" 
-                        value="hours" 
-                        checked={budgetMode === 'hours'} 
-                        onChange={() => setBudgetMode('hours')} 
-                      />
-                      Inserisci Ore (Calcola Giorni)
-                    </label>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
-                  <div className="input-group" style={{ flex: 1 }}>
-                    <label>Durata in Giorni (Calendario)</label>
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        className="input"
-                        style={{ fontWeight: 600, color: 'var(--accent-500)', paddingRight: '70px', opacity: budgetMode === 'hours' ? 0.6 : 1 }}
-                        value={taskForm.duration_days}
-                        onChange={(e) => handleDurationDaysChange(e.target.value)}
-                        disabled={budgetMode === 'hours'}
-                      />
-                      <span style={{ position: 'absolute', right: 40, top: 9, fontSize: 12, color: 'var(--text-tertiary)', pointerEvents: 'none' }}>giorni</span>
-                    </div>
-                  </div>
-                  <div className="input-group" style={{ flex: 1 }}>
-                    <label>Durata in Ore (Budget Lavoro)</label>
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        type="number"
-                        min="0.5"
-                        step="0.5"
-                        className="input"
-                        style={{ fontWeight: 600, color: 'var(--success)', paddingRight: '60px', opacity: budgetMode === 'days' ? 0.6 : 1 }}
-                        value={taskForm.planned_hours}
-                        onChange={(e) => handlePlannedHoursChange(e.target.value)}
-                        disabled={budgetMode === 'days'}
-                      />
-                      <span style={{ position: 'absolute', right: 40, top: 9, fontSize: 12, color: 'var(--text-tertiary)', pointerEvents: 'none' }}>ore</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Reparto */}
-                <div className="input-group" style={{ marginTop: 12 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    🏢 Reparto
-                    {user?.role !== 'admin' && (
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(assegnato automaticamente)</span>
-                    )}
+                {/* Colore personalizzato della fase */}
+                <div className="input-group" style={{ marginTop: 14 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>Colore Fase (Gantt & Timeline)</span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 'normal' }}>Personalizzabile (Default assegna colore univoco)</span>
                   </label>
-                  {user?.role === 'admin' ? (
-                    <select
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
+                    <input
+                      type="color"
+                      value={taskForm.color || '#3b82f6'}
+                      onChange={(e) => setTaskForm({ ...taskForm, color: e.target.value })}
+                      style={{ width: 44, height: 38, padding: 2, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--bg-tertiary)' }}
+                    />
+                    <input
+                      type="text"
                       className="input"
-                      value={taskForm.department || ''}
-                      onChange={(e) => setTaskForm({ ...taskForm, department: e.target.value || null })}
-                    >
-                      <option value="">— Nessun reparto —</option>
-                      {DEPT_OPTIONS.map(d => (
-                        <option key={d.value} value={d.value}>{d.label}</option>
+                      value={(taskForm.color || '#3b82f6').toUpperCase()}
+                      onChange={(e) => setTaskForm({ ...taskForm, color: e.target.value })}
+                      style={{ width: 100, fontFamily: 'monospace' }}
+                      maxLength={7}
+                    />
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {Object.values(PHASE_DEFAULT_COLORS).slice(0, 8).map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setTaskForm({ ...taskForm, color: c })}
+                          style={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: '50%',
+                            backgroundColor: c,
+                            border: taskForm.color === c ? '2px solid #fff' : '1px solid var(--border-subtle)',
+                            boxShadow: taskForm.color === c ? '0 0 0 2px var(--accent-500)' : 'none',
+                            cursor: 'pointer',
+                            padding: 0
+                          }}
+                          title={`Colore preset: ${c}`}
+                        />
                       ))}
-                    </select>
-                  ) : (
-                    <div style={{
-                      padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                      background: taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') + '18' : 'var(--bg-secondary)',
-                      color: taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') : 'var(--text-muted)',
-                      border: `1px solid ${taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') + '44' : 'var(--border-subtle)'}`,
-                      display: 'flex', alignItems: 'center', gap: 8
-                    }}>
-                      {taskForm.department ? DEPT_OPTIONS.find(d => d.value === taskForm.department)?.label || taskForm.department : '— Nessun reparto —'}
                     </div>
-                  )}
-                </div>
-
-                {/* Preset veloci cliccabili */}
-                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-                  <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginRight: 4 }}>Preset veloci:</span>
-                  <button
-                    type="button"
-                    className="btn-ghost btn-sm"
-                    style={{ border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 8px', fontSize: 11 }}
-                    onClick={() => applyDurationPreset(1, 4)}
-                  >
-                    ⚡ Mezza giornata (1g / 4h)
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost btn-sm"
-                    style={{ border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 8px', fontSize: 11 }}
-                    onClick={() => applyDurationPreset(1, 8)}
-                  >
-                    ⚡ 1 Giorno (8h)
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost btn-sm"
-                    style={{ border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 8px', fontSize: 11 }}
-                    onClick={() => applyDurationPreset(2, 16)}
-                  >
-                    ⚡ 2 Giorni (16h)
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost btn-sm"
-                    style={{ border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 8px', fontSize: 11 }}
-                    onClick={() => applyDurationPreset(5, 40)}
-                  >
-                    ⚡ 1 Settimana (5g / 40h)
-                  </button>
-                </div>
-              </div>
-
-              <div className="input-group" style={{ marginTop: 16 }}>
-                <label>Addetti Assegnati (Multi-selezione)</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                  {predefinedWorkers.map(w => {
-                    const sel = taskForm.workers.includes(w);
-                    return (
-                      <button
-                        type="button"
-                        key={w}
-                        onClick={() => toggleWorkerSelection(w)}
-                        style={{
-                          background: sel ? 'var(--accent-600)' : 'var(--bg-primary)',
-                          color: sel ? '#fff' : 'var(--text-secondary)',
-                          border: `1px solid ${sel ? 'var(--accent-500)' : 'var(--border-default)'}`,
-                          padding: '6px 12px',
-                          borderRadius: '16px',
-                          cursor: 'pointer',
-                          fontSize: '0.85rem',
-                          fontWeight: sel ? 600 : 400
-                        }}
-                      >
-                        {sel ? '✓ ' : '+ '}{w}
-                      </button>
-                    );
-                  })}
-                </div>
-
-
-                {/* Sezione addetti attualmente assegnati (sotto al campo aggiungi altro addetto) */}
-                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed var(--border-default)' }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-500)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span>✅ Addetti Assegnati a questa fase ({taskForm.workers.length}):</span>
                   </div>
-                  {taskForm.workers.length === 0 ? (
-                    <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Nessun addetto ancora selezionato. Scegline uno qui sopra.</span>
-                  ) : (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                      {taskForm.workers.map(w => (
-                        <div key={w} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)', padding: '6px 12px', borderRadius: 8 }}>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-500)' }}>{w}</span>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 4 }}>Ore:</span>
-                          <input
-                            type="number"
-                            min="0.5"
-                            step="0.5"
-                            style={{
-                              width: 60,
-                              height: 24,
-                              background: 'var(--bg-secondary)',
-                              border: '1px solid var(--border-color)',
-                              borderRadius: 4,
-                              color: 'var(--text-primary)',
-                              padding: '0 4px',
-                              fontSize: '0.8rem',
-                              textAlign: 'center'
-                            }}
-                            value={taskForm.worker_hours?.[w] || ''}
-                            onChange={(e) => {
-                              const val = parseFloat(e.target.value) || 0;
-                              setTaskForm({
-                                ...taskForm,
-                                worker_hours: { ...taskForm.worker_hours, [w]: val }
-                              });
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => toggleWorkerSelection(w, true)}
-                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.9rem', marginLeft: 4 }}
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
-              </div>
 
-              <div className="modal-footer" style={{ marginTop: 24 }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowTaskModal(false)}>
-                  Annulla
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  {editingTask ? 'Salva Modifiche' : 'Aggiungi Fase'}
-                </button>
-              </div>
-            </form>
+
+                {/* Sezione Pianificazione Temporale e Durate / Data Evento */}
+                {taskForm.taskType === 'milestone' ? (
+                  <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: 14, marginTop: 16 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+                      📍 Data Evento / Milestone (Linea Verticale e Diamante nel Gantt)
+                    </div>
+                    <div className="input-group" style={{ maxWidth: 260 }}>
+                      <label>Data Evento</label>
+                      <input
+                        type="date"
+                        className="input"
+                        value={taskForm.start_date}
+                        onChange={(e) => setTaskForm({ ...taskForm, start_date: e.target.value, end_date: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: 14, marginTop: 16 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-500)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+                        🗓️ Pianificazione e Durata (Impostabile in Giorni e in Ore)
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 12 }}>
+                        <div className="input-group" style={{ flex: 1 }}>
+                          <label>Data Avvio Lavorazione</label>
+                          <input
+                            type="date"
+                            className="input"
+                            value={taskForm.start_date}
+                            onChange={(e) => handleStartDateChange(e.target.value)}
+                          />
+                        </div>
+                        <div className="input-group" style={{ flex: 1 }}>
+                          <label>Data Fine Lavorazione</label>
+                          <input
+                            type="date"
+                            className="input"
+                            value={taskForm.end_date}
+                            onChange={(e) => handleEndDateChange(e.target.value)}
+                            disabled={budgetMode === 'hours'}
+                            style={{ opacity: budgetMode === 'hours' ? 0.6 : 1 }}
+                            title={budgetMode === 'hours' ? "Data fine calcolata automaticamente dalle ore" : ""}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Scelta Modalità Budget */}
+                      <div style={{ marginTop: 16, marginBottom: 8, padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>Modalità calcolo budget:</label>
+                        <div style={{ display: 'flex', gap: '20px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                            <input
+                              type="radio"
+                              name="budgetMode"
+                              value="days"
+                              checked={budgetMode === 'days'}
+                              onChange={() => setBudgetMode('days')}
+                            />
+                            Inserisci Giorni (Calcola Ore)
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                            <input
+                              type="radio"
+                              name="budgetMode"
+                              value="hours"
+                              checked={budgetMode === 'hours'}
+                              onChange={() => setBudgetMode('hours')}
+                            />
+                            Inserisci Ore (Calcola Giorni)
+                          </label>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+                        <div className="input-group" style={{ flex: 1 }}>
+                          <label>Durata in Giorni (Calendario)</label>
+                          <div style={{ position: 'relative' }}>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              className="input"
+                              style={{ fontWeight: 600, color: 'var(--accent-500)', paddingRight: '70px', opacity: budgetMode === 'hours' ? 0.6 : 1 }}
+                              value={taskForm.duration_days}
+                              onChange={(e) => handleDurationDaysChange(e.target.value)}
+                              disabled={budgetMode === 'hours'}
+                            />
+                            <span style={{ position: 'absolute', right: 40, top: 9, fontSize: 12, color: 'var(--text-tertiary)', pointerEvents: 'none' }}>giorni</span>
+                          </div>
+                        </div>
+                        <div className="input-group" style={{ flex: 1 }}>
+                          <label>Durata in Ore (Budget Lavoro)</label>
+                          <div style={{ position: 'relative' }}>
+                            <input
+                              type="number"
+                              min="0.5"
+                              step="0.5"
+                              className="input"
+                              style={{ fontWeight: 600, color: 'var(--success)', paddingRight: '60px', opacity: budgetMode === 'days' ? 0.6 : 1 }}
+                              value={taskForm.planned_hours}
+                              onChange={(e) => handlePlannedHoursChange(e.target.value)}
+                              disabled={budgetMode === 'days'}
+                            />
+                            <span style={{ position: 'absolute', right: 40, top: 9, fontSize: 12, color: 'var(--text-tertiary)', pointerEvents: 'none' }}>ore</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Reparto */}
+                      <div className="input-group" style={{ marginTop: 12 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          🏢 Reparto
+                          {user?.role !== 'admin' && (
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(assegnato automaticamente)</span>
+                          )}
+                        </label>
+                        {user?.role === 'admin' ? (
+                          <select
+                            className="input"
+                            value={taskForm.department || ''}
+                            onChange={(e) => setTaskForm({ ...taskForm, department: e.target.value || null })}
+                          >
+                            <option value="">— Nessun reparto —</option>
+                            {DEPT_OPTIONS.map(d => (
+                              <option key={d.value} value={d.value}>{d.label}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div style={{
+                            padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                            background: taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') + '18' : 'var(--bg-secondary)',
+                            color: taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') : 'var(--text-muted)',
+                            border: `1px solid ${taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') + '44' : 'var(--border-subtle)'}`,
+                            display: 'flex', alignItems: 'center', gap: 8
+                          }}>
+                            {taskForm.department ? DEPT_OPTIONS.find(d => d.value === taskForm.department)?.label || taskForm.department : '— Nessun reparto —'}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Preset veloci cliccabili */}
+                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginRight: 4 }}>Preset veloci:</span>
+                        <button
+                          type="button"
+                          className="btn-ghost btn-sm"
+                          style={{ border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 8px', fontSize: 11 }}
+                          onClick={() => applyDurationPreset(1, 4)}
+                        >
+                          ⚡ Mezza giornata (1g / 4h)
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-ghost btn-sm"
+                          style={{ border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 8px', fontSize: 11 }}
+                          onClick={() => applyDurationPreset(1, 8)}
+                        >
+                          ⚡ 1 Giorno (8h)
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-ghost btn-sm"
+                          style={{ border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 8px', fontSize: 11 }}
+                          onClick={() => applyDurationPreset(2, 16)}
+                        >
+                          ⚡ 2 Giorni (16h)
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-ghost btn-sm"
+                          style={{ border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 8px', fontSize: 11 }}
+                          onClick={() => applyDurationPreset(5, 40)}
+                        >
+                          ⚡ 1 Settimana (5g / 40h)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="input-group" style={{ marginTop: 16 }}>
+                      <label>Addetti Assegnati (Multi-selezione)</label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                        {predefinedWorkers.map(w => {
+                          const sel = taskForm.workers.includes(w);
+                          return (
+                            <button
+                              type="button"
+                              key={w}
+                              onClick={() => toggleWorkerSelection(w)}
+                              style={{
+                                background: sel ? 'var(--accent-600)' : 'var(--bg-primary)',
+                                color: sel ? '#fff' : 'var(--text-secondary)',
+                                border: `1px solid ${sel ? 'var(--accent-500)' : 'var(--border-default)'}`,
+                                padding: '6px 12px',
+                                borderRadius: '16px',
+                                cursor: 'pointer',
+                                fontSize: '0.85rem',
+                                fontWeight: sel ? 600 : 400
+                              }}
+                            >
+                              {sel ? '✓ ' : '+ '}{w}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+
+                      {/* Sezione addetti attualmente assegnati (sotto al campo aggiungi altro addetto) */}
+                      <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed var(--border-default)' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-500)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span>✅ Addetti Assegnati a questa fase ({taskForm.workers.length}):</span>
+                        </div>
+                        {taskForm.workers.length === 0 ? (
+                          <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Nessun addetto ancora selezionato. Scegline uno qui sopra.</span>
+                        ) : (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                            {taskForm.workers.map(w => (
+                              <div key={w} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)', padding: '6px 12px', borderRadius: 8 }}>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-500)' }}>{w}</span>
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 4 }}>Ore:</span>
+                                <input
+                                  type="number"
+                                  min="0.5"
+                                  step="0.5"
+                                  style={{
+                                    width: 60,
+                                    height: 24,
+                                    background: 'var(--bg-secondary)',
+                                    border: '1px solid var(--border-color)',
+                                    borderRadius: 4,
+                                    color: 'var(--text-primary)',
+                                    padding: '0 4px',
+                                    fontSize: '0.8rem',
+                                    textAlign: 'center'
+                                  }}
+                                  value={taskForm.worker_hours?.[w] || ''}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    setTaskForm({
+                                      ...taskForm,
+                                      worker_hours: { ...taskForm.worker_hours, [w]: val }
+                                    });
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => toggleWorkerSelection(w, true)}
+                                  style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.9rem', marginLeft: 4 }}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <div className="modal-footer" style={{ marginTop: 24 }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowTaskModal(false)}>
+                    Annulla
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    {editingTask ? 'Salva Modifiche' : 'Aggiungi Fase'}
+                  </button>
+                </div>
+              </form>
             )}
 
             {taskModalTab === 'checklist' && editingTask && (
@@ -1590,7 +1743,7 @@ export default function ProjectDetailPage() {
                           <th style={{ minWidth: 130, textAlign: 'left' }}>Addetto / Giorno</th>
                           {dates.map(d => (
                             <th key={d} style={{ minWidth: 85 }}>
-                              {d.split('-')[2]}/{d.split('-')[1]}<br/>
+                              {d.split('-')[2]}/{d.split('-')[1]}<br />
                               <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-tertiary)' }}>({oreGg.toFixed(1)}h prev)</span>
                             </th>
                           ))}
@@ -1614,6 +1767,7 @@ export default function ProjectDetailPage() {
                                       min="0"
                                       max="24"
                                       className="ore-input"
+                                      disabled={!canManageProject && w !== user?.username && w !== (user?.full_name || user?.username)}
                                       value={val}
                                       onChange={(e) => {
                                         const newVal = e.target.value;
@@ -1779,6 +1933,49 @@ export default function ProjectDetailPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label htmlFor="edit-proj-responsible">Responsabile di Commessa</label>
+                <select
+                  id="edit-proj-responsible"
+                  className="input"
+                  value={projectForm.responsible_id || ''}
+                  onChange={(e) => setProjectForm({ ...projectForm, responsible_id: e.target.value })}
+                >
+                  <option value="">-- Nessuno / Predefinito --</option>
+                  {usersList.map(u => (
+                    <option key={u.id} value={u.id}>{u.full_name || u.username} ({u.username})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="input-group">
+                <label>Addetti della Commessa (Multi-selezione)</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                  {usersList.map(u => {
+                    const selected = (projectForm.assigned_workers || []).includes(u.username);
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => toggleProjectWorkerSelection(u.username)}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: 20,
+                          border: selected ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                          background: selected ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-tertiary)',
+                          color: selected ? '#60a5fa' : 'var(--text-secondary)',
+                          fontSize: 13,
+                          cursor: 'pointer',
+                          fontWeight: selected ? 600 : 400
+                        }}
+                      >
+                        {selected ? '✓ ' : '+ '}{u.full_name || u.username}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

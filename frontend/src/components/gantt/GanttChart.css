@@ -179,8 +179,7 @@
 
 .gantt_task_line.gantt_milestone {
   background-image: none !important;
-  background-color: var(--accent-400) !important;
-  border: 2px solid var(--accent-200) !important;
+  border: 1px solid rgba(255, 255, 255, 0.6) !important;
   border-radius: 4px !important;
 }
 
@@ -245,10 +244,70 @@
   z-index: 10000 !important;
 }
 
-/* Linea del marker di oggi (disabilitata per eliminare la linea verticale) */
-.gantt_marker,
+/* Linea del marker di oggi di default disabilitata */
 .gantt_today_marker {
   display: none !important;
+}
+
+/* Marker verticali di Inizio e Fine Commessa */
+.gantt_marker.gantt-project-start-marker,
+.gantt_marker.gantt-project-end-marker,
+.custom-project-marker {
+  display: block !important;
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  z-index: 10 !important;
+  pointer-events: none !important;
+  background: none !important;
+}
+
+.gantt_marker.gantt-project-start-marker,
+.custom-project-marker.custom-start-marker {
+  width: 2px !important;
+  border-left: 2px dashed #10b981 !important; /* Verde smeraldo */
+}
+
+.gantt_marker.gantt-project-end-marker,
+.custom-project-marker.custom-end-marker {
+  width: 2px !important;
+  border-left: 2px dashed #ef4444 !important; /* Rosso corsa */
+}
+
+.custom-project-marker.custom-milestone-marker {
+  width: 2px !important;
+  border-left: 2px dashed #f59e0b !important; /* Colore di default opzionale, sovrascritto inline */
+}
+
+.gantt_marker.gantt-project-start-marker .gantt_marker_content,
+.gantt_marker.gantt-project-end-marker .gantt_marker_content,
+.custom-project-marker.custom-start-marker .custom-marker-badge,
+.custom-project-marker.custom-end-marker .custom-marker-badge {
+  position: absolute !important;
+  top: 6px !important;
+  left: 6px !important;
+  padding: 4px 10px !important;
+  border-radius: 14px !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important;
+  pointer-events: auto !important;
+  letter-spacing: 0.02em !important;
+}
+
+.gantt_marker.gantt-project-start-marker .gantt_marker_content,
+.custom-project-marker.custom-start-marker .custom-marker-badge {
+  background-color: #10b981 !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,0.4) !important;
+}
+
+.gantt_marker.gantt-project-end-marker .gantt_marker_content,
+.custom-project-marker.custom-end-marker .custom-marker-badge {
+  background-color: #ef4444 !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,0.4) !important;
 }
 
 /* Evidenziazione colonna/cella del giorno/settimana/mese/trimestre di oggi nella timeline (solo sfondo, senza linea blu verticale) */
@@ -271,3 +330,47 @@
 [data-theme="dark"] .gantt_task_line:hover {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
 }
+
+/* Nascondere la barra/icona blu o diamante di default nella timeline del Gantt quando una fase è di tipo Evento/Milestone, lasciando solo la linea verticale e la sua etichetta */
+.gantt-hidden-milestone,
+.gantt_task_line.gantt-hidden-milestone,
+.gantt_task_line.gantt_milestone.gantt-hidden-milestone,
+.gantt_bars_area .gantt_task_line.gantt-hidden-milestone,
+.gantt_task_line.gantt_milestone,
+.gantt_bars_area .gantt_task_line.gantt_milestone,
+.gantt_task_data .gantt_task_line.gantt_milestone,
+.gantt_task_line[class*="milestone"],
+.gantt_bars_area [class*="milestone"] {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  border: none !important;
+  background: none !important;
+}
+
+.gantt_task_line.gantt_milestone .gantt_link_point,
+.gantt_task_line.gantt_milestone .gantt_link_control,
+.gantt-hidden-milestone .gantt_link_point,
+.gantt-hidden-milestone .gantt_link_control {
+  display: none !important;
+}
+
+.custom-project-marker.custom-milestone-marker .custom-marker-badge {
+  position: absolute !important;
+  left: 6px !important;
+  padding: 3px 8px !important;
+  border-radius: 12px !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important;
+  pointer-events: auto !important;
+  letter-spacing: 0.02em !important;
+  background-color: var(--bg-tertiary, #ffffff) !important;
+  color: var(--text-primary, #333333) !important;
+  border: 1px solid #f59e0b !important;
+}
+

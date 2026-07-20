@@ -5,7 +5,7 @@ from app.models.project import ProjectStatus, MemberRole
 
 
 class ProjectCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=200)
+    name: Optional[str] = Field(default="", max_length=200)
     code: Optional[str] = None
     client: Optional[str] = None
     color: Optional[str] = "#185FA5"
@@ -13,6 +13,8 @@ class ProjectCreate(BaseModel):
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     status: ProjectStatus = ProjectStatus.PLANNING
+    responsible_id: Optional[str] = None
+    assigned_workers: List[str] = []
 
 
 class ProjectUpdate(BaseModel):
@@ -24,6 +26,8 @@ class ProjectUpdate(BaseModel):
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     status: Optional[ProjectStatus] = None
+    responsible_id: Optional[str] = None
+    assigned_workers: Optional[List[str]] = None
 
 
 class MemberAdd(BaseModel):
@@ -54,6 +58,11 @@ class ProjectOut(BaseModel):
     end_date: Optional[date] = None
     status: ProjectStatus
     owner_id: str
+    responsible_id: Optional[str] = None
+    responsible_username: Optional[str] = None
+    responsible_name: Optional[str] = None
+    assigned_workers: List[str] = []
+    is_assigned: bool = False
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     task_count: int = 0

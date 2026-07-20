@@ -25,6 +25,7 @@ class TaskCreate(BaseModel):
     actual_hours: dict = {}
     color: Optional[str] = None
     department: Optional[str] = None
+    completed: int = 0
 
 
 class TaskUpdate(BaseModel):
@@ -45,6 +46,7 @@ class TaskUpdate(BaseModel):
     actual_hours: Optional[dict] = None
     color: Optional[str] = None
     department: Optional[str] = None
+    completed: Optional[int] = None
 
 
 class TaskOut(BaseModel):
@@ -67,6 +69,7 @@ class TaskOut(BaseModel):
     actual_hours: dict = {}
     color: Optional[str] = None
     department: Optional[str] = None
+    completed: int = 0
 
 
     class Config:

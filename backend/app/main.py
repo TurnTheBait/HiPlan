@@ -16,6 +16,22 @@ async def lifespan(app: FastAPI):
             await conn.exec_driver_sql("ALTER TABLE tasks ADD COLUMN color VARCHAR(50);")
         except Exception:
             pass  # Colonna già esistente
+        try:
+            await conn.exec_driver_sql("ALTER TABLE tasks ADD COLUMN department VARCHAR(50);")
+        except Exception:
+            pass
+        try:
+            await conn.exec_driver_sql("ALTER TABLE tasks ADD COLUMN completed INTEGER DEFAULT 0;")
+        except Exception:
+            pass
+        try:
+            await conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN responsible_id VARCHAR(36);")
+        except Exception:
+            pass
+        try:
+            await conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN assigned_workers TEXT DEFAULT '[]';")
+        except Exception:
+            pass
 
     from app.models.base import AsyncSessionLocal
     from sqlalchemy import select, func

@@ -378,15 +378,31 @@ export default function NotesPage() {
         </div>
 
         {/* CAMPO DI RICERCA */}
-        <div className="notes-search-wrapper">
-          <span className="notes-search-icon">🔍</span>
+        <div className="notes-search-wrapper" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <img
+            src="/hiway-icon.png"
+            alt="HiWay"
+            title="Cerca in HiWay GanttFlow"
+            className="notes-search-icon"
+            style={{ position: 'absolute', left: 12, width: 18, height: 18, objectFit: 'contain', pointerEvents: 'none' }}
+          />
           <input
             type="text"
             className="notes-search-input"
+            style={{ paddingLeft: 38 }}
             placeholder="Cerca tra gli appunti..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              style={{ position: 'absolute', right: 12, background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 13 }}
+            >
+              ✕
+            </button>
+          )}
         </div>
 
         {/* TABS FILTRO */}

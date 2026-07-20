@@ -30,8 +30,11 @@ class Project(Base, TimestampMixin):
     end_date = Column(Date, nullable=True)
     status = Column(Enum(ProjectStatus), default=ProjectStatus.PLANNING, nullable=False)
     owner_id = Column(uuid_fk(), ForeignKey("users.id"), nullable=False)
+    responsible_id = Column(uuid_fk(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    assigned_workers = Column(Text, nullable=True, default="[]")  # JSON list di addetti assegnati alla commessa
 
     owner = relationship("User", foreign_keys=[owner_id])
+    responsible = relationship("User", foreign_keys=[responsible_id])
     members = relationship("ProjectMember", back_populates="project", cascade="all, delete-orphan")
     tasks = relationship("Task", back_populates="project", cascade="all, delete-orphan")
     links = relationship("Link", back_populates="project", cascade="all, delete-orphan")

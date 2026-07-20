@@ -57,7 +57,8 @@ def _extract_task_info(task: Task) -> Tuple[str, float, float, float]:
 
 
 async def export_excel(db: AsyncSession, project_id: str) -> io.BytesIO:
-    project = await db.execute(select(Project).where(Project.id == project_id))
+    from sqlalchemy.orm import selectinload
+    project = await db.execute(select(Project).options(selectinload(Project.responsible)).where(Project.id == project_id))
     proj = project.scalar_one()
 
     tasks = await db.execute(
@@ -84,12 +85,25 @@ async def export_excel(db: AsyncSession, project_id: str) -> io.BytesIO:
     # Titolo del report
     ws.append([f"COMMESSA: {proj.code or ''} - {proj.name}"])
     ws.cell(row=1, column=1).font = Font(size=14, bold=True, color="1E3A8A")
-    if proj.client:
-        ws.append([f"Cliente: {proj.client} | Stato: {proj.status.value if proj.status else '-'} | Periodo: {proj.start_date or '-'} al {proj.end_date or '-'}"])
-        ws.cell(row=2, column=1).font = Font(size=11, italic=True)
-    else:
-        ws.append([f"Stato: {proj.status.value if proj.status else '-'} | Periodo: {proj.start_date or '-'} al {proj.end_date or '-'}"])
-        ws.cell(row=2, column=1).font = Font(size=11, italic=True)
+    
+    resp_str = proj.responsible.full_name or proj.responsible.username if proj.responsible else "-"
+    addetti_list = []
+    if proj.assigned_workers:
+        try:
+            parsed_aw = json.loads(proj.assigned_workers)
+            if isinstance(parsed_aw, list):
+                addetti_list = parsed_aw
+        except:
+            pass
+    addetti_str = ", ".join(addetti_list) if addetti_list else "-"
+
+    info_line1 = f"Cliente: {proj.client or '-'} | Stato: {proj.status.value if proj.status else '-'} | Periodo: {proj.start_date or '-'} al {proj.end_date or '-'}"
+    ws.append([info_line1])
+    ws.cell(row=2, column=1).font = Font(size=11, italic=True)
+
+    info_line2 = f"Responsabile di Commessa: {resp_str} | Addetti Commessa: {addetti_str}"
+    ws.append([info_line2])
+    ws.cell(row=3, column=1).font = Font(size=11, italic=True)
     ws.append([])
 
     headers = [
@@ -202,7 +216,8 @@ async def export_excel(db: AsyncSession, project_id: str) -> io.BytesIO:
 
 
 async def export_pdf(db: AsyncSession, project_id: str) -> io.BytesIO:
-    project = await db.execute(select(Project).where(Project.id == project_id))
+    from sqlalchemy.orm import selectinload
+    project = await db.execute(select(Project).options(selectinload(Project.responsible)).where(Project.id == project_id))
     proj = project.scalar_one()
 
     tasks = await db.execute(
@@ -252,11 +267,23 @@ async def export_pdf(db: AsyncSession, project_id: str) -> io.BytesIO:
 
     # Titolo
     elements.append(Paragraph(f"<b>{proj.code or ''} {proj.name}</b> — Report Dettagliato Fasi e Consuntivazione Ore", styles["Title"]))
-    info_str = f"<b>Stato:</b> {proj.status.value if proj.status else '-'} | <b>Periodo:</b> {proj.start_date or '-'} al {proj.end_date or '-'}"
+    
+    resp_str = proj.responsible.full_name or proj.responsible.username if proj.responsible else "-"
+    addetti_list = []
+    if proj.assigned_workers:
+        try:
+            parsed_aw = json.loads(proj.assigned_workers)
+            if isinstance(parsed_aw, list):
+                addetti_list = parsed_aw
+        except:
+            pass
+    addetti_str = ", ".join(addetti_list) if addetti_list else "-"
+
+    info_str = f"<b>Stato:</b> {proj.status.value if proj.status else '-'} | <b>Periodo:</b> {proj.start_date or '-'} al {proj.end_date or '-'} | <b>Responsabile:</b> {resp_str} | <b>Addetti Commessa:</b> {addetti_str}"
     if proj.client:
         info_str += f" | <b>Cliente:</b> {proj.client}"
     if proj.description:
-        info_str += f" | <b>Descrizione:</b> {proj.description}"
+        info_str += f"<br/><b>Descrizione:</b> {proj.description}"
     elements.append(Paragraph(info_str, styles["Normal"]))
     elements.append(Spacer(1, 4 * mm))
 

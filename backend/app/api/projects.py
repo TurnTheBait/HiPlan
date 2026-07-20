@@ -24,11 +24,26 @@ async def create_project(
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.EDITOR)),
 ):
     project = await project_service.create_project(db, data, current_user)
+    import json
+    assigned_workers_list = []
+    if project.assigned_workers:
+        try:
+            parsed_aw = json.loads(project.assigned_workers)
+            if isinstance(parsed_aw, list):
+                assigned_workers_list = parsed_aw
+        except:
+            pass
+
     return ProjectOut(
         id=project.id, name=project.name, code=project.code, client=project.client, color=project.color or "#185FA5",
         description=project.description,
         start_date=project.start_date, end_date=project.end_date,
         status=project.status, owner_id=project.owner_id,
+        responsible_id=project.responsible_id,
+        responsible_username=project.responsible.username if project.responsible else None,
+        responsible_name=project.responsible.full_name if project.responsible else (project.responsible.username if project.responsible else None),
+        assigned_workers=assigned_workers_list,
+        is_assigned=(current_user.id == project.owner_id or current_user.id == project.responsible_id or current_user.username in assigned_workers_list),
         created_at=project.created_at, updated_at=project.updated_at,
     )
 
@@ -39,11 +54,12 @@ async def backup_json(
     current_user: User = Depends(get_current_user),
 ):
     from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
     from app.models.project import Project
     from app.models.task import Task
     import json
 
-    result = await db.execute(select(Project))
+    result = await db.execute(select(Project).options(selectinload(Project.responsible)))
     projects = result.scalars().all()
     commesse = []
     for p in projects:
@@ -67,6 +83,9 @@ async def backup_json(
             "ds": p.start_date.strftime("%Y-%m-%d") if p.start_date else "",
             "note": p.description or "",
             "color": {"bar": p.color or "#185FA5"},
+            "responsible_id": p.responsible_id,
+            "responsible_username": p.responsible.username if p.responsible else None,
+            "addetti_commessa": json.loads(p.assigned_workers) if p.assigned_workers else [],
             "fasi": fasi
         })
     return {"version": 1, "savedAt": "now", "commesse": commesse}
@@ -80,6 +99,8 @@ async def restore_json(
 ):
     from app.models.project import Project
     from app.models.task import Task
+    from app.models.user import User as UserModel
+    from sqlalchemy import select
     import json
     from datetime import datetime
 
@@ -94,6 +115,13 @@ async def restore_json(
         color_obj = c.get("color")
         color_str = color_obj.get("bar", "#185FA5") if isinstance(color_obj, dict) else (color_obj or "#185FA5")
 
+        resp_id = c.get("responsible_id") or current_user.id
+        if c.get("responsible_username") and not c.get("responsible_id"):
+            u_res = await db.execute(select(UserModel).where(UserModel.username == c.get("responsible_username")))
+            u_obj = u_res.scalar_one_or_none()
+            if u_obj:
+                resp_id = u_obj.id
+
         proj = Project(
             name=f"{cod} - {cli}",
             code=cod,
@@ -101,7 +129,9 @@ async def restore_json(
             color=color_str,
             description=c.get("note", ""),
             start_date=ds,
-            owner_id=current_user.id
+            owner_id=current_user.id,
+            responsible_id=resp_id,
+            assigned_workers=json.dumps(c.get("addetti_commessa", []))
         )
         db.add(proj)
         await db.flush()
@@ -140,11 +170,49 @@ async def get_project(
 ):
     project = await project_service.get_project(db, project_id, current_user)
     members = await project_service.get_project_members(db, project_id)
+    import json
+    assigned_workers_list = []
+    if project.assigned_workers:
+        try:
+            parsed_aw = json.loads(project.assigned_workers)
+            if isinstance(parsed_aw, list):
+                assigned_workers_list = parsed_aw
+        except:
+            pass
+
+    from sqlalchemy import select
+    from app.models.task import Task
+    tasks_res = await db.execute(select(Task.workers).where(Task.project_id == project_id))
+    unique_workers = set()
+    for row in tasks_res.all():
+        if row.workers:
+            try:
+                w_list = json.loads(row.workers)
+                for w in w_list:
+                    unique_workers.add(w)
+            except:
+                pass
+
+    is_assigned = (
+        current_user.id == project.owner_id
+        or current_user.id == project.responsible_id
+        or (project.responsible and project.responsible.username == current_user.username)
+        or (current_user.username in assigned_workers_list)
+        or (current_user.full_name and current_user.full_name in assigned_workers_list)
+        or (current_user.username in unique_workers)
+        or (current_user.full_name and current_user.full_name in unique_workers)
+    )
+
     return ProjectDetail(
         id=project.id, name=project.name, code=project.code, client=project.client, color=project.color or "#185FA5",
         description=project.description,
         start_date=project.start_date, end_date=project.end_date,
         status=project.status, owner_id=project.owner_id,
+        responsible_id=project.responsible_id,
+        responsible_username=project.responsible.username if project.responsible else None,
+        responsible_name=project.responsible.full_name if project.responsible else (project.responsible.username if project.responsible else None),
+        assigned_workers=assigned_workers_list,
+        is_assigned=is_assigned,
         created_at=project.created_at, updated_at=project.updated_at,
         members=members,
     )
@@ -158,7 +226,28 @@ async def update_project(
     current_user: User = Depends(get_current_user),
 ):
     project = await project_service.update_project(db, project_id, data, current_user)
-    return project
+    import json
+    assigned_workers_list = []
+    if project.assigned_workers:
+        try:
+            parsed_aw = json.loads(project.assigned_workers)
+            if isinstance(parsed_aw, list):
+                assigned_workers_list = parsed_aw
+        except:
+            pass
+
+    return ProjectOut(
+        id=project.id, name=project.name, code=project.code, client=project.client, color=project.color or "#185FA5",
+        description=project.description,
+        start_date=project.start_date, end_date=project.end_date,
+        status=project.status, owner_id=project.owner_id,
+        responsible_id=project.responsible_id,
+        responsible_username=project.responsible.username if project.responsible else None,
+        responsible_name=project.responsible.full_name if project.responsible else (project.responsible.username if project.responsible else None),
+        assigned_workers=assigned_workers_list,
+        is_assigned=(current_user.id == project.owner_id or current_user.id == project.responsible_id or current_user.username in assigned_workers_list),
+        created_at=project.created_at, updated_at=project.updated_at,
+    )
 
 
 @router.delete("/{project_id}", status_code=204)
