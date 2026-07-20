@@ -1,5 +1,5 @@
 import json
-from typing import List
+from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.task import Task
@@ -20,13 +20,30 @@ def _parse_json(val, default):
 
 
 def _task_to_out(task: Task) -> TaskOut:
+    tot_eff = 0.0
+    actual_map = _parse_json(task.actual_hours, {})
+    if isinstance(actual_map, dict):
+        for day_map in actual_map.values():
+            if isinstance(day_map, dict):
+                for h in day_map.values():
+                    try:
+                        tot_eff += float(h or 0)
+                    except (ValueError, TypeError):
+                        pass
+
+    planned = float(task.planned_hours or 8.0)
+    calc_progress = min(1.0, max(0.0, tot_eff / planned)) if planned > 0 else (1.0 if tot_eff > 0 else 0.0)
+    
+    is_comp = 1 if (task.completed == 1 or (task.completed != -1 and ((task.progress is not None and task.progress >= 1.0) or (calc_progress >= 1.0 and planned > 0)))) else (task.completed if task.completed is not None else 0)
+    eff_progress = 1.0 if is_comp == 1 else (task.progress if task.progress is not None else calc_progress)
+
     return TaskOut(
         id=task.id,
         text=task.text,
         start_date=task.start_date.strftime("%Y-%m-%d 00:00") if task.start_date else "",
         end_date=task.end_date.strftime("%Y-%m-%d 00:00") if task.end_date else None,
         duration=task.duration,
-        progress=task.progress,
+        progress=eff_progress,
         type=task.type.value if task.type else "task",
         priority=task.priority.value if task.priority else "medium",
         parent=task.parent_id or "0",
@@ -36,14 +53,15 @@ def _task_to_out(task: Task) -> TaskOut:
         planned_hours=task.planned_hours or 8.0,
         workers=_parse_json(task.workers, []),
         worker_hours=_parse_json(task.worker_hours, {}),
-        actual_hours=_parse_json(task.actual_hours, {}),
+        actual_hours=actual_map,
         color=task.color,
         department=task.department,
-        completed=task.completed or 0,
+        completed=is_comp,
     )
 
 
-def _compute_task_progress_and_completed(task: Task, update_data: dict = None):
+
+def _compute_task_progress_and_completed(task: Task, update_data: Optional[dict] = None):
     # Calcola ore consuntivate totali
     tot_eff = 0.0
     actual_map = _parse_json(task.actual_hours, {})
@@ -64,18 +82,30 @@ def _compute_task_progress_and_completed(task: Task, update_data: dict = None):
 
     explicit_completed = update_data.get("completed") if update_data and "completed" in update_data else None
 
-    if explicit_completed is not None:
-        if int(explicit_completed) == 1:
+    if explicit_completed is not None and int(explicit_completed) == 1:
+        task.completed = 1
+        task.progress = 1.0
+    elif explicit_completed is not None and int(explicit_completed) == -1:
+        task.completed = -1
+        task.progress = min(0.99, calc_progress) if calc_progress >= 1.0 else calc_progress
+    elif explicit_completed is not None and int(explicit_completed) == 0:
+        if task.completed != -1 and calc_progress >= 1.0 and planned > 0:
             task.completed = 1
             task.progress = 1.0
-        else:
+        elif task.completed == 1 and calc_progress < 1.0:
             task.completed = 0
+            task.progress = calc_progress
+        elif task.completed != 1:
+            if task.completed != -1:
+                task.completed = 0
             task.progress = min(0.99, calc_progress) if calc_progress >= 1.0 else calc_progress
     else:
-        if calc_progress >= 1.0 and planned > 0:
+        if task.completed != -1 and calc_progress >= 1.0 and planned > 0:
             task.completed = 1
             task.progress = 1.0
         elif calc_progress < 1.0:
+            if task.completed == 1:
+                task.completed = 0
             if task.completed != 1:
                 task.progress = calc_progress
             else:

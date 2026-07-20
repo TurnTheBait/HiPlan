@@ -256,7 +256,7 @@
   display: block !important;
   position: absolute !important;
   top: 0 !important;
-  bottom: 0 !important;
+  bottom: auto !important;
   z-index: 10 !important;
   pointer-events: none !important;
   background: none !important;
@@ -373,4 +373,29 @@
   color: var(--text-primary, #333333) !important;
   border: 1px solid #f59e0b !important;
 }
+
+/* Quando una fase è completata (spunta dal menu o 100% ore consuntivate), tutto lo sfondo della barra nella timeline diventa verde smeraldo */
+.gantt_task_line.gantt-task-completed,
+.gantt_bars_area .gantt_task_line.gantt-task-completed {
+  background-color: #10b981 !important;
+  border-color: #059669 !important;
+}
+.gantt_task_line.gantt-task-completed .gantt_task_progress,
+.gantt_bars_area .gantt_task_line.gantt-task-completed .gantt_task_progress {
+  background-color: rgba(0, 0, 0, 0.18) !important;
+}
+
+/* Sfondo verde smeraldo leggero per l'intera riga della fase nella griglia a sinistra e nella timeline temporale a destra */
+.gantt_grid_data .gantt_row.gantt-row-completed,
+.gantt_task_bg .gantt_task_row.gantt-row-completed,
+.gantt_row.gantt-row-completed {
+  background-color: rgba(16, 185, 129, 0.18) !important;
+  transition: background-color 0.2s ease;
+}
+.gantt_grid_data .gantt_row.gantt_selected.gantt-row-completed,
+.gantt_task_bg .gantt_task_row.gantt_selected.gantt-row-completed,
+.gantt_row.gantt_selected.gantt-row-completed {
+  background-color: rgba(16, 185, 129, 0.28) !important;
+}
+
 

@@ -130,12 +130,12 @@ export default function ProjectDetailPage() {
       setProject(projRes.data);
       const sortedTasks = Array.isArray(ganttRes.data?.tasks)
         ? [...ganttRes.data.tasks].sort((a, b) => {
-            const da = new Date(a.start_date ? String(a.start_date).split(' ')[0] : '1970-01-01');
-            const db = new Date(b.start_date ? String(b.start_date).split(' ')[0] : '1970-01-01');
-            if (da < db) return -1;
-            if (da > db) return 1;
-            return (a.id || 0) - (b.id || 0);
-          })
+          const da = new Date(a.start_date ? String(a.start_date).split(' ')[0] : '1970-01-01');
+          const db = new Date(b.start_date ? String(b.start_date).split(' ')[0] : '1970-01-01');
+          if (da < db) return -1;
+          if (da > db) return 1;
+          return (a.id || 0) - (b.id || 0);
+        })
         : [];
       setGanttData({ ...ganttRes.data, tasks: sortedTasks });
       if (Array.isArray(usersRes.data)) {
@@ -303,6 +303,23 @@ export default function ProjectDetailPage() {
     } catch { /* task già rimosso */ }
   }
 
+  async function handleToggleTaskCompleted(task, currentIsCompleted) {
+    if (!canManageProject) {
+      toast.error('Solo proprietario, responsabile o editor possono segnare la fase come completata/in corso');
+      return;
+    }
+    const newCompleted = currentIsCompleted ? -1 : 1;
+    try {
+      await api.put(`/projects/${id}/tasks/${task.id}`, {
+        completed: newCompleted
+      });
+      toast.success(newCompleted === 1 ? 'Fase completata!' : 'Fase ripristinata in corso');
+      loadProject();
+    } catch {
+      toast.error("Errore durante l'aggiornamento dello stato della fase");
+    }
+  }
+
   async function handleLinkCreate(data, tempId) {
     try {
       const { data: created } = await api.post(`/projects/${id}/links`, data);
@@ -383,7 +400,7 @@ export default function ProjectDetailPage() {
       worker_hours: typeof task.worker_hours === 'object' ? task.worker_hours : {},
       customWorker: '',
       department: task.department || (user?.department && user.department !== 'admin' ? user.department : 'ufficio_tecnico'),
-      completed: Number(task.completed) === 1 || (Number(task.progress) >= 1 && task.completed !== 0 && task.completed !== false) ? 1 : 0,
+      completed: Number(task.completed) === 1 || (Number(task.completed) !== -1 && Number(task.progress) >= 1) ? 1 : (Number(task.completed) === -1 ? -1 : 0),
     });
     setShowTaskModal(true);
   }
@@ -479,7 +496,7 @@ export default function ProjectDetailPage() {
       type: isMilestone ? 'milestone' : 'task',
       color: taskForm.color || (isMilestone ? '#f59e0b' : null),
       department: taskForm.department || null,
-      completed: isMilestone ? 0 : (Number(taskForm.completed) || 0),
+      completed: isMilestone ? 0 : (taskForm.completed !== undefined && taskForm.completed !== null ? Number(taskForm.completed) : 0),
     };
 
 
@@ -976,16 +993,21 @@ export default function ProjectDetailPage() {
                       });
                     }
                     const tColor = getTaskColor(task);
+                    const isCompleted = Number(task.completed) === 1 || (Number(task.completed) !== -1 && Number(task.progress) >= 1) || (Number(task.completed) !== -1 && Number(task.planned_hours) > 0 && tEff >= Number(task.planned_hours));
                     return (
 
-                      <tr key={task.id}>
+                      <tr key={task.id} style={{ backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.18)' : undefined }}>
                         <td style={{ fontWeight: 600 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <input
+                              type="checkbox"
+                              checked={isCompleted}
+                              onChange={() => handleToggleTaskCompleted(task, isCompleted)}
+                              title="Clicca per spuntare/rimuovere completamento fase"
+                              style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#10b981' }}
+                            />
                             <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: tColor, flexShrink: 0, display: 'inline-block', border: '1px solid rgba(255,255,255,0.2)' }} title={`Colore fase: ${tColor}`} />
                             <span>
-                              {(Number(task.completed) === 1 || (Number(task.progress) >= 1 && task.completed !== 0 && task.completed !== false)) && (
-                                <span style={{ color: '#10b981', fontWeight: 'bold', marginRight: '6px' }} title="Fase completata">✓</span>
-                              )}
                               {task.text}
                             </span>
                           </div>
@@ -1163,15 +1185,20 @@ export default function ProjectDetailPage() {
                     });
 
                     const tColor = getTaskColor(task);
+                    const isCompleted = Number(task.completed) === 1 || (Number(task.completed) !== -1 && Number(task.progress) >= 1) || (Number(task.completed) !== -1 && Number(task.planned_hours) > 0 && totalTaskEff >= Number(task.planned_hours));
                     return (
-                      <tr key={task.id}>
+                      <tr key={task.id} style={{ backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.18)' : undefined }}>
                         <td style={{ fontWeight: 600 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <input
+                              type="checkbox"
+                              checked={isCompleted}
+                              onChange={() => handleToggleTaskCompleted(task, isCompleted)}
+                              title="Clicca per spuntare/rimuovere completamento fase"
+                              style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#10b981' }}
+                            />
                             <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: tColor, flexShrink: 0, display: 'inline-block', border: '1px solid rgba(255,255,255,0.2)' }} title={`Colore fase: ${tColor}`} />
                             <span>
-                              {(Number(task.completed) === 1 || (Number(task.progress) >= 1 && task.completed !== 0 && task.completed !== false)) && (
-                                <span style={{ color: '#10b981', fontWeight: 'bold', marginRight: '6px' }} title="Fase completata">✓</span>
-                              )}
                               {task.text}
                             </span>
                           </div>
@@ -1333,12 +1360,12 @@ export default function ProjectDetailPage() {
                     <input
                       type="checkbox"
                       id="taskCompleted"
-                      checked={Boolean(taskForm.completed)}
-                      onChange={(e) => setTaskForm({ ...taskForm, completed: e.target.checked ? 1 : 0 })}
+                      checked={Number(taskForm.completed) === 1}
+                      onChange={(e) => setTaskForm({ ...taskForm, completed: e.target.checked ? 1 : -1 })}
                       style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                     />
                     <label htmlFor="taskCompleted" style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)', margin: 0 }}>
-                      ✅ Fase Completata (segna con spunta verde nel Gantt)
+                      ✅ Fase Completata
                     </label>
                   </div>
                 )}
@@ -1382,7 +1409,7 @@ export default function ProjectDetailPage() {
                 <div className="input-group" style={{ marginTop: 14 }}>
                   <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span>Colore Fase (Gantt & Timeline)</span>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 'normal' }}>Personalizzabile (Default assegna colore univoco)</span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 'normal' }}>Personalizzabile</span>
                   </label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
                     <input
@@ -1803,14 +1830,21 @@ export default function ProjectDetailPage() {
                           actual_hours: actualHoursMap
                         };
                         const st = computeStato(tempTask);
+                        const plannedH = Number(selectedTaskForHours.planned_hours || 8);
+                        const isModalCompleted = Number(selectedTaskForHours.completed) === 1 || (plannedH > 0 && totAll >= plannedH && selectedTaskForHours.completed !== 0 && selectedTaskForHours.completed !== false);
                         return (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                             <span style={{ fontSize: 15, color: 'var(--text-primary)' }}>
-                              Totale consuntivato finora: <strong style={{ color: 'var(--accent-500)' }}>{totAll} h</strong> / {selectedTaskForHours.planned_hours || 8} h prev
+                              Totale consuntivato finora: <strong style={{ color: 'var(--accent-500)' }}>{totAll} h</strong> / {plannedH} h prev
                             </span>
                             {st === 'ok' && <span className="semaforo-ok">🟢 Stato OK (Regolare)</span>}
                             {st === 'attenzione' && <span className="semaforo-attenzione">🟡 Stato Attenzione</span>}
                             {st === 'ritardo' && <span className="semaforo-ritardo">🔴 Stato Ritardo</span>}
+                            {isModalCompleted && (
+                              <span style={{ background: 'rgba(16, 185, 129, 0.18)', color: '#10b981', padding: '3px 10px', borderRadius: '12px', fontWeight: 600, fontSize: '0.82rem', border: '1px solid #059669' }}>
+                                ✓ Fase Completata (100% Ore / Flaggata)
+                              </span>
+                            )}
                           </div>
                         );
                       })()}

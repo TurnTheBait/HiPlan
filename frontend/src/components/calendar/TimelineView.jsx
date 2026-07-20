@@ -160,16 +160,18 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                   const tEndDayNum = tEnd > monthEndStr ? daysInMonth : parseInt(tEnd.substring(8, 10), 10);
                   const tSpanDays = Math.max(1, tEndDayNum - tStartDayNum + 1);
                   const tColor = getTaskColor(t);
+                  const isCompleted = Number(t.completed) === 1 || (Number(t.completed) !== -1 && Number(t.progress) >= 1);
 
                   return (
-                    <div key={t.id} className="timeline-project-row timeline-task-subrow">
+                    <div key={t.id} className={`timeline-project-row timeline-task-subrow ${isCompleted ? 'timeline-row-completed' : ''}`}>
                       <div
-                        className="timeline-project-info timeline-task-info"
+                        className={`timeline-project-info timeline-task-info ${isCompleted ? 'timeline-row-completed' : ''}`}
                         onClick={() => onSelectProject({ ...proj, selectedPhase: t })}
-                        style={{ cursor: 'pointer', paddingLeft: 24, borderLeft: `3px solid ${tColor}` }}
+                        style={{ cursor: 'pointer', paddingLeft: 24, borderLeft: `3px solid ${isCompleted ? '#10b981' : tColor}` }}
                       >
                         <span className="timeline-proj-title" style={{ fontSize: '0.8125rem', color: 'var(--text-primary)' }} title={t.text}>
-                          ↳ <strong>{t.text}</strong>
+                          ↳ {isCompleted && <span style={{ color: '#10b981', fontWeight: 'bold', marginRight: '6px' }} title="Fase completata">✓</span>}
+                          <strong>{t.text}</strong>
                         </span>
                         <span className="timeline-proj-meta" style={{ fontSize: '0.72rem' }}>
                           👤 {Array.isArray(t.workers) && t.workers.length > 0 ? t.workers.join(', ') : 'Nessuno'} | ⏱ {t.planned_hours || 8}h
@@ -191,13 +193,13 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                           style={{
                             left: `${(tStartDayNum - 1) * 38 + 2}px`,
                             width: `${tSpanDays * 38 - 4}px`,
-                            background: `linear-gradient(135deg, ${tColor}ee, ${tColor}99)`,
-                            border: `1px solid ${tColor}`,
+                            background: isCompleted ? '#10b981' : `linear-gradient(135deg, ${tColor}ee, ${tColor}99)`,
+                            border: `1px solid ${isCompleted ? '#059669' : tColor}`,
                           }}
                           onClick={() => onSelectProject({ ...proj, selectedPhase: t })}
                           title={`[Fase] ${t.text} (${tStart} -> ${tEnd}) - Addetti: ${Array.isArray(t.workers) ? t.workers.join(', ') : ''}`}
                         >
-                          ↳ {t.text} {(filterWorker && filterWorker !== 'all') ? `(${filterWorker})` : ''}
+                          ↳ {isCompleted ? '✓ ' : ''}{t.text} {(filterWorker && filterWorker !== 'all') ? `(${filterWorker})` : ''}
                         </div>
                       </div>
                     </div>
