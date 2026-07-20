@@ -20,6 +20,57 @@ const parseDateSafe = (d) => {
   return isNaN(dt) ? null : dt;
 };
 
+function getPasquettaDate(year) {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31) - 1;
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  const pasqua = new Date(year, month, day);
+  return new Date(pasqua.getTime() + 86400000);
+}
+
+export function isWeekendOrHoliday(date) {
+  if (!date || !(date instanceof Date) || isNaN(date)) return false;
+  const dayOfWeek = date.getDay();
+  if (dayOfWeek === 0 || dayOfWeek === 6) return true;
+
+  const d = date.getDate();
+  const m = date.getMonth();
+  const y = date.getFullYear();
+
+  if (
+    (d === 1 && m === 0) ||   // 1 Gennaio - Capodanno
+    (d === 6 && m === 0) ||   // 6 Gennaio - Epifania
+    (d === 25 && m === 3) ||  // 25 Aprile - Liberazione
+    (d === 1 && m === 4) ||   // 1 Maggio - Festa dei Lavoratori
+    (d === 2 && m === 5) ||   // 2 Giugno - Festa della Repubblica
+    (d === 15 && m === 7) ||  // 15 Agosto - Ferragosto
+    (d === 1 && m === 10) ||  // 1 Novembre - Tutti i Santi
+    (d === 8 && m === 11) ||  // 8 Dicembre - Immacolata
+    (d === 25 && m === 11) || // 25 Dicembre - Natale
+    (d === 26 && m === 11)    // 26 Dicembre - Santo Stefano
+  ) {
+    return true;
+  }
+
+  const pasquetta = getPasquettaDate(y);
+  if (d === pasquetta.getDate() && m === pasquetta.getMonth()) {
+    return true;
+  }
+
+  return false;
+}
+
 export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onNewTask, visibleColumns, readOnly, projectStartDate, projectEndDate }) {
 
   const containerRef = useRef(null);
@@ -66,8 +117,8 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.config.xml_date = "%Y-%m-%d %H:%i";
     gantt.config.row_height = 38;
     gantt.config.bar_height = 24;
-    gantt.config.scale_height = 50;
-    gantt.config.min_column_width = 40;
+    gantt.config.scale_height = 66;
+    gantt.config.min_column_width = 38;
     gantt.config.fit_tasks = false;
     gantt.config.autosize = false;
     gantt.config.autoscroll = true;
@@ -138,9 +189,12 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       c.name === 'text' || (!readOnly && c.name === 'add') || (visibleColumns && visibleColumns.includes(c.name))
     );
 
-    // Scala temporale
+    // Scala temporale (Mese in italiano, Giorno della settimana: Lun Mar Mer..., Numero del giorno: 12 13 14...)
+    const mesiItaliani = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+    const giorniItaliani = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
     gantt.config.scales = [
-      { unit: "month", step: 1, format: "%F %Y" },
+      { unit: "month", step: 1, format: function (date) { return `${mesiItaliani[date.getMonth()]} ${date.getFullYear()}`; } },
+      { unit: "day", step: 1, format: function (date) { return giorniItaliani[date.getDay()]; } },
       { unit: "day", step: 1, format: "%d" },
     ];
 
@@ -196,7 +250,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       return gantt.date.add(date, step, "day");
     }
 
-    // Evidenziazione della colonna verticale di oggi su tutte le viste (Giorni, Settimane, Mesi, Trimestri)
+    // Evidenziazione della colonna verticale di sabato, domenica, festivi e oggi su tutte le viste
     gantt.templates.timeline_cell_class = function (task, date) {
       const today = new Date();
       const scales = gantt.config.scales || [];
@@ -205,13 +259,17 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       const step = bottomScale.step || 1;
       const cellEnd = getCellEndDate(date, unit, step);
 
-      if (date <= today && today < cellEnd) {
-        return "gantt_today_cell";
+      const classes = [];
+      if (unit === "day" && isWeekendOrHoliday(date)) {
+        classes.push("gantt_weekend_cell");
       }
-      return "";
+      if (date <= today && today < cellEnd) {
+        classes.push("gantt_today_cell");
+      }
+      return classes.join(" ");
     };
 
-    // Evidenziazione delle celle di intestazione della scala temporale che contengono oggi
+    // Evidenziazione delle celle di intestazione della scala temporale per sabato, domenica, festivi e oggi
     gantt.templates.scale_cell_class = function (date, scale) {
       const today = new Date();
       const scales = gantt.config.scales || [];
@@ -220,10 +278,14 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       const step = (scale && scale.step) ? scale.step : (bottomScale.step || 1);
       const cellEnd = getCellEndDate(date, unit, step);
 
-      if (date <= today && today < cellEnd) {
-        return "gantt_today_scale_cell";
+      const classes = [];
+      if (unit === "day" && isWeekendOrHoliday(date)) {
+        classes.push("gantt_weekend_scale_cell");
       }
-      return "";
+      if (date <= today && today < cellEnd) {
+        classes.push("gantt_today_scale_cell");
+      }
+      return classes.join(" ");
     };
 
     gantt.init(containerRef.current);

@@ -322,6 +322,44 @@
   font-weight: 800 !important;
 }
 
+/* Evidenziazione nell'intestazione della scala temporale per sabato, domenica e festivi */
+.gantt_weekend_scale_cell {
+  background-color: rgba(239, 68, 68, 0.16) !important;
+  color: #ef4444 !important;
+  font-weight: 700 !important;
+}
+.gantt_weekend_scale_cell.gantt_today_scale_cell {
+  background-color: rgba(168, 85, 247, 0.25) !important;
+  color: #c084fc !important;
+}
+
+/* Evidenziazione colonna nella timeline per sabato, domenica e festivi (pattern rigato e leggero tint) */
+.gantt_weekend_cell {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(239, 68, 68, 0.025),
+    rgba(239, 68, 68, 0.025) 6px,
+    rgba(239, 68, 68, 0.075) 6px,
+    rgba(239, 68, 68, 0.075) 12px
+  ) !important;
+}
+.gantt_weekend_cell.gantt_today_cell {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(59, 130, 246, 0.12),
+    rgba(59, 130, 246, 0.12) 6px,
+    rgba(168, 85, 247, 0.18) 6px,
+    rgba(168, 85, 247, 0.18) 12px
+  ) !important;
+}
+
+/* Allineamento al centro per le celle dell'header con scale multiple */
+.gantt_scale_cell {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
 
 /* Dark mode enhanced shadows for bars */
 [data-theme="dark"] .gantt_task_line {

@@ -591,27 +591,34 @@ export default function ProjectDetailPage() {
 
   function handleZoom(mode) {
     setViewMode(mode);
+    const mesiItaliani = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+    const giorniItaliani = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+
     switch (mode) {
       case 'day':
         gantt.config.scales = [
-          { unit: "month", step: 1, format: "%F %Y" },
+          { unit: "month", step: 1, format: function (date) { return `${mesiItaliani[date.getMonth()]} ${date.getFullYear()}`; } },
+          { unit: "day", step: 1, format: function (date) { return giorniItaliani[date.getDay()]; } },
           { unit: "day", step: 1, format: "%d" },
         ];
-        gantt.config.min_column_width = 40;
+        gantt.config.min_column_width = 38;
+        gantt.config.scale_height = 66;
         break;
       case 'week':
         gantt.config.scales = [
-          { unit: "month", step: 1, format: "%F %Y" },
+          { unit: "month", step: 1, format: function (date) { return `${mesiItaliani[date.getMonth()]} ${date.getFullYear()}`; } },
           { unit: "week", step: 1, format: "Sett. %W" },
         ];
         gantt.config.min_column_width = 80;
+        gantt.config.scale_height = 50;
         break;
       case 'month':
         gantt.config.scales = [
           { unit: "year", step: 1, format: "%Y" },
-          { unit: "month", step: 1, format: "%M" },
+          { unit: "month", step: 1, format: function (date) { return mesiItaliani[date.getMonth()]; } },
         ];
         gantt.config.min_column_width = 60;
+        gantt.config.scale_height = 50;
         break;
       case 'quarter':
         gantt.config.scales = [
@@ -626,6 +633,7 @@ export default function ProjectDetailPage() {
           },
         ];
         gantt.config.min_column_width = 100;
+        gantt.config.scale_height = 50;
         break;
     }
     gantt.render();
