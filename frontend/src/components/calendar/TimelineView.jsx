@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { getTaskColor } from '../../utils/phaseColors';
+import { isTaskCompleted } from '../../utils/taskCompletion';
 
 const STATUS_LABELS_IT = {
   planning: 'In pianificazione',
@@ -160,7 +161,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                   const tEndDayNum = tEnd > monthEndStr ? daysInMonth : parseInt(tEnd.substring(8, 10), 10);
                   const tSpanDays = Math.max(1, tEndDayNum - tStartDayNum + 1);
                   const tColor = getTaskColor(t);
-                  const isCompleted = Number(t.completed) === 1 || (Number(t.completed) !== -1 && Number(t.progress) >= 1);
+                  const isCompleted = isTaskCompleted(t);
 
                   return (
                     <div key={t.id} className={`timeline-project-row timeline-task-subrow ${isCompleted ? 'timeline-row-completed' : ''}`}>

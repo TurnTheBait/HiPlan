@@ -8,6 +8,7 @@ import GanttChart from '../components/gantt/GanttChart';
 import './ProjectDetailPage.css';
 import { STATUS_LABELS_IT, STATUS_OPTIONS } from '../utils/statusLabels';
 import { PREDEFINED_PHASES, PHASE_DEFAULT_COLORS, getTaskColor } from '../utils/phaseColors';
+import { calculateTaskEffHours, isTaskCompleted } from '../utils/taskCompletion';
 import TaskComments from '../components/tasks/TaskComments';
 import TaskChecklist from '../components/tasks/TaskChecklist';
 
@@ -178,6 +179,7 @@ export default function ProjectDetailPage() {
   // Calcolo stato semaforo e ore giornaliere previste (algoritmo prototipo Ufficio Tecnico)
   function computeStato(task) {
     if (!task || !task.start_date) return 'ok';
+    if (isTaskCompleted(task)) return 'ok';
     const startStr = formatDateOnly(task.start_date);
     const endStr = task.end_date ? formatDateOnly(task.end_date) : startStr;
     if (!startStr) return 'ok';
@@ -400,7 +402,7 @@ export default function ProjectDetailPage() {
       worker_hours: typeof task.worker_hours === 'object' ? task.worker_hours : {},
       customWorker: '',
       department: task.department || (user?.department && user.department !== 'admin' ? user.department : 'ufficio_tecnico'),
-      completed: Number(task.completed) === 1 || (Number(task.completed) !== -1 && Number(task.progress) >= 1) ? 1 : (Number(task.completed) === -1 ? -1 : 0),
+      completed: isTaskCompleted(task) ? 1 : (Number(task.completed) === -1 ? -1 : 0),
     });
     setShowTaskModal(true);
   }
@@ -992,16 +994,9 @@ export default function ProjectDetailPage() {
                 ) : (
                   ganttData.tasks.map((task) => {
                     const st = computeStato(task);
-                    let tEff = 0;
-                    if (task.actual_hours && typeof task.actual_hours === 'object') {
-                      Object.values(task.actual_hours).forEach(dayMap => {
-                        if (dayMap && typeof dayMap === 'object') {
-                          Object.values(dayMap).forEach(h => { tEff += Number(h) || 0; });
-                        }
-                      });
-                    }
+                    const tEff = calculateTaskEffHours(task);
                     const tColor = getTaskColor(task);
-                    const isCompleted = Number(task.completed) === 1 || (Number(task.completed) !== -1 && Number(task.progress) >= 1) || (Number(task.completed) !== -1 && Number(task.planned_hours) > 0 && tEff >= Number(task.planned_hours));
+                    const isCompleted = isTaskCompleted(task);
                     return (
 
                       <tr key={task.id} style={{ backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.18)' : undefined }}>
@@ -1193,7 +1188,7 @@ export default function ProjectDetailPage() {
                     });
 
                     const tColor = getTaskColor(task);
-                    const isCompleted = Number(task.completed) === 1 || (Number(task.completed) !== -1 && Number(task.progress) >= 1) || (Number(task.completed) !== -1 && Number(task.planned_hours) > 0 && totalTaskEff >= Number(task.planned_hours));
+                    const isCompleted = isTaskCompleted(task);
                     return (
                       <tr key={task.id} style={{ backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.18)' : undefined }}>
                         <td style={{ fontWeight: 600 }}>
@@ -1839,7 +1834,7 @@ export default function ProjectDetailPage() {
                         };
                         const st = computeStato(tempTask);
                         const plannedH = Number(selectedTaskForHours.planned_hours || 8);
-                        const isModalCompleted = Number(selectedTaskForHours.completed) === 1 || (plannedH > 0 && totAll >= plannedH && selectedTaskForHours.completed !== 0 && selectedTaskForHours.completed !== false);
+                        const isModalCompleted = isTaskCompleted(tempTask);
                         return (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                             <span style={{ fontSize: 15, color: 'var(--text-primary)' }}>

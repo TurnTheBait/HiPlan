@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { gantt } from 'dhtmlx-gantt';
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css';
 import { getTaskColor } from '../../utils/phaseColors';
+import { isTaskCompleted } from '../../utils/taskCompletion';
 import './GanttChart.css';
 
 const parseDateSafe = (d) => {
@@ -139,7 +140,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         width: 210, 
         resize: true,
         template: function(task) {
-          const isCompleted = Number(task.completed) === 1 || (Number(task.completed) !== -1 && Number(task.progress) >= 1);
+          const isCompleted = isTaskCompleted(task);
           const checkIcon = isCompleted ? `<span style="color: #10b981; font-weight: bold; margin-right: 6px;" title="Fase completata">✓</span>` : '';
           return `${checkIcon}${task.text || ''}`;
         }
@@ -159,7 +160,10 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         label: "Progresso",
         align: "center",
         width: 70,
-        template: function(task) { return Math.round((task.progress || 0) * 100) + "%"; }
+        template: function(task) { 
+          const isComp = isTaskCompleted(task);
+          return (isComp ? 100 : Math.round((task.progress || 0) * 100)) + "%"; 
+        }
       },
       {
         name: "priority",
@@ -213,7 +217,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       if (task.type === 'milestone' || Number(task.duration) === 0) {
         return 'gantt-hidden-milestone';
       }
-      const isCompleted = Number(task.completed) === 1 || (Number(task.completed) !== -1 && Number(task.progress) >= 1);
+      const isCompleted = isTaskCompleted(task);
       if (isCompleted) {
         return 'gantt-task-completed';
       }
@@ -223,18 +227,18 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     // Milestone e spunta di completamento
     gantt.templates.task_text = function (start, end, task) {
       if (task.type === 'milestone') return '';
-      const isCompleted = Number(task.completed) === 1 || (Number(task.completed) !== -1 && Number(task.progress) >= 1);
+      const isCompleted = isTaskCompleted(task);
       const check = isCompleted ? '✓ ' : '';
       return `${check}${task.text || ''}`;
     };
 
     // Classe CSS per colorare di verde lo sfondo dell'intera riga della fase completata sia in griglia che in timeline
     gantt.templates.grid_row_class = function (start, end, task) {
-      const isCompleted = Number(task.completed) === 1 || (Number(task.completed) !== -1 && Number(task.progress) >= 1);
+      const isCompleted = isTaskCompleted(task);
       return isCompleted ? 'gantt-row-completed' : '';
     };
     gantt.templates.task_row_class = function (start, end, task) {
-      const isCompleted = Number(task.completed) === 1 || (Number(task.completed) !== -1 && Number(task.progress) >= 1);
+      const isCompleted = isTaskCompleted(task);
       return isCompleted ? 'gantt-row-completed' : '';
     };
 
@@ -423,7 +427,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         width: 210, 
         resize: true,
         template: function(task) {
-          const isCompleted = Number(task.completed) === 1 || (Number(task.completed) !== -1 && Number(task.progress) >= 1);
+          const isCompleted = isTaskCompleted(task);
           const checkIcon = isCompleted ? `<span style="color: #10b981; font-weight: bold; margin-right: 6px;" title="Fase completata">✓</span>` : '';
           return `${checkIcon}${task.text || ''}`;
         }
@@ -636,14 +640,14 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.clearAll();
     gantt.parse({
       data: sortedTaskList.map(t => {
-        const isCompleted = Number(t.completed) === 1 || (Number(t.completed) !== -1 && Number(t.progress) >= 1);
+        const isCompleted = isTaskCompleted(t);
         return {
           ...t,
           id: String(t.id),
           text: t.text,
           start_date: t.start_date,
           duration: t.duration,
-          progress: t.progress,
+          progress: isCompleted ? 1 : t.progress,
           parent: t.parent === '0' || !t.parent ? 0 : String(t.parent),
           open: Boolean(t.open),
           type: (t.type === 'milestone' || Number(t.duration) === 0) ? gantt.config.types.milestone : gantt.config.types.task,

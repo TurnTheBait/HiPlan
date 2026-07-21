@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.core.dependencies import get_db, get_current_user, require_role
 from app.models.user import User, UserRole
 from app.schemas.user import UserOut, UserUpdate
+from app.services import task_service
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -104,12 +105,13 @@ async def get_my_tasks_today(
                 except:
                     pass
                     
+            t_out = task_service._task_to_out(task)
             my_tasks.append({
                 "id": task.id,
                 "text": task.text,
                 "project_id": task.project_id,
                 "project_name": task.project.name if task.project else "Sconosciuto",
-                "progress": round((task.progress or 0) * 100),
+                "progress": round((t_out.progress or 0) * 100),
                 "planned_hours": task.planned_hours,
                 "my_assigned_hours": worker_hours.get(user_name, None)
             })
