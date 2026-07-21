@@ -7,6 +7,7 @@ from sqlalchemy.future import select
 from app.core.dependencies import get_db, get_current_user
 from app.models.user import User
 from app.models.task import Task
+from app.models.vacation import Vacation
 
 router = APIRouter(prefix="/api/workload", tags=["workload"])
 
@@ -15,9 +16,6 @@ async def get_workload_heatmap(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
-    # Restituisce una struttura dati con il carico giornaliero per ogni utente
-    # { user_id: { "full_name": "...", "workload": { "YYYY-MM-DD": { "hours": 8, "tasks": [...] } } } }
-    
     from sqlalchemy.orm import joinedload
     users_res = await db.execute(select(User).where(User.is_active == True))
     users = users_res.scalars().all()
@@ -25,19 +23,36 @@ async def get_workload_heatmap(
     tasks_res = await db.execute(select(Task).options(joinedload(Task.project)))
     tasks = tasks_res.scalars().all()
     
+    # Fetch all vacations
+    vac_res = await db.execute(select(Vacation))
+    vacations = vac_res.scalars().all()
+    
+    # Build vacation lookup: user_id -> list of vacation date ranges
+    vac_by_user = {}
+    for v in vacations:
+        uid = str(v.user_id)
+        if uid not in vac_by_user:
+            vac_by_user[uid] = []
+        vac_by_user[uid].append({
+            "start_date": str(v.start_date),
+            "end_date": str(v.end_date),
+            "reason": v.reason or ""
+        })
+    
     heatmap = {}
     for u in users:
-        heatmap[str(u.id)] = {
+        uid = str(u.id)
+        heatmap[uid] = {
             "full_name": u.full_name or u.username,
             "department": u.department,
-            "workload": {}
+            "workload": {},
+            "vacations": vac_by_user.get(uid, [])
         }
         
     for task in tasks:
         if not task.start_date or not task.end_date:
             continue
             
-        # Determina gli addetti assegnati
         assigned_workers = []
         try:
             workers_list = json.loads(task.workers) if task.workers else []
@@ -49,7 +64,6 @@ async def get_workload_heatmap(
         if not assigned_workers:
             continue
             
-        # Trova gli ID e i nomi degli utenti partendo dai nomi
         worker_info = []
         for w_name in assigned_workers:
             for u in users:
@@ -60,16 +74,14 @@ async def get_workload_heatmap(
         if not worker_info:
             continue
             
-        # Calcola le ore giornaliere per ciascun addetto basandoci sulle ore assegnate previste
         start_date = task.start_date
         end_date = task.end_date
         
-        # Array di giorni (incluso start e end)
         delta = end_date - start_date
         days = []
         for i in range(delta.days + 1):
             day = start_date + timedelta(days=i)
-            if day.weekday() < 5:  # Solo giorni lavorativi (Lun-Ven)
+            if day.weekday() < 5:
                 days.append(day)
                 
         if not days:
@@ -87,7 +99,6 @@ async def get_workload_heatmap(
             w_id = winfo["id"]
             w_name = winfo["name"]
             
-            # Ore previste/assegnate al singolo addetto per questa fase (non a consuntivo)
             if w_name in worker_hours_map and worker_hours_map[w_name] is not None:
                 try:
                     assigned_total = float(worker_hours_map[w_name])

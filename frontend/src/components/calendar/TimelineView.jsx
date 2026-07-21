@@ -18,7 +18,7 @@ const STATUS_COLORS = {
 
 const WEEKDAYS_IT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
 
-export default function TimelineView({ projects, currYear, currMonth, filterWorker, onSelectProject }) {
+export default function TimelineView({ projects, currYear, currMonth, filterWorker, onSelectProject, vacations = [] }) {
   const today = new Date();
   const daysInMonth = new Date(currYear, currMonth + 1, 0).getDate();
   const [expandedProjects, setExpandedProjects] = useState({});
@@ -44,6 +44,62 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
           })}
         </div>
       </div>
+      
+      {/* Righe Ferie */}
+      {(() => {
+        const monthStartStr = `${currYear}-${String(currMonth + 1).padStart(2, '0')}-01`;
+        const monthEndStr = `${currYear}-${String(currMonth + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+        const visibleVacations = vacations.filter(v => {
+          const vStart = v.start_date?.substring(0, 10) || '';
+          const vEnd = v.end_date?.substring(0, 10) || '';
+          return vEnd >= monthStartStr && vStart <= monthEndStr;
+        });
+        if (visibleVacations.length === 0) return null;
+        return visibleVacations.map(v => {
+          const vStart = v.start_date?.substring(0, 10) || monthStartStr;
+          const vEnd = v.end_date?.substring(0, 10) || vStart;
+          const startDayNum = vStart < monthStartStr ? 1 : parseInt(vStart.substring(8, 10), 10);
+          const endDayNum = vEnd > monthEndStr ? daysInMonth : parseInt(vEnd.substring(8, 10), 10);
+          const spanDays = Math.max(1, endDayNum - startDayNum + 1);
+          
+          return (
+            <div key={v.id || `vac-${vStart}-${vEnd}`} className="timeline-project-row">
+              <div className="timeline-project-info" style={{ cursor: 'default', borderLeft: '3px solid #f59e0b' }}>
+                <span className="timeline-proj-title" style={{ color: '#f59e0b' }}>
+                  🏖️ Ferie
+                </span>
+                <span className="timeline-proj-meta">
+                  {v.reason || ''}
+                </span> {/* <-- CORRETTO: Aggiunta chiusura span */}
+              </div> {/* <-- CORRETTO: Aggiunta chiusura div info */}
+              
+              <div className="timeline-row-grid">
+                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
+                  const dayDate = new Date(currYear, currMonth, d);
+                  const isWk = dayDate.getDay() === 0 || dayDate.getDay() === 6;
+                  const monthStr = String(currMonth + 1).padStart(2, '0');
+                  const dayStr = String(d).padStart(2, '0');
+                  const isToday = `${currYear}-${monthStr}-${dayStr}` === today.toISOString().substring(0, 10);
+                  return <div key={d} className={`timeline-cell ${isWk ? 'weekend' : ''} ${isToday ? 'today' : ''}`} />;
+                })}
+                <div
+                  className="timeline-bar"
+                  style={{
+                    left: `${(startDayNum - 1) * 38 + 2}px`,
+                    width: `${spanDays * 38 - 4}px`,
+                    background: 'linear-gradient(135deg, #f59e0b, #f97316)',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                  }}
+                  title={`Ferie: ${vStart} → ${vEnd}${v.reason ? ` (${v.reason})` : ''}`}
+                >
+                  🏖️ Ferie {vStart === vEnd ? vStart : `${vStart.substring(8,10)}/${vStart.substring(5,7)} → ${vEnd.substring(8,10)}/${vEnd.substring(5,7)}`}
+                </div>
+              </div>
+            </div>
+          );
+        });
+      })()} {/* <-- CORRETTO: Aggiunte le () per invocare la funzione IIFE */}
 
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {projects.length === 0 ? (
@@ -100,7 +156,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                       {proj.name}
                     </span>
                     <span className="timeline-proj-meta">
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLORS[proj.status] || '#a5b4fc', display: 'inline-block' }} />
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLORS[proj.status] || '#a5b4fc', display: 'inline-block', marginRight: '4px' }} />
                       {STATUS_LABELS_IT[proj.status] || proj.status}
                       <button
                         type="button"

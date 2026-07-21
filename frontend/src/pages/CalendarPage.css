@@ -156,7 +156,8 @@
   white-space: nowrap;
 }
 .calendar-weekday.weekend {
-  color: var(--text-muted);
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
 }
 
 .calendar-days-grid {
@@ -189,7 +190,13 @@
   opacity: 0.5;
 }
 .calendar-day-cell.weekend-cell {
-  background: var(--bg-tertiary);
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(239, 68, 68, 0.025),
+    rgba(239, 68, 68, 0.025) 6px,
+    rgba(239, 68, 68, 0.075) 6px,
+    rgba(239, 68, 68, 0.075) 12px
+  );
 }
 .calendar-day-cell.today-cell {
   background: rgba(99, 102, 241, 0.04);
@@ -363,15 +370,20 @@
   box-sizing: border-box;
 }
 .timeline-day-col-header.weekend {
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
+  background: rgba(239, 68, 68, 0.16);
+  color: #ef4444;
+  font-weight: 700;
 }
 .timeline-day-col-header.today {
-  background: rgba(99, 102, 241, 0.15);
-  color: var(--accent-500);
+  background: rgba(59, 130, 246, 0.25);
+  color: var(--accent-500, #60a5fa);
   font-weight: 800;
   border-left: 2px solid var(--accent-500, #3b82f6) !important;
   box-shadow: inset 2px 0 0 var(--accent-500);
+}
+.timeline-day-col-header.today.weekend {
+  background: rgba(168, 85, 247, 0.25);
+  color: #c084fc;
 }
 
 
@@ -442,12 +454,27 @@
   box-sizing: border-box;
 }
 .timeline-cell.weekend {
-  background: var(--bg-tertiary);
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(239, 68, 68, 0.025),
+    rgba(239, 68, 68, 0.025) 6px,
+    rgba(239, 68, 68, 0.075) 6px,
+    rgba(239, 68, 68, 0.075) 12px
+  );
 }
 .timeline-cell.today {
-  background: rgba(99, 102, 241, 0.08);
+  background: rgba(59, 130, 246, 0.12);
   border-left: 2px solid var(--accent-500, #3b82f6) !important;
   box-shadow: inset 2px 0 0 var(--accent-500);
+}
+.timeline-cell.today.weekend {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(59, 130, 246, 0.12),
+    rgba(59, 130, 246, 0.12) 6px,
+    rgba(168, 85, 247, 0.18) 6px,
+    rgba(168, 85, 247, 0.18) 12px
+  );
 }
 
 

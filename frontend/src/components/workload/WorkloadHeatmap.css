@@ -94,26 +94,57 @@
   border-bottom: 2px solid var(--accent-500) !important;
 }
 
-.today-cell {
+/* Evidenziazione colonna Sabato/Domenica */
+.weekend-header {
+  background: rgba(239, 68, 68, 0.16) !important;
+  color: #ef4444 !important;
+}
+
+/* Cella Vacanza (Ferie) */
+.heatmap-vacation {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(251, 191, 36, 0.3)) !important;
+  color: #f59e0b !important;
+  font-weight: 700 !important;
+  font-size: 1.1rem !important;
+}
+
+/* Cella Weekend */
+.heatmap-weekend {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(239, 68, 68, 0.03),
+    rgba(239, 68, 68, 0.03) 6px,
+    rgba(239, 68, 68, 0.08) 6px,
+    rgba(239, 68, 68, 0.08) 12px
+  ) !important;
+  color: #ef4444 !important;
+  font-weight: 600 !important;
+}
+
+.heatmap-vacation.today-cell,
+.heatmap-weekend.today-cell {
   border-left: 2px solid rgba(59, 130, 246, 0.4) !important;
   border-right: 2px solid rgba(59, 130, 246, 0.4) !important;
-  background: rgba(59, 130, 246, 0.25) !important;
 }
 
-.today-cell.heatmap-green {
-  background: rgba(59, 130, 246, 0.25) !important;
-  color: #10b981 !important;
-  font-weight: 700;
-}
+.today-cell {
 
-.today-cell.heatmap-yellow {
-  background: rgba(59, 130, 246, 0.25) !important;
-  color: #f59e0b !important;
-  font-weight: 700;
-}
+  .today-cell.heatmap-green {
+    background: rgba(59, 130, 246, 0.25) !important;
+    color: #10b981 !important;
+    font-weight: 700;
+  }
 
-.today-cell.heatmap-red {
-  background: rgba(59, 130, 246, 0.25) !important;
-  color: #ef4444 !important;
-  font-weight: 700;
+  .today-cell.heatmap-yellow {
+    background: rgba(59, 130, 246, 0.25) !important;
+    color: #f59e0b !important;
+    font-weight: 700;
+  }
+
+  .today-cell.heatmap-red {
+    background: rgba(59, 130, 246, 0.25) !important;
+    color: #ef4444 !important;
+    font-weight: 700;
+  }
+
 }

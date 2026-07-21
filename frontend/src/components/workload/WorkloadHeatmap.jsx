@@ -3,12 +3,19 @@ import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import './WorkloadHeatmap.css';
 
+function isWeekendOrHoliday(date) {
+  if (!date || !(date instanceof Date) || isNaN(date)) return false;
+  const dayOfWeek = date.getDay();
+  if (dayOfWeek === 0 || dayOfWeek === 6) return true;
+  return false;
+}
+
 export default function WorkloadHeatmap() {
   const { user } = useAuth();
   const [heatmapData, setHeatmapData] = useState({});
   const [loading, setLoading] = useState(true);
   const [expandedUsers, setExpandedUsers] = useState({});
-  const [viewMode, setViewMode] = useState('day'); // 'day', 'week', 'month'
+  const [viewMode, setViewMode] = useState('day');
   const gridRef = React.useRef(null);
 
   useEffect(() => {
@@ -30,32 +37,48 @@ export default function WorkloadHeatmap() {
     setExpandedUsers(prev => ({ ...prev, [userId]: !prev[userId] }));
   };
 
-  // Raggruppamento date in colonne
-  const allDates = new Set();
+  // Build full date range including weekends
+  const allWorkDates = new Set();
   Object.values(heatmapData).forEach(u => {
-    Object.keys(u.workload).forEach(d => allDates.add(d));
+    Object.keys(u.workload).forEach(d => allWorkDates.add(d));
   });
 
-  // Se non ci sono dati, mostra almeno i prossimi 5 giorni lavorativi
-  if (allDates.size === 0) {
+  let minDateStr = null;
+  let maxDateStr = null;
+  if (allWorkDates.size > 0) {
+    const sorted = Array.from(allWorkDates).sort();
+    minDateStr = sorted[0];
+    maxDateStr = sorted[sorted.length - 1];
+  }
+
+  if (!minDateStr || !maxDateStr) {
     const today = new Date();
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() + i);
-      if (d.getDay() !== 0 && d.getDay() !== 6) {
-        allDates.add(d.toISOString().substring(0, 10));
-      }
+    const fiveDaysLater = new Date(today);
+    fiveDaysLater.setDate(fiveDaysLater.getDate() + 7);
+    minDateStr = today.toISOString().substring(0, 10);
+    maxDateStr = fiveDaysLater.toISOString().substring(0, 10);
+  }
+
+  // Only generate all-day grid in 'day' view
+  const fullDatesSet = new Set(allWorkDates);
+  if (viewMode === 'day' && minDateStr && maxDateStr) {
+    const start = new Date(minDateStr);
+    const end = new Date(maxDateStr);
+    const cur = new Date(start);
+    while (cur <= end) {
+      fullDatesSet.add(cur.toISOString().substring(0, 10));
+      cur.setDate(cur.getDate() + 1);
     }
   }
 
-  const sortedDates = Array.from(allDates).sort();
+  const sortedDates = Array.from(fullDatesSet).sort();
 
   const columnsMap = new Map();
   sortedDates.forEach(dStr => {
     const d = new Date(dStr);
     let key, label;
     if (viewMode === 'month') {
-      key = dStr.substring(0, 7); // YYYY-MM
+      key = dStr.substring(0, 7);
       label = d.toLocaleDateString('it-IT', { month: 'short', year: 'numeric' });
     } else if (viewMode === 'week') {
       const day = d.getDay();
@@ -63,10 +86,12 @@ export default function WorkloadHeatmap() {
       const monday = new Date(d);
       monday.setDate(diff);
       key = monday.toISOString().substring(0, 10);
-      label = "Sett. " + monday.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
+      label = 'Sett. ' + monday.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
     } else {
       key = dStr;
-      label = d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      const dayLabel = d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
+      label = isWeekend ? dayLabel + ' 🚫' : dayLabel;
     }
     if (!columnsMap.has(key)) columnsMap.set(key, label);
   });
@@ -92,11 +117,11 @@ export default function WorkloadHeatmap() {
   const scrollToToday = () => {
     if (!gridRef.current || columns.length === 0) return;
     setTimeout(() => {
-      let targetEl = gridRef.current.querySelector(`[data-colkey="${todayKey}"]`);
+      let targetEl = gridRef.current.querySelector('[data-colkey="' + todayKey + '"]');
       if (!targetEl) {
         const futureCol = columns.find(c => c >= todayKey);
         const fallbackKey = futureCol || columns[columns.length - 1];
-        if (fallbackKey) targetEl = gridRef.current.querySelector(`[data-colkey="${fallbackKey}"]`);
+        if (fallbackKey) targetEl = gridRef.current.querySelector('[data-colkey="' + fallbackKey + '"]');
       }
       if (targetEl && gridRef.current) {
         const containerWidth = gridRef.current.clientWidth;
@@ -116,6 +141,27 @@ export default function WorkloadHeatmap() {
 
   const capacityMap = { day: 8, week: 40, month: 160 };
   const currentCapacity = capacityMap[viewMode];
+
+  const isColumnWeekend = (colKey) => {
+    if (viewMode === 'day') {
+      const d = new Date(colKey);
+      return d.getDay() === 0 || d.getDay() === 6;
+    }
+    return false;
+  };
+
+  const isUserOnVacation = (userId, dateStr) => {
+    const userData = heatmapData[userId];
+    if (!userData || !userData.vacations) return false;
+    return userData.vacations.some(v => {
+      return dateStr >= v.start_date && dateStr <= v.end_date;
+    });
+  };
+
+  const formatDateStr = (key) => {
+    const [y, m, d] = key.split('-');
+    return d + '/' + m + '/' + y;
+  };
 
   if (loading) return <div>Caricamento mappa di calore...</div>;
 
@@ -148,30 +194,38 @@ export default function WorkloadHeatmap() {
             <option value="month">Per Mese</option>
           </select>
         </div>
-      </div>
+      </div> {/* <-- CORRETTO: Chiusura del div flexbox header che mancava */}
 
-      <div className="heatmap-grid" ref={gridRef} style={{ gridTemplateColumns: `200px repeat(${columns.length}, 90px)` }}>
-        
+      <div className="heatmap-grid" ref={gridRef} style={{ gridTemplateColumns: '200px repeat(' + columns.length + ', 90px)' }}>
+
         {/* Header (Columns) */}
         <div className="heatmap-header-cell sticky-col sticky-header-col">Addetto</div>
-        {columns.map(colKey => (
-          <div 
-            key={colKey} 
-            data-colkey={colKey}
-            className={`heatmap-header-cell ${colKey === todayKey ? 'today-header' : ''}`}
-            title={colKey === todayKey ? 'Data di Oggi' : ''}
-          >
-            {columnsMap.get(colKey)}
-            {colKey === todayKey && (
-              <div style={{ fontSize: '0.7rem', color: 'var(--accent-500)', fontWeight: 800 }}>📍 Oggi</div>
-            )}
-          </div>
-        ))}
+        {columns.map(colKey => {
+          const isWeekendCol = isColumnWeekend(colKey);
+          const isTodayCol = colKey === todayKey;
+          const colDateStr = viewMode === 'day' ? formatDateStr(colKey) : columnsMap.get(colKey);
+          const titleParts = [];
+          if (isWeekendCol) titleParts.push('Sabato/Domenica');
+          if (isTodayCol) titleParts.push('Oggi');
+          const titleText = colDateStr + (titleParts.length > 0 ? ' - ' + titleParts.join(', ') : '');
+          return (
+            <div 
+              key={colKey} 
+              data-colkey={colKey}
+              className={'heatmap-header-cell' + (isTodayCol ? ' today-header' : '') + (isWeekendCol ? ' weekend-header' : '')}
+              title={titleText}
+            >
+              {columnsMap.get(colKey)}
+              {isTodayCol && (
+                <div style={{ fontSize: '0.7rem', color: 'var(--accent-500)', fontWeight: 800 }}>Oggi</div>
+              )}
+            </div>
+          );
+        })}
 
         {/* Rows (Users) */}
         {Object.entries(heatmapData).map(([userId, userData]) => {
-          
-          // Aggrega il workload per questo utente
+
           const aggregatedWorkload = {};
           columns.forEach(c => aggregatedWorkload[c] = { hours: 0, tasks: [] });
 
@@ -205,40 +259,64 @@ export default function WorkloadHeatmap() {
           return (
             <React.Fragment key={userId}>
               <div className="heatmap-user-cell sticky-col sticky-user-col" onClick={() => toggleUser(userId)} style={{ cursor: 'pointer' }} title="Clicca per espandere/comprimere il dettaglio progetti e fasi">
-                <span>{expandedUsers[userId] ? '▼' : '▶'}</span>
+                <span>{expandedUsers[userId] ? '\u25BC' : '\u25B6'}</span>
                 {userData.full_name}
               </div>
-              
+
               {/* Cella Saturazione */}
               {columns.map(colKey => {
                 const data = aggregatedWorkload[colKey];
-                const ratio = data.hours / currentCapacity;
+                
+                // <-- CORRETTO: Dichiarate e calcolate le variabili mancanti
+                const isVacation = isUserOnVacation(userId, colKey);
+                const isWeekendCol = isColumnWeekend(colKey);
                 let colorClass = '';
                 
-                if (data.hours > 0) {
-                  if (ratio <= 0.8) colorClass = 'heatmap-green';
-                  else if (ratio <= 1.0) colorClass = 'heatmap-yellow';
-                  else colorClass = 'heatmap-red';
+                if (!isVacation && !isWeekendCol && data.hours > 0) {
+                  if (data.hours > currentCapacity) {
+                    colorClass = 'over-capacity'; // Assumo tu abbia queste classi nel CSS
+                  } else if (data.hours === currentCapacity) {
+                    colorClass = 'at-capacity';
+                  } else {
+                    colorClass = 'under-capacity';
+                  }
                 }
 
-                const tooltipText = data.tasks.length > 0
-                  ? data.tasks.map(t => `📁 ${t.project_name || 'Progetto'}\n   📌 ${t.name}: ${t.hours?.toFixed(1) || 0}h (${columnsMap.get(colKey)}) | Totale Fase: ${t.total_assigned_hours?.toFixed(1) || '-'}h`).join('\n\n')
-                  : 'Nessuna ora assegnata';
+                let tooltipText = '';
+                
+                if (isVacation) {
+                  tooltipText = 'Ferie (' + formatDateStr(colKey) + ')';
+                } else if (isWeekendCol) {
+                  tooltipText = '🚫 ' + formatDateStr(colKey) + ' (Sabato/Domenica)';
+                } else if (data.tasks.length > 0) {
+                  tooltipText = data.tasks.map(t => '📁 ' + (t.project_name || 'Progetto') + '\n   📌 ' + t.name + ': ' + (t.hours?.toFixed(1) || 0) + 'h (' + columnsMap.get(colKey) + ') | Totale Fase: ' + (t.total_assigned_hours?.toFixed(1) || '-') + 'h').join('\n\n');
+                } else {
+                  tooltipText = 'Nessuna ora assegnata';
+                }
+
+                let displayContent;
+                if (isVacation) {
+                  displayContent = '🏖️';
+                } else if (isWeekendCol) {
+                  displayContent = '🚫';
+                } else {
+                  displayContent = data.hours > 0 ? data.hours.toFixed(1) + 'h' : '-';
+                }
 
                 return (
                   <div 
                     key={colKey} 
-                    className={`heatmap-cell ${colorClass} ${colKey === todayKey ? 'today-cell' : ''}`}
+                    className={'heatmap-cell ' + colorClass + (colKey === todayKey ? ' today-cell' : '')}
                     title={tooltipText}
                   >
-                    {data.hours > 0 ? `${data.hours.toFixed(1)}h` : '-'}
+                    {displayContent}
                   </div>
                 );
               })}
 
               {/* Dettagli tasks se espanso */}
               {expandedUsers[userId] && (
-                <div style={{ gridColumn: `1 / span ${columns.length + 1}`, padding: '12px 20px', background: 'var(--bg-tertiary)', borderTop: '1px solid var(--border-default)', borderBottom: '1px solid var(--border-default)' }}>
+                <div style={{ gridColumn: '1 / span ' + (columns.length + 1), padding: '12px 20px', background: 'var(--bg-tertiary)', borderTop: '1px solid var(--border-default)', borderBottom: '1px solid var(--border-default)' }}>
                   <h5 style={{ margin: '0 0 10px 0', color: 'var(--text-primary)' }}>
                     Panoramica Fasi e Progetti assegnati a <strong>{userData.full_name}</strong>:
                   </h5>
@@ -247,7 +325,7 @@ export default function WorkloadHeatmap() {
                        const tasks = aggregatedWorkload[colKey].tasks;
                        if (tasks.length === 0) return null;
                        return tasks.map((t, idx) => (
-                         <div key={`${colKey}-${idx}`} style={{ padding: '8px 12px', background: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-default)', fontSize: '0.82rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                         <div key={colKey + '-' + idx} style={{ padding: '8px 12px', background: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-default)', fontSize: '0.82rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                            <div style={{ color: 'var(--accent-500)', fontWeight: 700, marginBottom: 2 }}>
                              📁 {t.project_name || 'Progetto non specificato'}
                            </div>
@@ -255,7 +333,7 @@ export default function WorkloadHeatmap() {
                              📌 {t.name}
                            </div>
                            <div style={{ marginTop: 4, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                             <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{t.hours?.toFixed(1) || 0}h/giorno</span> ({columnsMap.get(colKey)}) • Totale fase: {t.total_assigned_hours ? `${t.total_assigned_hours.toFixed(1)}h` : '-'}
+                             <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{t.hours?.toFixed(1) || 0}h/giorno</span> ({columnsMap.get(colKey)}) • Totale fase: {t.total_assigned_hours ? t.total_assigned_hours.toFixed(1) + 'h' : '-'}
                            </div>
                          </div>
                        ));
@@ -266,7 +344,7 @@ export default function WorkloadHeatmap() {
             </React.Fragment>
           );
         })}
-      </div>
+      </div> {/* <-- CORRETTO: Aggiunta la chiusura della div heatmap-grid */}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 from typing import List
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, delete
 from app.core.dependencies import get_db, get_current_user
 from app.models.user import User
 from app.models.notification import Notification
@@ -61,6 +61,33 @@ async def mark_all_as_read(
         update(Notification)
         .where(Notification.user_id == current_user.id, Notification.is_read == False)
         .values(is_read=True)
+    )
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.delete("/{notification_id}")
+async def delete_notification(
+    notification_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await db.execute(
+        delete(Notification)
+        .where(Notification.id == notification_id, Notification.user_id == current_user.id)
+    )
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.delete("")
+async def delete_all_notifications(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await db.execute(
+        delete(Notification)
+        .where(Notification.user_id == current_user.id)
     )
     await db.commit()
     return {"status": "ok"}

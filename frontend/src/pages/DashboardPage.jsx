@@ -16,6 +16,7 @@ export default function DashboardPage() {
   const [projectsWithTasks, setProjectsWithTasks] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [myTasksToday, setMyTasksToday] = useState([]);
+  const [vacations, setVacations] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const MONTH_NAMES_IT = [
@@ -51,16 +52,18 @@ export default function DashboardPage() {
     loadData();
   }, []);
 
-  async function loadData() {
+async function loadData() {
     try {
-      const [projRes, notifRes, tasksRes] = await Promise.all([
+      const [projRes, notifRes, tasksRes, vacRes] = await Promise.all([
         api.get('/projects'),
         api.get('/notifications'),
         api.get('/users/me/tasks/today'),
+        api.get('/me/vacations').catch(() => ({ data: [] })),
       ]);
       setProjects(projRes.data);
       setNotifications(notifRes.data);
       setMyTasksToday(tasksRes.data);
+      setVacations(vacRes.data || []);
 
       Promise.all(
         projRes.data.map(async (p) => {
@@ -76,6 +79,22 @@ export default function DashboardPage() {
       });
     } catch { /* ignore */ }
     finally { setLoading(false); }
+  }
+
+  async function deleteNotification(id) {
+    try {
+      await api.delete(`/notifications/${id}`);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+      window.dispatchEvent(new Event('notifications-changed'));
+    } catch { /* ignore */ }
+  }
+
+  async function deleteAllNotifications() {
+    try {
+      await api.delete('/notifications');
+      setNotifications([]);
+      window.dispatchEvent(new Event('notifications-changed'));
+    } catch { /* ignore */ }
   }
 
   const stats = {
@@ -171,12 +190,13 @@ export default function DashboardPage() {
             </button>
           </div>
         </div>
-        <TimelineView 
+<TimelineView 
           projects={timelineProjects}
           currYear={timelineYear}
           currMonth={timelineMonth}
           filterWorker={user?.username}
           onSelectProject={(proj) => navigate(`/projects/${proj.id}`)}
+          vacations={vacations}
         />
       </div>
 
@@ -265,7 +285,18 @@ export default function DashboardPage() {
         </div>
 
         <div className="card dashboard-section">
-          <h2>Notifiche</h2>
+          <div className="notification-header">
+            <h2>Notifiche</h2>
+            {notifications.length > 0 && (
+              <button
+                className="btn btn-ghost btn-sm notification-delete-all"
+                onClick={deleteAllNotifications}
+                title="Elimina tutte le notifiche"
+              >
+                🗑️ Elimina tutte
+              </button>
+            )}
+          </div>
           {notifications.length === 0 ? (
             <div className="empty-state">
               <div className="empty-state-icon">🔔</div>
@@ -283,6 +314,13 @@ export default function DashboardPage() {
                     <span className="notification-title">{n.title}</span>
                     {n.message && <span className="notification-message">{n.message}</span>}
                   </div>
+                  <button
+                    className="notification-delete-btn"
+                    onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}
+                    title="Elimina notifica"
+                  >
+                    ✕
+                  </button>
                 </div>
               ))}
             </div>

@@ -4,8 +4,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.task import Task
 from app.models.link import Link
+from app.models.vacation import Vacation
+from app.models.notification import Notification, NotificationType
+from app.models.user import User
+from datetime import timedelta, date
 from app.schemas.task import TaskCreate, TaskUpdate, TaskOut, LinkCreate, LinkOut, GanttData
 from fastapi import HTTPException, status
+
+
+def find_vacation_conflicts(task_start, task_end, vacations):
+    if not vacations:
+        return []
+    conflict_days = 0
+    current = task_start
+    while current <= task_end:
+        if current.weekday() < 5:
+            for vacation in vacations:
+                if vacation.get("start_date") and vacation.get("end_date"):
+                    start = vacation["start_date"]
+                    end = vacation["end_date"]
+                    if start <= current <= end:
+                        conflict_days += 1
+                        break
+        current = current + timedelta(days=1)
+    return [{"date": task_start, "workdays": conflict_days}] if conflict_days else []
 
 
 def _parse_json(val, default):
@@ -181,9 +203,62 @@ async def create_task(db: AsyncSession, project_id: str, data: TaskCreate, user=
     )
     _compute_task_progress_and_completed(task, data.model_dump())
 
+    # Controllo ferie per eventuali addetti assegnati
+    try:
+        workers_list = data.workers or []
+    except Exception:
+        workers_list = []
+
+    total_shift_days = 0
+    for worker_name in workers_list:
+        u_res = await db.execute(select(User).where(User.username == worker_name))
+        worker_user = u_res.scalar_one_or_none()
+        if not worker_user:
+            continue
+        vac_res = await db.execute(select(Vacation).where(Vacation.user_id == worker_user.id))
+        vacs = vac_res.scalars().all()
+        vacation_payloads = [{"start_date": v.start_date, "end_date": v.end_date} for v in vacs]
+        conflicts = find_vacation_conflicts(task.start_date, task.end_date or task.start_date, vacation_payloads)
+        total_shift_days = max(total_shift_days, conflicts[0]["workdays"] if conflicts else 0)
+
+    if total_shift_days > 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assegnazione bloccata: esistono ferie nel periodo della fase")
+
     db.add(task)
     await db.commit()
     await db.refresh(task)
+
+    # Notifiche per ferie sovrapposte
+    if total_shift_days > 0:
+        from app.models.project import Project
+        proj_res = await db.execute(select(Project).where(Project.id == project_id))
+        project = proj_res.scalar_one_or_none()
+        for worker_name in (data.workers or []):
+            u_res = await db.execute(select(User).where(User.username == worker_name))
+            worker_user = u_res.scalar_one_or_none()
+            if not worker_user:
+                continue
+            note = Notification(
+                user_id=worker_user.id,
+                title="Ferie rilevate - fase spostata",
+                message=f"La fase '{task.text}' è stata spostata di {total_shift_days} giorni a causa di ferie sovrapposte.",
+                type=NotificationType.ASSIGNMENT,
+                project_id=project.id if project else None,
+            )
+            db.add(note)
+        if project:
+            resp_id = project.responsible_id or project.owner_id
+            if resp_id:
+                note = Notification(
+                    user_id=resp_id,
+                    title="Fase spostata per ferie",
+                    message=f"La fase '{task.text}' nel progetto '{project.name}' è stata spostata di {total_shift_days} giorni.",
+                    type=NotificationType.UPDATE,
+                    project_id=project.id,
+                )
+                db.add(note)
+        await db.commit()
+
     return _task_to_out(task)
 
 
@@ -216,8 +291,13 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
                 if not is_worker:
                     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Non hai i permessi per modificare questa fase")
                 update_keys = set(data.model_dump(exclude_unset=True).keys())
-                if update_keys and update_keys != {"actual_hours"}:
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="In modalità sola lettura puoi aggiornare solo le ore consuntivate (actual_hours)")
+                allowed_keys = {"actual_hours", "end_date", "duration"}
+                if update_keys and not update_keys.issubset(allowed_keys):
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="In modalità consuntivazione puoi aggiornare solo le ore consuntivate o prolungare/ridurre i giorni (actual_hours, end_date, duration)")
+
+    old_start = task.start_date
+    old_end = task.end_date
+    old_duration = task.duration
 
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -227,6 +307,112 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
             value = json.dumps(value)
         setattr(task, key, value)
     _compute_task_progress_and_completed(task, update_data)
+    # Se cambiano workers o date, ricalcoliamo impatti ferie
+    try:
+        workers_list = json.loads(task.workers) if task.workers else []
+    except Exception:
+        workers_list = []
+
+    total_shift_days = 0
+    for worker_name in workers_list:
+        u_res = await db.execute(select(User).where(User.username == worker_name))
+        worker_user = u_res.scalar_one_or_none()
+        if not worker_user:
+            continue
+        vac_res = await db.execute(select(Vacation).where(Vacation.user_id == worker_user.id))
+        vacs = vac_res.scalars().all()
+        vacation_payloads = [{"start_date": v.start_date, "end_date": v.end_date} for v in vacs]
+        conflicts = find_vacation_conflicts(task.start_date, task.end_date or task.start_date, vacation_payloads)
+        total_shift_days = max(total_shift_days, conflicts[0]["workdays"] if conflicts else 0)
+
+    if total_shift_days > 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assegnazione bloccata: esistono ferie nel periodo della fase")
+
+    # Propagazione a catena quando la data della fase viene modificata esplicitamente
+    if "start_date" in update_data or "end_date" in update_data:
+        async def propagate_shift(current_task, shift_days, visited=None):
+            if shift_days <= 0:
+                return
+            if visited is None:
+                visited = set()
+            if current_task.id in visited:
+                return
+            visited.add(current_task.id)
+            current_task.start_date = current_task.start_date + timedelta(days=shift_days) if current_task.start_date else current_task.start_date
+            if current_task.end_date:
+                current_task.end_date = current_task.end_date + timedelta(days=shift_days)
+            if getattr(current_task, "duration", None) is not None:
+                current_task.duration = (current_task.duration or 0) + shift_days
+            await db.flush()
+            links_result = await db.execute(select(Link).where(Link.source == current_task.id))
+            for link in links_result.scalars().all():
+                child_res = await db.execute(select(Task).where(Task.id == link.target))
+                child = child_res.scalar_one_or_none()
+                if child and child.id not in visited:
+                    await propagate_shift(child, shift_days, visited)
+
+        delta_days = 0
+        if "start_date" in update_data and old_start and task.start_date:
+            delta_days = (task.start_date - old_start).days
+        elif "end_date" in update_data and old_end and task.end_date:
+            delta_days = (task.end_date - old_end).days
+        if delta_days != 0:
+            await propagate_shift(task, delta_days)
+
+        # Se ci sono ore consuntivate nella finestra di ferie, segnala criticità
+        try:
+            actual_map = _parse_json(task.actual_hours, {})
+        except Exception:
+            actual_map = {}
+        had_hours_in_vac = False
+        for d in actual_map.keys():
+            try:
+                d_date = date.fromisoformat(d)
+            except Exception:
+                continue
+            for worker_name in workers_list:
+                u_res = await db.execute(select(User).where(User.username == worker_name))
+                worker_user = u_res.scalar_one_or_none()
+                if not worker_user:
+                    continue
+                vac_res = await db.execute(select(Vacation).where(Vacation.user_id == worker_user.id))
+                for v in vac_res.scalars().all():
+                    if v.start_date <= d_date <= v.end_date:
+                        had_hours_in_vac = True
+                        break
+                if had_hours_in_vac:
+                    break
+
+        # Notifiche
+        from app.models.project import Project
+        proj_res = await db.execute(select(Project).where(Project.id == task.project_id))
+        project = proj_res.scalar_one_or_none()
+        for worker_name in workers_list:
+            u_res = await db.execute(select(User).where(User.username == worker_name))
+            worker_user = u_res.scalar_one_or_none()
+            if not worker_user:
+                continue
+            note = Notification(
+                user_id=worker_user.id,
+                title="Ferie rilevate - fase spostata",
+                message=f"La fase '{task.text}' è stata spostata di {total_shift_days} giorni a causa di ferie sovrapposte.",
+                type=NotificationType.ASSIGNMENT,
+                project_id=project.id if project else None,
+            )
+            db.add(note)
+
+        if had_hours_in_vac and project:
+            resp_id = project.responsible_id or project.owner_id
+            if resp_id:
+                note = Notification(
+                    user_id=resp_id,
+                    title="Criticità: ore registrate in ferie",
+                    message=f"La fase '{task.text}' ha ore registrate durante le ferie: durata estesa di {total_shift_days} giorni.",
+                    type=NotificationType.DEADLINE,
+                    project_id=project.id,
+                )
+                db.add(note)
+
     await db.commit()
     await db.refresh(task)
     return _task_to_out(task)

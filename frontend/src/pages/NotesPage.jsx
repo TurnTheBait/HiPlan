@@ -467,7 +467,7 @@ export default function NotesPage() {
       <main className="notes-editor-container">
         {!activeNote ? (
           <div className="notes-empty-selection">
-            <span style={{ fontSize: '3rem', marginBottom: '16px' }}>▤</span>
+            <span style={{ fontSize: '3rem', marginBottom: '16px' }}>📝</span>
             <h3 style={{ fontSize: '1.25rem', color: 'var(--text-primary)', marginBottom: '8px' }}>Seleziona o crea un blocco note</h3>
             <p style={{ maxWidth: 400, marginBottom: '24px', lineHeight: 1.5 }}>
               Scrivi appunti, specifiche di commessa o check-list con formattazione visuale in stile Notion. Puoi decidere in qualsiasi momento se mantenere il file privato o condividerlo con il resto del team.

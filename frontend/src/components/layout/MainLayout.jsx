@@ -50,7 +50,11 @@ export default function MainLayout() {
   useEffect(() => {
     fetchUnread();
     const interval = setInterval(fetchUnread, 30000);
-    return () => clearInterval(interval);
+    window.addEventListener('notifications-changed', fetchUnread);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('notifications-changed', fetchUnread);
+    };
   }, []);
 
   async function fetchUnread() {
@@ -147,7 +151,7 @@ export default function MainLayout() {
             {!collapsed && <span>{themeLabel}</span>}
           </button>
 
-          <div className="sidebar-user">
+          <div className="sidebar-user" style={{ cursor: 'pointer' }} onClick={() => navigate('/me')} title="Apri il mio profilo">
             <div className="sidebar-avatar">{user?.username?.[0]?.toUpperCase() || '?'}</div>
             {!collapsed && (
               <div className="sidebar-user-info">
