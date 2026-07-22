@@ -431,11 +431,13 @@ export default function ProjectDetailPage() {
       openOreModalForTask(task);
       return;
     }
+    const realTask = (ganttData && Array.isArray(ganttData.tasks) ? ganttData.tasks.find(t => String(t.id) === String(task.id)) : null) || task;
+
     fetchPhaseTemplates();
     const available = getAvailableTemplates();
-    const isPredefined = available.some(t => t.name === task.text) || PREDEFINED_PHASES.includes(task.text);
+    const isPredefined = available.some(t => t.name === realTask.text) || PREDEFINED_PHASES.includes(realTask.text);
 
-    setEditingTask(task);
+    setEditingTask(realTask);
     setTaskModalTab('generale');
     setShowPhaseDropdown(false);
 
@@ -447,29 +449,32 @@ export default function ProjectDetailPage() {
       return String(d).split(' ')[0].split('T')[0];
     };
 
-    const s = safeDate(task.start_date);
-    const e = safeDate(task.end_date);
+    const s = safeDate(realTask.start_date);
+    const e = safeDate(realTask.end_date);
     const diff = countWorkingDays(s, e);
-    const taskDur = Number(task.duration) || diff;
-    const taskPlan = Number(task.planned_hours) || (taskDur * 8.0);
-    const mode = task.budget_mode || task.budgetMode || (Math.abs(taskPlan - taskDur * 8.0) > 0.1 ? 'start_days_hours' : 'start_days');
+    const taskDur = Number(realTask.duration) || diff;
+    const taskPlan = Number(realTask.planned_hours) || (taskDur * 8.0);
+    const mode = realTask.budget_mode || realTask.budgetMode || (Math.abs(taskPlan - taskDur * 8.0) > 0.1 ? 'start_days_hours' : 'start_days');
     setBudgetMode(mode);
 
+    const isComp = Number(realTask.completed) === 1 || Number(task.completed) === 1 || isTaskCompleted(realTask) || isTaskCompleted(task);
+    const compVal = isComp ? 1 : (Number(realTask.completed) === -1 || Number(task.completed) === -1 ? -1 : 0);
+
     setTaskForm({
-      taskType: task.type === 'milestone' || Number(task.duration) === 0 ? 'milestone' : 'task',
-      faseSel: isPredefined ? task.text : '__custom__',
-      customText: isPredefined ? '' : task.text,
-      color: getTaskColor(task),
+      taskType: realTask.type === 'milestone' || Number(realTask.duration) === 0 ? 'milestone' : 'task',
+      faseSel: isPredefined ? realTask.text : '__custom__',
+      customText: isPredefined ? '' : realTask.text,
+      color: getTaskColor(realTask),
       start_date: s,
       end_date: e,
       duration_days: taskDur,
       planned_hours: taskPlan,
       budgetMode: mode,
-      workers: Array.isArray(task.workers) ? task.workers : [],
-      worker_hours: typeof task.worker_hours === 'object' ? task.worker_hours : {},
+      workers: Array.isArray(realTask.workers) ? realTask.workers : [],
+      worker_hours: typeof realTask.worker_hours === 'object' ? realTask.worker_hours : {},
       customWorker: '',
-      department: task.department || (user?.department && user.department !== 'admin' ? user.department : 'ufficio_tecnico'),
-      completed: isTaskCompleted(task) ? 1 : (Number(task.completed) === -1 ? -1 : 0),
+      department: realTask.department || (user?.department && user.department !== 'admin' ? user.department : 'ufficio_tecnico'),
+      completed: compVal,
     });
     setShowTaskModal(true);
   }
@@ -636,11 +641,18 @@ export default function ProjectDetailPage() {
 
     try {
       if (editingTask) {
-        await api.put(`/projects/${id}/tasks/${editingTask.id}`, payload);
+        const res = await api.put(`/projects/${id}/tasks/${editingTask.id}`, payload);
         toast.success('Fase modificata con successo!');
+        if (res.data && ganttData && Array.isArray(ganttData.tasks)) {
+          const updatedTasks = ganttData.tasks.map(t => String(t.id) === String(editingTask.id) ? res.data : t);
+          setGanttData({ ...ganttData, tasks: updatedTasks });
+        }
       } else {
-        await api.post(`/projects/${id}/tasks`, payload);
+        const res = await api.post(`/projects/${id}/tasks`, payload);
         toast.success('Nuova fase aggiunta!');
+        if (res.data && ganttData && Array.isArray(ganttData.tasks)) {
+          setGanttData({ ...ganttData, tasks: [...ganttData.tasks, res.data] });
+        }
       }
 
       // Se l'utente ha inserito una fase personalizzata o nuova, aggiungiamola automaticamente alle fasi suggerite per quel reparto
