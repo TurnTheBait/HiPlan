@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import get_db, get_current_user
@@ -11,10 +11,12 @@ router = APIRouter(prefix="/api/projects/{project_id}/export", tags=["export"])
 @router.get("/excel")
 async def export_excel(
     project_id: str,
+    sections: str = Query("tasks,hours", description="Sezioni da includere: tasks, hours, gantt (separate da virgola)"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    buffer = await export_service.export_excel(db, project_id)
+    sections_list = [s.strip() for s in sections.split(",") if s.strip()]
+    buffer = await export_service.export_excel(db, project_id, sections=sections_list)
     return StreamingResponse(
         buffer,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -25,10 +27,12 @@ async def export_excel(
 @router.get("/pdf")
 async def export_pdf(
     project_id: str,
+    sections: str = Query("tasks,hours", description="Sezioni da includere: tasks, hours, gantt (separate da virgola)"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    buffer = await export_service.export_pdf(db, project_id)
+    sections_list = [s.strip() for s in sections.split(",") if s.strip()]
+    buffer = await export_service.export_pdf(db, project_id, sections=sections_list)
     return StreamingResponse(
         buffer,
         media_type="application/pdf",

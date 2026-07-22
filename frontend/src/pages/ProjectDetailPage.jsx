@@ -55,6 +55,15 @@ export default function ProjectDetailPage() {
   });
   const [showTableColumnsMenu, setShowTableColumnsMenu] = useState(false);
 
+  // STATO PER MENU EXPORT
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportSections, setExportSections] = useState({
+    tasks: true,
+    hours: true,
+    gantt: true,
+  });
+  const [exportFormat, setExportFormat] = useState('pdf');
+
   // STATO PER COLONNE TABELLA ORE
   const [oreVisibleColumns, setOreVisibleColumns] = useState(() => {
     const saved = localStorage.getItem('oreVisibleColumns');
@@ -719,15 +728,27 @@ export default function ProjectDetailPage() {
   }
 
   async function handleExport(type) {
+    const selectedSections = Object.entries(exportSections)
+      .filter(([_, v]) => v)
+      .map(([k]) => k)
+      .join(',');
+    if (!selectedSections) {
+      toast.error('Seleziona almeno una sezione da esportare');
+      return;
+    }
     try {
-      const response = await api.get(`/projects/${id}/export/${type}`, { responseType: 'blob' });
+      const response = await api.get(`/projects/${id}/export/${type}`, {
+        responseType: 'blob',
+        params: { sections: selectedSections }
+      });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const a = document.createElement('a');
       a.href = url;
       a.download = `${project.code || project.name}.${type === 'excel' ? 'xlsx' : 'pdf'}`;
       a.click();
       window.URL.revokeObjectURL(url);
-      toast.success(`Export ${type.toUpperCase()} completato!`);
+      toast.success(`Export ${type.toUpperCase()} completato (${selectedSections.replace(/,/g, ', ')})!`);
+      setShowExportMenu(false);
     } catch {
       toast.error(`Errore export ${type}`);
     }
@@ -920,13 +941,110 @@ export default function ProjectDetailPage() {
               ))}
             </div>
           )}
-          <div className="export-buttons">
-            <button className="btn btn-secondary" onClick={() => handleExport('pdf')} title="Esporta PDF">
-              📄 PDF
+          <div className="export-buttons" style={{ position: 'relative' }}>
+            <button
+              className="btn btn-primary"
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              title="Esporta commessa"
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              📥 Stampa / Export ▾
             </button>
-            <button className="btn btn-secondary" onClick={() => handleExport('excel')} title="Esporta Excel">
-              📊 Excel
-            </button>
+
+            {showExportMenu && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, marginTop: 6,
+                background: 'var(--bg-card)', border: '1px solid var(--border-default)',
+                borderRadius: 10, padding: 16, zIndex: 300, minWidth: 280,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.2)', textAlign: 'left'
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Sezioni da esportare:
+                </div>
+                {[
+                  { id: 'tasks', label: '📋 Fasi', desc: 'Tabella fasi, date, addetti, budget ore' },
+                  { id: 'hours', label: '⏱ Consuntivazione Ore', desc: 'Ore previste vs effettive, saldo' },
+                  { id: 'gantt', label: '📊 Diagramma Gantt', desc: 'Timeline visiva delle fasi' },
+                ].map(sec => (
+                  <label key={sec.id} style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 10,
+                    padding: '8px 0', cursor: 'pointer', fontSize: 13,
+                    color: 'var(--text-primary)', borderBottom: '1px solid var(--border-subtle)'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={exportSections[sec.id]}
+                      onChange={(e) => setExportSections(prev => ({ ...prev, [sec.id]: e.target.checked }))}
+                      style={{ marginTop: 2, cursor: 'pointer' }}
+                    />
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{sec.label}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{sec.desc}</div>
+                    </div>
+                  </label>
+                ))}
+
+                <div style={{ borderTop: '1px solid var(--border-default)', marginTop: 10, paddingTop: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Formato:
+                  </div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <label style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                      background: exportFormat === 'pdf' ? 'rgba(239, 68, 68, 0.15)' : 'var(--bg-tertiary)',
+                      border: exportFormat === 'pdf' ? '2px solid #ef4444' : '1px solid var(--border-default)',
+                      color: exportFormat === 'pdf' ? '#ef4444' : 'var(--text-secondary)',
+                    }}>
+                      <input
+                        type="radio"
+                        name="exportFormat"
+                        value="pdf"
+                        checked={exportFormat === 'pdf'}
+                        onChange={() => setExportFormat('pdf')}
+                        style={{ display: 'none' }}
+                      />
+                      📄 PDF
+                    </label>
+                    <label style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                      background: exportFormat === 'excel' ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-tertiary)',
+                      border: exportFormat === 'excel' ? '2px solid #10b981' : '1px solid var(--border-default)',
+                      color: exportFormat === 'excel' ? '#10b981' : 'var(--text-secondary)',
+                    }}>
+                      <input
+                        type="radio"
+                        name="exportFormat"
+                        value="excel"
+                        checked={exportFormat === 'excel'}
+                        onChange={() => setExportFormat('excel')}
+                        style={{ display: 'none' }}
+                      />
+                      📊 Excel
+                    </label>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ flex: 1 }}
+                    onClick={() => setShowExportMenu(false)}
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    style={{ flex: 1 }}
+                    onClick={() => handleExport(exportFormat)}
+                    disabled={!Object.values(exportSections).some(v => v)}
+                  >
+                    Export {exportFormat.toUpperCase()}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

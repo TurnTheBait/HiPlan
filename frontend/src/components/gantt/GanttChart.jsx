@@ -392,7 +392,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       }
     });
 
-    gantt.attachEvent("onBeforeLinkDelete", (id, item) => {
+gantt.attachEvent("onBeforeLinkDelete", (id, item) => {
       if (!window.confirm("Confermi l'eliminazione di questa dipendenza tra fasi?")) {
         return false;
       }

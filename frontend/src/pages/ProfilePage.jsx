@@ -116,13 +116,6 @@ export default function ProfilePage() {
             <div className="stat-label">Ruolo</div>
           </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon">🏖️</div>
-          <div className="stat-content">
-            <div className="stat-value">{totalVacationDays}</div>
-            <div className="stat-label">Giorni Ferie</div>
-          </div>
-        </div>
       </div>
 
       {/* Form + Lista Ferie */}
