@@ -364,6 +364,8 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
         # Se ci sono ore consuntivate nella finestra di ferie, segnala criticità
         try:
             actual_map = _parse_json(task.actual_hours, {})
+            if not isinstance(actual_map, dict):
+                actual_map = {}
         except Exception:
             actual_map = {}
         had_hours_in_vac = False
