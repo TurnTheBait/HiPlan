@@ -232,19 +232,23 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       return classes.join(" ");
     };
 
-    // Evidenziazione delle celle di intestazione della scala temporale per sabato, domenica, festivi e oggi
+    // Evidenziazione delle celle di intestazione della scala temporale (esclusivamente per la riga dei singoli giorni)
     gantt.templates.scale_cell_class = function (date, scale) {
       const today = new Date();
-      const scales = gantt.config.scales || [];
-      const bottomScale = scales.length > 0 ? scales[scales.length - 1] : { unit: "day", step: 1 };
-      const unit = (scale && scale.unit) ? scale.unit : (bottomScale.unit || "day");
-      const step = (scale && scale.step) ? scale.step : (bottomScale.step || 1);
-      const cellEnd = getCellEndDate(date, unit, step);
+      // Se la scala corrente non è quella giornaliera (es. mese, settimana, anno), non evidenziare mai come weekend/festivo
+      if (scale && scale.unit && scale.unit !== "day") {
+        const cellEnd = getCellEndDate(date, scale.unit, scale.step || 1);
+        if (date <= today && today < cellEnd) {
+          return "gantt_today_scale_cell";
+        }
+        return "";
+      }
 
       const classes = [];
-      if (unit === "day" && isWeekendOrHoliday(date)) {
+      if (isWeekendOrHoliday(date)) {
         classes.push("gantt_weekend_scale_cell");
       }
+      const cellEnd = gantt.date.add(date, 1, "day");
       if (date <= today && today < cellEnd) {
         classes.push("gantt_today_scale_cell");
       }
