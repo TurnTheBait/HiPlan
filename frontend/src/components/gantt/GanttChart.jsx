@@ -3,6 +3,7 @@ import { gantt } from 'dhtmlx-gantt';
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css';
 import { getTaskColor } from '../../utils/phaseColors';
 import { isTaskCompleted } from '../../utils/taskCompletion';
+import { isWeekendOrHoliday } from '../../utils/workingDays';
 import './GanttChart.css';
 
 const parseDateSafe = (d) => {
@@ -21,56 +22,7 @@ const parseDateSafe = (d) => {
   return isNaN(dt) ? null : dt;
 };
 
-function getPasquettaDate(year) {
-  const a = year % 19;
-  const b = Math.floor(year / 100);
-  const c = year % 100;
-  const d = Math.floor(b / 4);
-  const e = b % 4;
-  const f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3);
-  const h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4);
-  const k = c % 4;
-  const l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const month = Math.floor((h + l - 7 * m + 114) / 31) - 1;
-  const day = ((h + l - 7 * m + 114) % 31) + 1;
-  const pasqua = new Date(year, month, day);
-  return new Date(pasqua.getTime() + 86400000);
-}
-
-export function isWeekendOrHoliday(date) {
-  if (!date || !(date instanceof Date) || isNaN(date)) return false;
-  const dayOfWeek = date.getDay();
-  if (dayOfWeek === 0 || dayOfWeek === 6) return true;
-
-  const d = date.getDate();
-  const m = date.getMonth();
-  const y = date.getFullYear();
-
-  if (
-    (d === 1 && m === 0) ||   // 1 Gennaio - Capodanno
-    (d === 6 && m === 0) ||   // 6 Gennaio - Epifania
-    (d === 25 && m === 3) ||  // 25 Aprile - Liberazione
-    (d === 1 && m === 4) ||   // 1 Maggio - Festa dei Lavoratori
-    (d === 2 && m === 5) ||   // 2 Giugno - Festa della Repubblica
-    (d === 15 && m === 7) ||  // 15 Agosto - Ferragosto
-    (d === 1 && m === 10) ||  // 1 Novembre - Tutti i Santi
-    (d === 8 && m === 11) ||  // 8 Dicembre - Immacolata
-    (d === 25 && m === 11) || // 25 Dicembre - Natale
-    (d === 26 && m === 11)    // 26 Dicembre - Santo Stefano
-  ) {
-    return true;
-  }
-
-  const pasquetta = getPasquettaDate(y);
-  if (d === pasquetta.getDate() && m === pasquetta.getMonth()) {
-    return true;
-  }
-
-  return false;
-}
+export { isWeekendOrHoliday };
 
 export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onNewTask, visibleColumns, readOnly, projectStartDate, projectEndDate }) {
 
@@ -244,6 +196,13 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
 
     // Abilita l'ereditarietà della classe CSS su tutte le sottoscale dell'header
     gantt.config.inherit_scale_class = true;
+
+    // Configurazione orari e giorni lavorativi (esclude sabati, domeniche e festivi)
+    gantt.config.work_time = true;
+    gantt.config.correct_work_time = true;
+    gantt.config.is_work_time = function (date) {
+      return !isWeekendOrHoliday(date);
+    };
 
     // Funzione helper per calcolare la fine esatta di una cella temporale (giorno, settimana, mese, trimestre, anno)
     function getCellEndDate(date, unit, step = 1) {

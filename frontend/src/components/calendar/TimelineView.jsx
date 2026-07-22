@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { getTaskColor } from '../../utils/phaseColors';
 import { isTaskCompleted } from '../../utils/taskCompletion';
+import { isWeekendOrHoliday } from '../../utils/workingDays';
 
 const STATUS_LABELS_IT = {
   planning: 'In pianificazione',
@@ -31,7 +32,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
           {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
             const dayDate = new Date(currYear, currMonth, d);
             const dayOfWeek = dayDate.getDay();
-            const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
+            const isWknd = isWeekendOrHoliday(dayDate);
             const monthStr = String(currMonth + 1).padStart(2, '0');
             const dayStr = String(d).padStart(2, '0');
             const isToday = `${currYear}-${monthStr}-${dayStr}` === today.toISOString().substring(0, 10);
@@ -76,7 +77,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
               <div className="timeline-row-grid">
                 {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
                   const dayDate = new Date(currYear, currMonth, d);
-                  const isWk = dayDate.getDay() === 0 || dayDate.getDay() === 6;
+                  const isWk = isWeekendOrHoliday(dayDate);
                   const monthStr = String(currMonth + 1).padStart(2, '0');
                   const dayStr = String(d).padStart(2, '0');
                   const isToday = `${currYear}-${monthStr}-${dayStr}` === today.toISOString().substring(0, 10);
@@ -126,7 +127,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                   <div className="timeline-row-grid">
                     {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
                       const dayDate = new Date(currYear, currMonth, d);
-                      const isWk = dayDate.getDay() === 0 || dayDate.getDay() === 6;
+                      const isWk = isWeekendOrHoliday(dayDate);
                       return <div key={d} className={`timeline-cell ${isWk ? 'weekend' : ''}`} />;
                     })}
                   </div>
@@ -184,7 +185,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                   <div className="timeline-row-grid">
                     {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
                       const dayDate = new Date(currYear, currMonth, d);
-                      const isWk = dayDate.getDay() === 0 || dayDate.getDay() === 6;
+                      const isWk = isWeekendOrHoliday(dayDate);
                       const monthStr = String(currMonth + 1).padStart(2, '0');
                       const dayStr = String(d).padStart(2, '0');
                       const isToday = `${currYear}-${monthStr}-${dayStr}` === today.toISOString().substring(0, 10);
@@ -238,7 +239,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                       <div className="timeline-row-grid" style={{ height: 44 }}>
                         {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
                           const dayDate = new Date(currYear, currMonth, d);
-                          const isWk = dayDate.getDay() === 0 || dayDate.getDay() === 6;
+                          const isWk = isWeekendOrHoliday(dayDate);
                           const monthStr = String(currMonth + 1).padStart(2, '0');
                           const dayStr = String(d).padStart(2, '0');
                           const isToday = `${currYear}-${monthStr}-${dayStr}` === today.toISOString().substring(0, 10);

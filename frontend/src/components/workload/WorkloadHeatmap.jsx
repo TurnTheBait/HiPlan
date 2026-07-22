@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import './WorkloadHeatmap.css';
-import { isWeekendOrHoliday } from '../gantt/GanttChart';
+import { isWeekendOrHoliday } from '../../utils/workingDays';
 
 export default function WorkloadHeatmap() {
   const { user } = useAuth();

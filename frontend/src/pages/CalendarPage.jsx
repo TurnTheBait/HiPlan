@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { getTaskColor } from '../utils/phaseColors';
+import { isWeekendOrHoliday } from '../utils/workingDays';
 import TimelineView from '../components/calendar/TimelineView';
 import './CalendarPage.css';
 
@@ -354,11 +355,11 @@ export default function CalendarPage() {
 
           <div className="calendar-days-grid">
             {calendarCells.map((cell, idx) => {
-              const isWeekend = idx % 7 >= 5;
+              const isWeekendOrFestivo = cell.dateStr ? isWeekendOrHoliday(cell.dateStr) : (idx % 7 >= 5);
               return (
                 <div
                   key={idx}
-                  className={`calendar-day-cell ${cell.isOtherMonth ? 'other-month' : ''} ${isWeekend ? 'weekend-cell' : ''} ${cell.isToday ? 'today-cell' : ''}`}
+                  className={`calendar-day-cell ${cell.isOtherMonth ? 'other-month' : ''} ${isWeekendOrFestivo ? 'weekend-cell' : ''} ${cell.isToday ? 'today-cell' : ''}`}
                   onClick={() => {
                     if (!cell.isOtherMonth && cell.projectsList.length > 0) {
                       setSelectedDayProjects({
