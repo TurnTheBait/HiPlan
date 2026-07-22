@@ -1,6 +1,8 @@
 import json
 from typing import List, Optional
+# pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
+# pyrefly: ignore [missing-import]
 from sqlalchemy import select
 from app.models.task import Task
 from app.models.link import Link
@@ -9,6 +11,7 @@ from app.models.notification import Notification, NotificationType
 from app.models.user import User
 from datetime import timedelta, date
 from app.schemas.task import TaskCreate, TaskUpdate, TaskOut, LinkCreate, LinkOut, GanttData
+# pyrefly: ignore [missing-import]
 from fastapi import HTTPException, status
 
 
@@ -163,6 +166,7 @@ async def _check_task_manage_permissions(db: AsyncSession, project_id: str, user
         return
     from app.models.project import Project
     from app.models.user import UserRole
+    # pyrefly: ignore [missing-import]
     from sqlalchemy.orm import selectinload
     proj_res = await db.execute(select(Project).options(selectinload(Project.responsible)).where(Project.id == project_id))
     project = proj_res.scalar_one_or_none()
@@ -273,6 +277,7 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
     if user:
         from app.models.project import Project
         from app.models.user import UserRole
+        # pyrefly: ignore [missing-import]
         from sqlalchemy.orm import selectinload
         proj_res = await db.execute(select(Project).options(selectinload(Project.responsible)).where(Project.id == task.project_id))
         project = proj_res.scalar_one_or_none()
@@ -434,6 +439,7 @@ async def delete_task(db: AsyncSession, task_id: str, user=None):
     await db.execute(
         select(Link).where((Link.source == task_id) | (Link.target == task_id))
     )
+    # pyrefly: ignore [missing-import]
     from sqlalchemy import delete as sql_delete
     await db.execute(sql_delete(Link).where((Link.source == task_id) | (Link.target == task_id)))
 
