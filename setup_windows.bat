@@ -16,9 +16,9 @@ call venv\Scripts\activate.bat
 
 echo.
 echo [2/3] Installazione dipendenze Python e Inizializzazione Database...
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-python seed.py
+venv\Scripts\python.exe -m pip install --upgrade pip
+venv\Scripts\python.exe -m pip install -r requirements.txt
+venv\Scripts\python.exe seed.py
 
 echo.
 echo [3/3] Installazione dipendenze Frontend (Node.js)...
