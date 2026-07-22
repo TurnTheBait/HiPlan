@@ -332,7 +332,14 @@ export default function DashboardPage() {
                     {n.type === 'assignment' ? '👤' : n.type === 'deadline' ? '⏰' : '📝'}
                   </span>
                   <div className="notification-content">
-                    <span className="notification-title">{n.title}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                      <span className="notification-title">{n.title}</span>
+                      {n.created_at && (
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
+                          {new Date(n.created_at).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
                     {n.message && <span className="notification-message">{n.message}</span>}
                   </div>
                   <button
