@@ -56,7 +56,7 @@ export default function DashboardPage() {
     loadData();
   }, []);
 
-async function loadData() {
+  async function loadData() {
     try {
       const [projRes, notifRes, tasksRes, vacRes, recoveryRes] = await Promise.all([
         api.get('/projects'),
@@ -211,7 +211,7 @@ async function loadData() {
             </button>
           </div>
         </div>
-<TimelineView 
+        <TimelineView
           projects={timelineProjects}
           currYear={timelineYear}
           currMonth={timelineMonth}
@@ -374,7 +374,7 @@ async function loadData() {
                       <div style={{ fontWeight: 700 }}>📋 {item.task_name}</div>
                       <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Progetto: {item.project_name}</div>
                       <div style={{ color: '#6b7280', fontSize: '0.8rem', marginTop: 3 }}>
-                        Ferie: {item.vacation_start} → {item.vacation_end} &middot; {item.vacation_days?.length || 0} gg lavorativi sovrapposti
+                        {item.vacation_days?.length || 0} gg lavorativi sovrapposti
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -393,8 +393,8 @@ async function loadData() {
                           color: '#6b7280', transition: 'all 0.15s',
                           display: 'flex', alignItems: 'center'
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor='#ef4444'; e.currentTarget.style.color='#ef4444'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor='#e5e7eb'; e.currentTarget.style.color='#6b7280'; }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.color = '#6b7280'; }}
                       >
                         🗑️
                       </button>

@@ -10,7 +10,6 @@ export default function ProjectsPage() {
   const { user } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
-  const fileInputRef = useRef(null);
   const [projects, setProjects] = useState([]);
   const [usersList, setUsersList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,7 +30,7 @@ export default function ProjectsPage() {
     try {
       const { data } = await api.get('/users');
       if (Array.isArray(data)) setUsersList(data);
-    } catch {}
+    } catch { }
   }
 
   async function loadProjects() {
@@ -101,43 +100,6 @@ export default function ProjectsPage() {
     }
   }
 
-  async function handleBackupJson() {
-    try {
-      const { data } = await api.get('/projects/backup/json');
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const d = new Date();
-      a.download = `commesse_backup_${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.json`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-      toast.success('Backup JSON scaricato!');
-    } catch {
-      toast.error('Errore durante il download del backup JSON');
-    }
-  }
-
-  async function handleRestoreJson(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        const payload = JSON.parse(ev.target.result);
-        if (!payload.commesse || !Array.isArray(payload.commesse)) {
-          throw new Error('Formato JSON commesse non valido');
-        }
-        await api.post('/projects/restore/json', payload);
-        toast.success(`Caricate ${payload.commesse.length} commesse con successo!`);
-        loadProjects();
-      } catch (err) {
-        toast.error('Errore nel caricamento file JSON commesse');
-      }
-      e.target.value = '';
-    };
-    reader.readAsText(file);
-  }
 
   const filtered = useMemo(() => {
     let list = projects;
@@ -148,7 +110,7 @@ export default function ProjectsPage() {
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      list = list.filter(p => 
+      list = list.filter(p =>
         (p.name && p.name.toLowerCase().includes(q)) ||
         (p.code && p.code.toLowerCase().includes(q)) ||
         (p.client && p.client.toLowerCase().includes(q)) ||
@@ -180,28 +142,13 @@ export default function ProjectsPage() {
       <div className="projects-header">
         <div>
           <h1>Commesse & Progetti</h1>
-          <p>{projects.length} commesse gestite (Ufficio Tecnico)</p>
+          <p>{filtered.length} commesse</p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button className="btn btn-secondary" style={{ width: '190px' }} onClick={handleBackupJson}>
-            💾 Salva Dati (JSON)
-          </button>
           {canCreate && (
-            <>
-              <button className="btn btn-secondary" style={{ width: '190px' }} onClick={() => fileInputRef.current?.click()}>
-                📂 Carica Dati (JSON)
-              </button>
-              <input
-                type="file"
-                ref={fileInputRef}
-                accept=".json"
-                style={{ display: 'none' }}
-                onChange={handleRestoreJson}
-              />
-              <button className="btn btn-primary" style={{ width: '190px' }} onClick={() => setShowModal(true)}>
-                + Nuova Commessa
-              </button>
-            </>
+            <button className="btn btn-primary" style={{ width: '190px' }} onClick={() => setShowModal(true)}>
+              + Nuova Commessa
+            </button>
           )}
         </div>
       </div>
@@ -329,7 +276,7 @@ export default function ProjectsPage() {
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Nuova Commessa Ufficio Tecnico</h2>
+              <h2>Nuova Commessa</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowModal(false)}>✕</button>
             </div>
             <form onSubmit={handleCreate}>

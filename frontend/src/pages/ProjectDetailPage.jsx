@@ -243,6 +243,9 @@ export default function ProjectDetailPage() {
     if (plannedH > 0 && totEff > plannedH) {
       return 'sforamento';
     }
+    if (plannedH > 0 && totEff === plannedH) {
+      return 'ok';
+    }
     if (!task.start_date) return 'ok';
     if (isTaskCompleted(task)) return 'ok';
     const startStr = formatDateOnly(task.start_date);
@@ -634,6 +637,15 @@ export default function ProjectDetailPage() {
     const eDate = taskForm.end_date;
     const diffDays = countWorkingDays(sDate, eDate);
     const finalDays = Math.max(1, Number(taskForm.duration_days) || diffDays);
+    const plannedHours = isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDays * 8.0));
+
+    if (!isMilestone && taskForm.workers && taskForm.workers.length > 0) {
+      const sumWorkerHours = taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0);
+      if (sumWorkerHours > plannedHours) {
+        toast.error(`Le ore assegnate agli addetti (${sumWorkerHours}h) superano il budget totale della fase (${plannedHours}h).`);
+        return;
+      }
+    }
 
     const payload = {
       text: taskName.trim(),
@@ -2109,9 +2121,21 @@ export default function ProjectDetailPage() {
 
                       {/* Sezione addetti attualmente assegnati (sotto al campo aggiungi altro addetto) */}
                       <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed var(--border-default)' }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-500)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span>✅ Addetti Assegnati a questa fase ({taskForm.workers.length}):</span>
-                        </div>
+                        {(() => {
+                          const currentAssignedTotal = taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0);
+                          const sDateForBudget = taskForm.start_date;
+                          const eDateForBudget = taskForm.end_date;
+                          const diffDaysForBudget = sDateForBudget && eDateForBudget ? countWorkingDays(sDateForBudget, eDateForBudget) : 1;
+                          const finalDaysForBudget = Math.max(1, Number(taskForm.duration_days) || diffDaysForBudget);
+                          const currentBudgetTotal = Number(taskForm.planned_hours) || (finalDaysForBudget * 8.0);
+                          const overBudget = currentAssignedTotal > currentBudgetTotal;
+
+                          return (
+                            <>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: overBudget ? '#ef4444' : 'var(--accent-500)', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                                <span>{overBudget ? '⚠️' : '✅'} Addetti Assegnati a questa fase ({taskForm.workers.length}):</span>
+                                <span>Totale assegnato: {currentAssignedTotal}h / {currentBudgetTotal}h</span>
+                              </div>
                         {taskForm.workers.length === 0 ? (
                           <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Nessun addetto ancora selezionato. Scegline uno qui sopra.</span>
                         ) : (
@@ -2155,6 +2179,9 @@ export default function ProjectDetailPage() {
                             ))}
                           </div>
                         )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                   </>
@@ -2376,6 +2403,7 @@ export default function ProjectDetailPage() {
                             {st === 'ok' && <span className="semaforo-ok">🟢 Stato OK (Regolare)</span>}
                             {st === 'attenzione' && <span className="semaforo-attenzione">🟡 Stato Attenzione</span>}
                             {st === 'ritardo' && <span className="semaforo-ritardo">🔴 Stato Ritardo</span>}
+                            {st === 'sforamento' && <span className="semaforo-ritardo" style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#ef4444', border: '1px solid #dc2626', padding: '3px 10px', borderRadius: '12px', fontWeight: 700 }}>🔴 Sforamento Ore</span>}
                             {isModalCompleted && (
                               <span style={{ background: 'rgba(16, 185, 129, 0.18)', color: '#10b981', padding: '3px 10px', borderRadius: '12px', fontWeight: 600, fontSize: '0.82rem', border: '1px solid #059669' }}>
                                 ✓ Fase Completata (100% Ore / Flaggata)

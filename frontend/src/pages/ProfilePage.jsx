@@ -25,7 +25,7 @@ export default function ProfilePage() {
       const { data } = await api.get('/vacations/me');
       console.log('✓ Vacations loaded:', data);
       setVacations(Array.isArray(data) ? data : []);
-    } catch (e) { 
+    } catch (e) {
       console.error('Errore caricamento ferie:', e);
     }
   }
@@ -56,21 +56,21 @@ export default function ProfilePage() {
 
   async function handleCreate(e) {
     e.preventDefault();
-    
+
     // Validazione date
     if (!form.start_date || !form.end_date) {
       toast.error('Inserisci sia la data di inizio che di fine');
       return;
     }
-    
+
     const start = new Date(form.start_date);
     const end = new Date(form.end_date);
-    
+
     if (start > end) {
       toast.error('La data di inizio deve essere prima della data di fine');
       return;
     }
-    
+
     try {
       const response = await api.post('/vacations/me', form);
       console.log('✓ Vacation created:', response.data);
@@ -229,8 +229,7 @@ export default function ProfilePage() {
                       <div style={{ fontWeight: 700, fontSize: '1rem' }}>📋 {item.task_name}</div>
                       <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Progetto: {item.project_name}</div>
                       <div style={{ color: '#6b7280', fontSize: '0.8rem', marginTop: 4 }}>
-                        Ferie: {item.vacation_start} → {item.vacation_end}
-                        {' · '}{item.vacation_days?.length || 0} giorni lavorativi sovrapposti
+                        {item.vacation_days?.length || 0} giorni lavorativi sovrapposti
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -249,8 +248,8 @@ export default function ProfilePage() {
                           color: '#6b7280', transition: 'all 0.15s',
                           display: 'flex', alignItems: 'center', gap: 4
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor='#ef4444'; e.currentTarget.style.color='#ef4444'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor='#e5e7eb'; e.currentTarget.style.color='#6b7280'; }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.color = '#6b7280'; }}
                       >
                         🗑️
                       </button>

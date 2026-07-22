@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../api/client';
 import { useToast } from '../context/ToastContext';
 import './AdminPage.css';
@@ -29,6 +29,45 @@ export default function AdminPage() {
     default_color: '#3b82f6',
   });
   const [loading, setLoading] = useState(true);
+  const fileInputRef = useRef(null);
+
+  async function handleBackupJson() {
+    try {
+      const { data } = await api.get('/projects/backup/json');
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const d = new Date();
+      a.download = `commesse_backup_${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.json`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      toast.success('Backup JSON scaricato!');
+    } catch {
+      toast.error('Errore durante il download del backup JSON');
+    }
+  }
+
+  async function handleRestoreJson(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const payload = JSON.parse(ev.target.result);
+        if (!payload.commesse || !Array.isArray(payload.commesse)) {
+          throw new Error('Formato JSON commesse non valido');
+        }
+        await api.post('/projects/restore/json', payload);
+        toast.success(`Caricate ${payload.commesse.length} commesse con successo!`);
+        loadData();
+      } catch (err) {
+        toast.error('Errore nel caricamento file JSON commesse');
+      }
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  }
 
   // STATO PER COLONNE TABELLA ADMIN
   const [adminVisibleColumns, setAdminVisibleColumns] = useState(() => {
@@ -178,9 +217,26 @@ export default function AdminPage() {
 
   return (
     <div className="admin-page animate-fadeIn">
-      <div className="admin-header">
-        <h1>Pannello di Amministrazione</h1>
-        <p>Gestisci gli utenti registrati e l'elenco degli addetti assegnabili alle singole fasi delle commesse.</p>
+      <div className="admin-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 20 }}>
+        <div>
+          <h1>Pannello di Amministrazione</h1>
+          <p>Gestisci gli utenti registrati e l'elenco degli addetti assegnabili alle singole fasi delle commesse.</p>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button className="btn btn-secondary" style={{ width: '190px' }} onClick={handleBackupJson}>
+            💾 Salva Dati (JSON)
+          </button>
+          <button className="btn btn-secondary" style={{ width: '190px' }} onClick={() => fileInputRef.current?.click()}>
+            📂 Carica Dati (JSON)
+          </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".json"
+            style={{ display: 'none' }}
+            onChange={handleRestoreJson}
+          />
+        </div>
       </div>
 
       {/* SEZIONE 1: UTENTI DI SISTEMA */}
@@ -250,7 +306,7 @@ export default function AdminPage() {
                         className="input"
                         value={u.role}
                         onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                        style={{ padding: '6px 10px', fontSize: '0.8125rem', minWidth: 100 }}
+                        style={{ padding: '6px 32px 6px 10px', fontSize: '0.8125rem', minWidth: 100 }}
                       >
                         <option value="admin">Admin</option>
                         <option value="editor">Editor</option>
@@ -264,7 +320,7 @@ export default function AdminPage() {
                         className="input"
                         value={u.department || ''}
                         onChange={(e) => handleDepartmentChange(u.id, e.target.value)}
-                        style={{ padding: '6px 10px', fontSize: '0.8125rem', minWidth: 140 }}
+                        style={{ padding: '6px 32px 6px 10px', fontSize: '0.8125rem', width: 'max-content', minWidth: 160 }}
                       >
                         <option value="">— Nessun reparto —</option>
                         <option value="ufficio_tecnico">🔧 Ufficio Tecnico</option>
