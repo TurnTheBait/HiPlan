@@ -89,6 +89,8 @@ export default function ProjectDetailPage() {
   const [taskModalTab, setTaskModalTab] = useState('generale');
   const [budgetMode, setBudgetMode] = useState('start_days'); // 'start_end', 'start_hours', 'end_hours', 'start_days', 'end_days', 'start_days_hours'
   const [editingTask, setEditingTask] = useState(null);
+  const [phaseTemplates, setPhaseTemplates] = useState([]);
+  const [showPhaseDropdown, setShowPhaseDropdown] = useState(false);
   const [taskForm, setTaskForm] = useState({
     faseSel: PREDEFINED_PHASES[0],
     customText: '',
@@ -153,11 +155,52 @@ export default function ProjectDetailPage() {
         setPredefinedWorkers(usersRes.data.map(u => u.username));
         setUsersList(usersRes.data);
       }
+      fetchPhaseTemplates();
     } catch {
       toast.error('Progetto non trovato');
       navigate('/projects');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchPhaseTemplates() {
+    try {
+      const dept = user?.role === 'admin' ? 'all' : (user?.department || 'ufficio_tecnico');
+      const res = await api.get('/phase-templates', { params: { department: dept } });
+      if (Array.isArray(res.data)) {
+        setPhaseTemplates(res.data);
+      }
+    } catch (err) {
+      console.error('Errore caricamento phase templates:', err);
+    }
+  }
+
+  function getAvailableTemplates() {
+    if (phaseTemplates && phaseTemplates.length > 0) {
+      return phaseTemplates;
+    }
+    return PREDEFINED_PHASES.filter(p => p !== '__custom__').map(p => ({
+      id: p,
+      name: p,
+      department: 'ufficio_tecnico',
+      default_color: PHASE_DEFAULT_COLORS[p] || '#3b82f6',
+    }));
+  }
+
+  async function handleDeleteTemplateFromDropdown(tpl) {
+    if (!window.confirm(`Confermi l'eliminazione della fase "${tpl.name}" dall'elenco suggerito?`)) return;
+    try {
+      if (tpl.id && tpl.id !== tpl.name) {
+        await api.delete(`/phase-templates/${tpl.id}`);
+      }
+      toast.success('Fase eliminata dall\'elenco');
+      await fetchPhaseTemplates();
+      if (taskForm.faseSel === tpl.name) {
+        setTaskForm(prev => ({ ...prev, faseSel: '__custom__', customText: tpl.name }));
+      }
+    } catch {
+      toast.error('Errore durante l\'eliminazione della fase');
     }
   }
 
@@ -356,13 +399,19 @@ export default function ProjectDetailPage() {
   }
 
   function openNewTaskModal() {
+    fetchPhaseTemplates();
+    const available = getAvailableTemplates();
+    const initialFase = available.length > 0 ? available[0].name : PREDEFINED_PHASES[0];
+    const initialColor = available.length > 0 ? (available[0].default_color || '#3b82f6') : (PHASE_DEFAULT_COLORS[PREDEFINED_PHASES[0]] || '#3b82f6');
+
     setEditingTask(null);
     setTaskModalTab('generale');
+    setShowPhaseDropdown(false);
     setTaskForm({
       taskType: 'task',
-      faseSel: PREDEFINED_PHASES[0],
+      faseSel: initialFase,
       customText: '',
-      color: PHASE_DEFAULT_COLORS[PREDEFINED_PHASES[0]] || '#3b82f6',
+      color: initialColor,
       start_date: project?.start_date || new Date().toISOString().split('T')[0],
       end_date: project?.end_date || new Date().toISOString().split('T')[0],
       duration_days: 1,
@@ -382,9 +431,13 @@ export default function ProjectDetailPage() {
       openOreModalForTask(task);
       return;
     }
+    fetchPhaseTemplates();
+    const available = getAvailableTemplates();
+    const isPredefined = available.some(t => t.name === task.text) || PREDEFINED_PHASES.includes(task.text);
+
     setEditingTask(task);
     setTaskModalTab('generale');
-    const isPredefined = PREDEFINED_PHASES.includes(task.text);
+    setShowPhaseDropdown(false);
 
     const safeDate = (d) => {
       if (!d) return new Date().toISOString().split('T')[0];
@@ -588,6 +641,22 @@ export default function ProjectDetailPage() {
         await api.post(`/projects/${id}/tasks`, payload);
         toast.success('Nuova fase aggiunta!');
       }
+
+      // Se l'utente ha inserito una fase personalizzata o nuova, aggiungiamola automaticamente alle fasi suggerite per quel reparto
+      if (taskForm.faseSel === '__custom__' && taskName.trim()) {
+        try {
+          const targetDept = taskForm.department || (user?.role === 'admin' ? 'tutti' : (user?.department || 'ufficio_tecnico'));
+          await api.post('/phase-templates', {
+            name: taskName.trim(),
+            department: targetDept,
+            default_color: taskForm.color || '#3b82f6',
+            is_custom: true,
+          });
+        } catch (e) {
+          console.error('Errore auto-salvataggio template:', e);
+        }
+      }
+
       setShowTaskModal(false);
       loadProject();
     } catch {
@@ -1568,26 +1637,148 @@ export default function ProjectDetailPage() {
                   </div>
                 )}
 
-                <div className="input-group">
+                <div className="input-group" style={{ position: 'relative' }}>
                   <label>{taskForm.taskType === 'milestone' ? 'Nome Evento / Scadenza *' : 'Fase di Lavorazione *'}</label>
-                  <select
+                  <div
                     className="input"
-                    value={taskForm.faseSel}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setTaskForm({
-                        ...taskForm,
-                        faseSel: val,
-                        color: val !== '__custom__' ? (PHASE_DEFAULT_COLORS[val] || taskForm.color) : taskForm.color
-                      });
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      cursor: 'pointer',
+                      background: 'var(--bg-secondary)',
+                      userSelect: 'none',
                     }}
+                    onClick={() => setShowPhaseDropdown(!showPhaseDropdown)}
                   >
-                    {PREDEFINED_PHASES.map(p => (
-                      <option key={p} value={p}>
-                        {p === '__custom__' ? '✏️ Altra lavorazione personalizzata...' : p}
-                      </option>
-                    ))}
-                  </select>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
+                      {taskForm.faseSel !== '__custom__' && (
+                        <span style={{ width: 14, height: 14, borderRadius: '50%', background: taskForm.color || '#3b82f6', border: '1px solid var(--border-default)', flexShrink: 0 }} />
+                      )}
+                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>
+                        {taskForm.faseSel === '__custom__' ? '✏️ Altra lavorazione personalizzata...' : taskForm.faseSel}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{showPhaseDropdown ? '▲' : '▼'}</span>
+                  </div>
+
+                  {showPhaseDropdown && (
+                    <div
+                      className="dropdown-menu"
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        marginTop: 4,
+                        maxHeight: 320,
+                        overflowY: 'auto',
+                        zIndex: 100,
+                        background: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 'var(--radius-md)',
+                        boxShadow: 'var(--shadow-xl)',
+                      }}
+                    >
+                      {(() => {
+                        const available = getAvailableTemplates();
+                        if (user?.role === 'admin') {
+                          const depts = ['ufficio_tecnico', 'produzione', 'acquisti', 'tutti'];
+                          const deptLabels = {
+                            ufficio_tecnico: '🔧 Ufficio Tecnico',
+                            produzione: '🏭 Produzione',
+                            acquisti: '🛒 Acquisti',
+                            tutti: '⚙️ Condivise / Tutti',
+                          };
+                          return depts.map(dKey => {
+                            const dItems = available.filter(t => t.department === dKey);
+                            if (dItems.length === 0) return null;
+                            return (
+                              <div key={dKey}>
+                                <div style={{ padding: '6px 12px', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-default)', borderTop: '1px solid var(--border-default)', textTransform: 'uppercase' }}>
+                                  {deptLabels[dKey] || dKey}
+                                </div>
+                                {dItems.map(tpl => (
+                                  <div
+                                    key={tpl.id || tpl.name}
+                                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', cursor: 'pointer', background: taskForm.faseSel === tpl.name ? 'var(--primary-subtle, rgba(59,130,246,0.15))' : 'transparent', borderBottom: '1px solid var(--border-default)' }}
+                                    onClick={() => {
+                                      setTaskForm({
+                                        ...taskForm,
+                                        faseSel: tpl.name,
+                                        color: tpl.default_color || PHASE_DEFAULT_COLORS[tpl.name] || taskForm.color,
+                                      });
+                                      setShowPhaseDropdown(false);
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                      <span style={{ width: 12, height: 12, borderRadius: '50%', background: tpl.default_color || PHASE_DEFAULT_COLORS[tpl.name] || '#3b82f6', border: '1px solid var(--border-default)' }} />
+                                      <span style={{ fontWeight: taskForm.faseSel === tpl.name ? 600 : 400, color: 'var(--text-primary)' }}>{tpl.name}</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteTemplateFromDropdown(tpl);
+                                      }}
+                                      className="btn-ghost btn-sm"
+                                      style={{ padding: '2px 6px', color: 'var(--danger)', fontSize: '0.9rem' }}
+                                      title="Elimina dall'elenco a tendina"
+                                    >
+                                      🗑️
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          });
+                        } else {
+                          return available.map(tpl => (
+                            <div
+                              key={tpl.id || tpl.name}
+                              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', cursor: 'pointer', background: taskForm.faseSel === tpl.name ? 'var(--primary-subtle, rgba(59,130,246,0.15))' : 'transparent', borderBottom: '1px solid var(--border-default)' }}
+                              onClick={() => {
+                                setTaskForm({
+                                  ...taskForm,
+                                  faseSel: tpl.name,
+                                  color: tpl.default_color || PHASE_DEFAULT_COLORS[tpl.name] || taskForm.color,
+                                });
+                                setShowPhaseDropdown(false);
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <span style={{ width: 12, height: 12, borderRadius: '50%', background: tpl.default_color || PHASE_DEFAULT_COLORS[tpl.name] || '#3b82f6', border: '1px solid var(--border-default)' }} />
+                                <span style={{ fontWeight: taskForm.faseSel === tpl.name ? 600 : 400, color: 'var(--text-primary)' }}>{tpl.name}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteTemplateFromDropdown(tpl);
+                                }}
+                                className="btn-ghost btn-sm"
+                                style={{ padding: '2px 6px', color: 'var(--danger)', fontSize: '0.9rem' }}
+                                title="Elimina dall'elenco a tendina"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          ));
+                        }
+                      })()}
+
+                      <div
+                        onClick={() => {
+                          setTaskForm({ ...taskForm, faseSel: '__custom__' });
+                          setShowPhaseDropdown(false);
+                        }}
+                        style={{ padding: '10px 12px', cursor: 'pointer', fontWeight: 600, color: 'var(--primary)', borderTop: '2px solid var(--border-default)', display: 'flex', alignItems: 'center', gap: 8, background: taskForm.faseSel === '__custom__' ? 'var(--primary-subtle, rgba(59,130,246,0.15))' : 'transparent' }}
+                      >
+                        <span>✏️</span>
+                        <span>Altra lavorazione personalizzata...</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {taskForm.faseSel === '__custom__' && (
@@ -1600,6 +1791,9 @@ export default function ProjectDetailPage() {
                       required
                       placeholder="es. Verifica requisiti speciali con fornitore"
                     />
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
+                      💡 Questa nuova fase verrà automaticamente aggiunta all'elenco suggerito per il reparto {user?.role === 'admin' ? 'di competenza' : (user?.department ? user.department.replace('_', ' ') : 'ufficio tecnico')}.
+                    </span>
                   </div>
                 )}
 

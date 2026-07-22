@@ -5,7 +5,7 @@ from app.core.config import settings
 from app.models.base import Base, engine
 import app.models  # Assicura il caricamento di tutti i modelli per create_all
 from fastapi.staticfiles import StaticFiles
-from app.api import auth, users, projects, tasks, notifications, export, notes, task_collaboration, workload, vacations
+from app.api import auth, users, projects, tasks, notifications, export, notes, task_collaboration, workload, vacations, phase_templates
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,9 +36,48 @@ async def lifespan(app: FastAPI):
     from app.models.base import AsyncSessionLocal
     from sqlalchemy import select, func
     from app.models.user import User, UserRole
+    from app.models.phase_template import PhaseTemplate
     from app.core.security import hash_password, verify_password
 
     async with AsyncSessionLocal() as session:
+        # Check and seed PhaseTemplates
+        count_res = await session.execute(select(func.count(PhaseTemplate.id)))
+        if count_res.scalar_one() == 0:
+            default_templates = [
+                # Ufficio Tecnico
+                ("Layout - Invio al cliente per approvazione", "ufficio_tecnico", "#3b82f6"),
+                ("Approvazione cliente", "ufficio_tecnico", "#10b981"),
+                ("Utenze elettriche", "ufficio_tecnico", "#f59e0b"),
+                ("Calcolo strutturale", "ufficio_tecnico", "#84cc16"),
+                ("Progettazione esecutiva - Messa in tavola - Codifica - Distinta base", "ufficio_tecnico", "#8b5cf6"),
+                ("Targhette", "ufficio_tecnico", "#ec4899"),
+                ("Documentazione tecnica (Manuali)", "ufficio_tecnico", "#d97706"),
+                ("Certificati", "ufficio_tecnico", "#06b6d4"),
+                ("Certificati - Approvazione Responsabile", "ufficio_tecnico", "#f43f5e"),
+                ("Compilazione modulo check list", "ufficio_tecnico", "#e11d48"),
+                ("Inserimento costi in Higest", "ufficio_tecnico", "#fb7185"),
+                # Produzione
+                ("Taglio lamiere laser", "produzione", "#ef4444"),
+                ("Saldatura carpenteria", "produzione", "#f97316"),
+                ("Verniciatura", "produzione", "#eab308"),
+                ("Assemblaggio meccanico ed elettrico", "produzione", "#22c55e"),
+                ("Assemblaggio finale", "produzione", "#14b8a6"),
+                ("Collaudo interno", "produzione", "#06b6d4"),
+                ("Imballo e preparazione spedizione", "produzione", "#3b82f6"),
+                ("Spedizione al cliente", "produzione", "#6366f1"),
+                # Acquisti
+                ("Richiesta preventivi motoriduttori e componenti", "acquisti", "#8b5cf6"),
+                ("Ordine materiale ferroso e lamiere", "acquisti", "#ec4899"),
+                ("Ordine componentistica commerciale e pneumatica", "acquisti", "#f43f5e"),
+                ("Attesa consegna materiali", "acquisti", "#64748b"),
+                ("Controllo arrivo merce e smistamento", "acquisti", "#10b981"),
+                ("Sollecito fornitori per ritardi", "acquisti", "#e11d48"),
+            ]
+            for name, dept, col in default_templates:
+                session.add(PhaseTemplate(name=name, department=dept, default_color=col, is_custom=False))
+            await session.commit()
+            print("📦 [INIT] Inserite fasi preimpostate di default per tutti i reparti")
+
         result = await session.execute(select(User).where(func.lower(User.username) == "admin"))
         admin_user = result.scalar_one_or_none()
         if not admin_user:
@@ -101,6 +140,7 @@ app.include_router(notifications.router)
 app.include_router(export.router)
 app.include_router(notes.router)
 app.include_router(vacations.router)
+app.include_router(phase_templates.router)
 
 
 @app.get("/api/health")

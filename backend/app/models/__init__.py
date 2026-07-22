@@ -7,6 +7,7 @@ from app.models.notification import Notification, NotificationType
 from app.models.note import Note
 from app.models.task_collaboration import TaskComment, TaskChecklistItem
 from app.models.vacation import Vacation
+from app.models.phase_template import PhaseTemplate
 
 __all__ = [
     "Base", "engine", "AsyncSessionLocal",
@@ -16,6 +17,6 @@ __all__ = [
     "Link", "LinkType",
     "Notification", "NotificationType",
     "Note",
-    "TaskComment", "TaskChecklistItem"
-    , "Vacation"
+    "TaskComment", "TaskChecklistItem",
+    "Vacation", "PhaseTemplate"
 ]
