@@ -1644,6 +1644,7 @@ export default function ProjectDetailPage() {
                     <input
                       type="checkbox"
                       id="taskCompleted"
+                      checked={Number(taskForm.completed) === 1}
                       onChange={(e) => {
                         const isChecked = e.target.checked;
                         const newCompleted = isChecked ? 1 : -1;
