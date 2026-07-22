@@ -110,6 +110,7 @@ export default function ProjectDetailPage() {
   const [showOreModal, setShowOreModal] = useState(false);
   const [selectedTaskForHours, setSelectedTaskForHours] = useState(null);
   const [actualHoursMap, setActualHoursMap] = useState({});
+  const [modalExtraDates, setModalExtraDates] = useState([]);
 
   // Stato Modale Modifica Dati Commessa
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
@@ -231,7 +232,13 @@ export default function ProjectDetailPage() {
 
   // Calcolo stato semaforo e ore giornaliere previste (algoritmo prototipo Ufficio Tecnico)
   function computeStato(task) {
-    if (!task || !task.start_date) return 'ok';
+    if (!task) return 'ok';
+    const totEff = calculateTaskEffHours(task);
+    const plannedH = Number(task.planned_hours || 8.0);
+    if (plannedH > 0 && totEff > plannedH) {
+      return 'sforamento';
+    }
+    if (!task.start_date) return 'ok';
     if (isTaskCompleted(task)) return 'ok';
     const startStr = formatDateOnly(task.start_date);
     const endStr = task.end_date ? formatDateOnly(task.end_date) : startStr;
@@ -688,7 +695,63 @@ export default function ProjectDetailPage() {
       initialMap['__extra__'] = {};
     }
     setActualHoursMap(initialMap);
+
+    const plannedDates = getWorkDatesBetween(
+      task.start_date ? task.start_date.split(' ')[0] : '',
+      task.end_date ? task.end_date.split(' ')[0] : ''
+    );
+    const plannedSet = new Set(plannedDates);
+    const existingExtraDates = [];
+
+    Object.values(initialMap).forEach(workerMap => {
+      if (workerMap && typeof workerMap === 'object') {
+        Object.keys(workerMap).forEach(dKey => {
+          if (dKey !== '__extra__' && !plannedSet.has(dKey) && /^\d{4}-\d{2}-\d{2}$/.test(dKey)) {
+            if (!existingExtraDates.includes(dKey)) {
+              existingExtraDates.push(dKey);
+            }
+          }
+        });
+      }
+    });
+
+    existingExtraDates.sort();
+    setModalExtraDates(existingExtraDates);
     setShowOreModal(true);
+  }
+
+  function handleAddExtraDayToModal() {
+    if (!selectedTaskForHours) return;
+    const plannedDates = getWorkDatesBetween(
+      selectedTaskForHours.start_date ? selectedTaskForHours.start_date.split(' ')[0] : '',
+      selectedTaskForHours.end_date ? selectedTaskForHours.end_date.split(' ')[0] : ''
+    );
+    const allCurrentDates = Array.from(new Set([...plannedDates, ...modalExtraDates])).sort();
+    let baseDateStr = allCurrentDates.length > 0
+      ? allCurrentDates[allCurrentDates.length - 1]
+      : (selectedTaskForHours.end_date ? selectedTaskForHours.end_date.split(' ')[0] : new Date().toISOString().split('T')[0]);
+    
+    const baseDate = new Date(baseDateStr + 'T00:00:00');
+    baseDate.setDate(baseDate.getDate() + 1);
+    const y = baseDate.getFullYear();
+    const m = String(baseDate.getMonth() + 1).padStart(2, '0');
+    const d = String(baseDate.getDate()).padStart(2, '0');
+    const nextWorkDateStr = addWorkingDays(`${y}-${m}-${d}`, 1);
+
+    if (nextWorkDateStr && !allCurrentDates.includes(nextWorkDateStr)) {
+      setModalExtraDates(prev => [...prev, nextWorkDateStr].sort());
+      toast.success(`Aggiunta colonna giorno extra: ${nextWorkDateStr.split('-').reverse().join('/')}`);
+    }
+  }
+
+  function handleRemoveLastExtraDay() {
+    if (modalExtraDates.length === 0) {
+      toast.error("Nessun giorno extra presente da rimuovere!");
+      return;
+    }
+    const lastDate = modalExtraDates[modalExtraDates.length - 1];
+    setModalExtraDates(prev => prev.slice(0, -1));
+    toast.success(`Rimosso ultimo giorno extra: ${lastDate.split('-').reverse().join('/')}`);
   }
 
   async function handleSaveOreModal() {
@@ -1345,18 +1408,21 @@ export default function ProjectDetailPage() {
                             {st === 'ok' && <span className="semaforo-ok">🟢 OK (Regolare)</span>}
                             {st === 'attenzione' && <span className="semaforo-attenzione">🟡 Attenzione</span>}
                             {st === 'ritardo' && <span className="semaforo-ritardo">🔴 Ritardo Lavorazione</span>}
+                            {st === 'sforamento' && <span className="semaforo-ritardo" style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#ef4444', border: '1px solid #dc2626', padding: '3px 10px', borderRadius: '12px', fontWeight: 700 }}>🔴 Sforamento Ore</span>}
                           </td>
                         )}
                         {tableVisibleColumns.includes('azioni') && (
                           <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              style={{ marginRight: 6 }}
-                              onClick={() => openOreModalForTask(task)}
-                              title="Inserisci ore lavorate (Giornale ore)"
-                            >
-                              ⏱️ Consuntiva
-                            </button>
+                            {task.type !== 'milestone' && Number(task.duration) !== 0 && (
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                style={{ marginRight: 6 }}
+                                onClick={() => openOreModalForTask(task)}
+                                title="Inserisci ore lavorate (Giornale ore)"
+                              >
+                                ⏱️ Consuntiva
+                              </button>
+                            )}
                             {canManageProject && (
                               <>
                                 <button
@@ -1513,16 +1579,19 @@ export default function ProjectDetailPage() {
                             {st === 'ok' && <span className="semaforo-ok">🟢 Regolare</span>}
                             {st === 'attenzione' && <span className="semaforo-attenzione">🟡 Attenzione</span>}
                             {st === 'ritardo' && <span className="semaforo-ritardo">🔴 Ritardo</span>}
+                            {st === 'sforamento' && <span className="semaforo-ritardo" style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#ef4444', border: '1px solid #dc2626', padding: '3px 10px', borderRadius: '12px', fontWeight: 700 }}>🔴 Sforamento</span>}
                           </td>
                         )}
                         {oreVisibleColumns.includes('azioni') && (
                           <td style={{ textAlign: 'right' }}>
-                            <button
-                              className="btn btn-primary btn-sm"
-                              onClick={() => openOreModalForTask(task)}
-                            >
-                              ⏱️ Consuntiva Ore
-                            </button>
+                            {task.type !== 'milestone' && Number(task.duration) !== 0 && (
+                              <button
+                                className="btn btn-primary btn-sm"
+                                onClick={() => openOreModalForTask(task)}
+                              >
+                                ⏱️ Consuntiva Ore
+                              </button>
+                            )}
                           </td>
                         )}
                       </tr>
@@ -2127,23 +2196,47 @@ export default function ProjectDetailPage() {
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {modalExtraDates.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleRemoveLastExtraDay}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 600, color: '#ef4444' }}
+                    title="Rimuovi l'ultimo giorno extra aggiunto"
+                  >
+                    ➖ Rimuovi Ultimo Giorno
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleAddExtraDayToModal}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 600 }}
+                  title="Aggiungi una colonna giorno extra al giornale ore (senza modificare la data fine fase)"
+                >
+                  ➕ Aggiungi Giorno Extra
+                </button>
                 <button className="btn-ghost btn-icon" onClick={() => setShowOreModal(false)}>✕</button>
               </div>
             </div>
 
             {(() => {
-              const dates = getWorkDatesBetween(
+              const plannedDates = getWorkDatesBetween(
                 selectedTaskForHours.start_date ? selectedTaskForHours.start_date.split(' ')[0] : '',
                 selectedTaskForHours.end_date ? selectedTaskForHours.end_date.split(' ')[0] : ''
               );
+              const datesSet = new Set([...plannedDates, ...modalExtraDates]);
+              const dates = Array.from(datesSet).sort();
+              const plannedSet = new Set(plannedDates);
+
               const workers = Array.isArray(selectedTaskForHours.workers) && selectedTaskForHours.workers.length > 0
                 ? selectedTaskForHours.workers
                 : ['Addetto Generico'];
-              const oreGgTotale = dates.length > 0 ? workers.reduce((acc, w) => {
+              const oreGgTotale = plannedDates.length > 0 ? workers.reduce((acc, w) => {
                 const wAssigned = (selectedTaskForHours.worker_hours && selectedTaskForHours.worker_hours[w] !== undefined && selectedTaskForHours.worker_hours[w] !== '')
                   ? Number(selectedTaskForHours.worker_hours[w])
                   : (Number(selectedTaskForHours.planned_hours || 8) / workers.length);
-                return acc + (wAssigned / dates.length);
+                return acc + (wAssigned / plannedDates.length);
               }, 0) : (Number(selectedTaskForHours.planned_hours || 8));
 
               return (
@@ -2154,9 +2247,11 @@ export default function ProjectDetailPage() {
                         <tr>
                           <th style={{ minWidth: 130, textAlign: 'left' }}>Addetto / Giorno</th>
                           {dates.map(d => (
-                            <th key={d} style={{ minWidth: 85 }}>
+                            <th key={d} style={{ minWidth: 85, background: !plannedSet.has(d) ? 'rgba(239, 68, 68, 0.08)' : undefined }}>
                               {d.split('-')[2]}/{d.split('-')[1]}<br />
-                              <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-tertiary)' }}>({oreGgTotale.toFixed(1)}h prev)</span>
+                              <span style={{ fontSize: 11, fontWeight: 400, color: !plannedSet.has(d) ? '#ef4444' : 'var(--text-tertiary)' }}>
+                                {plannedSet.has(d) ? `(${oreGgTotale.toFixed(1)}h prev)` : '(extra)'}
+                              </span>
                             </th>
                           ))}
                           <th style={{ minWidth: 90, background: 'rgba(245, 158, 11, 0.1)' }}>

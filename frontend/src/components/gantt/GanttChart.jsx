@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { gantt } from 'dhtmlx-gantt';
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css';
 import { getTaskColor } from '../../utils/phaseColors';
-import { isTaskCompleted } from '../../utils/taskCompletion';
+import { isTaskCompleted, calculateTaskEffHours } from '../../utils/taskCompletion';
 import { isWeekendOrHoliday } from '../../utils/workingDays';
 import './GanttChart.css';
 
@@ -174,10 +174,14 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         return 'gantt-hidden-milestone';
       }
       const isCompleted = isTaskCompleted(task);
+      const isOverrun = Boolean(task.is_overrun);
+      const classes = [];
       if (isCompleted) {
-        return 'gantt-task-completed';
+        classes.push('gantt-task-completed');
+      } else if (isOverrun) {
+        classes.push('gantt-task-overrun');
       }
-      return '';
+      return classes.join(' ');
     };
 
     // Milestone e spunta di completamento
@@ -595,17 +599,21 @@ gantt.attachEvent("onBeforeLinkDelete", (id, item) => {
     gantt.parse({
       data: sortedTaskList.map(t => {
         const isCompleted = isTaskCompleted(t);
+        const totEff = calculateTaskEffHours(t);
+        const plannedH = Number(t.planned_hours || 8.0);
+        const isOverrun = plannedH > 0 && totEff > plannedH;
         return {
           ...t,
           id: String(t.id),
           text: t.text,
           start_date: t.start_date,
           duration: t.duration,
-          progress: isCompleted ? 1 : t.progress,
+          progress: isCompleted ? 1 : Math.min(1, t.progress || (plannedH > 0 ? totEff / plannedH : 0)),
           parent: t.parent === '0' || !t.parent ? 0 : String(t.parent),
           open: Boolean(t.open),
           type: (t.type === 'milestone' || Number(t.duration) === 0) ? gantt.config.types.milestone : gantt.config.types.task,
-          color: isCompleted ? '#10b981' : getTaskColor(t),
+          color: isCompleted ? '#10b981' : (isOverrun ? '#ef4444' : getTaskColor(t)),
+          is_overrun: isOverrun,
         };
       }),
       links: validLinks.map(l => ({

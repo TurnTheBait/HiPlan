@@ -160,6 +160,11 @@
   background-color: #10b981 !important;
 }
 
+.gantt_task_line.gantt-task-overrun {
+  border: 2px solid #ef4444 !important;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.75) !important;
+}
+
 /* Fallbacks quando non c'è colore specifico */
 .gantt-priority-low .gantt_task_line,
 .gantt_task_line.gantt-priority-low {
