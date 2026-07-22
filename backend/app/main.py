@@ -25,6 +25,10 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
         try:
+            await conn.exec_driver_sql("ALTER TABLE tasks ADD COLUMN budget_mode VARCHAR(50);")
+        except Exception:
+            pass
+        try:
             await conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN responsible_id VARCHAR(36);")
         except Exception:
             pass

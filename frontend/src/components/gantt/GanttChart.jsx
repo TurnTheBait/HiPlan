@@ -173,7 +173,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       if (isCompleted) {
         return 'gantt-task-completed';
       }
-      return `gantt-priority-${task.priority || 'medium'}`;
+      return '';
     };
 
     // Milestone e spunta di completamento

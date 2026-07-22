@@ -39,6 +39,7 @@ class Task(Base, TimestampMixin):
     actual_hours = Column(Text, nullable=True, default="{}")  # JSON dict consuntivazione per data e addetto
     color = Column(String(50), nullable=True)  # Colore personalizzato per la fase nel Gantt
     department = Column(String(50), nullable=True)  # ufficio_tecnico | produzione | acquisti
+    budget_mode = Column(String(50), nullable=True)  # start_end | start_hours | end_hours | start_days | end_days | start_days_hours | end_days_hours
     completed = Column(Integer, default=0, nullable=False)  # 1=completato (spunta verde), 0=in corso/non completato
 
 

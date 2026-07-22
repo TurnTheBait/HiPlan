@@ -78,6 +78,7 @@ def _task_to_out(task: Task) -> TaskOut:
         actual_hours=actual_map,
         color=task.color,
         department=task.department,
+        budget_mode=task.budget_mode,
         completed=is_comp,
     )
 
@@ -199,6 +200,7 @@ async def create_task(db: AsyncSession, project_id: str, data: TaskCreate, user=
         actual_hours=json.dumps(data.actual_hours),
         color=data.color,
         department=data.department,
+        budget_mode=data.budget_mode,
         completed=data.completed,
     )
     _compute_task_progress_and_completed(task, data.model_dump())

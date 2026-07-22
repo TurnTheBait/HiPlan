@@ -452,7 +452,7 @@ export default function ProjectDetailPage() {
     const diff = countWorkingDays(s, e);
     const taskDur = Number(task.duration) || diff;
     const taskPlan = Number(task.planned_hours) || (taskDur * 8.0);
-    const mode = task.budgetMode || (Math.abs(taskPlan - taskDur * 8.0) > 0.1 ? 'start_days_hours' : 'start_days');
+    const mode = task.budget_mode || task.budgetMode || (Math.abs(taskPlan - taskDur * 8.0) > 0.1 ? 'start_days_hours' : 'start_days');
     setBudgetMode(mode);
 
     setTaskForm({
@@ -629,6 +629,7 @@ export default function ProjectDetailPage() {
       type: isMilestone ? 'milestone' : 'task',
       color: taskForm.color || (isMilestone ? '#f59e0b' : null),
       department: taskForm.department || null,
+      budget_mode: taskForm.budgetMode || budgetMode || 'start_days',
       completed: isMilestone ? 0 : (taskForm.completed !== undefined && taskForm.completed !== null ? Number(taskForm.completed) : 0),
     };
 
