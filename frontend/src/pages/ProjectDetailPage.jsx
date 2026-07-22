@@ -1979,43 +1979,6 @@ export default function ProjectDetailPage() {
                           </div>
                         )}
                       </div>
-
-                      {/* Preset veloci cliccabili */}
-                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-                        <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginRight: 4 }}>Preset veloci:</span>
-                        <button
-                          type="button"
-                          className="btn-ghost btn-sm"
-                          style={{ border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 8px', fontSize: 11 }}
-                          onClick={() => applyDurationPreset(1, 4)}
-                        >
-                          ⚡ Mezza giornata (1g / 4h)
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-ghost btn-sm"
-                          style={{ border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 8px', fontSize: 11 }}
-                          onClick={() => applyDurationPreset(1, 8)}
-                        >
-                          ⚡ 1 Giorno (8h)
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-ghost btn-sm"
-                          style={{ border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 8px', fontSize: 11 }}
-                          onClick={() => applyDurationPreset(2, 16)}
-                        >
-                          ⚡ 2 Giorni (16h)
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-ghost btn-sm"
-                          style={{ border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 8px', fontSize: 11 }}
-                          onClick={() => applyDurationPreset(5, 40)}
-                        >
-                          ⚡ 1 Settimana (5g / 40h)
-                        </button>
-                      </div>
                     </div>
 
                     <div className="input-group" style={{ marginTop: 16 }}>
