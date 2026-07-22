@@ -249,11 +249,23 @@ export default function WorkloadHeatmap() {
             }
           });
 
+          const isCurrentUser = userData.username === user?.username;
           return (
             <React.Fragment key={userId}>
-              <div className="heatmap-user-cell sticky-col sticky-user-col" onClick={() => toggleUser(userId)} style={{ cursor: 'pointer' }} title="Clicca per espandere/comprimere il dettaglio progetti e fasi">
+              <div
+                className="heatmap-user-cell sticky-col sticky-user-col"
+                onClick={() => toggleUser(userId)}
+                style={{
+                  cursor: 'pointer',
+                  background: isCurrentUser ? 'rgba(59,130,246,0.13)' : undefined,
+                  color: isCurrentUser ? 'var(--accent-400)' : undefined,
+                  fontWeight: isCurrentUser ? 800 : undefined,
+                  borderLeft: isCurrentUser ? '3px solid var(--accent-400)' : undefined,
+                }}
+                title="Clicca per espandere/comprimere il dettaglio progetti e fasi"
+              >
                 <span>{expandedUsers[userId] ? '\u25BC' : '\u25B6'}</span>
-                {userData.full_name}
+                {isCurrentUser ? '' : ''}{userData.full_name}{isCurrentUser ? ' (tu)' : ''}
               </div>
 
               {/* Cella Saturazione */}

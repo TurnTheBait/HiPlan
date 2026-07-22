@@ -44,6 +44,7 @@ async def get_workload_heatmap(
         uid = str(u.id)
         heatmap[uid] = {
             "full_name": u.full_name or u.username,
+            "username": u.username,
             "department": u.department,
             "workload": {},
             "vacations": vac_by_user.get(uid, [])

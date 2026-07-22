@@ -2274,9 +2274,12 @@ export default function ProjectDetailPage() {
                           const targetH = assignedH !== null ? assignedH : Number((Number(selectedTaskForHours.planned_hours || 8) / workers.length).toFixed(1));
                           const workerDailyTarget = dates.length > 0 ? (targetH / dates.length) : targetH;
 
+                          const isCurrentUser = (w === user?.username || w === (user?.full_name || user?.username));
                           return (
-                            <tr key={w}>
-                              <td style={{ textAlign: 'left', fontWeight: 600 }}>👤 {w}</td>
+                            <tr key={w} style={isCurrentUser ? { background: 'rgba(59,130,246,0.10)', outline: '2px solid rgba(59,130,246,0.35)', outlineOffset: '-2px', borderRadius: 8 } : {}}>
+                              <td style={{ textAlign: 'left', fontWeight: isCurrentUser ? 800 : 600, color: isCurrentUser ? 'var(--accent-400)' : undefined }}>
+                                👤 {w}{isCurrentUser ? ' (tu)' : ''}
+                              </td>
                               {dates.map(d => {
                                 const val = (actualHoursMap[w] && actualHoursMap[w][d]) || '';
                                 totW += Number(val) || 0;
