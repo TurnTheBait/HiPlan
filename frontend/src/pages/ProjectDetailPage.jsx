@@ -1632,8 +1632,16 @@ export default function ProjectDetailPage() {
                     <input
                       type="checkbox"
                       id="taskCompleted"
-                      checked={Number(taskForm.completed) === 1}
-                      onChange={(e) => setTaskForm({ ...taskForm, completed: e.target.checked ? 1 : -1 })}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        const newCompleted = isChecked ? 1 : -1;
+                        const resetColor = getTaskColor({ ...taskForm, completed: newCompleted });
+                        setTaskForm({
+                          ...taskForm,
+                          completed: newCompleted,
+                          color: !isChecked && taskForm.color === '#10b981' ? resetColor : taskForm.color,
+                        });
+                      }}
                       style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                     />
                     <label htmlFor="taskCompleted" style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)', margin: 0 }}>

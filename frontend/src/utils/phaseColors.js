@@ -36,11 +36,18 @@ export const PRIORITY_FALLBACK_COLORS = {
 
 export function getTaskColor(task) {
   if (!task) return '#3b82f6';
+  const name = task.text || task.faseSel;
+  // Se la fase ha un colore predefinito diverso dal verde completato, preferisci quello se il colore attuale è nullo o verde completato
+  if (name && PHASE_DEFAULT_COLORS[name] && name !== 'Approvazione cliente') {
+    if (!task.color || task.color === '#10b981') {
+      return PHASE_DEFAULT_COLORS[name];
+    }
+  }
   if (task.color && typeof task.color === 'string' && task.color.trim() !== '') {
     return task.color;
   }
-  if (task.text && PHASE_DEFAULT_COLORS[task.text]) {
-    return PHASE_DEFAULT_COLORS[task.text];
+  if (name && PHASE_DEFAULT_COLORS[name]) {
+    return PHASE_DEFAULT_COLORS[name];
   }
   return PRIORITY_FALLBACK_COLORS[task.priority || 'medium'] || '#3b82f6';
 }
