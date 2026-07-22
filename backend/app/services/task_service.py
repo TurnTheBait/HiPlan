@@ -332,7 +332,11 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
         conflicts = find_vacation_conflicts(task.start_date, task.end_date or task.start_date, vacation_payloads)
         total_shift_days = max(total_shift_days, conflicts[0]["workdays"] if conflicts else 0)
 
-    if total_shift_days > 0:
+    # Salta il controllo ferie se si stanno solo aggiornando ore consuntivate o stato completamento
+    # (non stiamo cambiando date o addetti, solo registrando ore effettive)
+    _consuntivo_only_keys = {"actual_hours", "completed", "progress"}
+    _changed_keys = set(update_data.keys())
+    if not _changed_keys.issubset(_consuntivo_only_keys) and total_shift_days > 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assegnazione bloccata: esistono ferie nel periodo della fase")
 
     # Propagazione a catena quando la data della fase viene modificata esplicitamente

@@ -763,8 +763,6 @@ export default function ProjectDetailPage() {
     if (!selectedTaskForHours) return;
     try {
       await api.put(`/projects/${id}/tasks/${selectedTaskForHours.id}`, {
-        end_date: formatDateOnly(selectedTaskForHours.end_date || new Date()),
-        duration: Number(selectedTaskForHours.duration || selectedTaskForHours.duration_days || 1),
         actual_hours: actualHoursMap,
       });
       toast.success('Ore consuntivate salvate!');

@@ -216,8 +216,8 @@ export default function WorkloadHeatmap() {
           );
         })}
 
-        {/* Rows (Users) */}
-        {Object.entries(heatmapData).map(([userId, userData]) => {
+        {/* Rows (Users) - sorted alphabetically by username */}
+        {Object.entries(heatmapData).sort(([, a], [, b]) => (a.full_name || '').localeCompare(b.full_name || '', 'it')).map(([userId, userData]) => {
 
           const aggregatedWorkload = {};
           columns.forEach(c => aggregatedWorkload[c] = { hours: 0, tasks: [] });
