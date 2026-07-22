@@ -8,21 +8,50 @@ export default function ProfilePage() {
   const { user } = useAuth();
   const toast = useToast();
   const [vacations, setVacations] = useState([]);
+  const [recoveryItems, setRecoveryItems] = useState([]);
+  const [dismissedKeys, setDismissedKeys] = useState(
+    () => new Set(JSON.parse(localStorage.getItem('recovery_dismissed') || '[]'))
+  );
   const [form, setForm] = useState({ start_date: '', end_date: '', reason: '' });
 
   useEffect(() => {
     console.log('🔄 ProfilePage mounted, loading vacations...');
     loadVacations();
+    loadRecovery();
   }, []);
 
   async function loadVacations() {
     try {
-      const { data } = await api.get('/me/vacations');
+      const { data } = await api.get('/vacations/me');
       console.log('✓ Vacations loaded:', data);
       setVacations(Array.isArray(data) ? data : []);
     } catch (e) { 
       console.error('Errore caricamento ferie:', e);
     }
+  }
+
+  async function loadRecovery() {
+    try {
+      const { data } = await api.get('/vacations/me/recovery');
+      setRecoveryItems(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Errore caricamento ore da recuperare:', e);
+    }
+  }
+
+  function getRecoveryKey(item) {
+    return `${item.task_id}_${item.vacation_start}`;
+  }
+
+  function dismissRecoveryItem(item) {
+    const key = getRecoveryKey(item);
+    setDismissedKeys(prev => {
+      const next = new Set(prev);
+      next.add(key);
+      localStorage.setItem('recovery_dismissed', JSON.stringify([...next]));
+      return next;
+    });
+    toast.success('Voce rimossa dalla lista.');
   }
 
   async function handleCreate(e) {
@@ -43,13 +72,16 @@ export default function ProfilePage() {
     }
     
     try {
-      const response = await api.post('/me/vacations', form);
+      const response = await api.post('/vacations/me', form);
       console.log('✓ Vacation created:', response.data);
       toast.success('Ferie create');
+      if (response.data.recovery_items?.length > 0) {
+        toast.warning(`⚠️ ${response.data.recovery_items.length} fase/i con ore da recuperare rilevate.`);
+      }
       setForm({ start_date: '', end_date: '', reason: '' });
-      // Piccolo delay per assicurarsi che il server abbia elaborato
       await new Promise(resolve => setTimeout(resolve, 300));
       await loadVacations();
+      await loadRecovery();
     } catch (err) {
       console.error('Errore creazione ferie:', err.response?.data);
       toast.error(err.response?.data?.detail || 'Errore creazione ferie');
@@ -59,7 +91,7 @@ export default function ProfilePage() {
   async function handleDelete(id) {
     if (!window.confirm('Eliminare queste ferie?')) return;
     try {
-      await api.delete(`/me/vacations/${id}`);
+      await api.delete(`/vacations/me/${id}`);
       toast.success('Ferie rimosse');
       await new Promise(resolve => setTimeout(resolve, 300));
       await loadVacations();
@@ -173,6 +205,62 @@ export default function ProfilePage() {
           </div>
         </section>
       </div>
+
+      {/* Sezione Ore da Recuperare */}
+      {recoveryItems.filter(item => !dismissedKeys.has(getRecoveryKey(item))).length > 0 && (
+        <div className="profile-content-grid" style={{ marginTop: 24 }}>
+          <section className="profile-card" style={{ gridColumn: '1 / -1', border: '2px solid #f59e0b', background: 'rgba(245,158,11,0.07)' }}>
+            <h3 style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: 8 }}>
+              ⚠️ Ore da Recuperare per Ferie
+            </h3>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: 16, fontSize: '0.9rem' }}>
+              Le seguenti fasi hanno ore pianificate che cadono nei tuoi giorni di ferie. Queste ore andrebbero recuperate in accordo con il tuo responsabile.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {recoveryItems
+                .filter(item => !dismissedKeys.has(getRecoveryKey(item)))
+                .map((item, i) => (
+                  <div key={i} style={{
+                    background: 'var(--bg-secondary)', borderRadius: 10, padding: '14px 18px',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    borderLeft: '4px solid #f59e0b', gap: 12, flexWrap: 'wrap'
+                  }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: '1rem' }}>📋 {item.task_name}</div>
+                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Progetto: {item.project_name}</div>
+                      <div style={{ color: '#6b7280', fontSize: '0.8rem', marginTop: 4 }}>
+                        Ferie: {item.vacation_start} → {item.vacation_end}
+                        {' · '}{item.vacation_days?.length || 0} giorni lavorativi sovrapposti
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        background: '#f59e0b', color: '#fff', borderRadius: 8, padding: '8px 16px',
+                        fontWeight: 800, fontSize: '1.1rem', whiteSpace: 'nowrap'
+                      }}>
+                        {item.hours_to_recover}h
+                      </div>
+                      <button
+                        onClick={() => dismissRecoveryItem(item)}
+                        title="Segna come recuperata e rimuovi dalla lista"
+                        style={{
+                          background: 'none', border: '1.5px solid #e5e7eb', borderRadius: 8,
+                          cursor: 'pointer', padding: '6px 10px', fontSize: '1rem',
+                          color: '#6b7280', transition: 'all 0.15s',
+                          display: 'flex', alignItems: 'center', gap: 4
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor='#ef4444'; e.currentTarget.style.color='#ef4444'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor='#e5e7eb'; e.currentTarget.style.color='#6b7280'; }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

@@ -111,6 +111,7 @@ export default function ProjectDetailPage() {
   const [selectedTaskForHours, setSelectedTaskForHours] = useState(null);
   const [actualHoursMap, setActualHoursMap] = useState({});
   const [modalExtraDates, setModalExtraDates] = useState([]);
+  const [allVacations, setAllVacations] = useState([]);
 
   // Stato Modale Modifica Dati Commessa
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
@@ -136,10 +137,11 @@ export default function ProjectDetailPage() {
 
   async function loadProject() {
     try {
-      const [projRes, ganttRes, usersRes] = await Promise.all([
+      const [projRes, ganttRes, usersRes, vacRes] = await Promise.all([
         api.get(`/projects/${id}`),
         api.get(`/projects/${id}/gantt`),
-        api.get('/users').catch(() => ({ data: [] }))
+        api.get('/users').catch(() => ({ data: [] })),
+        api.get('/vacations/all').catch(() => ({ data: [] }))
       ]);
       setProject(projRes.data);
       const sortedTasks = Array.isArray(ganttRes.data?.tasks)
@@ -155,6 +157,9 @@ export default function ProjectDetailPage() {
       if (Array.isArray(usersRes.data)) {
         setPredefinedWorkers(usersRes.data.map(u => u.username));
         setUsersList(usersRes.data);
+      }
+      if (Array.isArray(vacRes.data)) {
+        setAllVacations(vacRes.data);
       }
       fetchPhaseTemplates();
     } catch {
@@ -2277,6 +2282,7 @@ export default function ProjectDetailPage() {
                               {dates.map(d => {
                                 const val = (actualHoursMap[w] && actualHoursMap[w][d]) || '';
                                 totW += Number(val) || 0;
+                                const isHoliday = allVacations.some(v => v.username === w && d >= v.start_date && d <= v.end_date);
                                 return (
                                   <td key={d}>
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
@@ -2286,6 +2292,7 @@ export default function ProjectDetailPage() {
                                         min="0"
                                         max="24"
                                         className="ore-input"
+                                        style={isHoliday ? { backgroundColor: '#fef08a' } : {}}
                                         disabled={!canManageProject && w !== user?.username && w !== (user?.full_name || user?.username)}
                                         value={val}
                                         placeholder={`${workerDailyTarget.toFixed(1)}h`}
@@ -2298,6 +2305,7 @@ export default function ProjectDetailPage() {
                                           });
                                         }}
                                       />
+                                      {isHoliday && <span style={{ fontSize: '0.65rem', color: '#b45309', fontWeight: 'bold' }}>🌴 Ferie</span>}
                                       <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-tertiary)' }}>
                                         ({workerDailyTarget.toFixed(1)}h prev)
                                       </span>

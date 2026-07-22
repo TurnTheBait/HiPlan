@@ -17,6 +17,10 @@ export default function DashboardPage() {
   const [notifications, setNotifications] = useState([]);
   const [myTasksToday, setMyTasksToday] = useState([]);
   const [vacations, setVacations] = useState([]);
+  const [recoveryItems, setRecoveryItems] = useState([]);
+  const [dismissedKeys, setDismissedKeys] = useState(
+    () => new Set(JSON.parse(localStorage.getItem('recovery_dismissed') || '[]'))
+  );
   const [loading, setLoading] = useState(true);
 
   const MONTH_NAMES_IT = [
@@ -54,16 +58,18 @@ export default function DashboardPage() {
 
 async function loadData() {
     try {
-      const [projRes, notifRes, tasksRes, vacRes] = await Promise.all([
+      const [projRes, notifRes, tasksRes, vacRes, recoveryRes] = await Promise.all([
         api.get('/projects'),
         api.get('/notifications'),
         api.get('/users/me/tasks/today'),
-        api.get('/me/vacations').catch(() => ({ data: [] })),
+        api.get('/vacations/me').catch(() => ({ data: [] })),
+        api.get('/vacations/me/recovery').catch(() => ({ data: [] })),
       ]);
       setProjects(projRes.data);
       setNotifications(notifRes.data);
       setMyTasksToday(tasksRes.data);
       setVacations(vacRes.data || []);
+      setRecoveryItems(recoveryRes.data || []);
 
       Promise.all(
         projRes.data.map(async (p) => {
@@ -95,6 +101,21 @@ async function loadData() {
       setNotifications([]);
       window.dispatchEvent(new Event('notifications-changed'));
     } catch { /* ignore */ }
+  }
+
+  function getRecoveryKey(item) {
+    return `${item.task_id}_${item.vacation_start}`;
+  }
+
+  function dismissRecoveryItem(e, item) {
+    e.stopPropagation();
+    const key = getRecoveryKey(item);
+    setDismissedKeys(prev => {
+      const next = new Set(prev);
+      next.add(key);
+      localStorage.setItem('recovery_dismissed', JSON.stringify([...next]));
+      return next;
+    });
   }
 
   const stats = {
@@ -326,6 +347,63 @@ async function loadData() {
             </div>
           )}
         </div>
+
+        {recoveryItems.filter(item => !dismissedKeys.has(getRecoveryKey(item))).length > 0 && (
+          <div className="card dashboard-section" style={{ gridColumn: '1 / -1', border: '2px solid #f59e0b', background: 'rgba(245,158,11,0.05)' }}>
+            <h2 style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: 8 }}>
+              ⚠️ Ore da Recuperare per Ferie
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: 16, fontSize: '0.9rem' }}>
+              Hai ore pianificate che cadono nei tuoi giorni di ferie. Coordinati con il tuo responsabile per recuperarle.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {recoveryItems
+                .filter(item => !dismissedKeys.has(getRecoveryKey(item)))
+                .map((item, i) => (
+                  <div
+                    key={i}
+                    onClick={() => navigate(`/projects/${item.project_id}`)}
+                    style={{
+                      background: 'var(--bg-secondary)', borderRadius: 10, padding: '12px 16px',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      borderLeft: '4px solid #f59e0b', gap: 12, flexWrap: 'wrap',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700 }}>📋 {item.task_name}</div>
+                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Progetto: {item.project_name}</div>
+                      <div style={{ color: '#6b7280', fontSize: '0.8rem', marginTop: 3 }}>
+                        Ferie: {item.vacation_start} → {item.vacation_end} &middot; {item.vacation_days?.length || 0} gg lavorativi sovrapposti
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{
+                        background: '#f59e0b', color: '#fff', borderRadius: 8, padding: '6px 14px',
+                        fontWeight: 800, fontSize: '1rem', whiteSpace: 'nowrap'
+                      }}>
+                        {item.hours_to_recover}h
+                      </div>
+                      <button
+                        onClick={(e) => dismissRecoveryItem(e, item)}
+                        title="Segna come recuperata e rimuovi dalla lista"
+                        style={{
+                          background: 'none', border: '1.5px solid #e5e7eb', borderRadius: 8,
+                          cursor: 'pointer', padding: '5px 9px', fontSize: '1rem',
+                          color: '#6b7280', transition: 'all 0.15s',
+                          display: 'flex', alignItems: 'center'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor='#ef4444'; e.currentTarget.style.color='#ef4444'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor='#e5e7eb'; e.currentTarget.style.color='#6b7280'; }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
