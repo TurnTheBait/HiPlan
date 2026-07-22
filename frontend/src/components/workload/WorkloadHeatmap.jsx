@@ -2,13 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import './WorkloadHeatmap.css';
-
-function isWeekendOrHoliday(date) {
-  if (!date || !(date instanceof Date) || isNaN(date)) return false;
-  const dayOfWeek = date.getDay();
-  if (dayOfWeek === 0 || dayOfWeek === 6) return true;
-  return false;
-}
+import { isWeekendOrHoliday } from '../gantt/GanttChart';
 
 export default function WorkloadHeatmap() {
   const { user } = useAuth();
@@ -89,9 +83,8 @@ export default function WorkloadHeatmap() {
       label = 'Sett. ' + monday.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
     } else {
       key = dStr;
-      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
       const dayLabel = d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
-      label = isWeekend ? dayLabel + ' 🚫' : dayLabel;
+      label = dayLabel;
     }
     if (!columnsMap.has(key)) columnsMap.set(key, label);
   });
@@ -145,7 +138,7 @@ export default function WorkloadHeatmap() {
   const isColumnWeekend = (colKey) => {
     if (viewMode === 'day') {
       const d = new Date(colKey);
-      return d.getDay() === 0 || d.getDay() === 6;
+      return isWeekendOrHoliday(d);
     }
     return false;
   };
@@ -287,7 +280,7 @@ export default function WorkloadHeatmap() {
                 if (isVacation) {
                   tooltipText = 'Ferie (' + formatDateStr(colKey) + ')';
                 } else if (isWeekendCol) {
-                  tooltipText = '🚫 ' + formatDateStr(colKey) + ' (Sabato/Domenica)';
+                  tooltipText = formatDateStr(colKey) + ' (Sabato/Domenica/Festivo)';
                 } else if (data.tasks.length > 0) {
                   tooltipText = data.tasks.map(t => '📁 ' + (t.project_name || 'Progetto') + '\n   📌 ' + t.name + ': ' + (t.hours?.toFixed(1) || 0) + 'h (' + columnsMap.get(colKey) + ') | Totale Fase: ' + (t.total_assigned_hours?.toFixed(1) || '-') + 'h').join('\n\n');
                 } else {
@@ -298,7 +291,7 @@ export default function WorkloadHeatmap() {
                 if (isVacation) {
                   displayContent = '🏖️';
                 } else if (isWeekendCol) {
-                  displayContent = '🚫';
+                  displayContent = data.hours > 0 ? data.hours.toFixed(1) + 'h' : '';
                 } else {
                   displayContent = data.hours > 0 ? data.hours.toFixed(1) + 'h' : '-';
                 }
@@ -306,7 +299,7 @@ export default function WorkloadHeatmap() {
                 return (
                   <div 
                     key={colKey} 
-                    className={'heatmap-cell ' + colorClass + (colKey === todayKey ? ' today-cell' : '')}
+                    className={'heatmap-cell ' + colorClass + (colKey === todayKey ? ' today-cell' : '') + (isWeekendCol ? ' heatmap-weekend' : '')}
                     title={tooltipText}
                   >
                     {displayContent}
