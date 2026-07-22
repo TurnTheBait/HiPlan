@@ -1876,13 +1876,13 @@ export default function ProjectDetailPage() {
                           value={budgetMode}
                           onChange={(e) => handleBudgetModeChange(e.target.value)}
                         >
-                          <option value="start_end">📅 Data Inizio / Data Fine (calcola giorni lavorativi ed ore)</option>
-                          <option value="start_hours">⏳ Data Inizio / Ore (calcola data fine escludendo sab/dom e giorni = ore/8)</option>
-                          <option value="end_hours">⏳ Data Fine / Ore (calcola data inizio a ritroso escludendo sab/dom)</option>
-                          <option value="start_days">📆 Data Inizio / Giorni (calcola data fine escludendo sab/dom e ore = giorni×8)</option>
-                          <option value="end_days">📆 Data Fine / Giorni (calcola data inizio a ritroso escludendo sab/dom)</option>
-                          <option value="start_days_hours">⚡ Data Inizio / Giorni / Ore (es. 24h spalmate su 10 gg escludendo sab/dom)</option>
-                          <option value="end_days_hours">⚡ Data Fine / Giorni / Ore (es. 24h spalmate a ritroso su 10 gg escludendo sab/dom)</option>
+                          <option value="start_end">📅 Data Inizio / Data Fine (calcola giorni lavorativi ed ore escludendo sab/dom e festivi)</option>
+                          <option value="start_hours">⏳ Data Inizio / Ore (calcola data fine escludendo sab/dom e festivi, giorni = ore/8)</option>
+                          <option value="end_hours">⏳ Data Fine / Ore (calcola data inizio a ritroso escludendo sab/dom e festivi)</option>
+                          <option value="start_days">📆 Data Inizio / Giorni (calcola data fine escludendo sab/dom e festivi, ore = giorni×8)</option>
+                          <option value="end_days">📆 Data Fine / Giorni (calcola data inizio a ritroso escludendo sab/dom e festivi)</option>
+                          <option value="start_days_hours">⚡ Data Inizio / Giorni / Ore (es. 24h spalmate su 10 gg escludendo sab/dom e festivi)</option>
+                          <option value="end_days_hours">⚡ Data Fine / Giorni / Ore (es. 24h spalmate a ritroso su 10 gg escludendo sab/dom e festivi)</option>
                         </select>
                       </div>
 
