@@ -481,7 +481,8 @@ textarea.input {
   background: rgba(0, 0, 0, 0.6);
 }
 
-.modal {
+.modal,
+.modal-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-xl);

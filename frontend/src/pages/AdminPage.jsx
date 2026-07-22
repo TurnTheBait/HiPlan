@@ -418,11 +418,11 @@ export default function AdminPage() {
 
       {/* MODALE AGGIUNTA/MODIFICA TEMPLATE */}
       {showAddTemplateModal && (
-        <div className="modal-overlay animate-fadeIn">
-          <div className="modal-card" style={{ maxWidth: 500 }}>
+        <div className="modal-overlay animate-fadeIn" onClick={() => setShowAddTemplateModal(false)}>
+          <div className="modal" style={{ maxWidth: 500, background: 'var(--bg-secondary)', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-xl)' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{editingTemplate ? 'Modifica Fase Preimpostata' : 'Nuova Fase Preimpostata'}</h3>
-              <button className="btn-close" onClick={() => setShowAddTemplateModal(false)}>×</button>
+              <h2>{editingTemplate ? 'Modifica Fase Preimpostata' : 'Nuova Fase Preimpostata'}</h2>
+              <button className="btn-icon" type="button" onClick={() => setShowAddTemplateModal(false)}>×</button>
             </div>
             <form onSubmit={handleSaveTemplate}>
               <div className="modal-body">
