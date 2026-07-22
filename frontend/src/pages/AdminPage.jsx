@@ -228,7 +228,7 @@ export default function AdminPage() {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {[...users].sort((a, b) => (a.full_name || a.username || '').localeCompare(b.full_name || b.username || '', 'it')).map((u) => (
                 <tr key={u.id}>
                   {adminVisibleColumns.includes('utente') && (
                     <td>
@@ -364,7 +364,7 @@ export default function AdminPage() {
                   </td>
                 </tr>
               ) : (
-                phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'tutti').map((tpl) => (
+                phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'tutti').sort((a, b) => (a.name || '').localeCompare(b.name || '', 'it')).map((tpl) => (
                   <tr key={tpl.id}>
                     <td>
                       <div style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
