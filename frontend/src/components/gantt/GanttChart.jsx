@@ -148,10 +148,14 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     // Scala temporale (Mese in italiano, Giorno della settimana: Lun Mar Mer..., Numero del giorno: 12 13 14...)
     const mesiItaliani = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
     const giorniItaliani = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+    const dayCssFunc = function (date) {
+      if (isWeekendOrHoliday(date)) return "gantt_weekend_scale_cell";
+      return "";
+    };
     gantt.config.scales = [
       { unit: "month", step: 1, format: function (date) { return `${mesiItaliani[date.getMonth()]} ${date.getFullYear()}`; } },
-      { unit: "day", step: 1, format: function (date) { return giorniItaliani[date.getDay()]; } },
-      { unit: "day", step: 1, format: "%d" },
+      { unit: "day", step: 1, css: dayCssFunc, format: function (date) { return giorniItaliani[date.getDay()]; } },
+      { unit: "day", step: 1, css: dayCssFunc, format: "%d" },
     ];
 
     // Tooltip e Marker per il giorno di oggi
@@ -232,27 +236,14 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       return classes.join(" ");
     };
 
-    // Evidenziazione delle celle di intestazione della scala temporale (esclusivamente per la riga dei singoli giorni)
-    gantt.templates.scale_cell_class = function (date, scale) {
+    // Evidenziazione delle celle di intestazione per la data di oggi
+    gantt.templates.scale_cell_class = function (date) {
       const today = new Date();
-      // Se la scala corrente non è quella giornaliera (es. mese, settimana, anno), non evidenziare mai come weekend/festivo
-      if (scale && scale.unit && scale.unit !== "day") {
-        const cellEnd = getCellEndDate(date, scale.unit, scale.step || 1);
-        if (date <= today && today < cellEnd) {
-          return "gantt_today_scale_cell";
-        }
-        return "";
-      }
-
-      const classes = [];
-      if (isWeekendOrHoliday(date)) {
-        classes.push("gantt_weekend_scale_cell");
-      }
       const cellEnd = gantt.date.add(date, 1, "day");
       if (date <= today && today < cellEnd) {
-        classes.push("gantt_today_scale_cell");
+        return "gantt_today_scale_cell";
       }
-      return classes.join(" ");
+      return "";
     };
 
     gantt.init(containerRef.current);

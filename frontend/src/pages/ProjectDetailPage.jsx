@@ -9,7 +9,7 @@ import './ProjectDetailPage.css';
 import { STATUS_LABELS_IT, STATUS_OPTIONS } from '../utils/statusLabels';
 import { PREDEFINED_PHASES, PHASE_DEFAULT_COLORS, getTaskColor } from '../utils/phaseColors';
 import { calculateTaskEffHours, isTaskCompleted } from '../utils/taskCompletion';
-import { addWorkingDays, subtractWorkingDays, countWorkingDays } from '../utils/workingDays';
+import { addWorkingDays, subtractWorkingDays, countWorkingDays, isWeekendOrHoliday } from '../utils/workingDays';
 import TaskComments from '../components/tasks/TaskComments';
 import TaskChecklist from '../components/tasks/TaskChecklist';
 
@@ -751,13 +751,17 @@ export default function ProjectDetailPage() {
     setViewMode(mode);
     const mesiItaliani = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
     const giorniItaliani = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+    const dayCssFunc = function (date) {
+      if (isWeekendOrHoliday(date)) return "gantt_weekend_scale_cell";
+      return "";
+    };
 
     switch (mode) {
       case 'day':
         gantt.config.scales = [
           { unit: "month", step: 1, format: function (date) { return `${mesiItaliani[date.getMonth()]} ${date.getFullYear()}`; } },
-          { unit: "day", step: 1, format: function (date) { return giorniItaliani[date.getDay()]; } },
-          { unit: "day", step: 1, format: "%d" },
+          { unit: "day", step: 1, css: dayCssFunc, format: function (date) { return giorniItaliani[date.getDay()]; } },
+          { unit: "day", step: 1, css: dayCssFunc, format: "%d" },
         ];
         gantt.config.min_column_width = 38;
         gantt.config.scale_height = 66;
