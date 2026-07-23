@@ -48,47 +48,103 @@ async def create_project(
     )
 
 
+@router.get("/backup/json/test_debug")
+async def backup_json_test(db: AsyncSession = Depends(get_db)):
+    from app.models.user import User as UserModel
+    from app.models.setting import Setting
+    from app.models.phase_template import PhaseTemplate
+    from app.models.project import Project, ProjectMember
+    from app.models.task import Task
+    from app.models.note import Note
+    from app.models.vacation import Vacation
+    from app.models.notification import Notification
+    from app.models.link import Link
+    from app.models.task_collaboration import TaskComment, TaskChecklistItem
+    from sqlalchemy import select
+    import datetime
+    import uuid
+    models_order = [
+        UserModel, Setting, PhaseTemplate, Project, ProjectMember,
+        Task, Note, Vacation, Notification, Link, TaskComment, TaskChecklistItem
+    ]
+
+    data = {}
+    for model in models_order:
+        res = await db.execute(select(model))
+        rows = res.scalars().all()
+        model_name = model.__name__
+        data[model_name] = []
+        for row in rows:
+            row_dict = {}
+            for col in model.__table__.columns:
+                val = getattr(row, col.name)
+                if isinstance(val, (datetime.datetime, datetime.date)):
+                    val = val.isoformat()
+                elif isinstance(val, uuid.UUID):
+                    val = str(val)
+                elif hasattr(val, "value"): # Enum handling
+                    val = val.value
+                row_dict[col.name] = val
+            data[model_name].append(row_dict)
+            
+    return {
+        "version": 2, 
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(), 
+        "data": data
+    }
+
 @router.get("/backup/json")
 async def backup_json(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from sqlalchemy import select
-    from sqlalchemy.orm import selectinload
-    from app.models.project import Project
+    from app.models.user import User as UserModel
+    from app.models.setting import Setting
+    from app.models.phase_template import PhaseTemplate
+    from app.models.project import Project, ProjectMember
     from app.models.task import Task
-    import json
+    from app.models.note import Note
+    from app.models.vacation import Vacation
+    from app.models.notification import Notification
+    from app.models.link import Link
+    from app.models.task_collaboration import TaskComment, TaskChecklistItem
+    from sqlalchemy import select
+    import datetime
+    import uuid
 
-    result = await db.execute(select(Project).options(selectinload(Project.responsible)))
-    projects = result.scalars().all()
-    commesse = []
-    for p in projects:
-        task_res = await db.execute(select(Task).where(Task.project_id == p.id).order_by(Task.sort_order))
-        tasks = task_res.scalars().all()
-        fasi = []
-        for t in tasks:
-            fasi.append({
-                "id": t.id,
-                "fase": t.text,
-                "addetti": json.loads(t.workers) if t.workers else [],
-                "start": t.start_date.strftime("%Y-%m-%d") if t.start_date else "",
-                "end": t.end_date.strftime("%Y-%m-%d") if t.end_date else "",
-                "orePrev": t.planned_hours or 8.0,
-                "oreEff": json.loads(t.actual_hours) if t.actual_hours else {}
-            })
-        commesse.append({
-            "id": p.id,
-            "cod": p.code or p.name[:15],
-            "cli": p.client or "Cliente Non Specificato",
-            "ds": p.start_date.strftime("%Y-%m-%d") if p.start_date else "",
-            "note": p.description or "",
-            "color": {"bar": p.color or "#185FA5"},
-            "responsible_id": p.responsible_id,
-            "responsible_username": p.responsible.username if p.responsible else None,
-            "addetti_commessa": json.loads(p.assigned_workers) if p.assigned_workers else [],
-            "fasi": fasi
-        })
-    return {"version": 1, "savedAt": "now", "commesse": commesse}
+    if current_user.role != UserRole.ADMIN:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Solo gli amministratori possono scaricare il backup completo del sistema.")
+
+    models_order = [
+        UserModel, Setting, PhaseTemplate, Project, ProjectMember,
+        Task, Note, Vacation, Notification, Link, TaskComment, TaskChecklistItem
+    ]
+
+    data = {}
+    for model in models_order:
+        res = await db.execute(select(model))
+        rows = res.scalars().all()
+        model_name = model.__name__
+        data[model_name] = []
+        for row in rows:
+            row_dict = {}
+            for col in model.__table__.columns:
+                val = getattr(row, col.name)
+                if isinstance(val, (datetime.datetime, datetime.date)):
+                    val = val.isoformat()
+                elif isinstance(val, uuid.UUID):
+                    val = str(val)
+                elif hasattr(val, "value"): # Enum handling
+                    val = val.value
+                row_dict[col.name] = val
+            data[model_name].append(row_dict)
+            
+    return {
+        "version": 2, 
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(), 
+        "data": data
+    }
 
 
 @router.post("/restore/json")
@@ -97,69 +153,117 @@ async def restore_json(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.EDITOR)),
 ):
-    from app.models.project import Project
+    from app.models.project import Project, ProjectMember
     from app.models.task import Task
     from app.models.user import User as UserModel
-    from sqlalchemy import select
+    from app.models.setting import Setting
+    from app.models.phase_template import PhaseTemplate
+    from app.models.note import Note
+    from app.models.vacation import Vacation
+    from app.models.notification import Notification
+    from app.models.link import Link
+    from app.models.task_collaboration import TaskComment, TaskChecklistItem
+    from sqlalchemy import select, delete
     import json
-    from datetime import datetime
+    import datetime
 
-    commesse = payload.get("commesse", [])
-    restored_projects = 0
-    restored_tasks = 0
-    for c in commesse:
-        cod = c.get("cod", "UT-COMM")
-        cli = c.get("cli", "Cliente")
-        ds_str = c.get("ds")
-        ds = datetime.strptime(ds_str, "%Y-%m-%d").date() if ds_str else None
-        color_obj = c.get("color")
-        color_str = color_obj.get("bar", "#185FA5") if isinstance(color_obj, dict) else (color_obj or "#185FA5")
+    version = payload.get("version", 1)
 
-        resp_id = c.get("responsible_id") or current_user.id
-        if c.get("responsible_username") and not c.get("responsible_id"):
-            u_res = await db.execute(select(UserModel).where(UserModel.username == c.get("responsible_username")))
-            u_obj = u_res.scalar_one_or_none()
-            if u_obj:
-                resp_id = u_obj.id
+    if version == 1:
+        commesse = payload.get("commesse", [])
+        restored_projects = 0
+        restored_tasks = 0
+        for c in commesse:
+            cod = c.get("cod", "UT-COMM")
+            cli = c.get("cli", "Cliente")
+            ds_str = c.get("ds")
+            ds = datetime.datetime.strptime(ds_str, "%Y-%m-%d").date() if ds_str else None
+            color_obj = c.get("color")
+            color_str = color_obj.get("bar", "#185FA5") if isinstance(color_obj, dict) else (color_obj or "#185FA5")
 
-        proj = Project(
-            name=f"{cod} - {cli}",
-            code=cod,
-            client=cli,
-            color=color_str,
-            description=c.get("note", ""),
-            start_date=ds,
-            owner_id=current_user.id,
-            responsible_id=resp_id,
-            assigned_workers=json.dumps(c.get("addetti_commessa", []))
-        )
-        db.add(proj)
-        await db.flush()
-        restored_projects += 1
+            resp_id = c.get("responsible_id") or current_user.id
+            if c.get("responsible_username") and not c.get("responsible_id"):
+                u_res = await db.execute(select(UserModel).where(UserModel.username == c.get("responsible_username")))
+                u_obj = u_res.scalar_one_or_none()
+                if u_obj:
+                    resp_id = u_obj.id
 
-        for idx, f in enumerate(c.get("fasi", [])):
-            fs_str = f.get("start")
-            fe_str = f.get("end")
-            fs = datetime.strptime(fs_str, "%Y-%m-%d").date() if fs_str else (ds or datetime.today().date())
-            fe = datetime.strptime(fe_str, "%Y-%m-%d").date() if fe_str else fs
-
-            t = Task(
-                project_id=proj.id,
-                text=f.get("fase", "Fase Lavorazione"),
-                start_date=fs,
-                end_date=fe,
-                duration=(fe - fs).days + 1 if fe and fs else 1,
-                planned_hours=float(f.get("orePrev", 8.0)),
-                workers=json.dumps(f.get("addetti", [])),
-                actual_hours=json.dumps(f.get("oreEff", {})),
-                sort_order=idx
+            proj = Project(
+                name=f"{cod} - {cli}",
+                code=cod,
+                client=cli,
+                color=color_str,
+                description=c.get("note", ""),
+                start_date=ds,
+                owner_id=current_user.id,
+                responsible_id=resp_id,
+                assigned_workers=json.dumps(c.get("addetti_commessa", []))
             )
-            db.add(t)
-            restored_tasks += 1
+            db.add(proj)
+            await db.flush()
+            restored_projects += 1
 
-    await db.commit()
-    return {"message": "Ripristino completato con successo", "projects": restored_projects, "tasks": restored_tasks}
+            for idx, f in enumerate(c.get("fasi", [])):
+                start_str = f.get("start")
+                end_str = f.get("end")
+                st_date = datetime.datetime.strptime(start_str, "%Y-%m-%d").date() if start_str else None
+                en_date = datetime.datetime.strptime(end_str, "%Y-%m-%d").date() if end_str else None
 
+                t = Task(
+                    project_id=proj.id,
+                    text=f.get("fase", f"Fase {idx+1}"),
+                    start_date=st_date,
+                    end_date=en_date,
+                    duration=(en_date - st_date).days + 1 if en_date and st_date else 1,
+                    planned_hours=float(f.get("orePrev", 8.0)),
+                    workers=json.dumps(f.get("addetti", [])),
+                    actual_hours=json.dumps(f.get("oreEff", {})),
+                    sort_order=idx
+                )
+                db.add(t)
+                restored_tasks += 1
+
+        await db.commit()
+        return {"message": "Ripristino completato con successo", "projects": restored_projects, "tasks": restored_tasks}
+
+    if version == 2:
+        data = payload.get("data", {})
+        models_order = [
+            UserModel, Setting, PhaseTemplate, Project, ProjectMember,
+            Task, Note, Vacation, Notification, Link, TaskComment, TaskChecklistItem
+        ]
+
+        # 1. Clear all existing data in reverse order
+        for model in reversed(models_order):
+            await db.execute(delete(model))
+        await db.flush()
+
+        # 2. Re-insert data in correct dependency order
+        for model in models_order:
+            model_name = model.__name__
+            rows_data = data.get(model_name, [])
+            for row_dict in rows_data:
+                kwargs = {}
+                for col in model.__table__.columns:
+                    val = row_dict.get(col.name)
+                    if val is not None:
+                        # Convert string to date/datetime based on col type
+                        col_type_name = type(col.type).__name__
+                        if "Date" in col_type_name or "DateTime" in col_type_name or "TIMESTAMP" in col_type_name.upper():
+                            try:
+                                # Simple ISO parsing
+                                dt_val = datetime.datetime.fromisoformat(val.replace("Z", "+00:00"))
+                                if "DateTime" in col_type_name or "TIMESTAMP" in col_type_name.upper():
+                                    val = dt_val
+                                else:
+                                    val = dt_val.date()
+                            except Exception:
+                                pass
+                    kwargs[col.name] = val
+                db.add(model(**kwargs))
+        
+        await db.commit()
+        return {"status": "ok", "message": "Ripristino completo database effettuato con successo!"}
 
 
 @router.get("/{project_id}", response_model=ProjectDetail)

@@ -41,7 +41,7 @@ export default function AdminPage() {
       const a = document.createElement('a');
       a.href = url;
       const d = new Date();
-      a.download = `commesse_backup_${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.json`;
+      a.download = `gantt_full_backup_${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.json`;
       a.click();
       window.URL.revokeObjectURL(url);
       toast.success('Backup JSON scaricato!');
@@ -53,18 +53,28 @@ export default function AdminPage() {
   async function handleRestoreJson(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    if (!window.confirm("ATTENZIONE: Caricando questo backup sovrascriverai i dati attualmente esistenti.\\n\\nSei sicuro di voler procedere?")) {
+      e.target.value = '';
+      return;
+    }
+    
     const reader = new FileReader();
     reader.onload = async (ev) => {
       try {
         const payload = JSON.parse(ev.target.result);
-        if (!payload.commesse || !Array.isArray(payload.commesse)) {
-          throw new Error('Formato JSON commesse non valido');
+        if (payload.version === 2 && payload.data) {
+          await api.post('/projects/restore/json', payload);
+          toast.success(`Ripristino del database (v2) completato con successo!`);
+        } else if (payload.commesse && Array.isArray(payload.commesse)) {
+          await api.post('/projects/restore/json', payload);
+          toast.success(`Caricate ${payload.commesse.length} commesse (v1) con successo!`);
+        } else {
+          throw new Error('Formato JSON non valido o non riconosciuto');
         }
-        await api.post('/projects/restore/json', payload);
-        toast.success(`Caricate ${payload.commesse.length} commesse con successo!`);
         loadData();
       } catch (err) {
-        toast.error('Errore nel caricamento file JSON commesse');
+        toast.error('Errore nel caricamento file JSON: ' + (err.response?.data?.detail || err.message));
       }
       e.target.value = '';
     };
