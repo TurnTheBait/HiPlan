@@ -20,6 +20,19 @@ export default function ProjectsPage() {
   const [filter, setFilter] = useState('my_projects');
   const [searchQuery, setSearchQuery] = useState('');
   const [form, setForm] = useState({ name: '', code: '', client: '', color: '#185FA5', status: 'planning', description: '', start_date: '', end_date: '', responsible_id: '', assigned_workers: [] });
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportFormat, setExportFormat] = useState('pdf');
+  const exportMenuRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
+        setShowExportMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     loadProjects();
@@ -123,6 +136,25 @@ export default function ProjectsPage() {
 
   const canCreate = user?.role === 'admin' || user?.role === 'editor';
 
+  async function handleExportFiltered(format) {
+    if (filtered.length === 0) return toast.info("Nessuna commessa da esportare");
+    const project_ids = filtered.map(p => p.id);
+    
+    try {
+      const res = await api.post(`/projects/export-list/${format}`, { project_ids }, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `elenco_commesse.${format === 'excel' ? 'xlsx' : 'pdf'}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setShowExportMenu(false);
+    } catch {
+      toast.error('Errore durante l\'esportazione');
+    }
+  }
+
   function toggleWorkerSelection(username, isEdit = false) {
     if (isEdit) {
       const current = editForm.assigned_workers || [];
@@ -145,6 +177,69 @@ export default function ProjectsPage() {
           <p>{filtered.length} commesse</p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div style={{ position: 'relative' }} ref={exportMenuRef}>
+            <button 
+              className="btn btn-primary" 
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }} 
+              onClick={() => setShowExportMenu(!showExportMenu)}
+            >
+              📥 Stampa / Export ▾
+            </button>
+            {showExportMenu && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, marginTop: 6,
+                background: 'var(--bg-card)', border: '1px solid var(--border-default)',
+                borderRadius: 10, padding: 16, zIndex: 300, minWidth: 260,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.2)', textAlign: 'left'
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Formato:
+                </div>
+                <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+                  <label style={{
+                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                    background: exportFormat === 'pdf' ? 'rgba(239, 68, 68, 0.15)' : 'var(--bg-tertiary)',
+                    border: exportFormat === 'pdf' ? '2px solid #ef4444' : '1px solid var(--border-default)',
+                    color: exportFormat === 'pdf' ? '#ef4444' : 'var(--text-secondary)',
+                    transition: 'all 0.2s ease'
+                  }}>
+                    <input
+                      type="radio"
+                      name="exportFormat"
+                      value="pdf"
+                      checked={exportFormat === 'pdf'}
+                      onChange={() => setExportFormat('pdf')}
+                      style={{ display: 'none' }}
+                    />
+                    📄 PDF
+                  </label>
+                  <label style={{
+                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                    background: exportFormat === 'excel' ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-tertiary)',
+                    border: exportFormat === 'excel' ? '2px solid #10b981' : '1px solid var(--border-default)',
+                    color: exportFormat === 'excel' ? '#10b981' : 'var(--text-secondary)',
+                    transition: 'all 0.2s ease'
+                  }}>
+                    <input
+                      type="radio"
+                      name="exportFormat"
+                      value="excel"
+                      checked={exportFormat === 'excel'}
+                      onChange={() => setExportFormat('excel')}
+                      style={{ display: 'none' }}
+                    />
+                    📊 Excel
+                  </label>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <button className="btn btn-secondary" onClick={() => setShowExportMenu(false)}>Annulla</button>
+                  <button className="btn btn-primary" onClick={() => handleExportFiltered(exportFormat)}>Export {exportFormat.toUpperCase()}</button>
+                </div>
+              </div>
+            )}
+          </div>
           {canCreate && (
             <button className="btn btn-primary" style={{ width: '190px' }} onClick={() => setShowModal(true)}>
               + Nuova Commessa

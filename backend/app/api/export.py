@@ -1,14 +1,22 @@
-from fastapi import APIRouter, Depends, Query
+# pyrefly: ignore [missing-import]
+from fastapi import APIRouter, Depends, Query, Body
+# pyrefly: ignore [missing-import]
 from fastapi.responses import StreamingResponse
+# pyrefly: ignore [missing-import]
+from pydantic import BaseModel
+from typing import List
+# pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import get_db, get_current_user
 from app.models.user import User
 from app.services import export_service
 
-router = APIRouter(prefix="/api/projects/{project_id}/export", tags=["export"])
+router = APIRouter(prefix="/api/projects", tags=["export"])
 
+class ExportProjectsRequest(BaseModel):
+    project_ids: List[str]
 
-@router.get("/excel")
+@router.get("/{project_id}/export/excel")
 async def export_excel(
     project_id: str,
     sections: str = Query("tasks,hours", description="Sezioni da includere: tasks, hours, gantt (separate da virgola)"),
@@ -24,7 +32,7 @@ async def export_excel(
     )
 
 
-@router.get("/pdf")
+@router.get("/{project_id}/export/pdf")
 async def export_pdf(
     project_id: str,
     sections: str = Query("tasks,hours", description="Sezioni da includere: tasks, hours, gantt (separate da virgola)"),
@@ -37,4 +45,30 @@ async def export_pdf(
         buffer,
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=project_{project_id}.pdf"},
+    )
+
+@router.post("/export-list/excel")
+async def export_projects_list_excel(
+    request: ExportProjectsRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    buffer = await export_service.export_projects_list_excel(db, request.project_ids)
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=projects_list.xlsx"},
+    )
+
+@router.post("/export-list/pdf")
+async def export_projects_list_pdf(
+    request: ExportProjectsRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    buffer = await export_service.export_projects_list_pdf(db, request.project_ids)
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=projects_list.pdf"},
     )

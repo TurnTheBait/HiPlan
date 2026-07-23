@@ -28,6 +28,8 @@ export default function AdminPage() {
     department: 'ufficio_tecnico',
     default_color: '#3b82f6',
   });
+  const [globalBannerForm, setGlobalBannerForm] = useState({ text: '', type: 'info' });
+  const [globalBanners, setGlobalBanners] = useState([]);
   const [loading, setLoading] = useState(true);
   const fileInputRef = useRef(null);
 
@@ -91,9 +93,40 @@ export default function AdminPage() {
   async function loadData() {
     setLoading(true);
     try {
-      await Promise.all([loadUsers(), loadPhaseTemplates()]);
+      await Promise.all([loadUsers(), loadPhaseTemplates(), loadGlobalBanners()]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadGlobalBanners() {
+    try {
+      const res = await api.get('/settings/global-banner');
+      setGlobalBanners(res.data || []);
+    } catch { /* ignore */ }
+  }
+
+  async function addGlobalBanner(e) {
+    e.preventDefault();
+    if (!globalBannerForm.text.trim()) return;
+    try {
+      const res = await api.post('/settings/global-banner', globalBannerForm);
+      setGlobalBanners(prev => [...prev, res.data]);
+      setGlobalBannerForm({ text: '', type: 'info' });
+      toast.success('Annuncio aggiunto con successo');
+    } catch {
+      toast.error('Errore aggiunta annuncio');
+    }
+  }
+
+  async function deleteGlobalBanner(id) {
+    if (!window.confirm("Sei sicuro di voler eliminare questo annuncio?")) return;
+    try {
+      await api.delete(`/settings/global-banner/${id}`);
+      setGlobalBanners(prev => prev.filter(b => b.id !== id));
+      toast.success('Annuncio eliminato');
+    } catch {
+      toast.error('Errore eliminazione annuncio');
     }
   }
 
@@ -239,6 +272,62 @@ export default function AdminPage() {
         </div>
       </div>
 
+      {/* SEZIONE BACHECA AZIENDALE */}
+      <div className="admin-section-card" style={{ marginBottom: 30 }}>
+        <div className="admin-section-header">
+          <h2>📢 Annunci</h2>
+          <p className="admin-section-desc">Annunci in evidenza che appariranno a tutti gli utenti in cima alla Dashboard per le prossime 24h.</p>
+        </div>
+        <form onSubmit={addGlobalBanner} style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="input-group" style={{ flex: 1, minWidth: 250, marginBottom: 0 }}>
+            <input
+              className="input"
+              placeholder="Es. Venerdì gli uffici chiudono alle 16:00..."
+              value={globalBannerForm.text}
+              onChange={(e) => setGlobalBannerForm({ ...globalBannerForm, text: e.target.value })}
+            />
+          </div>
+          <div className="input-group" style={{ width: 150, marginBottom: 0 }}>
+            <select
+              className="input"
+              value={globalBannerForm.type}
+              onChange={(e) => setGlobalBannerForm({ ...globalBannerForm, type: e.target.value })}
+            >
+              <option value="info">🔵 Info</option>
+              <option value="warning">🟡 Avviso</option>
+              <option value="success">🟢 Successo</option>
+              <option value="error">🔴 Urgente</option>
+            </select>
+          </div>
+          <button type="submit" className="btn btn-primary" style={{ height: 42 }}>
+            Aggiungi Annuncio
+          </button>
+        </form>
+
+        {globalBanners.length > 0 && (
+          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Annunci Attivi (max 24h)</h4>
+            {globalBanners.map(b => (
+              <div key={b.id} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                background: 'var(--bg-tertiary)', padding: '10px 14px', borderRadius: 'var(--radius-sm)',
+                borderLeft: `3px solid ${b.type === 'error' ? '#ef4444' : b.type === 'warning' ? '#f59e0b' : b.type === 'success' ? '#10b981' : '#3b82f6'}`
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{b.text}</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Creato: {new Date(b.created_at).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <button onClick={() => deleteGlobalBanner(b.id)} className="btn btn-ghost" style={{ padding: '6px 10px', color: 'var(--text-muted)' }} title="Elimina annuncio">
+                  🗑️
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* SEZIONE 1: UTENTI DI SISTEMA */}
       <div className="admin-section-card">
         <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -247,7 +336,7 @@ export default function AdminPage() {
             <p className="admin-section-desc">Utenti registrati con credenziali di login per accedere al gestionale HiPlan ({users.length})</p>
           </div>
           <div style={{ position: 'relative' }}>
-            <button 
+            <button
               className="btn btn-secondary btn-sm"
               onClick={() => setShowAdminColumnsMenu(!showAdminColumnsMenu)}
             >
@@ -257,8 +346,8 @@ export default function AdminPage() {
               <div className="dropdown-menu" style={{ position: 'absolute', right: 0, top: '100%', marginTop: 8, zIndex: 50, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, padding: 8, boxShadow: 'var(--shadow-lg)', minWidth: 200 }}>
                 {['utente', 'email', 'ruolo', 'reparto', 'stato', 'registrato', 'azioni'].map(col => (
                   <label key={col} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', cursor: 'pointer', textTransform: 'capitalize' }}>
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       checked={adminVisibleColumns.includes(col)}
                       onChange={() => toggleAdminColumn(col)}
                     />

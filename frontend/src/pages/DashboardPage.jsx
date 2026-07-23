@@ -21,6 +21,7 @@ export default function DashboardPage() {
   const [dismissedKeys, setDismissedKeys] = useState(
     () => new Set(JSON.parse(localStorage.getItem('recovery_dismissed') || '[]'))
   );
+  const [globalBanners, setGlobalBanners] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const MONTH_NAMES_IT = [
@@ -58,14 +59,18 @@ export default function DashboardPage() {
 
   async function loadData() {
     try {
-      const [projRes, notifRes, tasksRes, vacRes, recoveryRes] = await Promise.all([
+      const [projRes, notifRes, tasksRes, vacRes, recoveryRes, bannerRes] = await Promise.all([
         api.get('/projects'),
         api.get('/notifications'),
         api.get('/users/me/tasks/today'),
         api.get('/vacations/me').catch(() => ({ data: [] })),
         api.get('/vacations/me/recovery').catch(() => ({ data: [] })),
+        api.get('/settings/global-banner').catch(() => ({ data: [] })),
       ]);
       setProjects(projRes.data);
+      if (Array.isArray(bannerRes.data)) {
+        setGlobalBanners(bannerRes.data);
+      }
       setNotifications(notifRes.data);
       setMyTasksToday(tasksRes.data);
       setVacations(vacRes.data || []);
@@ -143,6 +148,37 @@ export default function DashboardPage() {
 
   return (
     <div className="dashboard animate-fadeIn">
+      {globalBanners.map(banner => (
+        <div key={banner.id} style={{
+          background: banner.type === 'error' ? 'rgba(239, 68, 68, 0.1)' :
+                      banner.type === 'warning' ? 'rgba(245, 158, 11, 0.1)' :
+                      banner.type === 'success' ? 'rgba(16, 185, 129, 0.1)' :
+                      'rgba(59, 130, 246, 0.1)',
+          borderLeft: `4px solid ${
+                      banner.type === 'error' ? '#ef4444' :
+                      banner.type === 'warning' ? '#f59e0b' :
+                      banner.type === 'success' ? '#10b981' :
+                      '#3b82f6'
+          }`,
+          color: 'var(--text-primary)',
+          padding: '12px 16px',
+          borderRadius: '4px',
+          marginBottom: '16px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <span style={{ fontWeight: 500, fontSize: '0.95rem' }}>{banner.text}</span>
+          <button 
+            onClick={() => setGlobalBanners(prev => prev.filter(b => b.id !== banner.id))} 
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: 'var(--text-muted)' }}
+            title="Chiudi avviso"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+
       <div className="dashboard-welcome">
         <h1>Ciao, {user?.full_name || user?.username} 👋</h1>
         <p>Ecco un riepilogo dei tuoi progetti</p>

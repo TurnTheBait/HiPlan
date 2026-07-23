@@ -5,7 +5,7 @@ from app.core.config import settings
 from app.models.base import Base, engine
 import app.models  # Assicura il caricamento di tutti i modelli per create_all
 from fastapi.staticfiles import StaticFiles
-from app.api import auth, users, projects, tasks, notifications, export, notes, task_collaboration, workload, vacations, phase_templates
+from app.api import auth, users, projects, tasks, notifications, export, notes, task_collaboration, workload, vacations, phase_templates, settings as api_settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -141,6 +141,7 @@ app.include_router(tasks.router)
 app.include_router(task_collaboration.router)
 app.include_router(workload.router)
 app.include_router(notifications.router)
+app.include_router(api_settings.router)
 app.include_router(export.router)
 app.include_router(notes.router)
 app.include_router(vacations.router)

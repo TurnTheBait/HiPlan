@@ -111,6 +111,7 @@ def _compute_work_dates(start_date: Any, end_date: Any) -> List[Any]:
 
 async def _get_project_data(db: AsyncSession, project_id: str) -> Tuple[Any, List[Any]]:
     """Helper per fetchare progetto e tasks"""
+    # pyrefly: ignore [missing-import]
     from sqlalchemy.orm import selectinload
     project = await db.execute(select(Project).options(selectinload(Project.responsible)).where(Project.id == project_id))
     proj = project.scalar_one()
@@ -835,6 +836,161 @@ async def export_pdf(db: AsyncSession, project_id: str, sections: Optional[List[
             elements.append(table)
             elements.append(Spacer(1, 4 * mm))
 
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+async def export_projects_list_excel(db: AsyncSession, project_ids: List[str]) -> io.BytesIO:
+    from app.models.user import User
+    buffer = io.BytesIO()
+    wb = Workbook()
+    ws = cast(Worksheet, wb.active)
+    ws.title = "Elenco Commesse"
+
+    headers = ["Codice", "Nome Commessa", "Cliente", "Responsabile", "Stato", "Avanzamento", "Addetti"]
+    header_fill = PatternFill("solid", fgColor="1F2937")
+    header_font = Font(bold=True, color="FFFFFF")
+    
+    for col_idx, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+
+    if not project_ids:
+        wb.save(buffer)
+        buffer.seek(0)
+        return buffer
+
+    res = await db.execute(select(Project).where(Project.id.in_(project_ids)))
+    projects = res.scalars().all()
+    
+    user_res = await db.execute(select(User))
+    users = user_res.scalars().all()
+    user_map = {u.id: u.full_name or u.username for u in users}
+
+    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+
+    for idx, p in enumerate(projects, 2):
+        res_tasks = await db.execute(select(Task).where(Task.project_id == p.id))
+        tasks = res_tasks.scalars().all()
+        
+        total_tasks = len(tasks)
+        completed_tasks = sum(1 for t in tasks if t.completed)
+        progress = f"{int((completed_tasks / total_tasks) * 100)}%" if total_tasks > 0 else "0%"
+        
+        workers = set()
+        for t in tasks:
+            workers.update(_get_workers_from_task(t))
+        workers_str = ", ".join(sorted(workers)) if workers else "-"
+        
+        status_it = {"planning": "Pianificazione", "active": "In Corso", "completed": "Completata", "archived": "Archiviata"}.get(p.status, p.status)
+        resp_name = user_map.get(p.responsible_id, "-") if p.responsible_id else "-"
+
+        row_data = [
+            p.code or "-",
+            p.name,
+            p.client or "-",
+            resp_name,
+            status_it,
+            progress,
+            workers_str
+        ]
+        
+        for col_idx, val in enumerate(row_data, 1):
+            cell = ws.cell(row=idx, column=col_idx, value=val)
+            cell.border = thin_border
+            if col_idx in [1, 4, 5, 6]:
+                cell.alignment = Alignment(horizontal="center")
+
+    for col_idx in range(1, len(headers) + 1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = 20
+    ws.column_dimensions["B"].width = 35
+    ws.column_dimensions["G"].width = 40
+
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+async def export_projects_list_pdf(db: AsyncSession, project_ids: List[str]) -> io.BytesIO:
+    from app.models.user import User
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm, topMargin=15*mm, bottomMargin=15*mm)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle("TitleStyle", parent=styles["Heading1"], textColor=colors.HexColor("#1F2937"), fontSize=16, spaceAfter=10)
+    elements.append(Paragraph("Elenco Commesse & Progetti", title_style))
+    elements.append(Spacer(1, 5*mm))
+
+    if not project_ids:
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer
+
+    res = await db.execute(select(Project).where(Project.id.in_(project_ids)))
+    projects = res.scalars().all()
+    
+    user_res = await db.execute(select(User))
+    users = user_res.scalars().all()
+    user_map = {u.id: u.full_name or u.username for u in users}
+
+    header_style = ParagraphStyle("HeaderStyle", parent=styles["Normal"], textColor=colors.whitesmoke, fontName="Helvetica-Bold")
+    
+    data = [
+        [
+            Paragraph("Codice", header_style),
+            Paragraph("Nome Commessa", header_style),
+            Paragraph("Cliente", header_style),
+            Paragraph("Resp.", header_style),
+            Paragraph("Stato", header_style),
+            Paragraph("Avanz.", header_style),
+            Paragraph("Addetti", header_style)
+        ]
+    ]
+    
+    cell_style = ParagraphStyle("CellStyle", parent=styles["Normal"], fontSize=10, leading=12)
+    
+    for p in projects:
+        res_tasks = await db.execute(select(Task).where(Task.project_id == p.id))
+        tasks = res_tasks.scalars().all()
+        
+        total_tasks = len(tasks)
+        completed_tasks = sum(1 for t in tasks if t.completed)
+        progress = f"{int((completed_tasks / total_tasks) * 100)}%" if total_tasks > 0 else "0%"
+        
+        workers = set()
+        for t in tasks:
+            workers.update(_get_workers_from_task(t))
+        workers_str = ", ".join(sorted(workers)) if workers else "-"
+        
+        status_it = {"planning": "Pianificazione", "active": "In Corso", "completed": "Completata", "archived": "Archiviata"}.get(p.status, p.status)
+        resp_name = user_map.get(p.responsible_id, "-") if p.responsible_id else "-"
+        
+        data.append([
+            Paragraph(p.code or "-", cell_style),
+            Paragraph(p.name, cell_style),
+            Paragraph(p.client or "-", cell_style),
+            Paragraph(resp_name, cell_style),
+            Paragraph(status_it, cell_style),
+            Paragraph(progress, cell_style),
+            Paragraph(workers_str, cell_style)
+        ])
+
+    table = Table(data, colWidths=[65, 160, 110, 85, 75, 45, 190])
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F2937")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+        ("ALIGN", (5, 0), (5, -1), "CENTER"), # Avanzamento
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+        ("TOPPADDING", (0, 0), (-1, 0), 8),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F9FAFB")]),
+    ]))
+    
+    elements.append(table)
     doc.build(elements)
     buffer.seek(0)
     return buffer
