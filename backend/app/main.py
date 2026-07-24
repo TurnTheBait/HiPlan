@@ -84,7 +84,7 @@ async def lifespan(app: FastAPI):
             for name, dept, col in default_templates:
                 session.add(PhaseTemplate(name=name, department=dept, default_color=col, is_custom=False))
             await session.commit()
-            print("📦 [INIT] Inserite fasi preimpostate di default per tutti i reparti")
+            print("[INIT] Inserite fasi preimpostate di default per tutti i reparti")
 
         result = await session.execute(select(User).where(func.lower(User.username) == "admin"))
         admin_user = result.scalar_one_or_none()
@@ -100,20 +100,21 @@ async def lifespan(app: FastAPI):
             )
             session.add(admin_user)
             await session.commit()
-            print("👑 [INIT] Creato utente admin predefinito (username: admin / password: admin)")
+            print("[INIT] Creato utente admin predefinito (username: admin / password: admin)")
         else:
             if not verify_password("admin", admin_user.hashed_password):
                 admin_user.hashed_password = hash_password("admin")
                 await session.commit()
-                print("🔄 [INIT] Password utente admin sincronizzata a 'admin'")
+                print("[INIT] Password utente admin sincronizzata a 'admin'")
 
+    # pyrefly: ignore [missing-import]
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from app.services.backup_service import run_backup
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(run_backup, 'cron', day_of_week='sun', hour=3, minute=0)
     scheduler.start()
-    print("⏰ [INIT] Scheduler di backup avviato (domenica ore 03:00)")
+    print("[INIT] Scheduler di backup avviato (domenica ore 03:00)")
 
     yield
     await engine.dispose()
