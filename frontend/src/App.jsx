@@ -12,6 +12,7 @@ import NotesPage from './pages/NotesPage';
 import AdminPage from './pages/AdminPage';
 import ConflictMonitoringPage from './pages/ConflictMonitoringPage';
 import ProfilePage from './pages/ProfilePage';
+import TicketsPage from './pages/TicketsPage';
 import './index.css';
 
 function ProtectedRoute({ children, adminOnly = false }) {
@@ -59,6 +60,7 @@ function AppRoutes() {
         <Route path="/me" element={<ProfilePage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/notes" element={<NotesPage />} />
+        <Route path="/tickets" element={<TicketsPage />} />
         <Route path="/conflicts" element={<ConflictMonitoringPage />} />
         <Route path="/admin/conflicts" element={<ConflictMonitoringPage />} />
         <Route

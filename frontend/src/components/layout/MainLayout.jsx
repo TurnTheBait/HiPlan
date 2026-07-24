@@ -129,6 +129,10 @@ export default function MainLayout() {
             <span className="sidebar-link-icon">📝</span>
             {!collapsed && <span>Blocchi Note</span>}
           </NavLink>
+          <NavLink to="/tickets" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon">🎫</span>
+            {!collapsed && <span>Ticket</span>}
+          </NavLink>
           <NavLink to="/conflicts" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon">👷‍♂️</span>
             {!collapsed && <span>Panoramica addetti</span>}

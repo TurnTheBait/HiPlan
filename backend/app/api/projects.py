@@ -1,5 +1,7 @@
 from typing import List
+# pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends
+# pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import get_db, get_current_user, require_role
 from app.models.user import User, UserRole
@@ -60,6 +62,7 @@ async def backup_json_test(db: AsyncSession = Depends(get_db)):
     from app.models.notification import Notification
     from app.models.link import Link
     from app.models.task_collaboration import TaskComment, TaskChecklistItem
+    # pyrefly: ignore [missing-import]
     from sqlalchemy import select
     import datetime
     import uuid
@@ -108,11 +111,13 @@ async def backup_json(
     from app.models.notification import Notification
     from app.models.link import Link
     from app.models.task_collaboration import TaskComment, TaskChecklistItem
+    # pyrefly: ignore [missing-import]
     from sqlalchemy import select
     import datetime
     import uuid
 
     if current_user.role != UserRole.ADMIN:
+        # pyrefly: ignore [missing-import]
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Solo gli amministratori possono scaricare il backup completo del sistema.")
 
@@ -163,6 +168,7 @@ async def restore_json(
     from app.models.notification import Notification
     from app.models.link import Link
     from app.models.task_collaboration import TaskComment, TaskChecklistItem
+    # pyrefly: ignore [missing-import]
     from sqlalchemy import select, delete
     import json
     import datetime
@@ -284,6 +290,7 @@ async def get_project(
         except:
             pass
 
+    # pyrefly: ignore [missing-import]
     from sqlalchemy import select
     from app.models.task import Task
     tasks_res = await db.execute(select(Task.workers).where(Task.project_id == project_id))
@@ -372,6 +379,7 @@ async def add_member(
 ):
     member = await project_service.add_member(db, project_id, data, current_user)
     # Recupera i dati utente per la response
+    # pyrefly: ignore [missing-import]
     from sqlalchemy import select
     from app.models.user import User as UserModel
     result = await db.execute(select(UserModel).where(UserModel.id == member.user_id))

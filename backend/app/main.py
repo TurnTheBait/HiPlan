@@ -1,11 +1,14 @@
 from contextlib import asynccontextmanager
+# pyrefly: ignore [missing-import]
 from fastapi import FastAPI
+# pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.models.base import Base, engine
 import app.models  # Assicura il caricamento di tutti i modelli per create_all
+# pyrefly: ignore [missing-import]
 from fastapi.staticfiles import StaticFiles
-from app.api import auth, users, projects, tasks, notifications, export, notes, task_collaboration, workload, vacations, phase_templates, settings as api_settings
+from app.api import auth, users, projects, tasks, notifications, export, notes, task_collaboration, workload, vacations, phase_templates, settings as api_settings, tickets
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -34,6 +37,10 @@ async def lifespan(app: FastAPI):
             pass
         try:
             await conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN assigned_workers TEXT DEFAULT '[]';")
+        except Exception:
+            pass
+        try:
+            await conn.exec_driver_sql("ALTER TABLE tickets ADD COLUMN custom_project_code VARCHAR(255);")
         except Exception:
             pass
 
@@ -146,6 +153,7 @@ app.include_router(export.router)
 app.include_router(notes.router)
 app.include_router(vacations.router)
 app.include_router(phase_templates.router)
+app.include_router(tickets.router)
 
 
 @app.get("/api/health")

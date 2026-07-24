@@ -9,6 +9,7 @@ from app.models.task_collaboration import TaskComment, TaskChecklistItem
 from app.models.vacation import Vacation
 from app.models.phase_template import PhaseTemplate
 from app.models.setting import Setting
+from app.models.ticket import Ticket, TicketReply, TicketStatus, TicketPriority
 
 __all__ = [
     "Base", "engine", "AsyncSessionLocal",
@@ -20,5 +21,6 @@ __all__ = [
     "Note",
     "TaskComment", "TaskChecklistItem",
     "Vacation", "PhaseTemplate",
-    "Setting"
+    "Setting",
+    "Ticket", "TicketReply", "TicketStatus", "TicketPriority"
 ]
