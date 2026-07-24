@@ -112,6 +112,7 @@ export default function ProjectDetailPage() {
   const [actualHoursMap, setActualHoursMap] = useState({});
   const [modalExtraDates, setModalExtraDates] = useState([]);
   const [allVacations, setAllVacations] = useState([]);
+  const [openTicketsCount, setOpenTicketsCount] = useState(0);
 
   // Stato Modale Modifica Dati Commessa
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
@@ -137,11 +138,12 @@ export default function ProjectDetailPage() {
 
   async function loadProject() {
     try {
-      const [projRes, ganttRes, usersRes, vacRes] = await Promise.all([
+      const [projRes, ganttRes, usersRes, vacRes, ticketsRes] = await Promise.all([
         api.get(`/projects/${id}`),
         api.get(`/projects/${id}/gantt`),
         api.get('/users').catch(() => ({ data: [] })),
-        api.get('/vacations/all').catch(() => ({ data: [] }))
+        api.get('/vacations/all').catch(() => ({ data: [] })),
+        api.get('/tickets', { params: { project_id: id } }).catch(() => ({ data: [] }))
       ]);
       setProject(projRes.data);
       const sortedTasks = Array.isArray(ganttRes.data?.tasks)
@@ -160,6 +162,10 @@ export default function ProjectDetailPage() {
       }
       if (Array.isArray(vacRes.data)) {
         setAllVacations(vacRes.data);
+      }
+      if (Array.isArray(ticketsRes.data)) {
+        const openTkts = ticketsRes.data.filter(t => t.status !== 'Completato');
+        setOpenTicketsCount(openTkts.length);
       }
       fetchPhaseTemplates();
     } catch {
@@ -965,6 +971,16 @@ export default function ProjectDetailPage() {
           ⚠️ Ritardi & Semaforo
           {delaysList.length > 0 && (
             <span className="tab-badge tab-badge-danger">{delaysList.length}</span>
+          )}
+        </button>
+        <button
+          className="ut-tab-btn"
+          style={{ borderColor: openTicketsCount > 0 ? 'var(--warning)' : 'transparent', color: openTicketsCount > 0 ? 'var(--warning)' : 'inherit' }}
+          onClick={() => navigate('/tickets', { state: { projectId: id } })}
+        >
+          🎫 Ticket
+          {openTicketsCount > 0 && (
+            <span className="tab-badge" style={{ backgroundColor: 'var(--warning)', color: '#fff' }}>{openTicketsCount}</span>
           )}
         </button>
         {canManageProject && (
@@ -2432,7 +2448,7 @@ export default function ProjectDetailPage() {
       {/* Modale Modifica Dati Commessa */}
       {showEditProjectModal && (
         <div className="modal-overlay" onClick={() => setShowEditProjectModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Modifica Dati Commessa</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowEditProjectModal(false)}>✕</button>

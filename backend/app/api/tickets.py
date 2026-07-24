@@ -137,7 +137,7 @@ async def create_ticket(
         author_id=current_user.id,
         assigned_to=json.dumps(data.assigned_to or []),
         attachments=json.dumps([]),
-        status=TicketStatus.OPEN,
+        status=TicketStatus.DA_GESTIRE,
         priority=data.priority or "medium",
     )
     db.add(ticket)
@@ -272,8 +272,8 @@ async def add_reply(
     ticket = result.scalar_one_or_none()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket non trovato")
-    if ticket.status == TicketStatus.CLOSED:
-        raise HTTPException(status_code=400, detail="Impossibile rispondere a un ticket chiuso")
+    if ticket.status == TicketStatus.COMPLETATO:
+        raise HTTPException(status_code=400, detail="Impossibile rispondere a un ticket completato")
 
     reply = TicketReply(
         ticket_id=ticket.id,

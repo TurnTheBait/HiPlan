@@ -1,17 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import './TicketsPage.css';
 
-const BACKEND_URL = import.meta.env.VITE_API_URL 
-  ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '') 
+const BACKEND_URL = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
   : `http://${window.location.hostname}:8000`;
 
 /* ─── helpers ─── */
 const PRIORITY_ICON = { low: '🔵', medium: '🟡', high: '🔴' };
 const PRIORITY_LABEL = { low: 'Bassa', medium: 'Media', high: 'Alta' };
+const STATUS_CLASS = {
+  'Da gestire': 'da-gestire',
+  'In attesa del cliente': 'in-attesa',
+  'In elaborazione': 'in-elaborazione',
+  'Completato': 'completato'
+};
 
 function fmtDate(dt) {
   if (!dt) return '';
@@ -101,7 +107,15 @@ function AssigneeInput({ selected, onChange, users }) {
 
 /* ─── New Ticket Modal ─── */
 function NewTicketModal({ onClose, onCreated, projects, users }) {
-  const [form, setForm] = useState({ title: '', description: '', project_id: '', custom_project_code: '', priority: 'medium', assigned_to: [] });
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    project_id: '',
+    custom_project_code: '',
+    priority: 'medium',
+    assigned_to: [],
+    status: 'Da gestire'
+  });
   const [saving, setSaving] = useState(false);
   const [files, setFiles] = useState([]);
   const [dragActive, setDragActive] = useState(false);
@@ -192,11 +206,11 @@ function NewTicketModal({ onClose, onCreated, projects, users }) {
                 ))}
               </select>
               {form.project_id === 'custom' && (
-                <input 
-                  type="text" 
-                  placeholder="Codice commessa personalizzato" 
-                  value={form.custom_project_code} 
-                  onChange={e => setForm(f => ({...f, custom_project_code: e.target.value}))}
+                <input
+                  type="text"
+                  placeholder="Codice commessa personalizzato"
+                  value={form.custom_project_code}
+                  onChange={e => setForm(f => ({ ...f, custom_project_code: e.target.value }))}
                   style={{ marginTop: 8 }}
                   autoFocus
                 />
@@ -217,7 +231,7 @@ function NewTicketModal({ onClose, onCreated, projects, users }) {
           </div>
           <div className="tkt-field">
             <label>Allegati</label>
-            <div 
+            <div
               className={`ticket-dropzone ${dragActive ? 'active' : ''}`}
               onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}
             >
@@ -268,10 +282,10 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users }) {
     e.preventDefault();
     setSaving(true);
     try {
-      await api.patch(`/tickets/${ticket.id}`, { 
-        ...form, 
+      await api.patch(`/tickets/${ticket.id}`, {
+        ...form,
         project_id: form.project_id === 'custom' ? null : (form.project_id || null),
-        custom_project_code: form.project_id === 'custom' ? form.custom_project_code.trim() : null 
+        custom_project_code: form.project_id === 'custom' ? form.custom_project_code.trim() : null
       });
       toast.success('Ticket aggiornato!');
       onUpdated();
@@ -310,11 +324,11 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users }) {
                 ))}
               </select>
               {form.project_id === 'custom' && (
-                <input 
-                  type="text" 
-                  placeholder="Codice commessa personalizzato" 
-                  value={form.custom_project_code} 
-                  onChange={e => setForm(f => ({...f, custom_project_code: e.target.value}))}
+                <input
+                  type="text"
+                  placeholder="Codice commessa personalizzato"
+                  value={form.custom_project_code}
+                  onChange={e => setForm(f => ({ ...f, custom_project_code: e.target.value }))}
                   style={{ marginTop: 8 }}
                   autoFocus
                 />
@@ -336,8 +350,10 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users }) {
           <div className="tkt-field">
             <label>Stato</label>
             <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-              <option value="open">✅ Aperto</option>
-              <option value="closed">🔒 Chiuso</option>
+              <option value="Da gestire">Da gestire</option>
+              <option value="In attesa del cliente">In attesa del cliente</option>
+              <option value="In elaborazione">In elaborazione</option>
+              <option value="Completato">Completato</option>
             </select>
           </div>
           <div className="tkt-modal-footer">
@@ -367,13 +383,13 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
   const ticketFileRef = useRef(null);
 
   const canEdit = currentUser?.role === 'admin' || ticket.author_id === currentUser?.id;
-  const isClosed = ticket.status === 'closed';
+  const isClosed = ticket.status === 'Completato';
 
   async function sendReply() {
     if (!replyText.trim() && replyFiles.length === 0) return;
     setSending(true);
     try {
-      const { data } = await api.post(`/tickets/${ticket.id}/replies`, { 
+      const { data } = await api.post(`/tickets/${ticket.id}/replies`, {
         content: replyText.trim(),
         action_type: replyActionType
       });
@@ -406,10 +422,10 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
     } catch { toast.error('Errore nell\'eliminazione'); }
   }
 
-  async function toggleStatus() {
+  async function changeStatus(newStatus) {
     try {
-      await api.patch(`/tickets/${ticket.id}`, { status: isClosed ? 'open' : 'closed' });
-      toast.success(isClosed ? 'Ticket riaperto' : 'Ticket chiuso');
+      await api.patch(`/tickets/${ticket.id}`, { status: newStatus });
+      toast.success(`Stato modificato in: ${newStatus}`);
       onRefresh();
     } catch { toast.error('Errore aggiornamento stato'); }
   }
@@ -476,14 +492,7 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
           <div className="ticket-detail-actions">
             {canEdit && (
               <>
-                <button
-                  className={`btn btn-sm ${isClosed ? 'btn-secondary' : 'btn-ghost'}`}
-                  onClick={toggleStatus}
-                  title={isClosed ? 'Riapri ticket' : 'Chiudi ticket'}
-                  style={{ fontSize: '0.78rem' }}
-                >
-                  {isClosed ? '🔓 Riapri' : '🔒 Chiudi'}
-                </button>
+
                 <button className="btn btn-ghost btn-sm" onClick={() => setShowEdit(true)} title="Modifica" style={{ fontSize: '0.78rem' }}>
                   ✏️ Modifica
                 </button>
@@ -501,9 +510,23 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
         </div>
 
         <div className="ticket-detail-meta">
-          <span className={`ticket-status-badge ${ticket.status}`}>
-            {ticket.status === 'open' ? '● Aperto' : '● Chiuso'}
-          </span>
+          {canEdit ? (
+            <select
+              className={`ticket-status-badge ${STATUS_CLASS[ticket.status] || 'open'}`}
+              value={ticket.status}
+              onChange={(e) => changeStatus(e.target.value)}
+              style={{ cursor: 'pointer', border: 'none', outline: 'none' }}
+            >
+              <option value="Da gestire">● Da gestire</option>
+              <option value="In attesa del cliente">● In attesa del cliente</option>
+              <option value="In elaborazione">● In elaborazione</option>
+              <option value="Completato">● Completato</option>
+            </select>
+          ) : (
+            <span className={`ticket-status-badge ${STATUS_CLASS[ticket.status] || 'open'}`}>
+              ● {ticket.status}
+            </span>
+          )}
           <span className={`ticket-priority-badge ${ticket.priority}`}>
             {PRIORITY_ICON[ticket.priority]} {PRIORITY_LABEL[ticket.priority]}
           </span>
@@ -620,15 +643,15 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
           🔒 Ticket chiuso.{canEdit && ' Puoi riaprirlo per continuare la discussione.'}
         </div>
       ) : (
-        <div 
+        <div
           className={`ticket-reply-area ${dragActive ? 'active-dropzone' : ''}`}
           onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}
         >
           {dragActive && <div className="ticket-drop-overlay">Rilascia per allegare</div>}
           <div className="ticket-reply-top-row">
-            <select 
-              className="ticket-reply-type-select" 
-              value={replyActionType} 
+            <select
+              className="ticket-reply-type-select"
+              value={replyActionType}
               onChange={e => setReplyActionType(e.target.value)}
             >
               {(phases || []).map(p => (
@@ -681,13 +704,16 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
 export default function TicketsPage() {
   const { user } = useAuth();
   const toast = useToast();
+  const location = useLocation();
+  const passedProjectId = location.state?.projectId;
 
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
   const [showNew, setShowNew] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('open');
+  const [statusFilter, setStatusFilter] = useState('open_all');
   const [priorityFilter, setPriorityFilter] = useState('all');
+  const [projectFilter, setProjectFilter] = useState(passedProjectId || 'all');
   const [search, setSearch] = useState('');
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
@@ -700,6 +726,14 @@ export default function TicketsPage() {
     loadedRef.current = true;
     loadAll();
   }, []);
+
+  useEffect(() => {
+    if (location.state?.projectId) {
+      setProjectFilter(location.state.projectId);
+    } else {
+      setProjectFilter('all');
+    }
+  }, [location.state?.projectId]);
 
   async function loadAll() {
     setLoading(true);
@@ -734,16 +768,22 @@ export default function TicketsPage() {
 
   const selectedTicket = tickets.find(t => t.id === selectedId) || null;
 
+  const projectFilteredTickets = tickets.filter(t => projectFilter === 'all' || t.project_id === projectFilter);
+
   const filtered = tickets.filter(t => {
-    if (statusFilter !== 'all' && t.status !== statusFilter) return false;
+    if (projectFilter !== 'all' && t.project_id !== projectFilter) return false;
+    if (statusFilter === 'open_all' && t.status === 'Completato') return false;
+    if (statusFilter !== 'open_all' && statusFilter !== 'all' && t.status !== statusFilter) return false;
     if (priorityFilter !== 'all' && t.priority !== priorityFilter) return false;
-    if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !t.title.toLowerCase().includes(search.toLowerCase()) && !(t.project_code || '').toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
-  const openCount = tickets.filter(t => t.status === 'open').length;
-  const closedCount = tickets.filter(t => t.status === 'closed').length;
-  const baseTickets = tickets.filter(t => statusFilter === 'all' || t.status === statusFilter);
+  const baseTickets = projectFilteredTickets.filter(t => {
+    if (statusFilter === 'open_all') return t.status !== 'Completato';
+    if (statusFilter === 'all') return true;
+    return t.status === statusFilter;
+  });
   const highCount = baseTickets.filter(t => t.priority === 'high').length;
   const mediumCount = baseTickets.filter(t => t.priority === 'medium').length;
   const lowCount = baseTickets.filter(t => t.priority === 'low').length;
@@ -776,9 +816,11 @@ export default function TicketsPage() {
         <aside className="tickets-sidebar">
           <div className="tickets-sidebar-section-title">Stato</div>
           {[
-            { key: 'all', icon: '📋', label: 'Tutti', count: tickets.length },
-            { key: 'open', icon: '✅', label: 'Aperti', count: openCount },
-            { key: 'closed', icon: '🔒', label: 'Chiusi', count: closedCount },
+            { key: 'open_all', icon: '🔥', label: 'Aperti', count: projectFilteredTickets.filter(t => t.status !== 'Completato').length },
+            { key: 'Da gestire', icon: '⏳', label: 'Da gestire', count: projectFilteredTickets.filter(t => t.status === 'Da gestire').length },
+            { key: 'In attesa del cliente', icon: '📞', label: 'In attesa', count: projectFilteredTickets.filter(t => t.status === 'In attesa del cliente').length },
+            { key: 'In elaborazione', icon: '⚙️', label: 'In elaborazione', count: projectFilteredTickets.filter(t => t.status === 'In elaborazione').length },
+            { key: 'Completato', icon: '✅', label: 'Completato', count: projectFilteredTickets.filter(t => t.status === 'Completato').length },
           ].map(f => (
             <button
               key={f.key}
@@ -806,6 +848,21 @@ export default function TicketsPage() {
               {f.count !== null && <span className="tickets-filter-count">{f.count}</span>}
             </button>
           ))}
+
+          {projectFilter !== 'all' && (
+            <>
+              <div className="tickets-sidebar-section-title">Filtro Commessa</div>
+              <button
+                className="tickets-filter-btn active"
+                onClick={() => { setProjectFilter('all'); window.history.replaceState({}, ''); }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  📂 {projects.find(p => p.id === projectFilter)?.code || 'Commessa'}
+                </span>
+                <span className="tickets-filter-count" style={{ cursor: 'pointer' }}>✖</span>
+              </button>
+            </>
+          )}
         </aside>
 
         {/* Ticket list */}
@@ -846,8 +903,8 @@ export default function TicketsPage() {
                 >
                   <div className="ticket-card-title">{t.title}</div>
                   <div className="ticket-card-badges">
-                    <span className={`ticket-status-badge ${t.status}`}>
-                      {t.status === 'open' ? '● Aperto' : '● Chiuso'}
+                    <span className={`ticket-status-badge ${STATUS_CLASS[t.status] || 'open'}`}>
+                      ● {t.status}
                     </span>
                     <span className={`ticket-priority-badge ${t.priority}`}>
                       {PRIORITY_ICON[t.priority]} {PRIORITY_LABEL[t.priority]}

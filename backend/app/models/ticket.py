@@ -7,8 +7,10 @@ from app.models.base import Base, TimestampMixin, uuid_pk, uuid_fk
 
 
 class TicketStatus(str, enum.Enum):
-    OPEN = "open"
-    CLOSED = "closed"
+    DA_GESTIRE = "Da gestire"
+    IN_ATTESA = "In attesa del cliente"
+    IN_ELABORAZIONE = "In elaborazione"
+    COMPLETATO = "Completato"
 
 
 class TicketPriority(str, enum.Enum):
@@ -28,7 +30,7 @@ class Ticket(Base, TimestampMixin):
     author_id = Column(uuid_fk(), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     assigned_to = Column(Text, default="[]", nullable=False)  # JSON list of usernames
     attachments = Column(Text, default="[]", nullable=False)  # JSON list of file paths
-    status = Column(Enum(TicketStatus), default=TicketStatus.OPEN, nullable=False)
+    status = Column(Enum(TicketStatus), default=TicketStatus.DA_GESTIRE, nullable=False)
     priority = Column(Enum(TicketPriority), default=TicketPriority.MEDIUM, nullable=False)
 
     author = relationship("User", foreign_keys=[author_id])

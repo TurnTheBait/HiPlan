@@ -2,6 +2,7 @@ from typing import List, Optional, Any, Dict
 # pyrefly: ignore [missing-import]
 from pydantic import BaseModel
 from datetime import datetime
+from app.models.ticket import TicketStatus, TicketPriority
 
 
 class TicketReplyCreate(BaseModel):
@@ -30,7 +31,7 @@ class TicketCreate(BaseModel):
     project_id: Optional[str] = None
     custom_project_code: Optional[str] = None
     assigned_to: List[str] = []  # list of usernames
-    priority: Optional[str] = "medium"
+    priority: Optional[TicketPriority] = TicketPriority.MEDIUM
 
 
 class TicketUpdate(BaseModel):
@@ -39,8 +40,8 @@ class TicketUpdate(BaseModel):
     project_id: Optional[str] = None
     custom_project_code: Optional[str] = None
     assigned_to: Optional[List[str]] = None
-    priority: Optional[str] = None
-    status: Optional[str] = None
+    priority: Optional[TicketPriority] = None
+    status: Optional[TicketStatus] = None
 
 
 class TicketOut(BaseModel):
@@ -56,8 +57,8 @@ class TicketOut(BaseModel):
     author_full_name: Optional[str] = None
     assigned_to: List[str] = []
     attachments: List[Dict[str, Any]] = []
-    status: str
-    priority: str
+    status: TicketStatus
+    priority: TicketPriority
     replies: List[TicketReplyOut] = []
     reply_count: int = 0
     created_at: Optional[datetime] = None

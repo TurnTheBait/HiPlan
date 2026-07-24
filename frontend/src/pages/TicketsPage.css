@@ -238,12 +238,22 @@
   text-transform: uppercase;
 }
 
-.ticket-status-badge.open {
-  background: var(--success-bg);
-  color: var(--success);
+.ticket-status-badge.da-gestire {
+  background: var(--danger-bg);
+  color: var(--danger);
 }
 
-.ticket-status-badge.closed {
+.ticket-status-badge.in-attesa {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.ticket-status-badge.in-elaborazione {
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+.ticket-status-badge.completato {
   background: rgba(100, 116, 139, 0.12);
   color: #64748b;
 }
@@ -787,7 +797,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   width: 100%;
-  max-width: 520px;
+  max-width: 700px;
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);

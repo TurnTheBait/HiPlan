@@ -49,3 +49,6 @@ scratch/
 logs/
 *.log
 TODO.md
+
+# Uploads
+backend/uploads/

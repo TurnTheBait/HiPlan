@@ -530,7 +530,7 @@ export default function ProjectsPage() {
 
       {showEditModal && (
         <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Modifica Dati Commessa</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowEditModal(false)}>✕</button>
