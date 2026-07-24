@@ -353,11 +353,12 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users }) {
 }
 
 /* ─── Ticket Detail Panel ─── */
-function TicketDetail({ ticket, currentUser, onRefresh, users, projects }) {
+function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases }) {
   const [replyText, setReplyText] = useState('');
+  const [replyActionType, setReplyActionType] = useState(phases?.[0] || '📝 Nota Interna');
+  const [replyFiles, setReplyFiles] = useState([]);
   const [sending, setSending] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
-  const [replyFiles, setReplyFiles] = useState([]);
   const [uploadingTicket, setUploadingTicket] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const toast = useToast();
@@ -372,7 +373,10 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects }) {
     if (!replyText.trim() && replyFiles.length === 0) return;
     setSending(true);
     try {
-      const { data } = await api.post(`/tickets/${ticket.id}/replies`, { content: replyText.trim() || '📎' });
+      const { data } = await api.post(`/tickets/${ticket.id}/replies`, { 
+        content: replyText.trim(),
+        action_type: replyActionType
+      });
       if (replyFiles.length > 0) {
         const lastReply = data.replies[data.replies.length - 1];
         for (const file of replyFiles) {
@@ -382,6 +386,7 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects }) {
         }
       }
       setReplyText('');
+      setReplyActionType(phases?.[0] || '📝 Nota Interna');
       setReplyFiles([]);
       toast.success('Risposta inviata!');
       onRefresh();
@@ -573,26 +578,35 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects }) {
             const ratts = Array.isArray(reply.attachments) ? reply.attachments : [];
             const canDel = currentUser?.role === 'admin' || reply.author_id === currentUser?.id;
             return (
-              <div key={reply.id} className="ticket-reply-item">
-                <Av name={reply.author_full_name || reply.author_username} size={32} />
-                <div className="ticket-reply-bubble">
-                  <div className="ticket-reply-header">
-                    <span className="ticket-reply-author">{reply.author_full_name || reply.author_username}</span>
-                    <span className="ticket-reply-date">{fmtDateTime(reply.created_at)}</span>
+              <div key={reply.id} className="ticket-timeline-item">
+                <div className="ticket-timeline-marker">
+                  <Av name={reply.author_full_name || reply.author_username} size={36} />
+                </div>
+                <div className="ticket-timeline-content-card">
+                  <div className="ticket-timeline-header">
+                    <div className="ticket-timeline-author-row">
+                      <span className="ticket-timeline-author">{reply.author_full_name || reply.author_username}</span>
+                      <span className="ticket-timeline-date">{fmtDateTime(reply.created_at)}</span>
+                    </div>
+                    <span className="ticket-timeline-badge">
+                      {reply.action_type || '📝 Nota Interna'}
+                    </span>
                     {canDel && (
-                      <button className="ticket-reply-delete" onClick={() => deleteReply(reply.id)}>🗑️</button>
+                      <button className="ticket-timeline-delete" onClick={() => deleteReply(reply.id)}>🗑️</button>
                     )}
                   </div>
-                  <div className="ticket-reply-content">{reply.content}</div>
-                  {ratts.length > 0 && (
-                    <div className="ticket-attachments-list" style={{ marginTop: 8 }}>
-                      {ratts.map((att, i) => (
-                        <a key={i} href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" className="ticket-attachment-chip">
-                          📄 {att.name}
-                        </a>
-                      ))}
-                    </div>
-                  )}
+                  <div className="ticket-timeline-body">
+                    <div className="ticket-timeline-text">{reply.content}</div>
+                    {ratts.length > 0 && (
+                      <div className="ticket-attachments-list" style={{ marginTop: 12 }}>
+                        {ratts.map((att, i) => (
+                          <a key={i} href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" className="ticket-attachment-chip">
+                            📄 {att.name}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -611,11 +625,22 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects }) {
           onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}
         >
           {dragActive && <div className="ticket-drop-overlay">Rilascia per allegare</div>}
+          <div className="ticket-reply-top-row">
+            <select 
+              className="ticket-reply-type-select" 
+              value={replyActionType} 
+              onChange={e => setReplyActionType(e.target.value)}
+            >
+              {(phases || []).map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
           <div className="ticket-reply-row">
-            <Av name={currentUser?.full_name || currentUser?.username} size={32} />
+            <Av name={currentUser?.full_name || currentUser?.username} size={36} />
             <textarea
               className="ticket-reply-textarea"
-              placeholder="Scrivi una risposta..."
+              placeholder="Scrivi i dettagli dell'evento..."
               value={replyText}
               onChange={e => setReplyText(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) sendReply(); }}
@@ -666,6 +691,7 @@ export default function TicketsPage() {
   const [search, setSearch] = useState('');
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
+  const [phases, setPhases] = useState([]);
 
   const loadedRef = useRef(false);
 
@@ -678,12 +704,14 @@ export default function TicketsPage() {
   async function loadAll() {
     setLoading(true);
     try {
-      const [tRes, pRes] = await Promise.all([
+      const [tRes, pRes, phRes] = await Promise.all([
         api.get('/tickets'),
         api.get('/projects'),
+        api.get('/settings/ticket_phases')
       ]);
       setTickets(Array.isArray(tRes.data) ? tRes.data : []);
       setProjects(Array.isArray(pRes.data) ? pRes.data : []);
+      setPhases(Array.isArray(phRes.data) ? phRes.data : []);
     } catch (err) {
       toast.error('Errore nel caricamento dei ticket. Assicurati che il backend sia aggiornato.');
     } finally {
@@ -715,7 +743,10 @@ export default function TicketsPage() {
 
   const openCount = tickets.filter(t => t.status === 'open').length;
   const closedCount = tickets.filter(t => t.status === 'closed').length;
-  const highCount = tickets.filter(t => t.priority === 'high' && t.status === 'open').length;
+  const baseTickets = tickets.filter(t => statusFilter === 'all' || t.status === statusFilter);
+  const highCount = baseTickets.filter(t => t.priority === 'high').length;
+  const mediumCount = baseTickets.filter(t => t.priority === 'medium').length;
+  const lowCount = baseTickets.filter(t => t.priority === 'low').length;
 
   return (
     <div className="tickets-page-wrapper">
@@ -761,10 +792,10 @@ export default function TicketsPage() {
 
           <div className="tickets-sidebar-section-title">Priorità</div>
           {[
-            { key: 'all', icon: '📋', label: 'Tutte', count: null },
+            { key: 'all', icon: '📋', label: 'Tutte', count: baseTickets.length },
             { key: 'high', icon: '🔴', label: 'Alta', count: highCount },
-            { key: 'medium', icon: '🟡', label: 'Media', count: null },
-            { key: 'low', icon: '🔵', label: 'Bassa', count: null },
+            { key: 'medium', icon: '🟡', label: 'Media', count: mediumCount },
+            { key: 'low', icon: '🔵', label: 'Bassa', count: lowCount },
           ].map(f => (
             <button
               key={f.key}
@@ -846,6 +877,7 @@ export default function TicketsPage() {
             onRefresh={(reset) => refreshTickets(reset === true)}
             users={users}
             projects={projects}
+            phases={phases}
           />
         ) : (
           <div className="tickets-detail">

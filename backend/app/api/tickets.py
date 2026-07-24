@@ -35,7 +35,6 @@ def _serialize_ticket(ticket: Ticket, include_replies: bool = True) -> dict:
     replies_out = []
     if include_replies and ticket.replies:
         for r in ticket.replies:
-            r_attachments = json.loads(r.attachments) if r.attachments else []
             replies_out.append({
                 "id": r.id,
                 "ticket_id": r.ticket_id,
@@ -43,7 +42,8 @@ def _serialize_ticket(ticket: Ticket, include_replies: bool = True) -> dict:
                 "author_username": r.author.username if r.author else None,
                 "author_full_name": r.author.full_name if r.author else None,
                 "content": r.content,
-                "attachments": r_attachments,
+                "action_type": r.action_type,
+                "attachments": json.loads(r.attachments) if r.attachments else [],
                 "created_at": r.created_at,
                 "updated_at": r.updated_at,
             })
@@ -276,9 +276,10 @@ async def add_reply(
         raise HTTPException(status_code=400, detail="Impossibile rispondere a un ticket chiuso")
 
     reply = TicketReply(
-        ticket_id=ticket_id,
+        ticket_id=ticket.id,
         author_id=current_user.id,
-        content=data.content.strip(),
+        content=data.content,
+        action_type=data.action_type,
         attachments=json.dumps([]),
     )
     db.add(reply)

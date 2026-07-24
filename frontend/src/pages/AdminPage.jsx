@@ -30,6 +30,8 @@ export default function AdminPage() {
   });
   const [globalBannerForm, setGlobalBannerForm] = useState({ text: '', type: 'info' });
   const [globalBanners, setGlobalBanners] = useState([]);
+  const [ticketPhases, setTicketPhases] = useState([]);
+  const [newTicketPhase, setNewTicketPhase] = useState('');
   const [loading, setLoading] = useState(true);
   const fileInputRef = useRef(null);
 
@@ -53,12 +55,12 @@ export default function AdminPage() {
   async function handleRestoreJson(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     if (!window.confirm("ATTENZIONE: Caricando questo backup sovrascriverai i dati attualmente esistenti.\\n\\nSei sicuro di voler procedere?")) {
       e.target.value = '';
       return;
     }
-    
+
     const reader = new FileReader();
     reader.onload = async (ev) => {
       try {
@@ -103,7 +105,7 @@ export default function AdminPage() {
   async function loadData() {
     setLoading(true);
     try {
-      await Promise.all([loadUsers(), loadPhaseTemplates(), loadGlobalBanners()]);
+      await Promise.all([loadUsers(), loadPhaseTemplates(), loadGlobalBanners(), loadTicketPhases()]);
     } finally {
       setLoading(false);
     }
@@ -138,6 +140,36 @@ export default function AdminPage() {
     } catch {
       toast.error('Errore eliminazione annuncio');
     }
+  }
+
+  async function loadTicketPhases() {
+    try {
+      const res = await api.get('/settings/ticket_phases');
+      setTicketPhases(res.data || []);
+    } catch { /* ignore */ }
+  }
+
+  async function saveTicketPhases(phasesToSave) {
+    try {
+      const res = await api.put('/settings/ticket_phases', { phases: phasesToSave });
+      setTicketPhases(res.data);
+      toast.success('Fasi ticket aggiornate');
+    } catch {
+      toast.error('Errore aggiornamento fasi ticket');
+    }
+  }
+
+  function handleAddTicketPhase() {
+    if (!newTicketPhase.trim()) return;
+    const nextPhases = [...ticketPhases, newTicketPhase.trim()];
+    setNewTicketPhase('');
+    saveTicketPhases(nextPhases);
+  }
+
+  function handleRemoveTicketPhase(index) {
+    if (!window.confirm("Eliminare questa fase?")) return;
+    const nextPhases = ticketPhases.filter((_, i) => i !== index);
+    saveTicketPhases(nextPhases);
   }
 
   async function loadUsers() {
@@ -568,6 +600,51 @@ export default function AdminPage() {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* SEZIONE 3: FASI TICKET */}
+      <div className="admin-section-card" style={{ marginTop: 32 }}>
+        <div className="admin-section-header">
+          <h2>🎫 Fasi Ticket</h2>
+          <p className="admin-section-desc">
+            Personalizza l'elenco delle fasi o eventi selezionabili quando si risponde a un ticket (es. "Inviato al cliente", "In lavorazione").
+          </p>
+        </div>
+        <div style={{ maxWidth: '100%' }}>
+          <div className="ticket-phases-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, marginBottom: 24 }}>
+            {ticketPhases.map((phase, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-tertiary)', padding: '10px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                <span style={{ fontSize: '0.95rem', fontWeight: 500 }}>{phase}</span>
+                <button
+                  className="btn-icon"
+                  onClick={() => handleRemoveTicketPhase(i)}
+                  style={{ color: 'var(--danger)', opacity: 0.7 }}
+                  title="Elimina fase ticket"
+                >
+                  🗑️
+                </button>
+              </div>
+            ))}
+            {ticketPhases.length === 0 && (
+              <div style={{ padding: 12, color: 'var(--text-muted)', fontSize: '0.9rem', gridColumn: '1 / -1' }}>
+                Nessuna fase personalizzata impostata.
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 12, maxWidth: 800 }}>
+            <input
+              className="input"
+              style={{ flex: 1 }}
+              placeholder="Es: 📥 Risposta dal cliente"
+              value={newTicketPhase}
+              onChange={e => setNewTicketPhase(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddTicketPhase(); }}
+            />
+            <button className="btn btn-primary" onClick={handleAddTicketPhase}>
+              Aggiungi Fase
+            </button>
+          </div>
         </div>
       </div>
 

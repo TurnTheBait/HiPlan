@@ -104,8 +104,8 @@ async def delete_global_banner(
     current_user: User = Depends(get_current_user),
 ):
     if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin possono aggiornare la bacheca aziendale")
-        
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin possono eliminare i banner")
+    
     res = await db.execute(select(Setting).where(Setting.key == "global_banner"))
     setting = res.scalar_one_or_none()
     
@@ -114,11 +114,49 @@ async def delete_global_banner(
         
     try:
         current_items = json.loads(setting.value)
-        new_items = [item for item in current_items if item.get("id") != banner_id]
+        filtered_items = [item for item in current_items if item.get("id") != banner_id]
         
-        if len(new_items) != len(current_items):
-            setting.value = json.dumps(new_items)
-            await db.commit()
+        setting.value = json.dumps(filtered_items)
+        await db.commit()
     except Exception:
         pass
 
+
+class TicketPhasesUpdate(BaseModel):
+    phases: List[str]
+
+@router.get("/ticket_phases", response_model=List[str])
+async def get_ticket_phases(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    res = await db.execute(select(Setting).where(Setting.key == "ticket_phases"))
+    setting = res.scalar_one_or_none()
+    if not setting or not setting.value:
+        return ["📝 Nota Interna", "📤 Inviato al cliente", "📥 Risposta dal cliente", "🔧 Intervento tecnico", "✅ Risoluzione"]
+    try:
+        return json.loads(setting.value)
+    except Exception:
+        return ["📝 Nota Interna"]
+
+@router.put("/ticket_phases", response_model=List[str])
+async def update_ticket_phases(
+    config: TicketPhasesUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin possono gestire le fasi dei ticket")
+    
+    res = await db.execute(select(Setting).where(Setting.key == "ticket_phases"))
+    setting = res.scalar_one_or_none()
+    
+    value_str = json.dumps(config.phases)
+    if setting:
+        setting.value = value_str
+    else:
+        setting = Setting(key="ticket_phases", value=value_str)
+        db.add(setting)
+        
+    await db.commit()
+    return config.phases

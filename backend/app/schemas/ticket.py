@@ -6,6 +6,7 @@ from datetime import datetime
 
 class TicketReplyCreate(BaseModel):
     content: str
+    action_type: Optional[str] = None
 
 
 class TicketReplyOut(BaseModel):
@@ -15,6 +16,7 @@ class TicketReplyOut(BaseModel):
     author_username: Optional[str] = None
     author_full_name: Optional[str] = None
     content: str
+    action_type: Optional[str] = None
     attachments: List[Dict[str, Any]] = []
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

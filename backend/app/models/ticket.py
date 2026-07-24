@@ -43,6 +43,7 @@ class TicketReply(Base, TimestampMixin):
     ticket_id = Column(uuid_fk(), ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
     author_id = Column(uuid_fk(), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     content = Column(Text, nullable=False)
+    action_type = Column(String(50), nullable=True)
     attachments = Column(Text, default="[]", nullable=False)  # JSON list of file paths
 
     ticket = relationship("Ticket", back_populates="replies")

@@ -39,12 +39,9 @@ async def lifespan(app: FastAPI):
             await conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN assigned_workers TEXT DEFAULT '[]';")
         except Exception:
             pass
-        try:
-            await conn.exec_driver_sql("ALTER TABLE tickets ADD COLUMN custom_project_code VARCHAR(255);")
-        except Exception:
-            pass
 
     from app.models.base import AsyncSessionLocal
+    # pyrefly: ignore [missing-import]
     from sqlalchemy import select, func
     from app.models.user import User, UserRole
     from app.models.phase_template import PhaseTemplate
@@ -154,7 +151,6 @@ app.include_router(notes.router)
 app.include_router(vacations.router)
 app.include_router(phase_templates.router)
 app.include_router(tickets.router)
-
 
 @app.get("/api/health")
 async def health_check():
