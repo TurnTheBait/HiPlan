@@ -160,3 +160,29 @@ async def update_ticket_phases(
         
     await db.commit()
     return config.phases
+
+from app.services.backup_service import get_last_backup_info, run_backup
+
+@router.get("/backup/status")
+async def get_backup_status(
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin possono vedere lo stato dei backup")
+    
+    info = get_last_backup_info()
+    return {"last_backup": info}
+
+@router.post("/backup/trigger")
+async def trigger_manual_backup(
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin possono forzare un backup")
+    
+    success, result = run_backup()
+    if not success:
+        raise HTTPException(status_code=500, detail=f"Errore durante il backup: {result}")
+    
+    info = get_last_backup_info()
+    return {"message": "Backup completato con successo", "last_backup": info}

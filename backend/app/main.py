@@ -107,6 +107,14 @@ async def lifespan(app: FastAPI):
                 await session.commit()
                 print("🔄 [INIT] Password utente admin sincronizzata a 'admin'")
 
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from app.services.backup_service import run_backup
+
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(run_backup, 'cron', day_of_week='sun', hour=3, minute=0)
+    scheduler.start()
+    print("⏰ [INIT] Scheduler di backup avviato (domenica ore 03:00)")
+
     yield
     await engine.dispose()
 

@@ -32,6 +32,7 @@ export default function AdminPage() {
   const [globalBanners, setGlobalBanners] = useState([]);
   const [ticketPhases, setTicketPhases] = useState([]);
   const [newTicketPhase, setNewTicketPhase] = useState('');
+  const [lastBackup, setLastBackup] = useState(null);
   const [loading, setLoading] = useState(true);
   const fileInputRef = useRef(null);
 
@@ -105,7 +106,7 @@ export default function AdminPage() {
   async function loadData() {
     setLoading(true);
     try {
-      await Promise.all([loadUsers(), loadPhaseTemplates(), loadGlobalBanners(), loadTicketPhases()]);
+      await Promise.all([loadUsers(), loadPhaseTemplates(), loadGlobalBanners(), loadTicketPhases(), loadLastBackup()]);
     } finally {
       setLoading(false);
     }
@@ -113,9 +114,20 @@ export default function AdminPage() {
 
   async function loadGlobalBanners() {
     try {
-      const res = await api.get('/settings/global-banner');
-      setGlobalBanners(res.data || []);
-    } catch { /* ignore */ }
+      const { data } = await api.get('/settings/global-banner');
+      setGlobalBanners(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function loadLastBackup() {
+    try {
+      const { data } = await api.get('/settings/backup/status');
+      setLastBackup(data.last_backup);
+    } catch (e) {
+      console.error('Errore caricamento stato backup:', e);
+    }
   }
 
   async function addGlobalBanner(e) {
@@ -296,6 +308,11 @@ export default function AdminPage() {
         <div>
           <h1>Pannello di Amministrazione</h1>
           <p>Gestisci gli utenti registrati e l'elenco degli addetti assegnabili alle singole fasi delle commesse.</p>
+          {lastBackup && (
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: 8 }}>
+              💾 Ultimo backup automatico: {new Date(lastBackup.date).toLocaleString()} ({lastBackup.size_mb} MB)
+            </p>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <button className="btn btn-secondary" style={{ width: '190px' }} onClick={handleBackupJson}>
