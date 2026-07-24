@@ -62,6 +62,15 @@ async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
             or (user.full_name and user.full_name in unique_workers)
         )
 
+        attachments_list = []
+        if p.attachments:
+            try:
+                parsed_att = json.loads(p.attachments)
+                if isinstance(parsed_att, list):
+                    attachments_list = parsed_att
+            except:
+                pass
+
         out = ProjectOut(
             id=p.id, name=p.name, code=p.code, client=p.client, color=p.color or "#185FA5",
             description=p.description,
@@ -75,6 +84,7 @@ async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
             created_at=p.created_at, updated_at=p.updated_at,
             task_count=task_count, member_count=worker_count,
             progress=round(avg_progress, 2),
+            attachments=attachments_list,
         )
         output.append(out)
     return output

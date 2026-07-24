@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from app.schemas.user import UserOut
 
@@ -23,6 +23,7 @@ class NoteOut(BaseModel):
     is_shared: bool
     owner_id: str
     owner: Optional[UserOut] = None
+    attachments: List[dict] = []
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

@@ -23,6 +23,7 @@ class ProjectUpdate(BaseModel):
     client: Optional[str] = None
     color: Optional[str] = None
     description: Optional[str] = None
+    notes: Optional[str] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     status: Optional[ProjectStatus] = None
@@ -54,6 +55,7 @@ class ProjectOut(BaseModel):
     client: Optional[str] = None
     color: Optional[str] = "#185FA5"
     description: Optional[str] = None
+    notes: Optional[str] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     status: ProjectStatus
@@ -62,6 +64,7 @@ class ProjectOut(BaseModel):
     responsible_username: Optional[str] = None
     responsible_name: Optional[str] = None
     assigned_workers: List[str] = []
+    attachments: List[dict] = []
     is_assigned: bool = False
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

@@ -18,6 +18,10 @@ const DEPT_OPTIONS = [
   { value: 'produzione', label: '🏭 Produzione', color: '#10b981' },
   { value: 'acquisti', label: '🛒 Acquisti', color: '#f59e0b' },
 ];
+
+const BACKEND_URL = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
+  : `http://${window.location.hostname}:8000`;
 const ALL_DEPTS = DEPT_OPTIONS.map(d => d.value);
 
 const PREDEFINED_WORKERS_DEFAULT = [];
@@ -28,6 +32,7 @@ export default function ProjectDetailPage() {
   const toast = useToast();
   const { user } = useAuth();
   const [project, setProject] = useState(null);
+  const [notesText, setNotesText] = useState('');
   const [ganttData, setGanttData] = useState({ tasks: [], links: [] });
   const [predefinedWorkers, setPredefinedWorkers] = useState(PREDEFINED_WORKERS_DEFAULT);
   const [usersList, setUsersList] = useState([]);
@@ -126,7 +131,47 @@ export default function ProjectDetailPage() {
     end_date: '',
   });
 
-  useEffect(() => { loadProject(); }, [id]);
+  useEffect(() => {
+    loadProject();
+  }, [id]);
+
+  async function handleUploadAttachment(e) {
+    if (!e.target.files || e.target.files.length === 0) return;
+    await uploadFiles(e.target.files);
+  }
+
+  async function handleDropAttachment(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      await uploadFiles(e.dataTransfer.files);
+    }
+  }
+
+  async function uploadFiles(files) {
+    try {
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append('file', file);
+        await api.post(`/projects/${id}/attachments`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      }
+      toast.success('Allegati caricati!');
+      loadProject();
+    } catch (err) {
+      toast.error('Errore durante il caricamento');
+    }
+  }
+
+  async function handleDeleteAttachment(filename) {
+    if (!window.confirm('Eliminare questo allegato?')) return;
+    try {
+      await api.delete(`/projects/${id}/attachments/${encodeURIComponent(filename)}`);
+      toast.success('Allegato eliminato');
+      loadProject();
+    } catch (err) {
+      toast.error('Errore durante l\'eliminazione');
+    }
+  }
 
   useEffect(() => {
     localStorage.setItem('tableVisibleColumns', JSON.stringify(tableVisibleColumns));
@@ -146,6 +191,7 @@ export default function ProjectDetailPage() {
         api.get('/tickets', { params: { project_id: id } }).catch(() => ({ data: [] }))
       ]);
       setProject(projRes.data);
+      setNotesText(projRes.data.notes || '');
       const sortedTasks = Array.isArray(ganttRes.data?.tasks)
         ? [...ganttRes.data.tasks].sort((a, b) => {
           const da = new Date(a.start_date ? String(a.start_date).split(' ')[0] : '1970-01-01');
@@ -361,6 +407,16 @@ export default function ProjectDetailPage() {
       await api.put(`/projects/${id}/tasks/${taskId}`, data);
       loadProject();
     } catch { toast.error('Errore aggiornamento fase'); }
+  }
+
+  async function handleSaveNotes() {
+    try {
+      await api.put(`/projects/${id}`, { notes: notesText });
+      // aggiorna solo il campo notes nel project locale senza ricaricare tutto
+      setProject(prev => prev ? { ...prev, notes: notesText } : prev);
+    } catch (err) {
+      toast.error('Errore durante il salvataggio delle note');
+    }
   }
 
   async function handleTaskCreate(data, tempId) {
@@ -753,7 +809,7 @@ export default function ProjectDetailPage() {
     let baseDateStr = allCurrentDates.length > 0
       ? allCurrentDates[allCurrentDates.length - 1]
       : (selectedTaskForHours.end_date ? selectedTaskForHours.end_date.split(' ')[0] : new Date().toISOString().split('T')[0]);
-    
+
     const baseDate = new Date(baseDateStr + 'T00:00:00');
     baseDate.setDate(baseDate.getDate() + 1);
     const y = baseDate.getFullYear();
@@ -950,7 +1006,7 @@ export default function ProjectDetailPage() {
           className={`ut-tab-btn ${activeTab === 'gantt' ? 'active' : ''}`}
           onClick={() => setActiveTab('gantt')}
         >
-          📊 Gantt Interattivo
+          📊 Gantt
         </button>
         <button
           className={`ut-tab-btn ${activeTab === 'commessa' ? 'active' : ''}`}
@@ -959,10 +1015,15 @@ export default function ProjectDetailPage() {
           📋 Scheda & Fasi <span className="tab-badge">{ganttData.tasks.length}</span>
         </button>
         <button
-          className={`ut-tab-btn ${activeTab === 'ore' ? 'active' : ''}`}
-          onClick={() => setActiveTab('ore')}
+          className={`ut-tab-btn ${activeTab === 'note' ? 'active' : ''}`}
+          onClick={() => setActiveTab('note')}
+          style={{ 
+            borderColor: openTicketsCount > 0 && activeTab !== 'note' ? 'var(--warning)' : undefined, 
+            color: openTicketsCount > 0 && activeTab !== 'note' ? 'var(--warning)' : undefined,
+            backgroundColor: openTicketsCount > 0 && activeTab !== 'note' ? 'rgba(245, 158, 11, 0.1)' : undefined
+          }}
         >
-          ⏱️ Consuntivazione Ore <span className="tab-badge">{Math.round(totalEff)}h</span>
+          📝 Note ed Allegati
         </button>
         <button
           className={`ut-tab-btn ${activeTab === 'alert' ? 'active' : ''}`}
@@ -971,16 +1032,6 @@ export default function ProjectDetailPage() {
           ⚠️ Ritardi & Semaforo
           {delaysList.length > 0 && (
             <span className="tab-badge tab-badge-danger">{delaysList.length}</span>
-          )}
-        </button>
-        <button
-          className="ut-tab-btn"
-          style={{ borderColor: openTicketsCount > 0 ? 'var(--warning)' : 'transparent', color: openTicketsCount > 0 ? 'var(--warning)' : 'inherit' }}
-          onClick={() => navigate('/tickets', { state: { projectId: id } })}
-        >
-          🎫 Ticket
-          {openTicketsCount > 0 && (
-            <span className="tab-badge" style={{ backgroundColor: 'var(--warning)', color: '#fff' }}>{openTicketsCount}</span>
           )}
         </button>
         {canManageProject && (
@@ -1317,6 +1368,9 @@ export default function ProjectDetailPage() {
                 </div>
               </div>
             </div>
+
+
+
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10, position: 'relative' }}>
@@ -1485,152 +1539,106 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* TAB 3: CONSUNTIVAZIONE ORE */}
-      {activeTab === 'ore' && (
+      {/* TAB 3: NOTE ED ALLEGATI */}
+      {activeTab === 'note' && (
         <div className="animate-fadeIn">
           <div className="commessa-summary-card">
-            <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Consuntivazione Ore Effettive per Fase e Addetto</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
-              Monitoraggio delle ore di lavoro effettivamente svolte da ciascun membro del team nei giorni lavorativi di calendario. Clicca su <strong>Consuntiva Ore</strong> per compilare la scheda consuntivo di una fase.
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10, position: 'relative' }}>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => setShowOreColumnsMenu(!showOreColumnsMenu)}
-            >
-              ⚙️ Colonne ▾
-            </button>
-            {showOreColumnsMenu && (
-              <div style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-default)',
-                borderRadius: 8, padding: 10, zIndex: 100, minWidth: 200, boxShadow: 'var(--shadow-md)', textAlign: 'left'
-              }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>MOSTRA/NASCONDI:</div>
-                {[{ id: 'addetti', label: 'Addetti e Spaccato Ore' }, { id: 'giorni', label: 'Giorni Lavorativi Previsti' }, { id: 'ore_giorno', label: 'Ore Previste / Giorno' }, { id: 'totale', label: 'Totale Consuntivato' }, { id: 'semaforo', label: 'Semaforo' }, { id: 'azioni', label: 'Azione' }].map(col => (
-                  <label key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
-                    <input
-                      type="checkbox"
-                      checked={oreVisibleColumns.includes(col.id)}
-                      onChange={() => toggleOreColumn(col.id)}
-                    />
-                    {col.label}
-                  </label>
-                ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Note ed Allegati</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
+                  Area dedicata a note generali della commessa, caricamento di file allegati e accesso diretto ai ticket di assistenza.
+                </p>
               </div>
-            )}
+              <button
+                className="btn btn-secondary"
+                style={{ borderColor: openTicketsCount > 0 ? 'var(--warning)' : 'var(--border-default)', color: openTicketsCount > 0 ? 'var(--warning)' : 'inherit' }}
+                onClick={() => navigate('/tickets', { state: { projectId: id } })}
+              >
+                🎫 Gestione Ticket
+                {openTicketsCount > 0 && (
+                  <span className="tab-badge" style={{ backgroundColor: 'var(--warning)', color: '#fff', marginLeft: 8 }}>{openTicketsCount} Aperti</span>
+                )}
+              </button>
+            </div>
           </div>
 
-          <div className="phases-table-container">
-            <table className="phases-table">
-              <thead>
-                <tr>
-                  <th>Fase Lavorazione</th>
-                  {oreVisibleColumns.includes('addetti') && <th>Addetti e Spaccato Ore</th>}
-                  {oreVisibleColumns.includes('giorni') && <th>Giorni Lavorativi Previsti</th>}
-                  {oreVisibleColumns.includes('ore_giorno') && <th>Ore Previste / Giorno</th>}
-                  {oreVisibleColumns.includes('totale') && <th>Totale Consuntivato</th>}
-                  {oreVisibleColumns.includes('semaforo') && <th>Semaforo</th>}
-                  {oreVisibleColumns.includes('azioni') && <th style={{ textAlign: 'right' }}>Azione</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {ganttData.tasks.length === 0 ? (
-                  <tr>
-                    <td colSpan={1 + oreVisibleColumns.length} style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 32 }}>
-                      Nessuna fase disponibile. Aggiungi fasi per registrare le ore.
-                    </td>
-                  </tr>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
+            {/* AREA NOTE */}
+            <div className="commessa-summary-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h4 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>Note Commessa (Salvataggio automatico)</h4>
+              </div>
+              <textarea
+                value={notesText}
+                onChange={e => setNotesText(e.target.value)}
+                onBlur={handleSaveNotes}
+                placeholder="Scrivi qui eventuali note, dettagli tecnici o considerazioni per questa commessa..."
+                style={{
+                  width: '100%',
+                  height: 300,
+                  padding: 12,
+                  borderRadius: 8,
+                  border: '1px solid var(--border-default)',
+                  background: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)',
+                  fontSize: 14,
+                  resize: 'vertical',
+                  fontFamily: 'inherit'
+                }}
+              />
+            </div>
+
+            {/* AREA ALLEGATI */}
+            <div className="commessa-summary-card"
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onDrop={handleDropAttachment}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h4 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>Allegati</h4>
+                <div>
+                  <input
+                    type="file"
+                    id="project-attachment-upload-note"
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={handleUploadAttachment}
+                  />
+                  <label htmlFor="project-attachment-upload-note" className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
+                    + Aggiungi
+                  </label>
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 16 }}>
+                {Array.isArray(project?.attachments) && project.attachments.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {project.attachments.map((att, idx) => (
+                      <div key={idx} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '8px 12px', background: 'var(--bg-card)',
+                        border: '1px solid var(--border-subtle)', borderRadius: 8, fontSize: 13
+                      }}>
+                        <a href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-500)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: 16 }}>📎</span> {att.name}
+                        </a>
+                        <button
+                          onClick={() => handleDeleteAttachment(att.name)}
+                          style={{ background: 'var(--danger-light)', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: '4px 8px', borderRadius: 4, fontSize: 12 }}
+                          title="Elimina allegato"
+                        >
+                          Elimina
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
-                  ganttData.tasks.map(task => {
-                    const st = computeStato(task);
-                    const dates = getWorkDatesBetween(
-                      formatDateOnly(task.start_date),
-                      formatDateOnly(task.end_date)
-                    );
-                    const oreGg = dates.length > 0 ? ((task.planned_hours || 8) / dates.length).toFixed(1) : (task.planned_hours || 8);
-
-                    const workersList = Array.isArray(task.workers) && task.workers.length > 0 ? task.workers : ['Addetto Generico'];
-                    const workerTotals = {};
-                    let totalTaskEff = 0;
-
-                    workersList.forEach(w => {
-                      workerTotals[w] = 0;
-                      if (task.actual_hours && task.actual_hours[w]) {
-                        Object.values(task.actual_hours[w]).forEach(h => {
-                          workerTotals[w] += Number(h) || 0;
-                        });
-                      }
-                      totalTaskEff += workerTotals[w];
-                    });
-
-                    const tColor = getTaskColor(task);
-                    const isCompleted = isTaskCompleted(task);
-                    return (
-                      <tr key={task.id} style={{ backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.18)' : undefined }}>
-                        <td style={{ fontWeight: 600 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <input
-                              type="checkbox"
-                              checked={isCompleted}
-                              onChange={() => handleToggleTaskCompleted(task, isCompleted)}
-                              title="Clicca per spuntare/rimuovere completamento fase"
-                              style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#10b981' }}
-                            />
-                            <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: tColor, flexShrink: 0, display: 'inline-block', border: '1px solid rgba(255,255,255,0.2)' }} title={`Colore fase: ${tColor}`} />
-                            <span>
-                              {task.text}
-                            </span>
-                          </div>
-                        </td>
-                        {oreVisibleColumns.includes('addetti') && (
-                          <td>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                              {workersList.map(w => (
-                                <div key={w} style={{ fontSize: 13 }}>
-                                  <span className="worker-chip">👤 {w}</span>: <strong>{workerTotals[w]}h</strong> fatte
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-                        )}
-                        {oreVisibleColumns.includes('giorni') && <td>{dates.length} giorni lavorativi</td>}
-                        {oreVisibleColumns.includes('ore_giorno') && <td>~{oreGg} h/giorno</td>}
-                        {oreVisibleColumns.includes('totale') && (
-                          <td>
-                            <span style={{ fontSize: 15, fontWeight: 700, color: totalTaskEff >= task.planned_hours ? 'var(--success)' : 'var(--accent-500)' }}>
-                              {totalTaskEff} h
-                            </span> / {task.planned_hours || 8} h prev
-                          </td>
-                        )}
-                        {oreVisibleColumns.includes('semaforo') && (
-                          <td>
-                            {st === 'ok' && <span className="semaforo-ok">🟢 Regolare</span>}
-                            {st === 'attenzione' && <span className="semaforo-attenzione">🟡 Attenzione</span>}
-                            {st === 'ritardo' && <span className="semaforo-ritardo">🔴 Ritardo</span>}
-                            {st === 'sforamento' && <span className="semaforo-ritardo" style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#ef4444', border: '1px solid #dc2626', padding: '3px 10px', borderRadius: '12px', fontWeight: 700 }}>🔴 Sforamento</span>}
-                          </td>
-                        )}
-                        {oreVisibleColumns.includes('azioni') && (
-                          <td style={{ textAlign: 'right' }}>
-                            {task.type !== 'milestone' && Number(task.duration) !== 0 && (
-                              <button
-                                className="btn btn-primary btn-sm"
-                                onClick={() => openOreModalForTask(task)}
-                              >
-                                ⏱️ Consuntiva Ore
-                              </button>
-                            )}
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center', padding: '24px 0', border: '1px dashed var(--border-default)', borderRadius: 8 }}>
+                    Nessun allegato presente.<br/>Trascina qui i file o usa il pulsante Aggiungi.
+                  </div>
                 )}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1690,7 +1698,7 @@ export default function ProjectDetailPage() {
       {/* MODALE NUOVA / MODIFICA FASE (TASK MODAL) */}
       {showTaskModal && (
         <div className="modal-overlay" onClick={() => setShowTaskModal(false)}>
-          <div className="modal" style={{ maxWidth: 620 }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal" style={{ maxWidth: 900 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{editingTask ? 'Dettagli Fase Lavorazione' : 'Nuova Fase Lavorazione (Ufficio Tecnico)'}</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowTaskModal(false)}>✕</button>
@@ -2152,49 +2160,49 @@ export default function ProjectDetailPage() {
                                 <span>{overBudget ? '⚠️' : '✅'} Addetti Assegnati a questa fase ({taskForm.workers.length}):</span>
                                 <span>Totale assegnato: {currentAssignedTotal}h / {currentBudgetTotal}h</span>
                               </div>
-                        {taskForm.workers.length === 0 ? (
-                          <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Nessun addetto ancora selezionato. Scegline uno qui sopra.</span>
-                        ) : (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                            {taskForm.workers.map(w => (
-                              <div key={w} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)', padding: '6px 12px', borderRadius: 8 }}>
-                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-500)' }}>{w}</span>
-                                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 4 }}>Ore:</span>
-                                <input
-                                  type="number"
-                                  min="0.5"
-                                  step="0.5"
-                                  style={{
-                                    width: 60,
-                                    height: 24,
-                                    background: 'var(--bg-secondary)',
-                                    border: '1px solid var(--border-color)',
-                                    borderRadius: 4,
-                                    color: 'var(--text-primary)',
-                                    padding: '0 4px',
-                                    fontSize: '0.8rem',
-                                    textAlign: 'center'
-                                  }}
-                                  value={taskForm.worker_hours?.[w] || ''}
-                                  onChange={(e) => {
-                                    const val = parseFloat(e.target.value) || 0;
-                                    setTaskForm({
-                                      ...taskForm,
-                                      worker_hours: { ...taskForm.worker_hours, [w]: val }
-                                    });
-                                  }}
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => toggleWorkerSelection(w, true)}
-                                  style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.9rem', marginLeft: 4 }}
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                              {taskForm.workers.length === 0 ? (
+                                <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Nessun addetto ancora selezionato. Scegline uno qui sopra.</span>
+                              ) : (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                                  {taskForm.workers.map(w => (
+                                    <div key={w} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)', padding: '6px 12px', borderRadius: 8 }}>
+                                      <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-500)' }}>{w}</span>
+                                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 4 }}>Ore:</span>
+                                      <input
+                                        type="number"
+                                        min="0.5"
+                                        step="0.5"
+                                        style={{
+                                          width: 60,
+                                          height: 24,
+                                          background: 'var(--bg-secondary)',
+                                          border: '1px solid var(--border-color)',
+                                          borderRadius: 4,
+                                          color: 'var(--text-primary)',
+                                          padding: '0 4px',
+                                          fontSize: '0.8rem',
+                                          textAlign: 'center'
+                                        }}
+                                        value={taskForm.worker_hours?.[w] || ''}
+                                        onChange={(e) => {
+                                          const val = parseFloat(e.target.value) || 0;
+                                          setTaskForm({
+                                            ...taskForm,
+                                            worker_hours: { ...taskForm.worker_hours, [w]: val }
+                                          });
+                                        }}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleWorkerSelection(w, true)}
+                                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.9rem', marginLeft: 4 }}
+                                      >
+                                        ×
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </>
                           );
                         })()}

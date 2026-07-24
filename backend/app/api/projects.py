@@ -1,6 +1,9 @@
 from typing import List
 # pyrefly: ignore [missing-import]
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+import os
+import uuid
+import json
 # pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import get_db, get_current_user, require_role
@@ -36,6 +39,15 @@ async def create_project(
         except:
             pass
 
+    attachments_list = []
+    if project.attachments:
+        try:
+            parsed_att = json.loads(project.attachments)
+            if isinstance(parsed_att, list):
+                attachments_list = parsed_att
+        except:
+            pass
+
     return ProjectOut(
         id=project.id, name=project.name, code=project.code, client=project.client, color=project.color or "#185FA5",
         description=project.description,
@@ -46,6 +58,7 @@ async def create_project(
         responsible_name=project.responsible.full_name if project.responsible else (project.responsible.username if project.responsible else None),
         assigned_workers=assigned_workers_list,
         is_assigned=(current_user.id == project.owner_id or current_user.id == project.responsible_id or current_user.username in assigned_workers_list),
+        attachments=attachments_list,
         created_at=project.created_at, updated_at=project.updated_at,
     )
 
@@ -314,9 +327,19 @@ async def get_project(
         or (current_user.full_name and current_user.full_name in unique_workers)
     )
 
+    attachments_list = []
+    if project.attachments:
+        try:
+            parsed_att = json.loads(project.attachments)
+            if isinstance(parsed_att, list):
+                attachments_list = parsed_att
+        except:
+            pass
+
     return ProjectDetail(
         id=project.id, name=project.name, code=project.code, client=project.client, color=project.color or "#185FA5",
         description=project.description,
+        notes=project.notes,
         start_date=project.start_date, end_date=project.end_date,
         status=project.status, owner_id=project.owner_id,
         responsible_id=project.responsible_id,
@@ -324,6 +347,7 @@ async def get_project(
         responsible_name=project.responsible.full_name if project.responsible else (project.responsible.username if project.responsible else None),
         assigned_workers=assigned_workers_list,
         is_assigned=is_assigned,
+        attachments=attachments_list,
         created_at=project.created_at, updated_at=project.updated_at,
         members=members,
     )
@@ -347,6 +371,15 @@ async def update_project(
         except:
             pass
 
+    attachments_list = []
+    if project.attachments:
+        try:
+            parsed_att = json.loads(project.attachments)
+            if isinstance(parsed_att, list):
+                attachments_list = parsed_att
+        except:
+            pass
+
     return ProjectOut(
         id=project.id, name=project.name, code=project.code, client=project.client, color=project.color or "#185FA5",
         description=project.description,
@@ -357,6 +390,7 @@ async def update_project(
         responsible_name=project.responsible.full_name if project.responsible else (project.responsible.username if project.responsible else None),
         assigned_workers=assigned_workers_list,
         is_assigned=(current_user.id == project.owner_id or current_user.id == project.responsible_id or current_user.username in assigned_workers_list),
+        attachments=attachments_list,
         created_at=project.created_at, updated_at=project.updated_at,
     )
 
@@ -399,3 +433,98 @@ async def remove_member(
     current_user: User = Depends(get_current_user),
 ):
     await project_service.remove_member(db, project_id, member_id, current_user)
+
+PROJECTS_UPLOAD_DIR = "uploads/projects"
+os.makedirs(PROJECTS_UPLOAD_DIR, exist_ok=True)
+MAX_FILE_SIZE_MB = 10
+
+@router.post("/{project_id}/attachments")
+async def upload_project_attachment(
+    project_id: str,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # pyrefly: ignore [missing-import]
+    from sqlalchemy import select
+    from app.models.project import Project
+    
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Progetto non trovato")
+
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"File troppo grande (max {MAX_FILE_SIZE_MB}MB)")
+
+    ext = os.path.splitext(file.filename or "")[1]
+    filename = f"{uuid.uuid4()}{ext}"
+    filepath = os.path.join(PROJECTS_UPLOAD_DIR, filename)
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    attachments = []
+    if project.attachments:
+        try:
+            attachments = json.loads(project.attachments)
+            if not isinstance(attachments, list):
+                attachments = []
+        except:
+            pass
+
+    new_att = {"name": file.filename, "path": f"uploads/projects/{filename}"}
+    attachments.append(new_att)
+    project.attachments = json.dumps(attachments)
+    await db.commit()
+
+    return new_att
+
+@router.delete("/{project_id}/attachments/{filename}")
+async def delete_project_attachment(
+    project_id: str,
+    filename: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # pyrefly: ignore [missing-import]
+    from sqlalchemy import select
+    from app.models.project import Project
+    
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Progetto non trovato")
+
+    attachments = []
+    if project.attachments:
+        try:
+            attachments = json.loads(project.attachments)
+            if not isinstance(attachments, list):
+                attachments = []
+        except:
+            pass
+
+    new_attachments = []
+    found = False
+    for att in attachments:
+        att_name = att.get("name", "")
+        att_path = att.get("path", "")
+        if att_name == filename or att_path.endswith(filename):
+            found = True
+            filepath = att.get("path")
+            if filepath and os.path.exists(filepath):
+                try:
+                    os.remove(filepath)
+                except:
+                    pass
+        else:
+            new_attachments.append(att)
+
+    if not found:
+        raise HTTPException(status_code=404, detail="Allegato non trovato")
+
+    project.attachments = json.dumps(new_attachments)
+    await db.commit()
+    return {"status": "ok"}
+

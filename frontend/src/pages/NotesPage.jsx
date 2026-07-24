@@ -4,6 +4,10 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import './NotesPage.css';
 
+const BACKEND_URL = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
+  : `http://${window.location.hostname}:8000`;
+
 export default function NotesPage() {
   const { user } = useAuth();
   const toast = useToast();
@@ -33,6 +37,15 @@ export default function NotesPage() {
   // Ref per l'editor visuale contentEditable e timeout autocalcolato
   const editorRef = useRef(null);
   const saveTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    // Aggiungi classe full-height-page al main-body per occupare tutta l'altezza
+    const mainBody = document.querySelector('.main-body');
+    if (mainBody) mainBody.classList.add('full-height-page');
+    return () => {
+      if (mainBody) mainBody.classList.remove('full-height-page');
+    };
+  }, []);
 
   useEffect(() => {
     loadNotes();
@@ -271,6 +284,53 @@ export default function NotesPage() {
     }
   }
 
+  async function handleUploadAttachment(e) {
+    if (!activeNoteId) {
+      toast.error('Salva la nota prima di aggiungere allegati');
+      return;
+    }
+    if (!e.target.files || e.target.files.length === 0) return;
+    await uploadFiles(e.target.files);
+  }
+
+  async function handleDropAttachment(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!activeNoteId) {
+      toast.error('Salva la nota prima di aggiungere allegati');
+      return;
+    }
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      await uploadFiles(e.dataTransfer.files);
+    }
+  }
+
+  async function uploadFiles(files) {
+    try {
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append('file', file);
+        await api.post(`/notes/${activeNoteId}/attachments`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      }
+      toast.success('Allegati caricati!');
+      loadNotes();
+    } catch (err) {
+      toast.error('Errore durante il caricamento');
+    }
+  }
+
+  async function handleDeleteAttachment(filename) {
+    if (!activeNoteId) return;
+    if (!window.confirm('Eliminare questo allegato?')) return;
+    try {
+      await api.delete(`/notes/${activeNoteId}/attachments/${encodeURIComponent(filename)}`);
+      toast.success('Allegato eliminato');
+      loadNotes();
+    } catch (err) {
+      toast.error('Errore durante l\'eliminazione');
+    }
+  }
+
   // Formattazione visuale istantanea stile Notion (H1, H2, Bold, Check-list, ecc.)
   function applyFormatting(formatType) {
     if (!editorRef.current) return;
@@ -485,7 +545,7 @@ export default function NotesPage() {
           </div>
         ) : (
           <>
-            {/* TOOLBAR TOP (OWNER, VISIBILITÀ, AZIONI) */}
+            {/* TOOLBAR TOP (OWNER, VISIBILITÀ, AZIONI) — FISSA, NON SCROLLA */}
             <div className="notes-editor-toolbar-top">
               <div className="note-owner-info">
                 <span className="sidebar-avatar" style={{ width: 26, height: 26, fontSize: '0.7rem' }}>
@@ -507,7 +567,7 @@ export default function NotesPage() {
                     onClick={() => setShowVisibilityMenu(!showVisibilityMenu)}
                     title="Clicca per modificare la visibilità del blocco note"
                   >
-                    {isShared ? '👥 Condiviso (Modifica ▼)' : '🔒 Privato (Modifica ▼)'}
+                    {isShared ? '👥 Condiviso ▼' : '🔒 Privato ▼'}
                   </button>
 
                   {showVisibilityMenu && (
@@ -553,39 +613,94 @@ export default function NotesPage() {
               </div>
             </div>
 
-            {/* TOOLBAR DI FORMATTAZIONE STYLE NOTION */}
-            <div className="notion-formatting-bar">
-              <button type="button" className="format-btn" onClick={() => applyFormatting('normal')} title="Testo normale (P)">P Normale</button>
-              <button type="button" className="format-btn" onClick={() => applyFormatting('h1')} title="Titolo grande (H1)">H1 Titolo</button>
-              <button type="button" className="format-btn" onClick={() => applyFormatting('h2')} title="Sottotitolo (H2)">H2 Sottotitolo</button>
-              <button type="button" className="format-btn" onClick={() => applyFormatting('bold')} title="Grassetto"><strong>B</strong> Grassetto</button>
-              <button type="button" className="format-btn" onClick={() => applyFormatting('italic')} title="Corsivo"><em>I</em> Corsivo</button>
-              <button type="button" className="format-btn" onClick={() => applyFormatting('bullet')} title="Elenco puntato">• Elenco</button>
-              <button type="button" className="format-btn" onClick={() => applyFormatting('todo')} title="Check-list interattiva">☑ Check-list [ ]</button>
-              <button type="button" className="format-btn" onClick={() => applyFormatting('quote')} title="Citazione">❝ Citazione</button>
-              <button type="button" className="format-btn" onClick={() => applyFormatting('code')} title="Blocco Codice">⟨/⟩ Codice</button>
+            {/* AREA SCROLLABILE: FORMATTING BAR + TITOLO + CONTENUTO + ALLEGATI */}
+            <div className="notes-editor-scroll">
+              {/* TOOLBAR DI FORMATTAZIONE STYLE NOTION */}
+              <div className="notion-formatting-bar">
+                <button type="button" className="format-btn" onClick={() => applyFormatting('normal')} title="Testo normale (P)">P Normale</button>
+                <button type="button" className="format-btn" onClick={() => applyFormatting('h1')} title="Titolo grande (H1)">H1 Titolo</button>
+                <button type="button" className="format-btn" onClick={() => applyFormatting('h2')} title="Sottotitolo (H2)">H2 Sottotitolo</button>
+                <button type="button" className="format-btn" onClick={() => applyFormatting('bold')} title="Grassetto"><strong>B</strong> Grassetto</button>
+                <button type="button" className="format-btn" onClick={() => applyFormatting('italic')} title="Corsivo"><em>I</em> Corsivo</button>
+                <button type="button" className="format-btn" onClick={() => applyFormatting('bullet')} title="Elenco puntato">• Elenco</button>
+                <button type="button" className="format-btn" onClick={() => applyFormatting('todo')} title="Check-list interattiva">☑ Check-list [ ]</button>
+                <button type="button" className="format-btn" onClick={() => applyFormatting('quote')} title="Citazione">❝ Citazione</button>
+                <button type="button" className="format-btn" onClick={() => applyFormatting('code')} title="Blocco Codice">⟨/⟩ Codice</button>
+              </div>
+
+              {/* CAMPO TITOLO */}
+              <input
+                type="text"
+                className="note-title-input"
+                value={title}
+                onChange={handleTitleChange}
+                placeholder="Titolo del Blocco Note..."
+              />
+
+              {/* AREA TESTO VISUALE WYSIWYG CENTRALE */}
+              <div
+                ref={editorRef}
+                contentEditable
+                className="note-content-area"
+                onInput={handleEditorInput}
+                onClick={handleEditorClick}
+                onKeyDown={handleEditorKeyDown}
+                placeholder="Scrivi qui i tuoi appunti in stile Notion... Usa i pulsanti sopra per formattare con titoli, check-list e citazioni."
+                suppressContentEditableWarning
+              />
+
+              {/* ALLEGATI DELLA NOTA */}
+              {activeNote && (
+                <div 
+                  style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border-default)', paddingBottom: 16 }}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={handleDropAttachment}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h4 style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)' }}>Allegati</h4>
+                    <div>
+                      <input
+                        type="file"
+                        id="note-attachment-upload"
+                        multiple
+                        style={{ display: 'none' }}
+                        onChange={handleUploadAttachment}
+                      />
+                      <label htmlFor="note-attachment-upload" className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
+                        + Aggiungi File
+                      </label>
+                    </div>
+                  </div>
+                  
+                  {Array.isArray(activeNote.attachments) && activeNote.attachments.length > 0 ? (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {activeNote.attachments.map((att, idx) => (
+                        <div key={idx} style={{ 
+                          display: 'flex', alignItems: 'center', gap: 8, 
+                          padding: '4px 12px', background: 'var(--bg-secondary)', 
+                          border: '1px solid var(--border-subtle)', borderRadius: 16, fontSize: 13 
+                        }}>
+                          <a href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-500)', textDecoration: 'none' }}>
+                            📎 {att.name}
+                          </a>
+                          <button 
+                            onClick={() => handleDeleteAttachment(att.name)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: 0, fontSize: 14 }}
+                            title="Elimina allegato"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                      Nessun allegato presente
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-
-            {/* CAMPO TITOLO */}
-            <input
-              type="text"
-              className="note-title-input"
-              value={title}
-              onChange={handleTitleChange}
-              placeholder="Titolo del Blocco Note..."
-            />
-
-            {/* AREA TESTO VISUALE WYSIWYG CENTRALE */}
-            <div
-              ref={editorRef}
-              contentEditable
-              className="note-content-area"
-              onInput={handleEditorInput}
-              onClick={handleEditorClick}
-              onKeyDown={handleEditorKeyDown}
-              placeholder="Scrivi qui i tuoi appunti in stile Notion... Usa i pulsanti sopra per formattare con titoli, check-list e citazioni."
-              suppressContentEditableWarning
-            />
           </>
         )}
       </main>

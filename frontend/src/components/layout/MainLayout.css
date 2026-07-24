@@ -282,7 +282,8 @@
   transition: margin-left var(--transition-base);
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   min-width: 0;
   width: calc(100vw - var(--sidebar-width));
   max-width: calc(100vw - var(--sidebar-width));
@@ -319,4 +320,13 @@
   overflow-y: auto;
   min-width: 0;
   max-width: 100%;
+  min-height: 0;
+}
+
+/* Pagine che devono occupare tutta l'altezza senza padding (es. Notes, Tickets) */
+.main-body.full-height-page {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
