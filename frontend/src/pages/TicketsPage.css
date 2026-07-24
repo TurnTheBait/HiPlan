@@ -668,6 +668,17 @@
   word-break: break-word;
 }
 
+.ticket-timeline-text.system-message {
+  font-style: italic;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent-400);
+  margin-top: 6px;
+  font-size: 0.8125rem;
+}
+
 .ticket-no-replies {
   text-align: center;
   padding: 20px;

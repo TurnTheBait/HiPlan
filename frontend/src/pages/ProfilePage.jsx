@@ -148,6 +148,19 @@ export default function ProfilePage() {
             <div className="stat-label">Ruolo</div>
           </div>
         </div>
+        <div className="stat-card">
+          <div className="stat-icon">🏢</div>
+          <div className="stat-content">
+            <div className="stat-value">
+              {user?.department === 'ufficio_tecnico' ? 'Ufficio Tecnico' :
+               user?.department === 'produzione' ? 'Produzione' :
+               user?.department === 'acquisti' ? 'Acquisti' :
+               user?.department === 'admin' ? 'Admin' :
+               (user?.department || 'Nessuno')}
+            </div>
+            <div className="stat-label">Reparto</div>
+          </div>
+        </div>
       </div>
 
       {/* Form + Lista Ferie */}

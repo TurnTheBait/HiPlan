@@ -619,7 +619,9 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
                     )}
                   </div>
                   <div className="ticket-timeline-body">
-                    <div className="ticket-timeline-text">{reply.content}</div>
+                    <div className={`ticket-timeline-text ${reply.action_type === '🔄 Cambio Stato' ? 'system-message' : ''}`}>
+                      {reply.content}
+                    </div>
                     {ratts.length > 0 && (
                       <div className="ticket-attachments-list" style={{ marginTop: 12 }}>
                         {ratts.map((att, i) => (

@@ -226,8 +226,27 @@ async def update_ticket(
         ticket.assigned_to = json.dumps(data.assigned_to)
     if data.priority is not None:
         ticket.priority = data.priority
-    if data.status is not None:
+        
+    status_changed = False
+    old_status = None
+    new_status = None
+    if data.status is not None and data.status != ticket.status:
+        status_changed = True
+        old_status = ticket.status
+        new_status = data.status
         ticket.status = data.status
+
+    if status_changed:
+        old_val = old_status.value if hasattr(old_status, 'value') else old_status
+        new_val = new_status.value if hasattr(new_status, 'value') else new_status
+        reply = TicketReply(
+            ticket_id=ticket.id,
+            author_id=current_user.id,
+            content=f'Stato modificato da "{old_val}" a "{new_val}"',
+            action_type="🔄 Cambio Stato",
+            attachments="[]"
+        )
+        db.add(reply)
 
     await db.commit()
 
