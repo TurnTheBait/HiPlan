@@ -149,7 +149,7 @@ export default function ProfilePage() {
           <p className="page-kicker">Gestione personale</p>
           <h1>Il mio profilo</h1>
         </div>
-        <button className="btn btn-secondary" onClick={openEditModal}>✏️ Modifica Dati</button>
+        <button className="btn btn-secondary" onClick={openEditModal}>✏️</button>
       </div>
 
       {/* Card statistiche utente */}

@@ -137,12 +137,11 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         width: 120,
         template: function(task) { return Array.isArray(task.workers) ? task.workers.join(', ') : ''; }
       },
-      { name: "add", label: "", width: 36 },
     ];
     
     // Inizializza con le colonne visibili attuali o di default
     gantt.config.columns = baseColumns.filter(c => 
-      c.name === 'text' || (!readOnly && c.name === 'add') || (visibleColumns && visibleColumns.includes(c.name))
+      c.name === 'text' || (visibleColumns && visibleColumns.includes(c.name))
     );
 
     // Scala temporale (Mese in italiano, Giorno della settimana: Lun Mar Mer..., Numero del giorno: 12 13 14...)
@@ -368,6 +367,11 @@ gantt.attachEvent("onBeforeLinkDelete", (id, item) => {
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      if (gantt.ext && gantt.ext.tooltips && gantt.ext.tooltips.tooltip) {
+        gantt.ext.tooltips.tooltip.hide();
+      }
+      const leftoverTooltips = document.querySelectorAll('.gantt_tooltip');
+      leftoverTooltips.forEach(t => t.remove());
     };
   }, []);
 
@@ -427,11 +431,10 @@ gantt.attachEvent("onBeforeLinkDelete", (id, item) => {
         width: 120,
         template: function(task) { return Array.isArray(task.workers) ? task.workers.join(', ') : ''; }
       },
-      { name: "add", label: "", width: 36 },
     ];
 
     gantt.config.columns = baseColumns.filter(c => 
-      c.name === 'text' || (!readOnly && c.name === 'add') || (visibleColumns && visibleColumns.includes(c.name))
+      c.name === 'text' || (visibleColumns && visibleColumns.includes(c.name))
     );
     gantt.render();
   }, [visibleColumns, readOnly]);

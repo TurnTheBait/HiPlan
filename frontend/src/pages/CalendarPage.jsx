@@ -382,7 +382,7 @@ export default function CalendarPage() {
                   {!cell.isOtherMonth && (
                     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
                       <div className="calendar-projects-list" style={{ flex: 1, minHeight: 0 }}>
-                        {cell.projectsList.slice(0, 2).map(proj => {
+                        {cell.projectsList.slice(0, 1).map(proj => {
                           const color = proj.color || '#185FA5';
                           return (
                             <div
@@ -410,7 +410,7 @@ export default function CalendarPage() {
                           );
                         })}
                       </div>
-                      {cell.projectsList.length > 2 && (
+                      {cell.projectsList.length > 1 && (
                         <div
                           className="calendar-more-pill"
                           style={{ marginTop: 'auto', marginBottom: 2 }}
@@ -423,7 +423,7 @@ export default function CalendarPage() {
                             });
                           }}
                         >
-                          + altre {cell.projectsList.length - 2} commesse...
+                          + altre {cell.projectsList.length - 1} commesse...
                         </div>
                       )}
                     </div>
