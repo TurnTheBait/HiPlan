@@ -8,7 +8,7 @@ from app.models.base import Base, engine
 import app.models  # Assicura il caricamento di tutti i modelli per create_all
 # pyrefly: ignore [missing-import]
 from fastapi.staticfiles import StaticFiles
-from app.api import auth, users, projects, tasks, notifications, export, notes, task_collaboration, workload, vacations, phase_templates, settings as api_settings, tickets
+from app.api import auth, users, projects, tasks, notifications, export, notes, task_collaboration, workload, vacations, phase_templates, settings as api_settings, tickets, activity_logs, websockets
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -160,6 +160,8 @@ app.include_router(notes.router)
 app.include_router(vacations.router)
 app.include_router(phase_templates.router)
 app.include_router(tickets.router)
+app.include_router(activity_logs.router)
+app.include_router(websockets.router)
 
 @app.get("/api/health")
 async def health_check():

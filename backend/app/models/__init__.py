@@ -10,6 +10,7 @@ from app.models.vacation import Vacation
 from app.models.phase_template import PhaseTemplate
 from app.models.setting import Setting
 from app.models.ticket import Ticket, TicketReply, TicketStatus, TicketPriority
+from app.models.activity_log import ActivityLog, ActivityCategory
 
 __all__ = [
     "Base", "engine", "AsyncSessionLocal",
@@ -22,5 +23,6 @@ __all__ = [
     "TaskComment", "TaskChecklistItem",
     "Vacation", "PhaseTemplate",
     "Setting",
-    "Ticket", "TicketReply", "TicketStatus", "TicketPriority"
+    "Ticket", "TicketReply", "TicketStatus", "TicketPriority",
+    "ActivityLog", "ActivityCategory"
 ]

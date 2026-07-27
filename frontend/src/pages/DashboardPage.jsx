@@ -301,7 +301,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="card dashboard-section">
-          <h2>Progetti Recenti</h2>
+          <h2>Commesse Recenti</h2>
           {projects.length === 0 ? (
             <div className="empty-state">
               <div className="empty-state-icon">📋</div>
@@ -362,7 +362,16 @@ export default function DashboardPage() {
           ) : (
             <div className="notifications-list">
               {notifications.slice(0, 8).map((n) => (
-                <div key={n.id} className={`notification-item ${n.is_read ? '' : 'unread'}`}>
+                <div key={n.id} className={`notification-item ${n.is_read ? '' : 'unread'}`}
+                  onClick={() => {
+                    if (n.project_id && n.task_id) {
+                      navigate(`/projects/${n.project_id}?open_task=${n.task_id}`);
+                    } else if (n.project_id) {
+                      navigate(`/projects/${n.project_id}`);
+                    }
+                  }}
+                  style={{ cursor: n.project_id ? 'pointer' : 'default' }}
+                >
                   <span className="notification-icon">
                     {n.type === 'assignment' ? '👤' : n.type === 'deadline' ? '⏰' : '📝'}
                   </span>

@@ -42,11 +42,6 @@ export default function ConflictMonitoringPage() {
           <h1>Panoramica Addetti</h1>
           <p>Verifica le ore di lavoro e le sovrapposizioni degli addetti sulle varie fasi</p>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button className="btn btn-secondary btn-sm" onClick={loadConflicts}>
-            🔄 Aggiorna Dati
-          </button>
-        </div>
       </div>
 
       <WorkloadHeatmap />

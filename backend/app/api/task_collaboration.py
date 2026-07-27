@@ -2,9 +2,13 @@ import os
 import re
 import uuid
 import shutil
+# pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+# pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
+# pyrefly: ignore [missing-import]
 from sqlalchemy.future import select
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import selectinload
 from typing import List
 from datetime import datetime
@@ -59,9 +63,9 @@ async def add_comment(
                     user_id=u.id,
                     title="Sei stato menzionato",
                     message=f"{current_user.full_name or current_user.username} ti ha menzionato nel task '{task.text}'",
-                    type=NotificationType.INFO,
-                    related_entity_id=task_id,
-                    link=f"/projects/{project_id}?task={task_id}"
+                    type=NotificationType.UPDATE,
+                    project_id=project_id,
+                    task_id=task_id
                 )
                 db.add(notif)
                 

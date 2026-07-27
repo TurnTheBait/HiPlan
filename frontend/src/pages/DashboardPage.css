@@ -214,7 +214,7 @@
 .notification-message {
   font-size: 0.75rem;
   color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.4;
+  white-space: normal;
+  word-wrap: break-word;
 }

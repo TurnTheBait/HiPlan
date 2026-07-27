@@ -13,6 +13,7 @@ from datetime import timedelta, date
 from app.schemas.task import TaskCreate, TaskUpdate, TaskOut, LinkCreate, LinkOut, GanttData
 # pyrefly: ignore [missing-import]
 from fastapi import HTTPException, status
+from app.core.websocket_manager import manager
 
 
 def find_vacation_conflicts(task_start, task_end, vacations):
@@ -42,6 +43,21 @@ def _parse_json(val, default):
         return json.loads(val)
     except Exception:
         return default
+
+
+def _format_task_details(task):
+    details = []
+    if getattr(task, "start_date", None) and getattr(task, "end_date", None):
+        details.append(f"Dal {task.start_date.strftime('%d/%m/%Y')} al {task.end_date.strftime('%d/%m/%Y')}")
+    elif getattr(task, "start_date", None):
+        details.append(f"Dal {task.start_date.strftime('%d/%m/%Y')}")
+    if getattr(task, "planned_hours", None):
+        details.append(f"Ore previste: {task.planned_hours}")
+    if getattr(task, "workers", None):
+        workers = _parse_json(task.workers, [])
+        if workers:
+            details.append(f"Addetti: {', '.join(workers)}")
+    return " | ".join(details)
 
 
 def _task_to_out(task: Task) -> TaskOut:
@@ -231,8 +247,23 @@ async def create_task(db: AsyncSession, project_id: str, data: TaskCreate, user=
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assegnazione bloccata: esistono ferie nel periodo della fase")
 
     db.add(task)
+    
+    from app.models.activity_log import ActivityLog, ActivityCategory
+    details = _format_task_details(task)
+    action_text = f"Fase creata: '{task.text}'" + (f" ({details})" if details else "")
+    log = ActivityLog(
+        project_id=project_id,
+        user_id=user.id if user else None,
+        category=ActivityCategory.PHASE_PROJECT_EDIT,
+        action_text=action_text
+    )
+    db.add(log)
+    
     await db.commit()
     await db.refresh(task)
+
+    # Broadcast websocket
+    await manager.broadcast(project_id, {"action": "task_created", "task": _task_to_out(task).model_dump()})
 
     # Notifiche per ferie sovrapposte
     if total_shift_days > 0:
@@ -301,10 +332,38 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
                 allowed_keys = {"actual_hours", "end_date", "duration"}
                 if update_keys and not update_keys.issubset(allowed_keys):
                     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="In modalità consuntivazione puoi aggiornare solo le ore consuntivate o prolungare/ridurre i giorni (actual_hours, end_date, duration)")
+                
+                
+            if user.role != UserRole.ADMIN:
+                update_keys = set(data.model_dump(exclude_unset=True).keys())
+                if "actual_hours" in update_keys:
+                    old_actual_hours = _parse_json(task.actual_hours, {})
+                    if not isinstance(old_actual_hours, dict):
+                        old_actual_hours = {}
+                    
+                    new_actual_hours = data.actual_hours if data.actual_hours is not None else {}
+                    if not isinstance(new_actual_hours, dict):
+                        new_actual_hours = {}
+                    
+                    def _dates_equal(d1, d2):
+                        if d1 is None: d1 = {}
+                        if d2 is None: d2 = {}
+                        for k, v in d1.items():
+                            if v and str(v) != "0" and d2.get(k) != v: return False
+                        for k, v in d2.items():
+                            if v and str(v) != "0" and d1.get(k) != v: return False
+                        return True
+
+                    all_workers = set(old_actual_hours.keys()).union(set(new_actual_hours.keys()))
+                    for worker_key in all_workers:
+                        if worker_key != user.full_name and worker_key != user.username:
+                            if not _dates_equal(old_actual_hours.get(worker_key), new_actual_hours.get(worker_key)):
+                                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'amministratore può modificare le ore consuntivate di altri addetti.")
 
     old_start = task.start_date
     old_end = task.end_date
     old_duration = task.duration
+    old_actual_hours_str = task.actual_hours
 
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -426,8 +485,56 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
                 )
                 db.add(note)
 
+    from app.models.activity_log import ActivityLog, ActivityCategory
+    if "actual_hours" in _changed_keys and _changed_keys.issubset({"actual_hours", "completed", "progress"}):
+        cat = ActivityCategory.HOURS_LOG
+        old_actual_hours = _parse_json(old_actual_hours_str, {})
+        if not isinstance(old_actual_hours, dict):
+            old_actual_hours = {}
+        new_actual_hours = _parse_json(task.actual_hours, {})
+        if not isinstance(new_actual_hours, dict):
+            new_actual_hours = {}
+        
+        added_entries = []
+        for worker_key, dates in new_actual_hours.items():
+            if not isinstance(dates, dict):
+                continue
+            old_dates = old_actual_hours.get(worker_key, {})
+            if not isinstance(old_dates, dict):
+                old_dates = {}
+            for d, h in dates.items():
+                if old_dates.get(d) != h:
+                    try:
+                        h_val = float(h or 0)
+                        if h_val > 0:
+                            added_entries.append(f"{worker_key}: {h_val}h il {d}")
+                    except ValueError:
+                        pass
+        
+        details_str = ", ".join(added_entries)
+        if details_str:
+            action_text = f"Aggiornate ore consuntivate per la fase '{task.text}': inserite {details_str}"
+        else:
+            action_text = f"Aggiornate ore consuntivate per la fase: '{task.text}'"
+    else:
+        cat = ActivityCategory.PHASE_PROJECT_EDIT
+        details = _format_task_details(task)
+        action_text = f"Fase modificata: '{task.text}'" + (f" ({details})" if details else "")
+        
+    log = ActivityLog(
+        project_id=task.project_id,
+        user_id=user.id if user else None,
+        category=cat,
+        action_text=action_text
+    )
+    db.add(log)
+
     await db.commit()
     await db.refresh(task)
+
+    # Broadcast websocket
+    await manager.broadcast(task.project_id, {"action": "task_updated", "task": _task_to_out(task).model_dump()})
+
     return _task_to_out(task)
 
 
@@ -447,8 +554,22 @@ async def delete_task(db: AsyncSession, task_id: str, user=None):
     from sqlalchemy import delete as sql_delete
     await db.execute(sql_delete(Link).where((Link.source == task_id) | (Link.target == task_id)))
 
+    from app.models.activity_log import ActivityLog, ActivityCategory
+    details = _format_task_details(task)
+    action_text = f"Fase eliminata: '{task.text}'" + (f" ({details})" if details else "")
+    log = ActivityLog(
+        project_id=task.project_id,
+        user_id=user.id if user else None,
+        category=ActivityCategory.PHASE_PROJECT_EDIT,
+        action_text=action_text
+    )
+    db.add(log)
+
     await db.delete(task)
     await db.commit()
+
+    # Broadcast websocket
+    await manager.broadcast(task.project_id, {"action": "task_deleted", "task_id": task_id})
 
 
 async def create_link(db: AsyncSession, project_id: str, data: LinkCreate, user=None) -> LinkOut:
@@ -464,6 +585,10 @@ async def create_link(db: AsyncSession, project_id: str, data: LinkCreate, user=
     db.add(link)
     await db.commit()
     await db.refresh(link)
+
+    # Broadcast websocket
+    await manager.broadcast(project_id, {"action": "link_created", "link": _link_to_out(link).model_dump()})
+
     return _link_to_out(link)
 
 
@@ -475,3 +600,6 @@ async def delete_link(db: AsyncSession, link_id: str, user=None):
     await _check_task_manage_permissions(db, link.project_id, user)
     await db.delete(link)
     await db.commit()
+
+    # Broadcast websocket
+    await manager.broadcast(link.project_id, {"action": "link_deleted", "link_id": link_id})

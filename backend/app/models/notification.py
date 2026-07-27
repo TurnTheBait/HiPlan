@@ -1,4 +1,5 @@
 import enum
+# pyrefly: ignore [missing-import]
 from sqlalchemy import Column, String, Text, Boolean, Enum, ForeignKey
 from app.models.base import Base, TimestampMixin, uuid_pk, uuid_fk
 
@@ -19,3 +20,4 @@ class Notification(Base, TimestampMixin):
     type = Column(Enum(NotificationType), default=NotificationType.UPDATE, nullable=False)
     is_read = Column(Boolean, default=False, nullable=False)
     project_id = Column(uuid_fk(), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    task_id = Column(String(36), nullable=True)

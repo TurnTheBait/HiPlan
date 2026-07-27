@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
@@ -11,6 +12,7 @@ class NotificationOut(BaseModel):
     type: NotificationType
     is_read: bool
     project_id: Optional[str] = None
+    task_id: Optional[str] = None
     created_at: Optional[datetime] = None
 
     class Config:
@@ -23,3 +25,4 @@ class NotificationCreate(BaseModel):
     message: Optional[str] = None
     type: NotificationType = NotificationType.UPDATE
     project_id: Optional[str] = None
+    task_id: Optional[str] = None

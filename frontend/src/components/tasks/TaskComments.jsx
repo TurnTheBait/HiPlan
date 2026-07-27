@@ -8,9 +8,24 @@ export default function TaskComments({ projectId, taskId, currentUser }) {
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
 
+  const [users, setUsers] = useState([]);
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState('');
+  const [mentionIndex, setMentionIndex] = useState(-1);
+
   useEffect(() => {
     fetchComments();
+    fetchUsers();
   }, [taskId]);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await api.get('/users');
+      setUsers(res.data);
+    } catch (err) {
+      console.error("Errore fetch users per menzioni", err);
+    }
+  };
 
   const fetchComments = async () => {
     try {
@@ -92,13 +107,65 @@ export default function TaskComments({ projectId, taskId, currentUser }) {
           })
         )}
       </div>
-      <form onSubmit={handleAddComment} style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', gap: '8px' }}>
+      <form onSubmit={handleAddComment} style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', gap: '8px', position: 'relative' }}>
+        {showMentions && (
+          <div style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: 0,
+            width: '250px',
+            maxHeight: '150px',
+            overflowY: 'auto',
+            backgroundColor: 'var(--bg-primary)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '8px',
+            boxShadow: '0 -4px 12px rgba(0,0,0,0.1)',
+            zIndex: 10,
+            marginBottom: '4px'
+          }}>
+            {users.filter(u => u.username.toLowerCase().includes(mentionFilter.toLowerCase()) || (u.full_name && u.full_name.toLowerCase().includes(mentionFilter.toLowerCase()))).map(u => (
+              <div 
+                key={u.id}
+                onClick={() => {
+                  const prefix = newComment.substring(0, mentionIndex);
+                  setNewComment(prefix + u.username + ' ');
+                  setShowMentions(false);
+                }}
+                style={{
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  borderBottom: '1px solid var(--border-color)'
+                }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                <strong>{u.username}</strong> {u.full_name ? `(${u.full_name})` : ''}
+              </div>
+            ))}
+          </div>
+        )}
         <input
           type="text"
           className="input"
           placeholder="Scrivi un commento o usa @nome per menzionare..."
           value={newComment}
-          onChange={e => setNewComment(e.target.value)}
+          onChange={e => {
+            const val = e.target.value;
+            setNewComment(val);
+            
+            // Check for @mentions
+            const lastAt = val.lastIndexOf('@');
+            if (lastAt !== -1 && (lastAt === 0 || val[lastAt - 1] === ' ')) {
+              const afterAt = val.substring(lastAt + 1);
+              if (!afterAt.includes(' ')) {
+                setShowMentions(true);
+                setMentionFilter(afterAt);
+                setMentionIndex(lastAt + 1);
+                return;
+              }
+            }
+            setShowMentions(false);
+          }}
           style={{ flex: 1 }}
         />
         <button type="submit" className="btn btn-primary">Invia</button>

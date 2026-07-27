@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
@@ -12,6 +12,8 @@ import { calculateTaskEffHours, isTaskCompleted } from '../utils/taskCompletion'
 import { addWorkingDays, subtractWorkingDays, countWorkingDays, isWeekendOrHoliday } from '../utils/workingDays';
 import TaskComments from '../components/tasks/TaskComments';
 import TaskChecklist from '../components/tasks/TaskChecklist';
+import ActivityLogPanel from '../components/projects/ActivityLogModal';
+import useWebSocket from '../hooks/useWebSocket';
 
 const DEPT_OPTIONS = [
   { value: 'ufficio_tecnico', label: '🔧 Ufficio Tecnico', color: '#3b82f6' },
@@ -37,6 +39,37 @@ export default function ProjectDetailPage() {
   const [predefinedWorkers, setPredefinedWorkers] = useState(PREDEFINED_WORKERS_DEFAULT);
   const [usersList, setUsersList] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Calcolo WebSocket URL
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsHost = import.meta.env.VITE_API_URL 
+    ? new URL(import.meta.env.VITE_API_URL).host
+    : `${window.location.hostname}:8000`;
+  const wsUrl = `${protocol}//${wsHost}/api/ws/projects/${id}`;
+
+  const { isConnected: wsConnected } = useWebSocket(wsUrl, (msg) => {
+    if (['task_created', 'task_updated', 'task_deleted', 'link_created', 'link_deleted', 'project_updated'].includes(msg.action)) {
+      loadGanttDataOnly();
+    }
+  });
+
+  async function loadGanttDataOnly() {
+    try {
+      const ganttRes = await api.get(`/projects/${id}/gantt`);
+      const sortedTasks = Array.isArray(ganttRes.data?.tasks)
+        ? [...ganttRes.data.tasks].sort((a, b) => {
+          const da = new Date(a.start_date ? String(a.start_date).split(' ')[0] : '1970-01-01');
+          const db = new Date(b.start_date ? String(b.start_date).split(' ')[0] : '1970-01-01');
+          if (da < db) return -1;
+          if (da > db) return 1;
+          return (a.id || 0) - (b.id || 0);
+        })
+        : [];
+      setGanttData({ ...ganttRes.data, tasks: sortedTasks });
+    } catch (err) {
+      console.error("Errore ricaricamento dati Gantt:", err);
+    }
+  }
 
   const canManageProject = useMemo(() => {
     if (!user || !project) return false;
@@ -134,6 +167,22 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     loadProject();
   }, [id]);
+
+  const location = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const openTask = params.get('open_task');
+    if (openTask && ganttData.tasks && ganttData.tasks.length > 0) {
+      const t = ganttData.tasks.find(t => String(t.id) === openTask);
+      if (t && !showTaskModal) {
+        openEditTaskModal(t, 'commenti');
+        // Remove from url
+        params.delete('open_task');
+        navigate({ search: params.toString() }, { replace: true });
+      }
+    }
+  }, [location.search, ganttData.tasks]);
 
   async function handleUploadAttachment(e) {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -503,8 +552,8 @@ export default function ProjectDetailPage() {
     setShowTaskModal(true);
   }
 
-  function openEditTaskModal(task) {
-    if (!canManageProject) {
+  function openEditTaskModal(task, initialTab = 'generale') {
+    if (!canManageProject && initialTab === 'generale') {
       openOreModalForTask(task);
       return;
     }
@@ -515,7 +564,7 @@ export default function ProjectDetailPage() {
     const isPredefined = available.some(t => t.name === realTask.text) || PREDEFINED_PHASES.includes(realTask.text);
 
     setEditingTask(realTask);
-    setTaskModalTab('generale');
+    setTaskModalTab(initialTab);
     setShowPhaseDropdown(false);
 
     const safeDate = (d) => {
@@ -1105,6 +1154,17 @@ export default function ProjectDetailPage() {
           >
             ⚠️ Ritardi
             <span className="tab-badge tab-badge-danger">{delaysList.length}</span>
+          </button>
+        )}
+
+        {user?.role === 'admin' && (
+          <button
+            className={`ut-tab-btn ${activeTab === 'activity_log' ? 'active' : ''}`}
+            onClick={() => setActiveTab('activity_log')}
+            title="Visualizza la cronologia delle modifiche e delle ore"
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            🕒 Cronologia
           </button>
         )}
 
@@ -1721,6 +1781,12 @@ export default function ProjectDetailPage() {
               </div>
             </div>
           </div>
+          {wsConnected && (
+            <div style={{ marginLeft: 16, display: 'flex', alignItems: 'center', gap: 6, color: '#10b981', fontSize: '0.9rem' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#10b981', display: 'inline-block' }}></span>
+              Sincronizzato
+            </div>
+          )}
         </div>
       )}
 
@@ -1787,9 +1853,11 @@ export default function ProjectDetailPage() {
 
             {editingTask && (
               <div className="ut-tabs" style={{ marginBottom: 16, paddingBottom: 0 }}>
-                <button className={`ut-tab-btn ${taskModalTab === 'generale' ? 'active' : ''}`} onClick={() => setTaskModalTab('generale')}>
-                  Generale
-                </button>
+                {canManageProject && (
+                  <button className={`ut-tab-btn ${taskModalTab === 'generale' ? 'active' : ''}`} onClick={() => setTaskModalTab('generale')}>
+                    Generale
+                  </button>
+                )}
                 <button className={`ut-tab-btn ${taskModalTab === 'checklist' ? 'active' : ''}`} onClick={() => setTaskModalTab('checklist')}>
                   Checklist
                 </button>
@@ -2426,7 +2494,7 @@ export default function ProjectDetailPage() {
                                         max="24"
                                         className="ore-input"
                                         style={isHoliday ? { backgroundColor: '#fef08a' } : {}}
-                                        disabled={!canManageProject && w !== user?.username && w !== (user?.full_name || user?.username)}
+                                        disabled={user?.role !== 'admin' && w !== user?.username && w !== (user?.full_name || user?.username)}
                                         value={val}
                                         placeholder={`${workerDailyTarget.toFixed(1)}h`}
                                         onChange={(e) => {
@@ -2453,6 +2521,7 @@ export default function ProjectDetailPage() {
                                   min="0"
                                   max="24"
                                   className="ore-input"
+                                  disabled={user?.role !== 'admin' && w !== user?.username && w !== (user?.full_name || user?.username)}
                                   value={(actualHoursMap[w] && actualHoursMap[w]['__extra__']) || ''}
                                   placeholder="0h"
                                   onChange={(e) => {
@@ -2706,6 +2775,10 @@ export default function ProjectDetailPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {activeTab === 'activity_log' && (
+        <ActivityLogPanel projectId={id} />
       )}
     </div>
   );

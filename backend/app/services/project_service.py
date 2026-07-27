@@ -12,6 +12,7 @@ from app.schemas.project import ProjectCreate, ProjectUpdate, MemberAdd, Project
 from app.models.notification import Notification, NotificationType
 # pyrefly: ignore [missing-import]
 from fastapi import HTTPException, status
+from app.core.websocket_manager import manager
 
 
 async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
@@ -101,6 +102,17 @@ async def create_project(db: AsyncSession, data: ProjectCreate, owner: User) -> 
         assigned_workers=json.dumps(data.assigned_workers) if data.assigned_workers else "[]",
     )
     db.add(project)
+    await db.flush()
+    
+    from app.models.activity_log import ActivityLog, ActivityCategory
+    log = ActivityLog(
+        project_id=project.id,
+        user_id=owner.id,
+        category=ActivityCategory.PHASE_PROJECT_EDIT,
+        action_text=f"Commessa creata: '{project.name}'"
+    )
+    db.add(log)
+    
     await db.commit()
     await db.refresh(project)
     return project
@@ -130,7 +142,21 @@ async def update_project(db: AsyncSession, project_id: str, data: ProjectUpdate,
         if key == "assigned_workers":
             value = json.dumps(value) if value is not None else "[]"
         setattr(project, key, value)
+        
+    from app.models.activity_log import ActivityLog, ActivityCategory
+    log = ActivityLog(
+        project_id=project.id,
+        user_id=user.id,
+        category=ActivityCategory.PHASE_PROJECT_EDIT,
+        action_text=f"Commessa modificata"
+    )
+    db.add(log)
+    
     await db.commit()
+    
+    # Broadcast websocket
+    await manager.broadcast(project_id, {"action": "project_updated"})
+
     return await get_project(db, project_id, user)
 
 
