@@ -39,10 +39,15 @@ class UserOut(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    username: Optional[str] = None
     full_name: Optional[str] = None
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
     department: Optional[str] = None
+
+
+class UserPasswordUpdate(BaseModel):
+    new_password: str = Field(..., min_length=1, max_length=128)
 
 
 class TokenPair(BaseModel):

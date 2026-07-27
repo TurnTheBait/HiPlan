@@ -5,7 +5,7 @@ import { useToast } from '../context/ToastContext';
 import './ProfilePage.css';
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, fetchUser } = useAuth();
   const toast = useToast();
   const [vacations, setVacations] = useState([]);
   const [recoveryItems, setRecoveryItems] = useState([]);
@@ -13,6 +13,32 @@ export default function ProfilePage() {
     () => new Set(JSON.parse(localStorage.getItem('recovery_dismissed') || '[]'))
   );
   const [form, setForm] = useState({ start_date: '', end_date: '', reason: '' });
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({ full_name: '', username: '' });
+
+  function openEditModal() {
+    setEditForm({ full_name: user?.full_name || '', username: user?.username || '' });
+    setShowEditModal(true);
+  }
+
+  async function handleSaveProfile(e) {
+    e.preventDefault();
+    if (!editForm.username.trim()) {
+      toast.error('Lo username è obbligatorio');
+      return;
+    }
+    try {
+      await api.patch('/users/me', {
+        full_name: editForm.full_name.trim() || null,
+        username: editForm.username.trim()
+      });
+      toast.success('Profilo aggiornato con successo!');
+      setShowEditModal(false);
+      await fetchUser();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Errore aggiornamento profilo');
+    }
+  }
 
   useEffect(() => {
     console.log('🔄 ProfilePage mounted, loading vacations...');
@@ -118,11 +144,12 @@ export default function ProfilePage() {
 
   return (
     <div className="profile-page">
-      <div className="profile-header">
+      <div className="profile-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <p className="page-kicker">Gestione personale</p>
           <h1>Il mio profilo</h1>
         </div>
+        <button className="btn btn-secondary" onClick={openEditModal}>✏️ Modifica Dati</button>
       </div>
 
       {/* Card statistiche utente */}
@@ -153,10 +180,10 @@ export default function ProfilePage() {
           <div className="stat-content">
             <div className="stat-value">
               {user?.department === 'ufficio_tecnico' ? 'Ufficio Tecnico' :
-               user?.department === 'produzione' ? 'Produzione' :
-               user?.department === 'acquisti' ? 'Acquisti' :
-               user?.department === 'admin' ? 'Admin' :
-               (user?.department || 'Nessuno')}
+                user?.department === 'produzione' ? 'Produzione' :
+                  user?.department === 'acquisti' ? 'Acquisti' :
+                    user?.department === 'admin' ? 'Admin' :
+                      (user?.department || 'Nessuno')}
             </div>
             <div className="stat-label">Reparto</div>
           </div>
@@ -271,6 +298,42 @@ export default function ProfilePage() {
                 ))}
             </div>
           </section>
+        </div>
+      )}
+
+      {showEditModal && (
+        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>👤 Modifica Profilo</h2>
+              <button className="btn-ghost btn-icon" onClick={() => setShowEditModal(false)}>✕</button>
+            </div>
+            <form onSubmit={handleSaveProfile}>
+              <div className="input-group">
+                <label>Nome Completo</label>
+                <input
+                  className="input"
+                  value={editForm.full_name}
+                  onChange={e => setEditForm({ ...editForm, full_name: e.target.value })}
+                  placeholder="Es. Mario Rossi"
+                />
+              </div>
+              <div className="input-group">
+                <label>Username *</label>
+                <input
+                  className="input"
+                  required
+                  value={editForm.username}
+                  onChange={e => setEditForm({ ...editForm, username: e.target.value })}
+                  placeholder="Es. m.rossi"
+                />
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>Annulla</button>
+                <button type="submit" className="btn btn-primary">Salva Modifiche</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

@@ -90,6 +90,8 @@ export default function AdminPage() {
     return saved ? JSON.parse(saved) : ['utente', 'email', 'ruolo', 'reparto', 'stato', 'registrato', 'azioni'];
   });
   const [showAdminColumnsMenu, setShowAdminColumnsMenu] = useState(false);
+  const [managingUser, setManagingUser] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
 
   function toggleAdminColumn(col) {
     setAdminVisibleColumns(prev => {
@@ -293,9 +295,26 @@ export default function AdminPage() {
     try {
       await api.delete(`/users/${user.id}`);
       toast.success("Utente eliminato definitivamente");
+      if (managingUser?.id === user.id) setManagingUser(null);
       loadUsers();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Errore durante l'eliminazione dell'utente");
+    }
+  }
+
+  async function handleResetPassword(e) {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+      toast.error("La password deve essere di almeno 6 caratteri");
+      return;
+    }
+    if (!window.confirm(`Confermi di voler reimpostare la password per '${managingUser.username}'?`)) return;
+    try {
+      await api.post(`/users/${managingUser.id}/reset-password`, { new_password: newPassword });
+      toast.success("Password reimpostata con successo");
+      setNewPassword('');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Errore durante il reset della password");
     }
   }
 
@@ -492,22 +511,12 @@ export default function AdminPage() {
                   )}
                   {adminVisibleColumns.includes('azioni') && (
                     <td>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button
-                          className={`btn btn-sm ${u.is_active ? 'btn-danger' : 'btn-primary'}`}
-                          onClick={() => handleToggleActive(u.id, u.is_active)}
-                        >
-                          {u.is_active ? 'Disattiva' : 'Attiva'}
-                        </button>
-                        <button
-                          className="btn btn-sm btn-ghost"
-                          style={{ color: 'var(--danger)', padding: '4px 8px' }}
-                          onClick={() => handleDeleteUser(u)}
-                          title="Elimina definitivamente questo utente"
-                        >
-                          🗑️
-                        </button>
-                      </div>
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => { setManagingUser(u); setNewPassword(''); }}
+                      >
+                        Gestisci
+                      </button>
                     </td>
                   )}
                 </tr>
@@ -732,6 +741,54 @@ export default function AdminPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL GESTIONE UTENTE */}
+      {managingUser && (
+        <div className="modal-overlay" onClick={() => setManagingUser(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 450 }}>
+            <div className="modal-header">
+              <h2>Azioni per @{managingUser.username}</h2>
+              <button className="btn-ghost btn-icon" onClick={() => setManagingUser(null)}>✕</button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <form onSubmit={handleResetPassword} style={{ background: 'var(--bg-tertiary)', padding: 16, borderRadius: 8 }}>
+                <h4 style={{ marginBottom: 12 }}>🔑 Modifica Password</h4>
+                <div className="input-group" style={{ marginBottom: 12 }}>
+                  <input
+                    type="text"
+                    className="input"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="Nuova password..."
+                  />
+                </div>
+                <button type="submit" className="btn btn-primary btn-sm">Salva Password</button>
+              </form>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <h4 style={{ margin: 0 }}>⚙️ Altre Azioni</h4>
+                <button
+                  className={`btn ${managingUser.is_active ? 'btn-secondary' : 'btn-primary'}`}
+                  style={{ justifyContent: 'center' }}
+                  onClick={() => { handleToggleActive(managingUser.id, managingUser.is_active); setManagingUser(null); }}
+                >
+                  {managingUser.is_active ? '⏸ Disattiva Account' : '▶️ Attiva Account'}
+                </button>
+
+                {managingUser.username !== 'admin' && (
+                  <button
+                    className="btn btn-danger"
+                    style={{ justifyContent: 'center' }}
+                    onClick={() => handleDeleteUser(managingUser)}
+                  >
+                    🗑️ Elimina Definitivamente
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -139,7 +139,7 @@ export default function ProjectsPage() {
   async function handleExportFiltered(format) {
     if (filtered.length === 0) return toast.info("Nessuna commessa da esportare");
     const project_ids = filtered.map(p => p.id);
-    
+
     try {
       const res = await api.post(`/projects/export-list/${format}`, { project_ids }, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([res.data]));
@@ -178,12 +178,12 @@ export default function ProjectsPage() {
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <div style={{ position: 'relative' }} ref={exportMenuRef}>
-            <button 
-              className="btn btn-primary" 
-              style={{ display: 'flex', alignItems: 'center', gap: 6 }} 
+            <button
+              className="btn btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
               onClick={() => setShowExportMenu(!showExportMenu)}
             >
-              📥 Stampa / Export ▾
+              📥
             </button>
             {showExportMenu && (
               <div style={{

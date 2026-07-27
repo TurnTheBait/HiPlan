@@ -166,7 +166,7 @@ export default function MainLayout() {
           </div>
 
           <button className="btn-ghost btn-sm sidebar-logout" onClick={handleLogout} title="Esci">
-            {collapsed ? '⏼' : '⏼ Esci'}
+            {collapsed ? '❌' : '❌ Esci'}
           </button>
         </div>
       </aside>

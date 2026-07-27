@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.dependencies import get_db, get_current_user, require_role
 from app.models.user import User, UserRole
-from app.schemas.user import UserOut, UserUpdate
+from app.schemas.user import UserOut, UserUpdate, UserPasswordUpdate
 from app.services import task_service
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -21,6 +21,34 @@ async def list_users(
 
 @router.get("/me", response_model=UserOut)
 async def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+@router.patch("/me", response_model=UserOut)
+async def update_me(
+    data: UserUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    update_data = data.model_dump(exclude_unset=True)
+    
+    # Restrict users from updating their own role or active status
+    update_data.pop("role", None)
+    update_data.pop("is_active", None)
+    update_data.pop("department", None)
+
+    if "username" in update_data and update_data["username"] != current_user.username:
+        # Check if username already exists
+        existing = await db.execute(select(User).where(User.username == update_data["username"]))
+        if existing.scalar_one_or_none():
+            from fastapi import HTTPException, status
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username già in uso")
+
+    for key, value in update_data.items():
+        setattr(current_user, key, value)
+        
+    await db.commit()
+    await db.refresh(current_user)
     return current_user
 
 
@@ -45,6 +73,26 @@ async def update_user(
     return user
 
 
+@router.post("/{user_id}/reset-password", response_model=UserOut)
+async def reset_user_password(
+    user_id: str,
+    data: UserPasswordUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        from fastapi import HTTPException, status
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utente non trovato")
+
+    from app.core.security import hash_password
+    user.hashed_password = hash_password(data.new_password)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
 @router.delete("/{user_id}")
 async def delete_user(
     user_id: str,
@@ -56,6 +104,10 @@ async def delete_user(
     if not user:
         from fastapi import HTTPException, status
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utente non trovato")
+
+    if user.username == "admin":
+        from fastapi import HTTPException, status
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Non è possibile eliminare l'account amministratore principale")
 
     await db.delete(user)
     await db.commit()
