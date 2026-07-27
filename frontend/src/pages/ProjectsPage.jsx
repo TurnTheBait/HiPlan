@@ -352,13 +352,15 @@ export default function ProjectsPage() {
                     >
                       ✏️
                     </button>
-                    <button
-                      className="btn-ghost btn-sm project-delete"
-                      onClick={(e) => handleDelete(project.id, e)}
-                      title="Elimina commessa"
-                    >
-                      🗑
-                    </button>
+                    {user?.role === 'admin' && (
+                      <button
+                        className="btn-ghost btn-sm project-delete"
+                        onClick={(e) => handleDelete(project.id, e)}
+                        title="Elimina commessa"
+                      >
+                        🗑
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

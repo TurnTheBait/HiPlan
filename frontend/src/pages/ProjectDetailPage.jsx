@@ -973,12 +973,12 @@ export default function ProjectDetailPage() {
       const startDate = new Date(t.start_date).toLocaleDateString();
       const endDate = new Date(t.end_date).toLocaleDateString();
       const progress = t.completed || 0;
-      
+
       const workers = Array.isArray(t.workers) ? t.workers : [];
 
       promptLines.push(`- [${dept}] ${taskName}`);
       promptLines.push(`  Date: dal ${startDate} al ${endDate} (${t.duration || 0} giorni) | Stato: ${progress}% completata`);
-      
+
       if (workers.length > 0) {
         promptLines.push(`  Addetti:`);
         workers.forEach(w => {
@@ -994,7 +994,7 @@ export default function ProjectDetailPage() {
 
       let totOreReg = 0;
       if (t.actual_hours && typeof t.actual_hours === 'object') {
-         totOreReg = Object.values(t.actual_hours).reduce((acc, v) => acc + (Number(v) || 0), 0);
+        totOreReg = Object.values(t.actual_hours).reduce((acc, v) => acc + (Number(v) || 0), 0);
       }
       promptLines.push(`  Totale Fase: ${totOreReg}h fatte su ${t.planned_hours || 0}h previste`);
     });
@@ -1037,21 +1037,44 @@ export default function ProjectDetailPage() {
       <div className="project-detail-header">
         <div className="project-detail-info">
           <button className="btn btn-secondary btn-sm" onClick={() => navigate('/projects')}>
-            ← Commesse
+            ←
           </button>
-          <div className="commessa-meta" style={{ borderLeft: `4px solid ${project?.color || '#185FA5'}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span className="commessa-code">{project?.code || 'UT-COMM'}</span>
-            <span>—</span>
-            <span className="commessa-client">🏢 {project?.client || 'Cliente'}</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <h1 style={{ margin: 0 }}>{project?.name || project?.code || 'Senza Titolo'}</h1>
+          <div className="commessa-meta" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 16,
+            padding: '12px 24px',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-subtle)',
+            borderLeft: `6px solid ${project?.color || '#185FA5'}`,
+            borderRadius: '12px',
+            fontSize: '1.15rem',
+            boxShadow: 'var(--shadow-sm)'
+          }}>
+            <span className="commessa-code" style={{ color: 'var(--text-primary)', fontWeight: 800, fontSize: '1.25rem' }}>{project?.code || 'UT-COMM'}</span>
+            {project?.client && (
+              <>
+                <span style={{ color: 'var(--border-subtle)', fontSize: '1.2rem' }}>—</span>
+                <span className="commessa-client" style={{ color: 'var(--text-secondary)' }}>🏢 {project.client}</span>
+              </>
+            )}
+            {project?.name && project.name !== project.code && (
+              <>
+                <span style={{ color: 'var(--border-subtle)', fontSize: '1.2rem' }}>|</span>
+                <span className="commessa-title-in-box" style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '1.25rem' }}>{project.name}</span>
+              </>
+            )}
           </div>
         </div>
       </div>
 
       {/* 4 Tabs Interattive Ufficio Tecnico */}
-      <div className="ut-tabs">
+      <div className="ut-tabs" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        {canManageProject && (
+          <button className="btn btn-primary" onClick={openNewTaskModal} style={{ padding: '9px 14px', fontSize: '0.85 rem' }}>
+            + Nuova Fase
+          </button>
+        )}
         <button
           className={`ut-tab-btn ${activeTab === 'gantt' ? 'active' : ''}`}
           onClick={() => setActiveTab('gantt')}
@@ -1062,176 +1085,60 @@ export default function ProjectDetailPage() {
           className={`ut-tab-btn ${activeTab === 'commessa' ? 'active' : ''}`}
           onClick={() => setActiveTab('commessa')}
         >
-          📋 Scheda & Fasi <span className="tab-badge">{ganttData.tasks.length}</span>
+          📋 Fasi <span className="tab-badge">{ganttData.tasks.length}</span>
         </button>
         <button
           className={`ut-tab-btn ${activeTab === 'note' ? 'active' : ''}`}
           onClick={() => setActiveTab('note')}
-          style={{ 
-            borderColor: openTicketsCount > 0 && activeTab !== 'note' ? 'var(--warning)' : undefined, 
+          style={{
+            borderColor: openTicketsCount > 0 && activeTab !== 'note' ? 'var(--warning)' : undefined,
             color: openTicketsCount > 0 && activeTab !== 'note' ? 'var(--warning)' : undefined,
             backgroundColor: openTicketsCount > 0 && activeTab !== 'note' ? 'rgba(245, 158, 11, 0.1)' : undefined
           }}
         >
-          📝 Note ed Allegati
+          📝 Note
         </button>
-        <button
-          className={`ut-tab-btn ${activeTab === 'alert' ? 'active' : ''}`}
-          onClick={() => setActiveTab('alert')}
-        >
-          ⚠️ Ritardi & Semaforo
-          {delaysList.length > 0 && (
-            <span className="tab-badge tab-badge-danger">{delaysList.length}</span>
-          )}
-        </button>
-        {canManageProject && (
+        {delaysList.length > 0 && (
           <button
-            type="button"
-            className={`btn btn-sm badge-${project?.status || 'planning'}`}
-            onClick={openEditProjectModal}
-            title="Modifica commessa e cambia stato"
-            style={{
-              marginLeft: 'auto',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '6px 14px',
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              borderRadius: '8px',
-              border: '1px solid currentColor',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
+            className={`ut-tab-btn ${activeTab === 'alert' ? 'active' : ''}`}
+            onClick={() => setActiveTab('alert')}
           >
-            ✏️ Modifica
+            ⚠️ Ritardi
+            <span className="tab-badge tab-badge-danger">{delaysList.length}</span>
           </button>
         )}
-      </div>
 
-      {/* TOOLBAR DI AZIONE POSIZIONATA SOTTO ALLE TABS */}
-      <div className="project-toolbar">
-        <div className="toolbar-left" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
           {canManageProject && (
-            <button className="btn btn-primary" onClick={openNewTaskModal}>
-              + Nuova Fase
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={openEditProjectModal}
+              title="Modifica commessa e cambia stato"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 38,
+                height: 38,
+                padding: 0,
+                fontSize: '1.2rem',
+                borderRadius: '10px'
+              }}
+            >
+              ✏️
             </button>
           )}
 
-          {activeTab === 'gantt' && (
-            <div style={{ position: 'relative' }}>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowColumnsMenu(!showColumnsMenu)}
-              >
-                ⚙️ Colonne
-              </button>
-
-              {showColumnsMenu && (
-                <div style={{
-                  position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-default)',
-                  borderRadius: 8, padding: 10, zIndex: 100, minWidth: 200, boxShadow: 'var(--shadow-md)'
-                }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>MOSTRA/NASCONDI:</div>
-                  {[
-                    { id: 'start_date', label: 'Inizio' },
-                    { id: 'duration', label: 'Durata' },
-                    { id: 'progress', label: 'Progresso' },
-                    { id: 'priority', label: 'Priorità' },
-                    { id: 'workers', label: 'Addetti' }
-                  ].map(col => (
-                    <label key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
-                      <input
-                        type="checkbox"
-                        checked={visibleColumns.includes(col.id)}
-                        onChange={(e) => {
-                          const newCols = e.target.checked
-                            ? [...visibleColumns, col.id]
-                            : visibleColumns.filter(c => c !== col.id);
-                          setVisibleColumns(newCols);
-                          localStorage.setItem('ganttVisibleColumns', JSON.stringify(newCols));
-                        }}
-                      />
-                      {col.label}
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'gantt' && (
-            <div style={{ position: 'relative' }}>
-              <button
-                className="btn btn-secondary"
-                onClick={() => { setShowDeptMenu(!showDeptMenu); setShowColumnsMenu(false); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-              >
-                🏢 Reparto
-                {activeDepartments.length < ALL_DEPTS.length && (
-                  <span style={{ background: '#6366f1', color: '#fff', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px' }}>
-                    {activeDepartments.length}/{ALL_DEPTS.length}
-                  </span>
-                )}
-              </button>
-              {showDeptMenu && (
-                <div style={{
-                  position: 'absolute', top: '100%', left: 0, marginTop: 4,
-                  background: 'var(--bg-card)', border: '1px solid var(--border-default)',
-                  borderRadius: 10, padding: 12, zIndex: 200, minWidth: 200,
-                  boxShadow: 'var(--shadow-md)'
-                }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>FILTRA PER REPARTO:</div>
-                  {DEPT_OPTIONS.map(dept => (
-                    <label key={dept.value} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
-                      <input
-                        type="checkbox"
-                        checked={activeDepartments.includes(dept.value)}
-                        onChange={(e) => {
-                          setActiveDepartments(e.target.checked
-                            ? [...activeDepartments, dept.value]
-                            : activeDepartments.filter(d => d !== dept.value)
-                          );
-                        }}
-                      />
-                      <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: dept.color, flexShrink: 0 }} />
-                      {dept.label}
-                    </label>
-                  ))}
-                  <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 8, paddingTop: 8, display: 'flex', gap: 8 }}>
-                    <button className="btn btn-sm btn-secondary" onClick={() => setActiveDepartments(ALL_DEPTS)} style={{ flex: 1, fontSize: 11 }}>Tutti</button>
-                    <button className="btn btn-sm btn-secondary" onClick={() => setActiveDepartments([])} style={{ flex: 1, fontSize: 11 }}>Nessuno</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="toolbar-right">
-          {activeTab === 'gantt' && (
-            <div className="zoom-controls">
-              {['day', 'week', 'month', 'quarter'].map((z) => (
-                <button
-                  key={z}
-                  className={`zoom-chip ${viewMode === z ? 'active' : ''}`}
-                  onClick={() => handleZoom(z)}
-                >
-                  {z === 'day' ? 'Giorno' : z === 'week' ? 'Settimana' : z === 'month' ? 'Mese' : 'Trimestre'}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="export-buttons" style={{ position: 'relative', display: 'flex', gap: '10px' }}>
+          <div style={{ position: 'relative' }}>
             <button
               className="btn btn-primary"
               onClick={() => setShowExportMenu(!showExportMenu)}
               title="Esporta commessa"
-              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38, padding: 0, fontSize: '1.3rem', borderRadius: '10px' }}
             >
-              📥 Stampa / Export ▾
+              📥
             </button>
-
             {showExportMenu && (
               <div style={{
                 position: 'absolute', top: '100%', right: 0, marginTop: 6,
@@ -1338,6 +1245,119 @@ export default function ProjectDetailPage() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* TOOLBAR DI AZIONE POSIZIONATA SOTTO ALLE TABS */}
+      <div className="project-toolbar">
+        <div className="toolbar-left" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+
+
+          {activeTab === 'gantt' && (
+            <div style={{ position: 'relative' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowColumnsMenu(!showColumnsMenu)}
+              >
+                ⚙️ Colonne
+              </button>
+
+              {showColumnsMenu && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-default)',
+                  borderRadius: 8, padding: 10, zIndex: 100, minWidth: 200, boxShadow: 'var(--shadow-md)'
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>MOSTRA/NASCONDI:</div>
+                  {[
+                    { id: 'start_date', label: 'Inizio' },
+                    { id: 'duration', label: 'Durata' },
+                    { id: 'progress', label: 'Progresso' },
+                    { id: 'priority', label: 'Priorità' },
+                    { id: 'workers', label: 'Addetti' }
+                  ].map(col => (
+                    <label key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.includes(col.id)}
+                        onChange={(e) => {
+                          const newCols = e.target.checked
+                            ? [...visibleColumns, col.id]
+                            : visibleColumns.filter(c => c !== col.id);
+                          setVisibleColumns(newCols);
+                          localStorage.setItem('ganttVisibleColumns', JSON.stringify(newCols));
+                        }}
+                      />
+                      {col.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'gantt' && (
+            <div style={{ position: 'relative' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => { setShowDeptMenu(!showDeptMenu); setShowColumnsMenu(false); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                🏢 Reparto
+                {activeDepartments.length < ALL_DEPTS.length && (
+                  <span style={{ background: '#6366f1', color: '#fff', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px' }}>
+                    {activeDepartments.length}/{ALL_DEPTS.length}
+                  </span>
+                )}
+              </button>
+              {showDeptMenu && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, marginTop: 4,
+                  background: 'var(--bg-card)', border: '1px solid var(--border-default)',
+                  borderRadius: 10, padding: 12, zIndex: 200, minWidth: 200,
+                  boxShadow: 'var(--shadow-md)'
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>FILTRA PER REPARTO:</div>
+                  {DEPT_OPTIONS.map(dept => (
+                    <label key={dept.value} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+                      <input
+                        type="checkbox"
+                        checked={activeDepartments.includes(dept.value)}
+                        onChange={(e) => {
+                          setActiveDepartments(e.target.checked
+                            ? [...activeDepartments, dept.value]
+                            : activeDepartments.filter(d => d !== dept.value)
+                          );
+                        }}
+                      />
+                      <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: dept.color, flexShrink: 0 }} />
+                      {dept.label}
+                    </label>
+                  ))}
+                  <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 8, paddingTop: 8, display: 'flex', gap: 8 }}>
+                    <button className="btn btn-sm btn-secondary" onClick={() => setActiveDepartments(ALL_DEPTS)} style={{ flex: 1, fontSize: 11 }}>Tutti</button>
+                    <button className="btn btn-sm btn-secondary" onClick={() => setActiveDepartments([])} style={{ flex: 1, fontSize: 11 }}>Nessuno</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="toolbar-right">
+          {activeTab === 'gantt' && (
+            <div className="zoom-controls">
+              {['day', 'week', 'month', 'quarter'].map((z) => (
+                <button
+                  key={z}
+                  className={`zoom-chip ${viewMode === z ? 'active' : ''}`}
+                  onClick={() => handleZoom(z)}
+                >
+                  {z === 'day' ? 'Giorno' : z === 'week' ? 'Settimana' : z === 'month' ? 'Mese' : 'Trimestre'}
+                </button>
+              ))}
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -1695,7 +1715,7 @@ export default function ProjectDetailPage() {
                   </div>
                 ) : (
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center', padding: '24px 0', border: '1px dashed var(--border-default)', borderRadius: 8 }}>
-                    Nessun allegato presente.<br/>Trascina qui i file o usa il pulsante Aggiungi.
+                    Nessun allegato presente.<br />Trascina qui i file o usa il pulsante Aggiungi.
                   </div>
                 )}
               </div>
@@ -1708,7 +1728,7 @@ export default function ProjectDetailPage() {
       {activeTab === 'alert' && (
         <div className="animate-fadeIn">
           <div className="commessa-summary-card">
-            <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Motore Semafori & Allarmi Lavorazioni</h3>
+            <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Motore Semafori ed Allarmi Lavorazioni</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
               Questo pannello identifica automaticamente tutte le lavorazioni e commesse che non stanno rispettando la consuntivazione oraria attesa (meno del 50% delle ore previste o giorni lavorativi trascorsi con 0 ore registrate).
             </p>

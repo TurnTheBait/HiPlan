@@ -257,6 +257,8 @@ async def update_ticket(
     old_status = None
     new_status = None
     if data.status is not None and data.status != ticket.status:
+        if ticket.status == TicketStatus.COMPLETATO and current_user.role != UserRole.ADMIN:
+            raise HTTPException(status_code=403, detail="Solo un amministratore può riaprire o modificare lo stato di un ticket completato")
         status_changed = True
         old_status = ticket.status
         new_status = data.status
@@ -360,8 +362,8 @@ async def delete_reply(
     reply = result.scalar_one_or_none()
     if not reply:
         raise HTTPException(status_code=404, detail="Risposta non trovata")
-    if reply.author_id != current_user.id and current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Solo l'autore o un amministratore può eliminare questa risposta")
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Solo un amministratore può eliminare i messaggi")
     await db.delete(reply)
     await db.commit()
     return None

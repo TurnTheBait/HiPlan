@@ -292,7 +292,7 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
 }
 
 /* ─── Edit Ticket Modal ─── */
-function EditTicketModal({ ticket, onClose, onUpdated, projects, users }) {
+function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentUser }) {
   const [form, setForm] = useState({
     title: ticket.title,
     description: ticket.description || '',
@@ -389,7 +389,11 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users }) {
           </div>
           <div className="tkt-field">
             <label>Stato</label>
-            <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
+            <select
+              value={form.status}
+              onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+              disabled={ticket.status === 'Completato' && currentUser?.role !== 'admin'}
+            >
               <option value="Da gestire">Da gestire</option>
               <option value="In attesa del cliente">In attesa del cliente</option>
               <option value="In elaborazione">In elaborazione</option>
@@ -518,6 +522,7 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
       {showEdit && (
         <EditTicketModal
           ticket={ticket}
+          currentUser={currentUser}
           onClose={() => setShowEdit(false)}
           onUpdated={onRefresh}
           projects={projects}
@@ -534,7 +539,7 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
               <>
 
                 <button className="btn btn-ghost btn-sm" onClick={() => setShowEdit(true)} title="Modifica" style={{ fontSize: '0.78rem' }}>
-                  ✏️ Modifica
+                  ✏️
                 </button>
                 <button
                   className="btn btn-ghost btn-sm"
@@ -556,6 +561,7 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
               value={ticket.status}
               onChange={(e) => changeStatus(e.target.value)}
               style={{ cursor: 'pointer', border: 'none', outline: 'none' }}
+              disabled={ticket.status === 'Completato' && currentUser?.role !== 'admin'}
             >
               <option value="Da gestire">● Da gestire</option>
               <option value="In attesa del cliente">● In attesa del cliente</option>
@@ -643,7 +649,7 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
           )}
           {ticket.replies?.map(reply => {
             const ratts = Array.isArray(reply.attachments) ? reply.attachments : [];
-            const canDel = currentUser?.role === 'admin' || reply.author_id === currentUser?.id;
+            const canDel = currentUser?.role === 'admin';
             return (
               <div key={reply.id} className="ticket-timeline-item">
                 <div className="ticket-timeline-marker">

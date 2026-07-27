@@ -136,8 +136,8 @@ async def update_project(db: AsyncSession, project_id: str, data: ProjectUpdate,
 
 async def delete_project(db: AsyncSession, project_id: str, user: User):
     project = await get_project(db, project_id, user)
-    if user.role != UserRole.ADMIN and project.owner_id != user.id and project.responsible_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo owner/responsabile/admin possono eliminare")
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'amministratore può eliminare le commesse")
     await db.delete(project)
     await db.commit()
 

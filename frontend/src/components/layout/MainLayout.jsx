@@ -76,9 +76,9 @@ export default function MainLayout() {
     <div className={`app-layout ${collapsed ? 'sidebar-collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar-header">
-          <div 
-            className="sidebar-logo" 
-            onClick={() => navigate('/dashboard')} 
+          <div
+            className="sidebar-logo"
+            onClick={() => navigate('/dashboard')}
             style={{ cursor: 'pointer' }}
             title="Torna alla Dashboard"
           >
@@ -166,7 +166,7 @@ export default function MainLayout() {
           </div>
 
           <button className="btn-ghost btn-sm sidebar-logout" onClick={handleLogout} title="Esci">
-            {collapsed ? '⏻' : '⏻ Esci'}
+            {collapsed ? '⏼' : '⏼ Esci'}
           </button>
         </div>
       </aside>

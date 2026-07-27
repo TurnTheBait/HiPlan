@@ -95,7 +95,7 @@ export default function CalendarPage() {
   const filteredProjects = useMemo(() => {
     return projects.filter(p => {
       if (filterStatus !== 'all' && p.status !== filterStatus) return false;
-      
+
       // Filtro per addetto (utente) e/o reparto
       if (filterWorker !== 'all' || filterDepartment !== 'all') {
         const hasMatchingTask = Array.isArray(p.tasks) && p.tasks.some(t => {
@@ -145,7 +145,7 @@ export default function CalendarPage() {
 
   // Generazione calendario mensile
   const daysInMonth = new Date(currYear, currMonth + 1, 0).getDate();
-  
+
   // Il giorno della settimana del 1° del mese (0 = Dom, 1 = Lun, ... 6 = Sab)
   // Convertiamo in standard italiano: 0 = Lun ... 6 = Dom
   const firstDayRaw = new Date(currYear, currMonth, 1).getDay();
@@ -162,7 +162,7 @@ export default function CalendarPage() {
   // Costruisce array per la griglia
   const calendarCells = useMemo(() => {
     const cells = [];
-    
+
     // Giorni mese precedente
     const prevMonthDays = new Date(currYear, currMonth, 0).getDate();
     for (let i = firstDayIndex - 1; i >= 0; i--) {
@@ -180,7 +180,7 @@ export default function CalendarPage() {
       const monthStr = String(currMonth + 1).padStart(2, '0');
       const dayStr = String(d).padStart(2, '0');
       const dateStr = `${currYear}-${monthStr}-${dayStr}`;
-      
+
       const activeList = [];
       filteredProjects.forEach(p => {
         if (filterWorker !== 'all') {
@@ -207,7 +207,7 @@ export default function CalendarPage() {
           }
         }
       });
-      
+
       cells.push({
         dayNum: d,
         isOtherMonth: false,
@@ -380,37 +380,40 @@ export default function CalendarPage() {
                   </div>
 
                   {!cell.isOtherMonth && (
-                    <div className="calendar-projects-list">
-                      {cell.projectsList.slice(0, 3).map(proj => {
-                        const color = proj.color || '#185FA5';
-                        return (
-                          <div
-                            key={proj.id}
-                            className="calendar-project-pill"
-                            style={{
-                              borderLeftColor: color,
-                              background: `${color}26`,
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedProject(proj);
-                            }}
-                            title={`${proj.code ? `[${proj.code}] ` : ''}${proj.displayTitle || proj.name} (${STATUS_LABELS_IT[proj.status] || proj.status})`}
-                          >
-                            <span className="pill-text">
-                              <strong>{proj.code ? `${proj.code} ` : ''}</strong>
-                              {proj.displayTitle ? proj.displayTitle.replace(proj.code ? `[${proj.code}] ` : '', '') : proj.name}
-                            </span>
-                            <span
-                              className="pill-status-dot"
-                              style={{ background: STATUS_COLORS[proj.status] || '#a5b4fc' }}
-                            />
-                          </div>
-                        );
-                      })}
-                      {cell.projectsList.length > 3 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+                      <div className="calendar-projects-list" style={{ flex: 1, minHeight: 0 }}>
+                        {cell.projectsList.slice(0, 2).map(proj => {
+                          const color = proj.color || '#185FA5';
+                          return (
+                            <div
+                              key={proj.id}
+                              className="calendar-project-pill"
+                              style={{
+                                borderLeftColor: color,
+                                background: `${color}26`,
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedProject(proj);
+                              }}
+                              title={`${proj.code ? `[${proj.code}] ` : ''}${proj.displayTitle || proj.name} (${STATUS_LABELS_IT[proj.status] || proj.status})`}
+                            >
+                              <span className="pill-text">
+                                <strong>{proj.code ? `${proj.code} ` : ''}</strong>
+                                {proj.displayTitle ? proj.displayTitle.replace(proj.code ? `[${proj.code}] ` : '', '') : proj.name}
+                              </span>
+                              <span
+                                className="pill-status-dot"
+                                style={{ background: STATUS_COLORS[proj.status] || '#a5b4fc' }}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {cell.projectsList.length > 2 && (
                         <div
                           className="calendar-more-pill"
+                          style={{ marginTop: 'auto', marginBottom: 2 }}
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedDayProjects({
@@ -420,7 +423,7 @@ export default function CalendarPage() {
                             });
                           }}
                         >
-                          + altre {cell.projectsList.length - 3} commesse...
+                          + altre {cell.projectsList.length - 2} commesse...
                         </div>
                       )}
                     </div>
