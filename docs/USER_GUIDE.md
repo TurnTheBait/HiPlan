@@ -58,7 +58,10 @@ La **Dashboard** è la schermata di accoglienza e offre uno sguardo immediato su
    - **Descrizione e Note**: Eventuali specifiche di commessa o riferimenti contrattuali.
 4. Clicca su **"Salva Commessa"** per crearla e accedere alla sua scheda operativa.
 
----
+### Gestione, Archiviazione ed Eliminazione
+- **Le Mie Commesse**: Nella visualizzazione delle commesse personali, i progetti **Archiviati** vengono nascosti automaticamente per mantenere l'elenco pulito.
+- **Eliminazione Progetti**: Per ragioni di sicurezza e tracciabilità, **solo gli Amministratori (Admin)** hanno i permessi per eliminare in modo permanente una commessa dal sistema.
+
 
 ## 📅 5. Scheda Commessa e Diagramma di Gantt
 
@@ -131,9 +134,36 @@ Per evitare sovraccarichi visivi e consentire a ogni operatore di consultare il 
 2. Seleziona il nome di un operatore (es. _Giuseppe Verdi_).
 3. Il calendario si aggiornerà istantaneamente mostrando **esclusivamente le giornate e le fasi in cui quell'addetto è stato assegnato**, rendendo semplicissima la consultazione dei propri turni operativi settimanali e mensili.
 
+### Visualizzazione Intelligente a Schermo Intero
+La griglia mensile è progettata per **adattarsi automaticamente all'altezza dello schermo** senza generare barre di scorrimento verticali della pagina.
+Ogni singola giornata visualizza fino a un massimo di **due commesse**. Se in un giorno sono attive più lavorazioni, il sistema raggruppa le eccedenze in un comodo pulsante **"+ altre X commesse..."** sempre visibile nella parte inferiore della cella, garantendo un layout pulito, ordinato e sempre contenuto nella viewport.
+
 ---
 
-## ▤ 7. Blocchi Note Interattivi (Stile Notion)
+## 🎫 7. Gestione Ticket e Supporto
+
+Il modulo **`🎫 Ticket`** consente di gestire richieste di assistenza, segnalazioni o attività generiche, garantendo il tracciamento e la collaborazione del team in modo separato dal Gantt principale.
+
+### Creazione e Responsabilità
+- **Responsabile**: Ogni ticket ha un `Responsabile` (impostato di default sull'autore della richiesta).
+- **Stati Visivi**: I ticket seguono un ciclo di vita preciso (`Da gestire`, `In attesa del cliente`, `In elaborazione`, `Completato`), ognuno evidenziato con un colore specifico per il riconoscimento immediato.
+- **Associazione a Commesse**: Durante la creazione di un nuovo ticket, il menu a tendina mostra **esclusivamente le commesse attive** (le commesse archiviate vengono automaticamente escluse).
+
+### Visibilità Dinamica Sicura
+Per mantenere l'interfaccia pulita e focalizzata, i ticket seguono regole di visibilità strette:
+1. Gli **Amministratori (Admin)** possono vedere tutti i ticket.
+2. L'**Autore** del ticket vede sempre la propria richiesta.
+3. Gli **Addetti Assegnati** vedono esclusivamente i ticket di cui fanno parte.
+Gli altri operatori non vedranno nel proprio elenco i ticket a cui non partecipano o che non hanno creato.
+
+### Permessi Avanzati di Amministrazione
+Alcune azioni sui ticket sono riservate ai ruoli dirigenziali:
+- **Eliminazione Messaggi**: All'interno della chat di un ticket, solo gli `Amministratori` hanno il potere di eliminare i messaggi.
+- **Riapertura Ticket Completati**: Quando un ticket viene impostato sullo stato `Completato`, viene contrassegnato come chiuso e bloccato. **Soltanto un Amministratore** può modificare nuovamente il suo stato per riaprirlo in caso di necessità.
+
+---
+
+## ▤ 8. Blocchi Note Interattivi (Stile Notion)
 
 Il modulo **`▤ Blocchi Note`** è il quaderno di lavoro aziendale collaborativo, perfetto per appunti di riunione, check-list di collaudo, specifiche tecniche o documentazione di cantiere.
 
@@ -167,7 +197,7 @@ Hai creato una nota di lavoro come `🔒 Privata` e ora che è pronta vuoi condi
 
 ---
 
-## ⚙ 8. Pannello di Amministrazione (`Admin`)
+## ⚙ 9. Pannello di Amministrazione (`Admin`)
 
 Se possiedi il ruolo di **Amministratore**, avrai accesso alla pagina esclusiva **`⚙ Admin`** situata in fondo al menu laterale di sinistra. Questo pannello è suddiviso in due sezioni operative cruciali:
 

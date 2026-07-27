@@ -110,13 +110,38 @@ erDiagram
         datetime updated_at
     }
 
+    tickets {
+        uuid id PK
+        string title
+        text description
+        uuid project_id FK
+        uuid author_id FK
+        uuid responsible_id FK
+        text assigned_to
+        string status
+        string priority
+        datetime created_at
+    }
+
+    ticket_replies {
+        uuid id PK
+        uuid ticket_id FK
+        uuid author_id FK
+        text content
+        datetime created_at
+    }
+
     clients ||--o{ projects : "possiede (CASCADE)"
     projects ||--o{ phases : "contiene (CASCADE)"
     phases ||--o{ phase_workers : "ha addetti assegnati (CASCADE)"
-    phases ||--o{ task_comments : "ha commenti di chat (CASCADE)"
-    phases ||--o{ task_checklist_items : "ha voci di checklist (CASCADE)"
-    users ||--o{ notes : "crea e possiede"
-    users ||--o{ task_comments : "scrive commenti (SET NULL)"
+    phases ||--o{ task_comments : "ha messaggi (CASCADE)"
+    phases ||--o{ task_checklist_items : "ha checklist (CASCADE)"
+    users ||--o{ task_comments : "scrive (CASCADE)"
+    users ||--o{ notes : "possiede (CASCADE)"
+    projects ||--o{ tickets : "raggruppa (SET NULL)"
+    users ||--o{ tickets : "crea / responsabile"
+    tickets ||--o{ ticket_replies : "ha risposte (CASCADE)"
+    users ||--o{ ticket_replies : "scrive"
 ```
 
 ### Dettaglio delle Tabelle Principali
