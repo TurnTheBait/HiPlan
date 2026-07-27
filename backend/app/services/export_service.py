@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.task import Task
 from app.models.project import Project
+from app.models.ticket import Ticket, TicketReply
+from app.models.user import User
 # pyrefly: ignore [missing-import]
 from reportlab.lib import colors
 # pyrefly: ignore [missing-import]
@@ -994,3 +996,214 @@ async def export_projects_list_pdf(db: AsyncSession, project_ids: List[str]) -> 
     doc.build(elements)
     buffer.seek(0)
     return buffer
+
+
+async def export_ticket_excel(db: AsyncSession, ticket_id: str) -> io.BytesIO:
+    # pyrefly: ignore [missing-import]
+    from sqlalchemy.orm import selectinload
+    res = await db.execute(select(Ticket).options(selectinload(Ticket.project)).where(Ticket.id == ticket_id))
+    ticket = res.scalar_one_or_none()
+    if not ticket:
+        raise ValueError("Ticket non trovato")
+
+    res_replies = await db.execute(select(TicketReply).where(TicketReply.ticket_id == ticket_id).order_by(TicketReply.created_at))
+    replies = res_replies.scalars().all()
+
+    # Get users for author/responsible resolution
+    res_users = await db.execute(select(User))
+    users = res_users.scalars().all()
+    user_map = {u.id: (u.full_name or u.username) for u in users}
+
+    wb = Workbook()
+    
+    # --- Foglio 1: Dettagli Ticket ---
+    ws_ticket = wb.active
+    ws_ticket.title = "Dettagli Ticket"
+    
+    header_font = Font(bold=True, size=12, color="FFFFFF")
+    header_fill = PatternFill(start_color="1F2937", end_color="1F2937", fill_type="solid")
+    
+    # Headers
+    headers = ["Campo", "Valore"]
+    for col_num, header in enumerate(headers, 1):
+        cell = ws_ticket.cell(row=1, column=col_num, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+
+    t_atts = []
+    if ticket.attachments:
+        try:
+            parsed = json.loads(ticket.attachments)
+            t_atts = [a.get("name", "Allegato") for a in parsed]
+        except Exception:
+            pass
+    t_atts_str = ", ".join(t_atts) if t_atts else "-"
+
+    details = [
+        ("Codice / Progetto", ticket.custom_project_code or (ticket.project.name if ticket.project else "-")),
+        ("Titolo", ticket.title),
+        ("Stato", ticket.status),
+        ("Priorità", ticket.priority),
+        ("Creato Da", user_map.get(ticket.author_id, "-")),
+        ("Responsabile", user_map.get(ticket.responsible_id, "-")),
+        ("Descrizione", ticket.description or "-"),
+        ("Allegati", t_atts_str),
+    ]
+
+    for row_num, (campo, valore) in enumerate(details, 2):
+        ws_ticket.cell(row=row_num, column=1, value=campo)
+        ws_ticket.cell(row=row_num, column=2, value=valore)
+
+    ws_ticket.column_dimensions['A'].width = 20
+    ws_ticket.column_dimensions['B'].width = 60
+
+    # --- Foglio 2: Risposte e Timeline ---
+    ws_replies = wb.create_sheet("Risposte e Timeline")
+    replies_headers = ["Data", "Autore", "Tipo Azione", "Contenuto"]
+    
+    for col_num, header in enumerate(replies_headers, 1):
+        cell = ws_replies.cell(row=1, column=col_num, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+
+    for row_num, reply in enumerate(replies, 2):
+        r_atts = []
+        if reply.attachments:
+            try:
+                parsed = json.loads(reply.attachments)
+                r_atts = [a.get("name", "Allegato") for a in parsed]
+            except Exception:
+                pass
+        content_text = reply.content or ""
+        if r_atts:
+            content_text += f"\n[Allegati: {', '.join(r_atts)}]"
+            
+        ws_replies.cell(row=row_num, column=1, value=reply.created_at.strftime("%Y-%m-%d %H:%M"))
+        ws_replies.cell(row=row_num, column=2, value=user_map.get(reply.author_id, "-"))
+        ws_replies.cell(row=row_num, column=3, value=reply.action_type or "Nota Interna")
+        ws_replies.cell(row=row_num, column=4, value=content_text)
+
+    ws_replies.column_dimensions['A'].width = 20
+    ws_replies.column_dimensions['B'].width = 25
+    ws_replies.column_dimensions['C'].width = 25
+    ws_replies.column_dimensions['D'].width = 80
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
+
+async def export_ticket_pdf(db: AsyncSession, ticket_id: str) -> io.BytesIO:
+    # pyrefly: ignore [missing-import]
+    from sqlalchemy.orm import selectinload
+    res = await db.execute(select(Ticket).options(selectinload(Ticket.project)).where(Ticket.id == ticket_id))
+    ticket = res.scalar_one_or_none()
+    if not ticket:
+        raise ValueError("Ticket non trovato")
+
+    res_replies = await db.execute(select(TicketReply).where(TicketReply.ticket_id == ticket_id).order_by(TicketReply.created_at))
+    replies = res_replies.scalars().all()
+
+    # Get users for author/responsible resolution
+    res_users = await db.execute(select(User))
+    users = res_users.scalars().all()
+    user_map = {u.id: (u.full_name or u.username) for u in users}
+
+    output = io.BytesIO()
+    doc = SimpleDocTemplate(
+        output,
+        pagesize=A4,
+        rightMargin=15*mm,
+        leftMargin=15*mm,
+        topMargin=15*mm,
+        bottomMargin=15*mm
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("TitleStyle", parent=styles["Heading1"], fontSize=18, textColor=colors.HexColor("#111827"), spaceAfter=12)
+    normal_style = styles["Normal"]
+    bold_style = ParagraphStyle("BoldStyle", parent=styles["Normal"], fontName="Helvetica-Bold")
+
+    elements = []
+
+    # Title
+    elements.append(Paragraph(f"Ticket: {ticket.title}", title_style))
+    elements.append(Spacer(1, 10))
+
+    t_atts = []
+    if ticket.attachments:
+        try:
+            parsed = json.loads(ticket.attachments)
+            t_atts = [a.get("name", "Allegato") for a in parsed]
+        except Exception:
+            pass
+    t_atts_str = ", ".join(t_atts) if t_atts else "-"
+
+    # Details Table
+    details_data = [
+        [Paragraph("<b>Progetto:</b>", normal_style), Paragraph(ticket.custom_project_code or (ticket.project.name if ticket.project else "-"), normal_style)],
+        [Paragraph("<b>Stato:</b>", normal_style), Paragraph(ticket.status, normal_style)],
+        [Paragraph("<b>Priorità:</b>", normal_style), Paragraph(ticket.priority, normal_style)],
+        [Paragraph("<b>Autore:</b>", normal_style), Paragraph(user_map.get(ticket.author_id, "-"), normal_style)],
+        [Paragraph("<b>Responsabile:</b>", normal_style), Paragraph(user_map.get(ticket.responsible_id, "-"), normal_style)],
+        [Paragraph("<b>Allegati:</b>", normal_style), Paragraph(t_atts_str, normal_style)],
+    ]
+    
+    details_table = Table(details_data, colWidths=[100, 350], hAlign="LEFT")
+    details_table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(details_table)
+    elements.append(Spacer(1, 15))
+
+    elements.append(Paragraph("<b>Descrizione:</b>", bold_style))
+    elements.append(Paragraph(ticket.description or "Nessuna descrizione fornita.", normal_style))
+    elements.append(Spacer(1, 20))
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#E5E7EB"), spaceBefore=10, spaceAfter=20))
+
+    # Replies Table
+    elements.append(Paragraph("Cronologia Risposte", ParagraphStyle("H2", parent=styles["Heading2"], spaceAfter=10)))
+
+    replies_data = [
+        [Paragraph("Data", bold_style), Paragraph("Autore", bold_style), Paragraph("Azione", bold_style), Paragraph("Contenuto", bold_style)]
+    ]
+
+    for reply in replies:
+        r_atts = []
+        if reply.attachments:
+            try:
+                parsed = json.loads(reply.attachments)
+                r_atts = [a.get("name", "Allegato") for a in parsed]
+            except Exception:
+                pass
+                
+        content_text = (reply.content or "").replace('\n', '<br/>')
+        if r_atts:
+            content_text += f"<br/><i>[Allegati: {', '.join(r_atts)}]</i>"
+
+        replies_data.append([
+            Paragraph(reply.created_at.strftime("%Y-%m-%d %H:%M"), normal_style),
+            Paragraph(user_map.get(reply.author_id, "-"), normal_style),
+            Paragraph(reply.action_type or "Nota Interna", normal_style),
+            Paragraph(content_text, normal_style),
+        ])
+
+    replies_table = Table(replies_data, colWidths=[80, 100, 100, 240])
+    replies_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F2937")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+        ("TOPPADDING", (0, 0), (-1, 0), 8),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F9FAFB")]),
+    ]))
+    elements.append(replies_table)
+
+    doc.build(elements)
+    output.seek(0)
+    return output

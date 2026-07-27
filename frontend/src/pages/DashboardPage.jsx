@@ -151,15 +151,14 @@ export default function DashboardPage() {
       {globalBanners.map(banner => (
         <div key={banner.id} style={{
           background: banner.type === 'error' ? 'rgba(239, 68, 68, 0.1)' :
-                      banner.type === 'warning' ? 'rgba(245, 158, 11, 0.1)' :
-                      banner.type === 'success' ? 'rgba(16, 185, 129, 0.1)' :
-                      'rgba(59, 130, 246, 0.1)',
-          borderLeft: `4px solid ${
-                      banner.type === 'error' ? '#ef4444' :
-                      banner.type === 'warning' ? '#f59e0b' :
-                      banner.type === 'success' ? '#10b981' :
-                      '#3b82f6'
-          }`,
+            banner.type === 'warning' ? 'rgba(245, 158, 11, 0.1)' :
+              banner.type === 'success' ? 'rgba(16, 185, 129, 0.1)' :
+                'rgba(59, 130, 246, 0.1)',
+          borderLeft: `4px solid ${banner.type === 'error' ? '#ef4444' :
+            banner.type === 'warning' ? '#f59e0b' :
+              banner.type === 'success' ? '#10b981' :
+                '#3b82f6'
+            }`,
           color: 'var(--text-primary)',
           padding: '12px 16px',
           borderRadius: '4px',
@@ -169,8 +168,8 @@ export default function DashboardPage() {
           alignItems: 'center'
         }}>
           <span style={{ fontWeight: 500, fontSize: '0.95rem' }}>{banner.text}</span>
-          <button 
-            onClick={() => setGlobalBanners(prev => prev.filter(b => b.id !== banner.id))} 
+          <button
+            onClick={() => setGlobalBanners(prev => prev.filter(b => b.id !== banner.id))}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: 'var(--text-muted)' }}
             title="Chiudi avviso"
           >
@@ -321,7 +320,7 @@ export default function DashboardPage() {
                   onClick={() => navigate(`/projects/${project.id}`)}
                 >
                   <div className="recent-project-info">
-                    <span className="recent-project-name">{project.name}</span>
+                    <span className="recent-project-name">{project.code} {project.name}</span>
                     <span className={`badge badge-${project.status}`}>{STATUS_LABELS_IT[project.status] || project.status}</span>
                   </div>
                   <div className="progress-bar" style={{ width: '100%' }}>

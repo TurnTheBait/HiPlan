@@ -564,13 +564,19 @@ export default function NotesPage() {
                   <button
                     type="button"
                     className={`visibility-btn-interactive ${isShared ? 'badge-shared' : 'badge-private'}`}
-                    onClick={() => setShowVisibilityMenu(!showVisibilityMenu)}
-                    title="Clicca per modificare la visibilità del blocco note"
+                    onClick={() => {
+                      if (activeNote.owner_id === user?.id) {
+                        setShowVisibilityMenu(!showVisibilityMenu);
+                      }
+                    }}
+                    title={activeNote.owner_id === user?.id ? "Clicca per modificare la visibilità del blocco note" : "Solo l'autore può modificare la visibilità"}
+                    style={{ cursor: activeNote.owner_id === user?.id ? 'pointer' : 'default', opacity: activeNote.owner_id === user?.id ? 1 : 0.8 }}
                   >
-                    {isShared ? '👥 Condiviso ▼' : '🔒 Privato ▼'}
+                    {isShared ? '👥 Condiviso' : '🔒 Privato'}
+                    {activeNote.owner_id === user?.id && ' ▼'}
                   </button>
 
-                  {showVisibilityMenu && (
+                  {showVisibilityMenu && activeNote.owner_id === user?.id && (
                     <div className="visibility-menu-popup">
                       <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>
                         IMPOSTAZIONI VISIBILITÀ

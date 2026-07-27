@@ -421,10 +421,13 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
   const [showEdit, setShowEdit] = useState(false);
   const [uploadingTicket, setUploadingTicket] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportFormat, setExportFormat] = useState('pdf');
   const toast = useToast();
   const navigate = useNavigate();
   const replyFileRef = useRef(null);
   const ticketFileRef = useRef(null);
+  const exportMenuRef = useRef(null);
 
   const canEdit = currentUser?.role === 'admin' || ticket.author_id === currentUser?.id;
   const isClosed = ticket.status === 'Completato';
@@ -481,6 +484,41 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
       toast.success('Ticket eliminato');
       onRefresh(true);
     } catch { toast.error('Errore eliminazione'); }
+  }
+
+  async function deleteTicketAttachment(index) {
+    if (!window.confirm('Eliminare questo allegato?')) return;
+    try {
+      await api.delete(`/tickets/${ticket.id}/attachments/${index}`);
+      toast.success('Allegato eliminato');
+      onRefresh();
+    } catch { toast.error('Errore durante l\'eliminazione dell\'allegato'); }
+  }
+
+  async function deleteReplyAttachment(replyId, index) {
+    if (!window.confirm('Eliminare questo allegato?')) return;
+    try {
+      await api.delete(`/tickets/${ticket.id}/replies/${replyId}/attachments/${index}`);
+      toast.success('Allegato eliminato');
+      onRefresh();
+    } catch { toast.error('Errore durante l\'eliminazione dell\'allegato'); }
+  }
+
+  async function handleExportTicket(format) {
+    try {
+      toast.info(`Generazione ${format.toUpperCase()} in corso...`);
+      const res = await api.get(`/tickets/${ticket.id}/export/${format}`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `ticket_${ticket.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${format === 'excel' ? 'xlsx' : 'pdf'}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setShowExportMenu(false);
+    } catch {
+      toast.error('Errore durante l\'esportazione del ticket');
+    }
   }
 
   async function uploadTicketFile(files) {
@@ -541,6 +579,69 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
                 <button className="btn btn-ghost btn-sm" onClick={() => setShowEdit(true)} title="Modifica" style={{ fontSize: '0.78rem' }}>
                   ✏️
                 </button>
+                <div style={{ position: 'relative' }} ref={exportMenuRef}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setShowExportMenu(!showExportMenu)} title="Esporta / Analizza" style={{ fontSize: '0.78rem' }}>
+                    📥
+                  </button>
+                  {showExportMenu && (
+                    <div style={{
+                      position: 'absolute', top: '100%', right: 0, marginTop: 6,
+                      background: 'var(--bg-card)', border: '1px solid var(--border-default)',
+                      borderRadius: 10, padding: 16, zIndex: 300, minWidth: 260,
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.2)', textAlign: 'left', fontWeight: 'normal'
+                    }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Formato:
+                      </div>
+                      <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+                        <label style={{
+                          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                          background: exportFormat === 'pdf' ? 'rgba(239, 68, 68, 0.15)' : 'var(--bg-tertiary)',
+                          border: exportFormat === 'pdf' ? '2px solid #ef4444' : '1px solid var(--border-default)',
+                          color: exportFormat === 'pdf' ? '#ef4444' : 'var(--text-secondary)',
+                          transition: 'all 0.2s ease'
+                        }}>
+                          <input type="radio" name="exportFormat" value="pdf" checked={exportFormat === 'pdf'} onChange={() => setExportFormat('pdf')} style={{ display: 'none' }} />
+                          📄 PDF
+                        </label>
+                        <label style={{
+                          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                          background: exportFormat === 'excel' ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-tertiary)',
+                          border: exportFormat === 'excel' ? '2px solid #10b981' : '1px solid var(--border-default)',
+                          color: exportFormat === 'excel' ? '#10b981' : 'var(--text-secondary)',
+                          transition: 'all 0.2s ease'
+                        }}>
+                          <input type="radio" name="exportFormat" value="excel" checked={exportFormat === 'excel'} onChange={() => setExportFormat('excel')} style={{ display: 'none' }} />
+                          📊 Excel
+                        </label>
+                      </div>
+
+                      <button
+                        className="btn"
+                        style={{ width: '100%', marginBottom: 16, background: '#10a37f', color: '#fff', border: 'none', display: 'flex', justifyContent: 'center', gap: 8 }}
+                        onClick={() => {
+                          const repliesText = (ticket.replies || []).map(r => `- ${r.author_full_name || r.author_username}: ${r.content}`).join('\n');
+                          const prompt = `Analizza questo ticket tecnico e forniscimi un riassunto dei punti chiave e delle possibili soluzioni. \n\nTitolo: ${ticket.title}\nDescrizione: ${ticket.description}\nStato: ${ticket.status}\nPriorità: ${ticket.priority}\nCreato da: ${ticket.author_full_name || ticket.author_username}\nResponsabile: ${ticket.responsible_full_name || ticket.responsible_username || 'Nessuno'}\n\nRisposte/Commenti:\n${repliesText}`;
+                          window.open(`https://chatgpt.com/?q=${encodeURIComponent(prompt)}`, '_blank');
+                          setShowExportMenu(false);
+                        }}
+                      >
+                        <span style={{ fontSize: '1.2em' }}></span>
+                        <img src="/chatgpt-logo.png" style={{ width: 16, height: 16, filter: 'brightness(0) invert(1)' }} alt="ChatGPT" />
+                        Analizza con ChatGPT
+                      </button>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <button className="btn btn-secondary" onClick={() => setShowExportMenu(false)}>Annulla</button>
+                        <button className="btn btn-primary" onClick={() => handleExportTicket(exportFormat)}>
+                          Export {exportFormat.toUpperCase()}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <button
                   className="btn btn-ghost btn-sm"
                   onClick={deleteTicket}
@@ -624,9 +725,20 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
             <div className="ticket-section-label">Allegati ({ticketAtts.length})</div>
             <div className="ticket-attachments-list" style={{ marginBottom: ticketAtts.length > 0 ? 8 : 0 }}>
               {ticketAtts.map((att, i) => (
-                <a key={i} href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" className="ticket-attachment-chip">
-                  📄 {att.name}
-                </a>
+                <span key={i} className="ticket-attachment-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, paddingRight: currentUser?.role === 'admin' ? 8 : undefined }}>
+                  <a href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
+                    📄 {att.name}
+                  </a>
+                  {currentUser?.role === 'admin' && (
+                    <button
+                      onClick={(e) => { e.preventDefault(); deleteTicketAttachment(i); }}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: 0, fontSize: '1em', display: 'flex', alignItems: 'center' }}
+                      title="Elimina allegato"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </span>
               ))}
             </div>
             {canEdit && (
@@ -675,9 +787,20 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
                     {ratts.length > 0 && (
                       <div className="ticket-attachments-list" style={{ marginTop: 12 }}>
                         {ratts.map((att, i) => (
-                          <a key={i} href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" className="ticket-attachment-chip">
-                            📄 {att.name}
-                          </a>
+                          <span key={i} className="ticket-attachment-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, paddingRight: currentUser?.role === 'admin' ? 8 : undefined }}>
+                            <a href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
+                              📄 {att.name}
+                            </a>
+                            {currentUser?.role === 'admin' && (
+                              <button
+                                onClick={(e) => { e.preventDefault(); deleteReplyAttachment(reply.id, i); }}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: 0, fontSize: '1em', display: 'flex', alignItems: 'center' }}
+                                title="Elimina allegato"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </span>
                         ))}
                       </div>
                     )}

@@ -5,7 +5,7 @@ from typing import List, Optional
 # pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 # pyrefly: ignore [missing-import]
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 # pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
 # pyrefly: ignore [missing-import]
@@ -18,6 +18,7 @@ from app.models.user import User, UserRole
 from app.models.ticket import Ticket, TicketReply, TicketStatus, TicketPriority
 from app.models.notification import Notification, NotificationType
 from app.schemas.ticket import TicketCreate, TicketUpdate, TicketOut, TicketReplyCreate, TicketReplyOut
+from app.services import export_service
 
 router = APIRouter(prefix="/api/tickets", tags=["tickets"])
 
@@ -432,3 +433,113 @@ async def upload_reply_attachment(
     await db.commit()
 
     return {"name": file.filename, "path": f"uploads/tickets/{filename}"}
+
+
+@router.delete("/{ticket_id}/attachments/{index}")
+async def delete_ticket_attachment(
+    ticket_id: str,
+    index: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Solo l'admin può eliminare gli allegati")
+        
+    result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
+    ticket = result.scalar_one_or_none()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket non trovato")
+
+    attachments = json.loads(ticket.attachments) if ticket.attachments else []
+    if index < 0 or index >= len(attachments):
+        raise HTTPException(status_code=400, detail="Indice allegato non valido")
+
+    att = attachments.pop(index)
+    ticket.attachments = json.dumps(attachments)
+    
+    filepath = os.path.join(".", att["path"])
+    if os.path.exists(filepath):
+        try:
+            os.remove(filepath)
+        except Exception:
+            pass
+
+    await db.commit()
+    return {"message": "Allegato eliminato"}
+
+
+@router.delete("/{ticket_id}/replies/{reply_id}/attachments/{index}")
+async def delete_reply_attachment(
+    ticket_id: str,
+    reply_id: str,
+    index: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Solo l'admin può eliminare gli allegati")
+        
+    result = await db.execute(
+        select(TicketReply)
+        .where(TicketReply.id == reply_id, TicketReply.ticket_id == ticket_id)
+    )
+    reply = result.scalar_one_or_none()
+    if not reply:
+        raise HTTPException(status_code=404, detail="Risposta non trovata")
+
+    attachments = json.loads(reply.attachments) if reply.attachments else []
+    if index < 0 or index >= len(attachments):
+        raise HTTPException(status_code=400, detail="Indice allegato non valido")
+
+    att = attachments.pop(index)
+    reply.attachments = json.dumps(attachments)
+    
+    filepath = os.path.join(".", att["path"])
+    if os.path.exists(filepath):
+        try:
+            os.remove(filepath)
+        except Exception:
+            pass
+
+    await db.commit()
+    return {"message": "Allegato eliminato"}
+
+
+@router.get("/{ticket_id}/export/pdf")
+async def export_ticket_pdf_route(
+    ticket_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
+    ticket = result.scalar_one_or_none()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket non trovato")
+    _check_ticket_access(ticket, current_user)
+
+    buffer = await export_service.export_ticket_pdf(db, ticket_id)
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=ticket_{ticket_id}.pdf"},
+    )
+
+
+@router.get("/{ticket_id}/export/excel")
+async def export_ticket_excel_route(
+    ticket_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
+    ticket = result.scalar_one_or_none()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket non trovato")
+    _check_ticket_access(ticket, current_user)
+
+    buffer = await export_service.export_ticket_excel(db, ticket_id)
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=ticket_{ticket_id}.xlsx"},
+    )
