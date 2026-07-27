@@ -314,7 +314,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="recent-projects">
-              {projects.slice(0, 5).map((project) => (
+              {projects.filter(p => p.status !== 'archived').slice(0, 5).map((project) => (
                 <div
                   key={project.id}
                   className="recent-project-item"

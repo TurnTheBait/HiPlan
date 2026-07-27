@@ -28,12 +28,14 @@ class Ticket(Base, TimestampMixin):
     project_id = Column(uuid_fk(), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
     custom_project_code = Column(String(255), nullable=True)
     author_id = Column(uuid_fk(), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    responsible_id = Column(uuid_fk(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     assigned_to = Column(Text, default="[]", nullable=False)  # JSON list of usernames
     attachments = Column(Text, default="[]", nullable=False)  # JSON list of file paths
     status = Column(Enum(TicketStatus), default=TicketStatus.DA_GESTIRE, nullable=False)
     priority = Column(Enum(TicketPriority), default=TicketPriority.MEDIUM, nullable=False)
 
     author = relationship("User", foreign_keys=[author_id])
+    responsible = relationship("User", foreign_keys=[responsible_id])
     project = relationship("Project", foreign_keys=[project_id])
     replies = relationship("TicketReply", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketReply.created_at")
 

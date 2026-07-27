@@ -30,6 +30,7 @@ class TicketCreate(BaseModel):
     description: Optional[str] = None
     project_id: Optional[str] = None
     custom_project_code: Optional[str] = None
+    responsible_id: Optional[str] = None
     assigned_to: List[str] = []  # list of usernames
     priority: Optional[TicketPriority] = TicketPriority.MEDIUM
 
@@ -39,6 +40,7 @@ class TicketUpdate(BaseModel):
     description: Optional[str] = None
     project_id: Optional[str] = None
     custom_project_code: Optional[str] = None
+    responsible_id: Optional[str] = None
     assigned_to: Optional[List[str]] = None
     priority: Optional[TicketPriority] = None
     status: Optional[TicketStatus] = None
@@ -55,6 +57,9 @@ class TicketOut(BaseModel):
     author_id: str
     author_username: Optional[str] = None
     author_full_name: Optional[str] = None
+    responsible_id: Optional[str] = None
+    responsible_username: Optional[str] = None
+    responsible_full_name: Optional[str] = None
     assigned_to: List[str] = []
     attachments: List[Dict[str, Any]] = []
     status: TicketStatus

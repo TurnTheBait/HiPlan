@@ -46,6 +46,20 @@ function Av({ name, size = 32 }) {
   );
 }
 
+function renderSystemMessage(text) {
+  if (text.startsWith('Stato modificato da ')) {
+    const match = text.match(/Stato modificato da "(.+)" a "(.+)"/);
+    if (match) {
+      return (
+        <>
+          Stato modificato da <span className={`ticket-status-badge ${STATUS_CLASS[match[1]] || ''}`} style={{ display: 'inline-block', margin: '0 4px', fontSize: '0.85em', padding: '2px 6px' }}>{match[1]}</span> a <span className={`ticket-status-badge ${STATUS_CLASS[match[2]] || ''}`} style={{ display: 'inline-block', margin: '0 4px', fontSize: '0.85em', padding: '2px 6px' }}>{match[2]}</span>
+        </>
+      );
+    }
+  }
+  return text;
+}
+
 /* ─── Assignee tag input ─── */
 function AssigneeInput({ selected, onChange, users }) {
   const [query, setQuery] = useState('');
@@ -106,12 +120,13 @@ function AssigneeInput({ selected, onChange, users }) {
 }
 
 /* ─── New Ticket Modal ─── */
-function NewTicketModal({ onClose, onCreated, projects, users }) {
+function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
   const [form, setForm] = useState({
     title: '',
     description: '',
     project_id: '',
     custom_project_code: '',
+    responsible_id: currentUser?.id || '',
     priority: 'medium',
     assigned_to: [],
     status: 'Da gestire'
@@ -132,6 +147,7 @@ function NewTicketModal({ onClose, onCreated, projects, users }) {
         description: form.description,
         project_id: form.project_id === 'custom' ? null : (form.project_id || null),
         custom_project_code: form.project_id === 'custom' ? form.custom_project_code.trim() : null,
+        responsible_id: form.responsible_id || null,
         priority: form.priority,
         assigned_to: form.assigned_to,
       });
@@ -201,7 +217,7 @@ function NewTicketModal({ onClose, onCreated, projects, users }) {
               <select value={form.project_id} onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))}>
                 <option value="">— Nessuna —</option>
                 <option value="custom">✏️ Inserimento manuale</option>
-                {projects.map(p => (
+                {projects.filter(p => p.status !== 'archived').map(p => (
                   <option key={p.id} value={p.id}>{p.code ? `${p.code} – ` : ''}{p.client || p.name}</option>
                 ))}
               </select>
@@ -225,9 +241,20 @@ function NewTicketModal({ onClose, onCreated, projects, users }) {
               </select>
             </div>
           </div>
-          <div className="tkt-field">
-            <label>Addetti (vuoto = avviso tutti)</label>
-            <AssigneeInput selected={form.assigned_to} onChange={v => setForm(f => ({ ...f, assigned_to: v }))} users={users} />
+          <div className="tkt-field-row">
+            <div className="tkt-field">
+              <label>Responsabile</label>
+              <select value={form.responsible_id} onChange={e => setForm(f => ({ ...f, responsible_id: e.target.value }))}>
+                <option value="">— Nessuno —</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.full_name || u.username}</option>
+                ))}
+              </select>
+            </div>
+            <div className="tkt-field">
+              <label>Addetti (vuoto = avviso tutti)</label>
+              <AssigneeInput selected={form.assigned_to} onChange={v => setForm(f => ({ ...f, assigned_to: v }))} users={users} />
+            </div>
           </div>
           <div className="tkt-field">
             <label>Allegati</label>
@@ -271,6 +298,7 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users }) {
     description: ticket.description || '',
     project_id: ticket.project_id ? ticket.project_id : (ticket.custom_project_code ? 'custom' : ''),
     custom_project_code: ticket.custom_project_code || '',
+    responsible_id: ticket.responsible_id || '',
     priority: ticket.priority,
     assigned_to: ticket.assigned_to || [],
     status: ticket.status,
@@ -285,7 +313,8 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users }) {
       await api.patch(`/tickets/${ticket.id}`, {
         ...form,
         project_id: form.project_id === 'custom' ? null : (form.project_id || null),
-        custom_project_code: form.project_id === 'custom' ? form.custom_project_code.trim() : null
+        custom_project_code: form.project_id === 'custom' ? form.custom_project_code.trim() : null,
+        responsible_id: form.responsible_id || null
       });
       toast.success('Ticket aggiornato!');
       onUpdated();
@@ -319,7 +348,7 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users }) {
               <select value={form.project_id} onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))}>
                 <option value="">— Nessuna —</option>
                 <option value="custom">✏️ Inserimento manuale</option>
-                {projects.map(p => (
+                {projects.filter(p => p.status !== 'archived').map(p => (
                   <option key={p.id} value={p.id}>{p.code ? `${p.code} – ` : ''}{p.client || p.name}</option>
                 ))}
               </select>
@@ -343,9 +372,20 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users }) {
               </select>
             </div>
           </div>
-          <div className="tkt-field">
-            <label>Addetti di riferimento</label>
-            <AssigneeInput selected={form.assigned_to} onChange={v => setForm(f => ({ ...f, assigned_to: v }))} users={users} />
+          <div className="tkt-field-row">
+            <div className="tkt-field">
+              <label>Responsabile</label>
+              <select value={form.responsible_id} onChange={e => setForm(f => ({ ...f, responsible_id: e.target.value }))}>
+                <option value="">— Nessuno —</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.full_name || u.username}</option>
+                ))}
+              </select>
+            </div>
+            <div className="tkt-field">
+              <label>Addetti di riferimento</label>
+              <AssigneeInput selected={form.assigned_to} onChange={v => setForm(f => ({ ...f, assigned_to: v }))} users={users} />
+            </div>
           </div>
           <div className="tkt-field">
             <label>Stato</label>
@@ -547,11 +587,15 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
           ) : null}
           <span style={{ color: 'var(--border-default)' }}>·</span>
           <span className="ticket-detail-meta-item">
-            👤 {ticket.assigned_to?.length > 0 ? ticket.assigned_to.join(', ') : 'Tutti'}
+            👤 Resp: {ticket.responsible_full_name || ticket.responsible_username || 'Nessuno'}
           </span>
           <span style={{ color: 'var(--border-default)' }}>·</span>
           <span className="ticket-detail-meta-item">
-            {ticket.author_full_name || ticket.author_username} · {fmtDate(ticket.created_at)}
+            👥 Addetti: {ticket.assigned_to?.length > 0 ? ticket.assigned_to.join(', ') : 'Tutti'}
+          </span>
+          <span style={{ color: 'var(--border-default)' }}>·</span>
+          <span className="ticket-detail-meta-item">
+            Creazione: {ticket.author_full_name || ticket.author_username} · {fmtDate(ticket.created_at)}
           </span>
         </div>
       </div>
@@ -620,7 +664,7 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
                   </div>
                   <div className="ticket-timeline-body">
                     <div className={`ticket-timeline-text ${reply.action_type === '🔄 Cambio Stato' ? 'system-message' : ''}`}>
-                      {reply.content}
+                      {reply.action_type === '🔄 Cambio Stato' ? renderSystemMessage(reply.content) : reply.content}
                     </div>
                     {ratts.length > 0 && (
                       <div className="ticket-attachments-list" style={{ marginTop: 12 }}>
@@ -805,6 +849,7 @@ export default function TicketsPage() {
 
       {showNew && (
         <NewTicketModal
+          currentUser={user}
           onClose={() => setShowNew(false)}
           onCreated={id => { refreshTickets(); setSelectedId(id); }}
           projects={projects}
@@ -820,7 +865,7 @@ export default function TicketsPage() {
           {[
             { key: 'open_all', icon: '🔥', label: 'Aperti', count: projectFilteredTickets.filter(t => t.status !== 'Completato').length },
             { key: 'Da gestire', icon: '⏳', label: 'Da gestire', count: projectFilteredTickets.filter(t => t.status === 'Da gestire').length },
-            { key: 'In attesa del cliente', icon: '📞', label: 'In attesa', count: projectFilteredTickets.filter(t => t.status === 'In attesa del cliente').length },
+            { key: 'In attesa del cliente', icon: '📞', label: 'In attesa cliente', count: projectFilteredTickets.filter(t => t.status === 'In attesa del cliente').length },
             { key: 'In elaborazione', icon: '⚙️', label: 'In elaborazione', count: projectFilteredTickets.filter(t => t.status === 'In elaborazione').length },
             { key: 'Completato', icon: '✅', label: 'Completato', count: projectFilteredTickets.filter(t => t.status === 'Completato').length },
           ].map(f => (

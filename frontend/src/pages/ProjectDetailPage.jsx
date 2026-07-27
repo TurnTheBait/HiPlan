@@ -953,6 +953,56 @@ export default function ProjectDetailPage() {
     gantt.render();
   }
 
+  function handleChatGPTAnalysis() {
+    const promptLines = [
+      "Comportati da Project Manager esperto e analizza i dati di questa commessa riportati di seguito (e nell'eventuale file allegato).",
+      "",
+      `COMMESSA: ${project.name} (Codice: ${project.code || 'N/A'})`,
+      `Descrizione: ${project.description || 'Nessuna descrizione'}`,
+      `Inizio: ${new Date(project.start_date).toLocaleDateString()}`,
+      `Fine: ${new Date(project.end_date).toLocaleDateString()}`,
+      `Stato: ${project.status}`,
+      "",
+      "FASI DELLA COMMESSA:"
+    ];
+
+    const sortedTasks = [...(ganttData?.tasks || [])].sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
+    sortedTasks.forEach(t => {
+      const dept = t.department ? t.department.toUpperCase() : 'N/A';
+      const taskName = t.text || 'Fase senza nome';
+      const startDate = new Date(t.start_date).toLocaleDateString();
+      const endDate = new Date(t.end_date).toLocaleDateString();
+      const progress = t.completed || 0;
+      
+      const workers = Array.isArray(t.workers) ? t.workers : [];
+
+      promptLines.push(`- [${dept}] ${taskName}`);
+      promptLines.push(`  Date: dal ${startDate} al ${endDate} (${t.duration || 0} giorni) | Stato: ${progress}% completata`);
+      
+      if (workers.length > 0) {
+        promptLines.push(`  Addetti:`);
+        workers.forEach(w => {
+          const wAssigned = (t.worker_hours && t.worker_hours[w] !== undefined && t.worker_hours[w] !== '')
+            ? Number(t.worker_hours[w])
+            : (Number(t.planned_hours || 8) / workers.length);
+          const wActual = (t.actual_hours && t.actual_hours[w]) ? Number(t.actual_hours[w]) : 0;
+          promptLines.push(`    - ${w}: ${wActual}h fatte / ${Number(wAssigned.toFixed(1))}h assegnate`);
+        });
+      } else {
+        promptLines.push(`  Addetti: Nessuno`);
+      }
+
+      let totOreReg = 0;
+      if (t.actual_hours && typeof t.actual_hours === 'object') {
+         totOreReg = Object.values(t.actual_hours).reduce((acc, v) => acc + (Number(v) || 0), 0);
+      }
+      promptLines.push(`  Totale Fase: ${totOreReg}h fatte su ${t.planned_hours || 0}h previste`);
+    });
+
+    const fullPrompt = promptLines.join('\n');
+    window.open('https://chatgpt.com/?q=' + encodeURIComponent(fullPrompt), '_blank');
+  }
+
   async function handleExport(type) {
     const selectedSections = Object.entries(exportSections)
       .filter(([_, v]) => v)
@@ -1172,7 +1222,7 @@ export default function ProjectDetailPage() {
               ))}
             </div>
           )}
-          <div className="export-buttons" style={{ position: 'relative' }}>
+          <div className="export-buttons" style={{ position: 'relative', display: 'flex', gap: '10px' }}>
             <button
               className="btn btn-primary"
               onClick={() => setShowExportMenu(!showExportMenu)}
@@ -1255,6 +1305,17 @@ export default function ProjectDetailPage() {
                       📊 Excel
                     </label>
                   </div>
+                </div>
+
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#10a37f', color: '#fff', borderColor: '#10a37f' }}
+                    onClick={() => { setShowExportMenu(false); handleChatGPTAnalysis(); }}
+                  >
+                    <img src="/chatgpt-logo.png" style={{ width: 16, height: 16, filter: 'brightness(0) invert(1)' }} alt="ChatGPT" />
+                    Analizza con ChatGPT
+                  </button>
                 </div>
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>

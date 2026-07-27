@@ -59,6 +59,9 @@ def _serialize_ticket(ticket: Ticket, include_replies: bool = True) -> dict:
         "author_id": ticket.author_id,
         "author_username": ticket.author.username if ticket.author else None,
         "author_full_name": ticket.author.full_name if ticket.author else None,
+        "responsible_id": ticket.responsible_id,
+        "responsible_username": ticket.responsible.username if ticket.responsible else None,
+        "responsible_full_name": ticket.responsible.full_name if ticket.responsible else None,
         "assigned_to": assigned,
         "attachments": attachments,
         "status": ticket.status.value if hasattr(ticket.status, "value") else ticket.status,
@@ -68,6 +71,13 @@ def _serialize_ticket(ticket: Ticket, include_replies: bool = True) -> dict:
         "created_at": ticket.created_at,
         "updated_at": ticket.updated_at,
     }
+
+
+def _check_ticket_access(ticket: Ticket, current_user: User):
+    assigned = json.loads(ticket.assigned_to) if ticket.assigned_to else []
+    if assigned:
+        if current_user.role != UserRole.ADMIN and ticket.author_id != current_user.id and ticket.responsible_id != current_user.id and current_user.username not in assigned:
+            raise HTTPException(status_code=403, detail="Non hai i permessi per accedere a questo ticket")
 
 
 async def _notify_for_ticket(db: AsyncSession, ticket: Ticket, message: str, current_user: User):
@@ -106,6 +116,7 @@ async def list_tickets(
         select(Ticket)
         .options(
             selectinload(Ticket.author),
+            selectinload(Ticket.responsible),
             selectinload(Ticket.project),
             selectinload(Ticket.replies).selectinload(TicketReply.author),
         )
@@ -120,7 +131,15 @@ async def list_tickets(
 
     result = await db.execute(query)
     tickets = result.scalars().all()
-    return [_serialize_ticket(t) for t in tickets]
+    
+    visible_tickets = []
+    for t in tickets:
+        assigned = json.loads(t.assigned_to) if t.assigned_to else []
+        if assigned and current_user.role != UserRole.ADMIN and t.author_id != current_user.id and t.responsible_id != current_user.id and current_user.username not in assigned:
+            continue
+        visible_tickets.append(t)
+        
+    return [_serialize_ticket(t) for t in visible_tickets]
 
 
 @router.post("", response_model=TicketOut, status_code=status.HTTP_201_CREATED)
@@ -135,6 +154,7 @@ async def create_ticket(
         project_id=data.project_id or None,
         custom_project_code=data.custom_project_code or None,
         author_id=current_user.id,
+        responsible_id=data.responsible_id or current_user.id,
         assigned_to=json.dumps(data.assigned_to or []),
         attachments=json.dumps([]),
         status=TicketStatus.DA_GESTIRE,
@@ -157,6 +177,7 @@ async def create_ticket(
         select(Ticket)
         .options(
             selectinload(Ticket.author),
+            selectinload(Ticket.responsible),
             selectinload(Ticket.project),
             selectinload(Ticket.replies).selectinload(TicketReply.author),
         )
@@ -176,6 +197,7 @@ async def get_ticket(
         select(Ticket)
         .options(
             selectinload(Ticket.author),
+            selectinload(Ticket.responsible),
             selectinload(Ticket.project),
             selectinload(Ticket.replies).selectinload(TicketReply.author),
         )
@@ -184,6 +206,7 @@ async def get_ticket(
     ticket = result.scalar_one_or_none()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket non trovato")
+    _check_ticket_access(ticket, current_user)
     return _serialize_ticket(ticket)
 
 
@@ -198,6 +221,7 @@ async def update_ticket(
         select(Ticket)
         .options(
             selectinload(Ticket.author),
+            selectinload(Ticket.responsible),
             selectinload(Ticket.project),
             selectinload(Ticket.replies).selectinload(TicketReply.author),
         )
@@ -207,8 +231,8 @@ async def update_ticket(
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket non trovato")
 
-    if ticket.author_id != current_user.id and current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Solo l'autore o un amministratore può modificare il ticket")
+    if ticket.author_id != current_user.id and ticket.responsible_id != current_user.id and current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Solo l'autore, il responsabile o un amministratore può modificare il ticket")
 
     if data.title is not None:
         ticket.title = data.title.strip()
@@ -222,6 +246,8 @@ async def update_ticket(
         ticket.custom_project_code = data.custom_project_code or None
         if ticket.custom_project_code:
             ticket.project_id = None
+    if data.responsible_id is not None:
+        ticket.responsible_id = data.responsible_id or None
     if data.assigned_to is not None:
         ticket.assigned_to = json.dumps(data.assigned_to)
     if data.priority is not None:
@@ -254,6 +280,7 @@ async def update_ticket(
         select(Ticket)
         .options(
             selectinload(Ticket.author),
+            selectinload(Ticket.responsible),
             selectinload(Ticket.project),
             selectinload(Ticket.replies).selectinload(TicketReply.author),
         )
@@ -273,8 +300,8 @@ async def delete_ticket(
     ticket = result.scalar_one_or_none()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket non trovato")
-    if ticket.author_id != current_user.id and current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Solo l'autore o un amministratore può eliminare il ticket")
+    if ticket.author_id != current_user.id and ticket.responsible_id != current_user.id and current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Solo l'autore, il responsabile o un amministratore può eliminare il ticket")
     await db.delete(ticket)
     await db.commit()
     return None
@@ -291,6 +318,7 @@ async def add_reply(
     ticket = result.scalar_one_or_none()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket non trovato")
+    _check_ticket_access(ticket, current_user)
     if ticket.status == TicketStatus.COMPLETATO:
         raise HTTPException(status_code=400, detail="Impossibile rispondere a un ticket completato")
 
@@ -308,6 +336,7 @@ async def add_reply(
         select(Ticket)
         .options(
             selectinload(Ticket.author),
+            selectinload(Ticket.responsible),
             selectinload(Ticket.project),
             selectinload(Ticket.replies).selectinload(TicketReply.author),
         )
@@ -349,6 +378,7 @@ async def upload_ticket_attachment(
     ticket = result.scalar_one_or_none()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket non trovato")
+    _check_ticket_access(ticket, current_user)
 
     content = await file.read()
     if len(content) > MAX_FILE_SIZE_MB * 1024 * 1024:
