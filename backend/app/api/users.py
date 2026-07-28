@@ -1,9 +1,14 @@
 from typing import List
+# pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends
+# pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
+# pyrefly: ignore [missing-import]
 from sqlalchemy import select
+# pyrefly: ignore [missing-import]
 from app.core.dependencies import get_db, get_current_user, require_role
 from app.models.user import User, UserRole
+# pyrefly: ignore [missing-import]
 from app.schemas.user import UserOut, UserUpdate, UserPasswordUpdate
 from app.services import task_service
 
@@ -41,6 +46,7 @@ async def update_me(
         # Check if username already exists
         existing = await db.execute(select(User).where(User.username == update_data["username"]))
         if existing.scalar_one_or_none():
+            # pyrefly: ignore [missing-import]
             from fastapi import HTTPException, status
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username già in uso")
 
@@ -62,6 +68,7 @@ async def update_user(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
+        # pyrefly: ignore [missing-import]
         from fastapi import HTTPException, status
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utente non trovato")
 
@@ -83,6 +90,7 @@ async def reset_user_password(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
+        # pyrefly: ignore [missing-import]
         from fastapi import HTTPException, status
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utente non trovato")
 
@@ -102,10 +110,12 @@ async def delete_user(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
+        # pyrefly: ignore [missing-import]
         from fastapi import HTTPException, status
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utente non trovato")
 
     if user.username == "admin":
+        # pyrefly: ignore [missing-import]
         from fastapi import HTTPException, status
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Non è possibile eliminare l'account amministratore principale")
 
@@ -123,6 +133,7 @@ async def get_my_tasks_today(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # pyrefly: ignore [missing-import]
     from sqlalchemy.orm import selectinload
     
     # Get current user's username (was full_name or username, now username is the id in tasks)
@@ -177,6 +188,7 @@ async def get_worker_conflicts(
 ):
     # Fetch all tasks that have start_date and end_date and might have workers
     # We join with project to get project name
+    # pyrefly: ignore [missing-import]
     from sqlalchemy.orm import selectinload
     result = await db.execute(
         select(Task).options(selectinload(Task.project))

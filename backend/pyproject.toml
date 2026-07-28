@@ -7,6 +7,11 @@ search-paths = [
     "/Users/davidegirolamo/Programming/Gantt/backend/venv/lib/python3.13/site-packages"
 ]
 
+[tool.pytest.ini_options]
+pythonpath = [
+    "."
+]
+
 [tool.pyright]
 venvPath = "/Users/davidegirolamo/Programming/Gantt/backend"
 venv = "venv"

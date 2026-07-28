@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
 from typing import Optional, Any
 from datetime import datetime
@@ -5,6 +6,7 @@ from app.models.user import UserRole
 
 try:
     import email_validator  # type: ignore
+    # pyrefly: ignore [missing-import]
     from pydantic import EmailStr
     EmailType: Any = EmailStr
 except ImportError:
