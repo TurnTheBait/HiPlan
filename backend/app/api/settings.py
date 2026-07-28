@@ -20,6 +20,7 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 class BannerCreate(BaseModel):
     text: str
     type: str = "info"
+    duration_hours: int = 24
 
 @router.get("/global-banner", response_model=List[GlobalBannerItem])
 async def get_global_banners(
@@ -42,7 +43,8 @@ async def get_global_banners(
         for item in data:
             try:
                 created_at = datetime.fromisoformat(item.get("created_at"))
-                if now - created_at <= timedelta(hours=24):
+                duration_h = int(item.get("duration_hours", 24))
+                if now - created_at <= timedelta(hours=duration_h):
                     active_items.append(item)
                 else:
                     changed = True
@@ -82,6 +84,7 @@ async def create_global_banner(
         "id": str(uuid.uuid4()),
         "text": config.text,
         "type": config.type,
+        "duration_hours": config.duration_hours,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     

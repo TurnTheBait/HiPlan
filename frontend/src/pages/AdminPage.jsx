@@ -28,7 +28,7 @@ export default function AdminPage() {
     department: 'ufficio_tecnico',
     default_color: '#3b82f6',
   });
-  const [globalBannerForm, setGlobalBannerForm] = useState({ text: '', type: 'info' });
+  const [globalBannerForm, setGlobalBannerForm] = useState({ text: '', type: 'info', duration_hours: 24, isManualDate: false, manualDate: '' });
   const [globalBanners, setGlobalBanners] = useState([]);
   const [ticketPhases, setTicketPhases] = useState([]);
   const [newTicketPhase, setNewTicketPhase] = useState('');
@@ -135,10 +135,31 @@ export default function AdminPage() {
   async function addGlobalBanner(e) {
     e.preventDefault();
     if (!globalBannerForm.text.trim()) return;
+    
+    let hours = globalBannerForm.duration_hours;
+    if (globalBannerForm.isManualDate) {
+      if (!globalBannerForm.manualDate) {
+        toast.error('Seleziona una data di scadenza valida');
+        return;
+      }
+      const expDate = new Date(globalBannerForm.manualDate);
+      const now = new Date();
+      if (expDate <= now) {
+        toast.error('La data di scadenza deve essere futura');
+        return;
+      }
+      hours = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60));
+    }
+
     try {
-      const res = await api.post('/settings/global-banner', globalBannerForm);
+      const payload = {
+        text: globalBannerForm.text,
+        type: globalBannerForm.type,
+        duration_hours: hours
+      };
+      const res = await api.post('/settings/global-banner', payload);
       setGlobalBanners(prev => [...prev, res.data]);
-      setGlobalBannerForm({ text: '', type: 'info' });
+      setGlobalBannerForm({ text: '', type: 'info', duration_hours: 24, isManualDate: false, manualDate: '' });
       toast.success('Annuncio aggiunto con successo');
     } catch {
       toast.error('Errore aggiunta annuncio');
@@ -354,7 +375,7 @@ export default function AdminPage() {
       <div className="admin-section-card" style={{ marginBottom: 30 }}>
         <div className="admin-section-header">
           <h2>📢 Annunci</h2>
-          <p className="admin-section-desc">Annunci in evidenza che appariranno a tutti gli utenti in cima alla Dashboard per le prossime 24h.</p>
+          <p className="admin-section-desc">Annunci in evidenza che appariranno a tutti gli utenti in cima alla Dashboard.</p>
         </div>
         <form onSubmit={addGlobalBanner} style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
           <div className="input-group" style={{ flex: 1, minWidth: 250, marginBottom: 0 }}>
@@ -377,6 +398,40 @@ export default function AdminPage() {
               <option value="error">🔴 Urgente</option>
             </select>
           </div>
+          <div className="input-group" style={{ width: 140, marginBottom: 0 }}>
+            <select
+              className="input"
+              value={globalBannerForm.isManualDate ? 'manual' : globalBannerForm.duration_hours}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'manual') {
+                  setGlobalBannerForm({ ...globalBannerForm, isManualDate: true });
+                } else {
+                  setGlobalBannerForm({ ...globalBannerForm, isManualDate: false, duration_hours: Number(val) });
+                }
+              }}
+            >
+              <option value={12}>1/2 Giornata</option>
+              <option value={24}>1 Giorno</option>
+              <option value={48}>2 Giorni</option>
+              <option value={168}>1 Settimana</option>
+              <option value={336}>2 Settimane</option>
+              <option value={504}>3 Settimane</option>
+              <option value={720}>1 Mese</option>
+              <option value="manual">Data Manuale...</option>
+            </select>
+          </div>
+          {globalBannerForm.isManualDate && (
+            <div className="input-group" style={{ width: 200, marginBottom: 0 }}>
+              <input
+                type="datetime-local"
+                className="input"
+                value={globalBannerForm.manualDate}
+                min={new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0,16)}
+                onChange={(e) => setGlobalBannerForm({ ...globalBannerForm, manualDate: e.target.value })}
+              />
+            </div>
+          )}
           <button type="submit" className="btn btn-primary" style={{ height: 42 }}>
             Aggiungi Annuncio
           </button>
@@ -384,7 +439,7 @@ export default function AdminPage() {
 
         {globalBanners.length > 0 && (
           <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Annunci Attivi (max 24h)</h4>
+            <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Annunci Attivi</h4>
             {globalBanners.map(b => (
               <div key={b.id} style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -395,6 +450,7 @@ export default function AdminPage() {
                   <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{b.text}</span>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                     Creato: {new Date(b.created_at).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    {' | '}Scadenza: {new Date(new Date(b.created_at).getTime() + (b.duration_hours || 24) * 60 * 60 * 1000).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
                 <button onClick={() => deleteGlobalBanner(b.id)} className="btn btn-ghost" style={{ padding: '6px 10px', color: 'var(--text-muted)' }} title="Elimina annuncio">

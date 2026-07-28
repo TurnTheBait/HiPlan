@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import useDragScroll from '../../hooks/useDragScroll';
 import { getTaskColor } from '../../utils/phaseColors';
 import { isTaskCompleted } from '../../utils/taskCompletion';
 import { isWeekendOrHoliday } from '../../utils/workingDays';
@@ -24,8 +25,10 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
   const daysInMonth = new Date(currYear, currMonth + 1, 0).getDate();
   const [expandedProjects, setExpandedProjects] = useState({});
 
+  const scrollRef = useDragScroll();
+
   return (
-    <div className="calendar-timeline-container">
+    <div className="calendar-timeline-container" ref={scrollRef}>
       <div className="timeline-header-row">
         <div className="timeline-project-col">Commessa / Progetto</div>
         <div className="timeline-days-scroll">

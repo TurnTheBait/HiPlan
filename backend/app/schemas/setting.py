@@ -23,5 +23,6 @@ class GlobalBannerItem(BaseModel):
     id: str
     text: str
     type: str = "info" # "info", "warning", "success", "error"
+    duration_hours: int = 24
     created_at: datetime
 

@@ -446,3 +446,11 @@
 }
 
 
+
+/* Grab cursor for timeline drag */
+.gantt_task {
+  cursor: grab !important;
+}
+.gantt_task:active {
+  cursor: grabbing !important;
+}

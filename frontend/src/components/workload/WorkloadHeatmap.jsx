@@ -3,6 +3,7 @@ import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import './WorkloadHeatmap.css';
 import { isWeekendOrHoliday } from '../../utils/workingDays';
+import useDragScroll from '../../hooks/useDragScroll';
 
 export default function WorkloadHeatmap() {
   const { user } = useAuth();
@@ -11,7 +12,7 @@ export default function WorkloadHeatmap() {
   const [expandedUsers, setExpandedUsers] = useState({});
   const [viewMode, setViewMode] = useState('day');
   const gridRef = React.useRef(null);
-
+  useDragScroll(gridRef, [loading]);
   useEffect(() => {
     fetchWorkload();
   }, []);

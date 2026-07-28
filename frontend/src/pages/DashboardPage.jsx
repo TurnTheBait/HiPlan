@@ -150,31 +150,26 @@ export default function DashboardPage() {
     <div className="dashboard animate-fadeIn">
       {globalBanners.map(banner => (
         <div key={banner.id} style={{
-          background: banner.type === 'error' ? 'rgba(239, 68, 68, 0.1)' :
-            banner.type === 'warning' ? 'rgba(245, 158, 11, 0.1)' :
-              banner.type === 'success' ? 'rgba(16, 185, 129, 0.1)' :
-                'rgba(59, 130, 246, 0.1)',
-          borderLeft: `4px solid ${banner.type === 'error' ? '#ef4444' :
+          background: banner.type === 'error' ? 'rgba(239, 68, 68, 0.15)' :
+            banner.type === 'warning' ? 'rgba(245, 158, 11, 0.15)' :
+              banner.type === 'success' ? 'rgba(16, 185, 129, 0.15)' :
+                'rgba(59, 130, 246, 0.15)',
+          borderLeft: `6px solid ${banner.type === 'error' ? '#ef4444' :
             banner.type === 'warning' ? '#f59e0b' :
               banner.type === 'success' ? '#10b981' :
                 '#3b82f6'
             }`,
           color: 'var(--text-primary)',
-          padding: '12px 16px',
-          borderRadius: '4px',
-          marginBottom: '16px',
+          padding: '16px 20px',
+          borderRadius: '8px',
+          marginBottom: '20px',
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
+          alignItems: 'center',
+          gap: '12px',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)'
         }}>
-          <span style={{ fontWeight: 500, fontSize: '0.95rem' }}>{banner.text}</span>
-          <button
-            onClick={() => setGlobalBanners(prev => prev.filter(b => b.id !== banner.id))}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: 'var(--text-muted)' }}
-            title="Chiudi avviso"
-          >
-            ✕
-          </button>
+          <span style={{ fontSize: '1.4rem' }}>📢</span>
+          <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>{banner.text}</span>
         </div>
       ))}
 

@@ -157,8 +157,12 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       { unit: "day", step: 1, css: dayCssFunc, format: "%d" },
     ];
 
-    // Tooltip e Marker per il giorno di oggi
-    gantt.plugins({ tooltip: true, marker: true });
+    // Tooltip e Marker per il giorno di oggi e Drag Timeline
+    gantt.plugins({ tooltip: true, marker: true, drag_timeline: true });
+    gantt.config.drag_timeline = {
+      ignore: ".gantt_task_line, .gantt_task_link",
+      useKey: false
+    };
     gantt.templates.tooltip_text = function (start, end, task) {
       return `<b>${task.text}</b><br/>
         Inizio: ${gantt.templates.tooltip_date_format(start)}<br/>
