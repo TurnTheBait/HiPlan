@@ -302,7 +302,7 @@ export default function TodoPage() {
           <span className="todo-sidebar-section-title">Vista</span>
           {[
             { key: 'all', label: '📋 Tutti', count: todos.length },
-            { key: 'open', label: '🟡 Aperti', count: openCount },
+            { key: 'open', label: '🔥 Aperti', count: openCount },
             { key: 'completed', label: '✅ Completati', count: completedCount },
           ].map(f => (
             <button

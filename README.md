@@ -1,62 +1,62 @@
-# 📊 HiPlan — Piattaforma Enterprise per Gestione Commesse e Diagrammi di Gantt
+# HiPlan — pianificazione commesse e risorse
 
-**HiPlan ** è una piattaforma web moderna, interattiva e multi-utente progettata per la pianificazione operativa delle commesse aziendali, il monitoraggio avanzato tramite **diagrammi di Gantt custom ad alta flessibilità**, la gestione dei turni del personale su **Calendario** e la collaborazione tramite **Blocchi Note interattivi in stile Notion**.
+HiPlan è una piattaforma web multiutente per pianificare commesse, fasi operative e carichi di lavoro. Riunisce diagrammi di Gantt, calendario, consuntivazione ore, ferie, ticket, TODO e strumenti di collaborazione in un'unica applicazione.
 
----
+Il progetto usa un backend asincrono **FastAPI + SQLAlchemy** e una SPA **React + Vite**. In sviluppo può utilizzare SQLite; il deployment Docker include PostgreSQL e Nginx.
 
-## 📚 Documentazione Ufficiale
+## Funzionalità disponibili
 
-Il progetto dispone di una documentazione completa e approfondita, suddivisa in due manuali dedicati all'interno della cartella [`docs/`]:
+### Commesse e pianificazione
 
-1. **[🛠️ Documentazione Tecnica per Sviluppatori (TECHNICAL_DOCUMENTATION.md)]**
-   - Panoramica architetturale asincrona (FastAPI + SQLAlchemy 2.0 + React 18).
-   - Diagrammi entità-relazione (ER) dettagliati delle tabelle (`users`, `clients`, `projects`, `phases`, `phase_workers`, `task_comments`, `task_checklist_items`, `notes`).
-   - Meccanismo di sicurezza, hashing industriali `bcrypt`, token JWT e politiche di controllo accessi **RBAC**.
-   - Specifiche tecniche dell'editor visuale WYSIWYG `contentEditable` per le note e del motore Gantt Custom.
-   - Riferimento rapido degli endpoint REST API e guida al setup locale e in produzione via Docker.
+- Anagrafica commesse con codice, cliente, responsabile, addetti, stato, colore e intervallo temporale.
+- Fasi e milestone organizzabili in gerarchia, con reparto, priorità, date e colore.
+- Diagramma di Gantt interattivo basato su DHTMLX Gantt.
+- Dipendenze tra fasi `FS`, `SS`, `FF` e `SF`, con eventuale ritardo (`lag`).
+- Modalità di calcolo basate su date, giorni lavorativi e budget ore.
+- Template di fase predefiniti per Ufficio Tecnico, Produzione e Acquisti.
+- Checklist, commenti, menzioni e notifiche contestuali alla singola fase.
+- Allegati e note di commessa.
+- Registro attività delle modifiche rilevanti.
 
-2. **[📖 Guida Utente Completa (USER_GUIDE.md)]**
-   - Manuale d'uso pratico per **Amministratori**, **Project Manager** e **Operatori/Visualizzatori**.
-   - Spiegazione passo-passo per la creazione di clienti, commesse e suddivisione in fasi temporali.
-   - Istruzioni sulla **Scheda di Dettaglio Interattiva (Modale Fase)** divisa nei 3 tab operativi: `Generale`, `Checklist` (to-do con barra progressiva di completamento) e `Commenti` (chat contestuale di fase con menzioni `@utente` e notifiche in tempo reale).
-   - Istruzioni per l'assegnazione degli addetti operativi e la gestione dei turni sul Calendario mensile.
-   - Guida all'utilizzo dei Blocchi Note in stile Notion (formattazione istantanea, check-list collaborative interattive e controllo della visibilità `🔒 Privato` / `👥 Condiviso` in tempo reale).
-   - Gestione degli account e dell'anagrafica addetti dal pannello `Admin`.
+### Risorse e avanzamento
 
----
+- Assegnazione di uno o più addetti a commesse e fasi.
+- Ripartizione delle ore pianificate per addetto.
+- Consuntivazione delle ore effettive per persona e giornata.
+- Heatmap del carico di lavoro.
+- Calendario operativo globale e timeline personale.
+- Segnalazione delle sovrapposizioni tra attività.
+- Gestione ferie e rilevazione dei conflitti tra ferie e fasi assegnate.
 
-## ✨ Funzionalità Core del Sistema
+### Collaborazione e operatività
 
-- **📅 Diagramma di Gantt & Timeline Interattiva Custom**:
-  - Nessun vincolo o costo di licenze esterne di terze parti: griglia temporale nativa ad altissime prestazioni.
-  - Selettore di risoluzione temporale multi-scala: **Giorni**, **Settimane** o **Mesi**.
-  - Visualizzazione di priorità (`Bassa`, `Media`, `Alta`, `Critica`) con colorazione dinamica, date di inizio/fine e addetti sul campo.
-  - Calcolo automatico in tempo reale della percentuale di completamento della commessa alla chiusura delle singole fasi.
+- TODO personali o assegnati, con scadenza, promemoria, allegati e notifiche email opzionali.
+- Ticket collegabili a una commessa, con responsabile, assegnatari, priorità, stati, conversazione e allegati.
+- Blocchi note privati o condivisi con editor visuale e allegati.
+- Notifiche in-app e aggiornamenti in tempo reale tramite WebSocket.
+- Tema chiaro, scuro o sincronizzato con il sistema.
 
-- **💬 Collaborazione Operativa sulle Singole Fasi (Checklist & Chat)**:
-  - **Checklist Interattiva**: Ogni fase possiede un elenco to-do interattivo; spuntando le voci completate (`[✓]`), una barra percentuale ricalcola e mostra l'avanzamento al team.
-  - **Chat e Commenti Contestuali**: Riquadri stile chat (i propri messaggi allineati a destra, quelli degli altri a sinistra con orario).
-  - **Menzioni `@username` & Notifiche 🔔**: Taggando un collega in un commento, questi riceve un avviso immediato nella barra superiore e può accedere direttamente al task cliccando sulla notifica.
-  - **Eliminazione Rapida**: Pulsante `✕` accanto ai propri commenti per cancellarli con un solo clic in modo sicuro.
+### Controllo e amministrazione
 
-- **👥 Calendario Operativo e Filtro Addetti**:
-  - Vista mensile intuitiva delle fasi di lavorazione attive su ogni singola giornata.
-  - Filtro dinamico per **Addetto Operativo**: ogni tecnico o operatore può isolare con un clic i giorni in cui è stato assegnato per conoscere il proprio planning personale.
+- Autenticazione JWT con access token e refresh token.
+- Ruoli `admin`, `editor` e `viewer`, con reparto di appartenenza.
+- Gestione utenti, ruoli, stato degli account e reset password.
+- Annunci globali con scadenza.
+- Configurazione dei template di fase e degli stati dei ticket.
+- Export PDF ed Excel delle commesse, del Gantt, delle ore e dei ticket.
+- Backup JSON completo, ripristino amministrativo e backup automatico schedulato.
+- Registro delle notifiche email inviate e programmate.
 
-- **📝 Blocchi Note Collaborativi (Stile Notion)**:
-  - Editor visuale WYSIWYG nativo (`contentEditable`) con conversione automatica e trasparente del Markdown.
-  - Pulsanti di formattazione istantanea: `H1`, `H2`, `Grassetto`, `Citazioni`, `Codice` e **Check-list interattive** con spunta a clic istantaneo e salvataggio automatico debounced.
-  - Controllo di visibilità flessibile: possibilità di alternare in qualsiasi momento tra `🔒 File Privato` e `👥 In Condivisione con il Team` tramite il menu interattivo superiore.
+## Documentazione
 
-- **🔐 Sicurezza e Multi-Utente (RBAC & JWT)**:
-  - Tre ruoli chiari e strutturati: **👑 Admin**, **🚀 Project Manager (PM)** e **👥 Operatore (Viewer/Worker)**.
-  - Intercettore Axios con rinnovo automatico del token di sessione (Access + Refresh Token).
+- [Guida utente](docs/USER_GUIDE.md): utilizzo quotidiano delle principali sezioni.
+- [Documentazione tecnica](docs/TECHNICAL_DOCUMENTATION.md): architettura, modello dati, API e sviluppo locale.
+- [Guida al deployment](docs/DEPLOYMENT_GUIDE.md): installazione e accesso in rete.
+- [Roadmap](docs/ROADMAP.md): funzionalità candidate e ordine di priorità.
 
----
+## Avvio rapido
 
-## 🚀 Avvio Rapido Locale
-
-### 1. Avvio del Backend (FastAPI — Porta 8000)
+### Backend
 
 ```bash
 cd backend
@@ -66,9 +66,11 @@ pip install -r requirements.txt
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-_La documentazione API interattiva (Swagger UI) sarà disponibile all'indirizzo `http://localhost:8000/docs`._
+Su Windows, attivare l'ambiente con `venv\Scripts\activate`.
 
-### 2. Avvio del Frontend (React/Vite — Porta 5173)
+Il backend risponde su `http://localhost:8000`; Swagger UI è disponibile su `http://localhost:8000/docs`.
+
+### Frontend
 
 ```bash
 cd frontend
@@ -76,45 +78,72 @@ npm install
 npm run dev
 ```
 
-_Apri il browser su `http://localhost:5173/`, registrati per diventare automaticamente il primo **Amministratore** e inizia a pianificare i tuoi progetti!_
+L'interfaccia è disponibile su `http://localhost:5173`.
 
----
+> La configurazione Vite corrente non definisce un proxy `/api`: il client frontend contatta il backend usando la configurazione presente in `frontend/src/api/client.js`.
 
-## 🐳 Deploy in Produzione via Docker
+## Avvio tramite script
 
-Per il rilascio su server aziendali o VPS con database **PostgreSQL** centralizzato:
+Il repository include script dedicati ai diversi sistemi:
+
+- macOS/Linux: `./start.sh` oppure `./start_mac_server.sh`
+- Windows: `start_windows.bat`
+- arresto su Windows: `stop_windows.bat`
+
+Prima del primo avvio verificare le variabili del backend partendo da `backend/.env.example`.
+
+## Docker
+
+Per avviare PostgreSQL, backend e frontend:
 
 ```bash
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
-Questo avvierà i 3 container Docker per la produzione (`PostgreSQL 16`, `FastAPI Server` e `Nginx + React SPA`).
+Servizi predefiniti:
 
----
+| Servizio | Porta |
+| --- | ---: |
+| Frontend Nginx | `80` |
+| API FastAPI | `8000` |
+| PostgreSQL | `5432` |
 
-## 📂 Struttura della Repository
+Per un ambiente reale è necessario sostituire password, `SECRET_KEY` e origini CORS definite in `docker-compose.yml`.
 
+## Verifiche
+
+```bash
+cd backend
+pytest
+
+cd ../frontend
+npm run lint
+npm run build
 ```
+
+## Struttura del repository
+
+```text
 Gantt/
-├── docs/
-│   ├── TECHNICAL_DOCUMENTATION.md  # Documentazione tecnica completa e schema DB
-│   ├── USER_GUIDE.md               # Manuale utente pratico per tutti i ruoli
-│   └── DEPLOYMENT_GUIDE.md         # Guida al deployment e configurazione di rete
 ├── backend/
 │   ├── app/
-│   │   ├── api/          # Endpoint REST (auth, users, clients, projects, phases, task_collaboration, notes)
-│   │   ├── core/         # Configurazione, sicurezza e connessione al DB
-│   │   ├── models/       # Modelli SQLAlchemy 2.0 (User, Client, Project, Task, TaskComment, TaskChecklistItem, Note)
-│   │   └── schemas/      # Schemi Pydantic V2 per input e output
-│   └── requirements.txt
+│   │   ├── api/          # Router REST e WebSocket
+│   │   ├── core/         # Configurazione, database, sicurezza
+│   │   ├── models/       # Modelli SQLAlchemy
+│   │   ├── schemas/      # Schemi Pydantic
+│   │   └── services/     # Logica applicativa, email, export e backup
+│   └── tests/
 ├── frontend/
-│   ├── src/
-│   │   ├── api/          # Client Axios con interceptor JWT
-│   │   ├── components/   # Componenti UI (MainLayout, Gantt/Timeline Custom, TaskComments, TaskChecklist)
-│   │   ├── context/      # AuthContext, ThemeContext e ToastContext
-│   │   ├── pages/        # Dashboard, Projects, ProjectDetail, Calendar, Notes, Admin
-│   │   └── index.css     # Design System moderno Dark Theme & Glassmorphism
-│   └── package.json
+│   └── src/
+│       ├── api/          # Client HTTP
+│       ├── components/   # Gantt, calendario, workload e layout
+│       ├── context/      # Autenticazione, tema e toast
+│       └── pages/        # Pagine della SPA
+├── docs/
 ├── docker-compose.yml
 └── README.md
 ```
+
+## Stato e prossimi sviluppi
+
+La distinzione tra funzionalità disponibili e proposte future è mantenuta nella [roadmap](docs/ROADMAP.md). Le prime aree candidate sono baseline e scostamenti, template completi di commessa, ripianificazione delle dipendenze, timesheet approvabili e ricerca globale.

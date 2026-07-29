@@ -284,7 +284,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="card dashboard-section" style={{ height: '420px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-          <h2>Commesse Recenti</h2>
+          <h2>📂 Commesse Recenti</h2>
           {projects.length === 0 ? (
             <div className="empty-state">
               <div className="empty-state-icon">📋</div>

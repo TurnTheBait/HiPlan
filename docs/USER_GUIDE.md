@@ -1,220 +1,248 @@
-# 📖 Guida Utente Completa — HiPlan
+# Guida utente di HiPlan
 
-Benvenuti nella **Guida Utente di HiPlan **, la piattaforma web aziendale interattiva progettata per la pianificazione operativa delle commesse, il monitoraggio delle fasi temporali tramite diagramma di Gantt, la pianificazione del personale su calendario e la collaborazione tramite blocchi note in stile Notion.
+HiPlan riunisce pianificazione delle commesse, attività operative, ore, ferie, TODO, ticket e documentazione di lavoro. Questa guida descrive le funzionalità disponibili nell'applicazione corrente.
 
----
+## 1. Accesso, ruoli e reparti
 
-## 👥 1. I Ruoli nella Piattaforma
+È possibile accedere usando email oppure username e password. La sessione viene mantenuta tramite access token e refresh token.
 
-La piattaforma adotta un sistema di autorizzazioni basato sui ruoli per garantire che ogni membro dell'azienda acceda solo agli strumenti idonei alle proprie mansioni:
+I ruoli applicativi sono:
 
-| Ruolo                                          | Icona | Descrizione e Poteri                                                                                                                                                                                                                                                                                 |
-| :--------------------------------------------- | :---: | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Amministratore (Admin)**                     |  👑   | Accesso totale. Può creare progetti, modificare ogni fase, gestire gli utenti del sistema, modificare i permessi e amministrare l'anagrafica centralizzata degli addetti operativi nel pannello `Admin`. _Nota: Il primo utente che si registra nel sistema diventa automaticamente Amministratore._ |
-| **Editor**                                     |  🚀   | Può creare clienti e commesse, aggiungere e modificare le fasi temporali, assegnare gli addetti, chiudere le fasi completate e gestire la timeline.                                                                                                                                                  |
-| **Operatore / Visualizzatore (Viewer/Worker)** |  👥   | Membro del team operativo. Può consultare la lista dei progetti, esplorare il diagramma di Gantt e verificare i propri turni sul Calendario operativo. Può inoltre creare appunti privati o collaborare sulle note condivise.                                                                        |
+| Ruolo | Utilizzo principale |
+| --- | --- |
+| `admin` | Amministrazione completa, utenti, configurazione e operazioni riservate |
+| `editor` | Creazione e aggiornamento dei dati operativi consentiti |
+| `viewer` | Consultazione e operazioni personali o collaborative autorizzate |
 
----
+Ogni utente può essere associato a un reparto: **Ufficio Tecnico**, **Produzione**, **Acquisti** oppure **Admin**. Ruolo e reparto sono concetti distinti: il ruolo determina i permessi, il reparto organizza il lavoro.
 
-## 🔑 2. Accesso e Primi Passi
+Il primo account registrato riceve il ruolo di amministratore. L'installazione corrente crea inoltre un account amministrativo iniziale all'avvio: in produzione è indispensabile sostituirne immediatamente le credenziali predefinite.
 
-### Accesso alla Piattaforma (`/login`)
+## 2. Navigazione e profilo
 
-1. Apri il browser web all'indirizzo dell'applicazione (es. `http://localhost:5173` o l'indirizzo del server aziendale).
-2. Se sei un nuovo utente, clicca sul link **"Non hai un account? Registrati"**, inserisci il tuo nome completo, indirizzo email e una password sicura.
-3. Se possiedi già le credenziali, inserisci **Email** e **Password** e premi su **"Accedi"**.
+Il menu laterale contiene:
 
-### Il Menu di Navigazione Laterale
+- **Dashboard**: riepilogo personale e aziendale.
+- **Commesse**: elenco, filtri, creazione ed export.
+- **Calendario**: vista mensile delle attività.
+- **Blocchi Note**: documenti privati e condivisi.
+- **TODO**: attività personali o assegnate.
+- **Panoramica addetti**: sovrapposizioni e carico delle persone.
+- **Ticket**: richieste e conversazioni operative.
+- **Admin**: configurazione riservata agli amministratori.
 
-A sinistra dello schermo troverai sempre il menu principale per muoverti agevolmente tra le sezioni:
+Nella parte inferiore sono disponibili le notifiche, la scelta del tema, il profilo e il logout. La pagina **Il mio profilo** permette di aggiornare i propri dati e gestire le ferie.
 
-- **`◫ Dashboard`**: Panoramica sintetica dell'andamento aziendale.
-- **`☰ Progetti`**: Catalogo di tutte le commesse e gestione fasi.
-- **`▦ Calendario`**: Vista mensile delle attività e filtro turni per singolo addetto.
-- **`▤ Blocchi Note`**: Appunti intelligenti con formattazione e check-list collaborative.
-- **`⚙ Admin`** _(visibile solo agli Amministratori)_: Pannello di gestione utenti e addetti.
+## 3. Dashboard
 
----
+La Dashboard mostra:
 
-## ◫ 3. La Dashboard Principale
+- numero totale di commesse, commesse attive e completate;
+- avanzamento medio;
+- timeline mensile delle commesse e delle fasi assegnate all'utente;
+- attività operative previste per la giornata;
+- TODO aperti assegnati;
+- avvisi relativi al rientro dalle ferie;
+- commesse recenti;
+- eventuali annunci globali pubblicati dagli amministratori.
 
-La **Dashboard** è la schermata di accoglienza e offre uno sguardo immediato sullo stato di salute della produzione aziendale:
+È possibile cambiare mese nella timeline e aprire direttamente una commessa o un'attività dal relativo riquadro.
 
-- **Contatori Rapid (KPI)**: Visualizzi istantaneamente il numero totale dei **Progetti Attivi**, delle **Fasi Aperte in Lavorazione** e dei **Progetti Completati al 100%**.
-- **Commesse in Corso**: Una lista interattiva dei progetti aperti con barra progressiva visuale che ti permette di accedere rapidamente al dettaglio di ciascuno.
-- **Fasi in Scadenza o Critiche**: Un pannello di avviso che ti mette in evidenza le fasi operative con priorità `Critica` o `Alta` la cui data di termine si avvicina, consentendoti di intervenire tempestivamente.
+## 4. Commesse
 
----
+### Creazione
 
-## ☰ 4. Gestione Clienti e Commesse
+Dalla pagina **Commesse**, selezionare **Nuova Commessa** e compilare i dati necessari:
 
-### Creazione di una Nuova Commessa
+- nome e codice;
+- cliente;
+- colore identificativo;
+- descrizione;
+- data di inizio e fine;
+- stato;
+- responsabile;
+- addetti di commessa.
 
-1. Naviga nella sezione **`☰ Progetti`**.
-2. In alto a destra, clicca sul pulsante **`+ Nuova Commessa`**.
-3. Compila i campi richiesti:
-   - **Nome Progetto**: Il titolo identificativo della commessa (es. _Impianto Fotovoltaico Sede Centrale_).
-   - **Cliente**: Seleziona il cliente dal menu a tendina. Se il cliente non esiste ancora, clicca sul pulsante **`+ Nuovo Cliente`** per aggiungerlo all'istante specificando ragione sociale, email e contatti.
-   - **Descrizione e Note**: Eventuali specifiche di commessa o riferimenti contrattuali.
-4. Clicca su **"Salva Commessa"** per crearla e accedere alla sua scheda operativa.
+Il cliente è attualmente un campo della commessa, non un'anagrafica separata.
 
-### Gestione, Archiviazione ed Eliminazione
-- **Le Mie Commesse**: Nella visualizzazione delle commesse personali, i progetti **Archiviati** vengono nascosti automaticamente per mantenere l'elenco pulito.
-- **Eliminazione Progetti**: Per ragioni di sicurezza e tracciabilità, **solo gli Amministratori (Admin)** hanno i permessi per eliminare in modo permanente una commessa dal sistema.
+### Filtri ed export
 
+L'elenco consente di filtrare e cercare le commesse. La vista personale include i progetti nei quali l'utente è responsabile o assegnato alla commessa o a una fase.
 
-## 📅 5. Scheda Commessa e Diagramma di Gantt
+È possibile selezionare più commesse ed esportarne l'elenco in PDF o Excel.
 
-Entrando all'interno di una singola commessa (`ProjectDetailPage`), avrai a disposizione un doppio strumento di pianificazione: la **Lista Fasi Operative** e il **Diagramma di Gantt & Timeline Interattiva**.
+### Dettaglio della commessa
 
-```mermaid
-flowchart LR
-    A[Apri Scheda Commessa] --> B[Aggiungi Fase Operativa]
-    B --> C[Imposta Date e Priorità]
-    C --> D[Assegna Addetti Operativi]
-    D --> E[Visualizza su Griglia Gantt]
-    E --> F[Chiusura Fase a Lavoro Finito]
-```
+La scheda contiene più aree:
 
-### Aggiunta e Gestione delle Fasi
+- **Gantt**: pianificazione temporale e dipendenze;
+- **Commessa**: informazioni generali e riepiloghi;
+- **Note e allegati**: documentazione collegata;
+- **Alert**: elementi che richiedono attenzione;
+- **Registro attività**: cronologia delle azioni rilevanti.
 
-Per suddividere la commessa in tappe operative:
+Dal dettaglio è possibile modificare i dati generali, caricare allegati ed esportare sezioni selezionate in PDF o Excel.
 
-1. Clicca sul pulsante **`+ Aggiungi Fase`**.
-2. **Titolo della Fase**: Es. _Posa Cavi e Cablaggio_, _Collaudo Finale_.
-3. **Date di Inizio e Fine**: Definiscono la finestra temporale lavorativa.
-4. **Priorità**: Scegli tra `Bassa`, `Media`, `Alta` e `Critica`. La priorità determina il colore visivo e la marcatura d'urgenza.
-5. **Assegnazione Addetti**: Seleziona uno o più operatori dalla lista degli addetti disponibili (es. _Marco Rossi_, _Luca Bianchi_) che eseguiranno la lavorazione sul campo.
-6. Clicca su **"Salva"**.
+## 5. Fasi, milestone e Gantt
 
-### Scheda di Dettaglio Interattiva (Modale Fase) e Collaborazione
+### Creazione di una fase
 
-Cliccando su qualsiasi fase nella tabella o direttamente sulla sua barra nel diagramma di Gantt, si apre la **Scheda di Dettaglio Interattiva**, organizzata in **3 sezioni operative (Tabs)** per una collaborazione a 360 gradi:
+Una fase può includere:
 
-1. **`Generale`**:
-   - Permette di modificare titolo, descrizione, date di inizio e fine, priorità e reparto assegnato (`🔧 Ufficio Tecnico`, `🏭 Produzione`, `🛒 Acquisti`).
-   - Consente di gestire e modificare in tempo reale la lista degli **addetti operativi** assegnati alla fase.
-2. **`Checklist` (Sotto-attività e To-Do interattivi)**:
-   - Consente di creare un elenco di sotto-attività specifiche per la fase (es. _Verifica materiale in arrivo_, _Controllo cablaggio quadro_).
-   - Ogni voce presenta una casella di spunta interattiva (`[✓]`): spuntando una voce, una **barra di completamento verde (% e contatore X/Y)** calcola istantaneamente il progresso operativo della checklist per tutto il team.
-3. **`Commenti` (Chat di Fase e Menzioni `@utente`)**:
-   - Una vera e propria chat contestuale legata alla singola fase di lavorazione.
-   - **Balloons Stile Chat**: I commenti scritti da te appaiono allineati a destra in un riquadro evidenziato, mentre quelli dei colleghi appaiono a sinistra con il nome dell'autore e la data/ora.
-   - **Menzioni `@username` e Notifiche in Tempo Reale**: Digitando il simbolo `@` seguito dal nome di un collega (es. `@m.rossi`), il sistema lo notifica in tempo reale nella barra superiore dell'applicazione (badge campanella 🔔), permettendogli di accedere alla fase con un clic.
-   - **Eliminazione rapida (`✕`)**: Ogni utente può rimuovere i propri commenti tramite il pulsante dedicato `✕` presente accanto alla propria bolla (gli amministratori possono rimuovere qualsiasi commento del team).
+- nome;
+- reparto;
+- priorità;
+- colore;
+- data iniziale e finale;
+- durata in giorni lavorativi;
+- budget ore;
+- uno o più addetti;
+- quota di ore assegnata a ciascun addetto;
+- fase padre, quando si usa una struttura gerarchica.
 
-### Chiusura e Completamento di una Fase
+Le modalità di calcolo permettono di partire da date, giorni oppure ore. I calcoli operativi escludono i giorni non lavorativi previsti dall'applicazione.
 
-Quando un team operativo conclude una fase di lavorazione:
+### Template di fase
 
-1. Clicca sull'indicatore o sulla casella di stato della fase per contrassegnarla come **`Chiusa ✓`**.
-2. Il sistema ricalcolerà automaticamente all'istante l'**avanzamento percentuale** dell'intera commessa (es. da 33% a 66%), aggiornando la barra verde sia nella scheda che nella Dashboard generale.
+Quando si crea una fase è possibile usare un modello predefinito per reparto. Gli editor autorizzati possono salvare una nuova denominazione come template personalizzato; gli amministratori gestiscono l'elenco completo dal pannello Admin.
 
-### La Visualizzazione Timeline e Gantt (`▤ Timeline`)
+### Milestone
 
-Cliccando sul pulsante **`▤ Timeline`** in alto a destra nella scheda commessa, la vista si trasforma nel **Diagramma di Gantt Interattivo**:
+Una milestone rappresenta un evento o una scadenza senza durata. Non richiede budget ore né assegnazione del lavoro come una fase ordinaria.
 
-- **Selettore Griglia (Multi-Scala)**: Puoi cambiare la risoluzione della griglia temporale in qualsiasi momento per analizzare il lavoro sotto diverse prospettive:
-  - **Giorni**: Vista ultra-dettagliata per il monitoraggio quotidiano.
-  - **Settimane**: Vista operativa per organizzare i turni settimanali.
-  - **Mesi**: Vista di pianificazione strategica per commesse a lungo termine.
-- **Barre Visive e Addetti**: Ogni fase appare come una barra orizzontale colorata posizionata esattamente lungo il calendario, con indicati i nomi degli operatori assegnati per un controllo visivo immediato di chi fa cosa e quando.
+### Dipendenze
 
----
+Nel Gantt è possibile collegare le fasi con quattro tipi di dipendenza:
 
-## ▦ 6. Calendario Operativo e Turni del Personale
+- `FS`: la fase successiva inizia dopo la fine della precedente;
+- `SS`: le due fasi iniziano in relazione;
+- `FF`: le due fasi terminano in relazione;
+- `SF`: la fine della fase target dipende dall'inizio della sorgente.
 
-La pagina **`▦ Calendario`** offre una vista mensile globale di tutte le fasi operative in corso in azienda, disposte sulle singole giornate.
+Il collegamento può includere un ritardo (`lag`). Le dipendenze sono visualizzate e modificabili nel Gantt; la ripianificazione automatica dell'intera catena è indicata come sviluppo futuro nella roadmap.
 
-### Filtro Dinamico per Addetto
+### Stato e avanzamento
 
-Per evitare sovraccarichi visivi e consentire a ogni operatore di consultare il proprio planning personale:
+Una fase può essere contrassegnata come completata. L'avanzamento viene riflesso nella commessa, nelle viste riepilogative e nel Gantt.
 
-1. In alto nella pagina del Calendario, individua il menu a tendina **"Filtra per Addetto"**.
-2. Seleziona il nome di un operatore (es. _Giuseppe Verdi_).
-3. Il calendario si aggiornerà istantaneamente mostrando **esclusivamente le giornate e le fasi in cui quell'addetto è stato assegnato**, rendendo semplicissima la consultazione dei propri turni operativi settimanali e mensili.
+## 6. Ore pianificate e consuntive
 
-### Visualizzazione Intelligente a Schermo Intero
-La griglia mensile è progettata per **adattarsi automaticamente all'altezza dello schermo** senza generare barre di scorrimento verticali della pagina.
-Ogni singola giornata visualizza fino a un massimo di **due commesse**. Se in un giorno sono attive più lavorazioni, il sistema raggruppa le eccedenze in un comodo pulsante **"+ altre X commesse..."** sempre visibile nella parte inferiore della cella, garantendo un layout pulito, ordinato e sempre contenuto nella viewport.
+Per ogni fase ordinaria è possibile:
 
----
+- definire un budget complessivo;
+- assegnare una quantità di ore ai singoli addetti;
+- registrare le ore effettive per giornata e persona;
+- confrontare ore previste e registrate.
 
-## 🎫 7. Gestione Ticket e Supporto
+La somma delle ore assegnate non può superare il budget della fase. La heatmap usa la pianificazione per evidenziare giornate libere, parzialmente occupate o sovraccariche.
 
-Il modulo **`🎫 Ticket`** consente di gestire richieste di assistenza, segnalazioni o attività generiche, garantendo il tracciamento e la collaborazione del team in modo separato dal Gantt principale.
+Il workflow formale di invio e approvazione dei timesheet non è ancora disponibile ed è incluso nella roadmap.
 
-### Creazione e Responsabilità
-- **Responsabile**: Ogni ticket ha un `Responsabile` (impostato di default sull'autore della richiesta).
-- **Stati Visivi**: I ticket seguono un ciclo di vita preciso (`Da gestire`, `In attesa del cliente`, `In elaborazione`, `Completato`), ognuno evidenziato con un colore specifico per il riconoscimento immediato.
-- **Associazione a Commesse**: Durante la creazione di un nuovo ticket, il menu a tendina mostra **esclusivamente le commesse attive** (le commesse archiviate vengono automaticamente escluse).
+## 7. Checklist, commenti e notifiche
 
-### Visibilità Dinamica Sicura
-Per mantenere l'interfaccia pulita e focalizzata, i ticket seguono regole di visibilità strette:
-1. Gli **Amministratori (Admin)** possono vedere tutti i ticket.
-2. L'**Autore** del ticket vede sempre la propria richiesta.
-3. Gli **Addetti Assegnati** vedono esclusivamente i ticket di cui fanno parte.
-Gli altri operatori non vedranno nel proprio elenco i ticket a cui non partecipano o che non hanno creato.
+Aprendo una fase sono disponibili tre schede:
 
-### Permessi Avanzati di Amministrazione
-Alcune azioni sui ticket sono riservate ai ruoli dirigenziali:
-- **Eliminazione Messaggi**: All'interno della chat di un ticket, solo gli `Amministratori` hanno il potere di eliminare i messaggi.
-- **Riapertura Ticket Completati**: Quando un ticket viene impostato sullo stato `Completato`, viene contrassegnato come chiuso e bloccato. **Soltanto un Amministratore** può modificare nuovamente il suo stato per riaprirlo in caso di necessità.
+- **Generale**: dati, date, budget, reparto e addetti;
+- **Checklist**: sotto-attività spuntabili con indicatore di completamento;
+- **Commenti**: conversazione contestuale alla fase.
 
----
+Nei commenti è possibile menzionare un collega con `@username`. Il destinatario riceve una notifica in-app collegata alla commessa e alla fase.
 
-## ▤ 8. Blocchi Note Interattivi (Stile Notion)
+La campanella nella barra laterale consente di:
 
-Il modulo **`▤ Blocchi Note`** è il quaderno di lavoro aziendale collaborativo, perfetto per appunti di riunione, check-list di collaudo, specifiche tecniche o documentazione di cantiere.
+- vedere le notifiche;
+- contrassegnarle come lette;
+- eliminarne una;
+- eliminare l'intero elenco.
 
-```mermaid
-stateDiagram-v2
-    [*] --> CreazioneNota: Clicca "+ Nuova"
-    CreazioneNota --> SceltaVisibilita: Seleziona Privato o Condiviso
-    SceltaVisibilita --> EditorVisuale: Scrittura con Formattazione
-    EditorVisuale --> ToggleVisibilita: Clicca su "Modifica ▼" (se necessario)
-    ToggleVisibilita --> EditorVisuale: Aggiornamento istantaneo permessi
-```
+## 8. Calendario, addetti e ferie
 
-### Creazione e Formattazione Visuale WYSIWYG
+### Calendario operativo
 
-1. Clicca su **`+ Nuova`** nella barra di sinistra del modulo Blocchi Note.
-2. Inserisci il titolo della nota e scegli la visibilità iniziale: **`🔒 File Privato`** (visibile solo a te) oppure **`👥 In Condivisione con il Team`**.
-3. All'apertura della nota, utilizza la **Barra di Formattazione Visuale** in alto per strutturare il documento senza dover conoscere alcun codice:
-   - **`P Normale`**: Testo standard di paragrafo.
-   - **`H1 Titolo` / `H2 Sottotitolo`**: Per dividere il documento in sezioni ben visibili.
-   - **`Grassetto` / `Corsivo`**: Per evidenziare concetti chiave.
-   - **`☑ Check-list [ ]`**: Crea una **lista di attività con vere caselle di spunta interattive**. Cliccando sulla casella di una voce completata, la spunta si attiva, il testo si sbarra automaticamente e il salvataggio avviene in tempo reale.
-   - **`❝ Citazione` / `⟨/⟩ Codice`**: Per riquadrare note importanti o frammenti tecnici.
+Il Calendario mostra le fasi sulle giornate del mese. È possibile filtrare per addetto e aprire il progetto collegato.
 
-### Modifica della Visibilità in Tempo Reale
+### Panoramica addetti
 
-Hai creato una nota di lavoro come `🔒 Privata` e ora che è pronta vuoi condividerla con tutti i colleghi?
+Questa sezione identifica le giornate nelle quali la stessa persona risulta impegnata su più attività. Per ogni conflitto vengono mostrate le fasi e le commesse coinvolte.
 
-1. Apri la nota.
-2. Nella barra superiore, accanto al nome dell'autore, clicca sul pulsante badge **`🔒 Privato (Modifica ▼)`** (o `👥 Condiviso`).
-3. Dal menu a comparsa, seleziona la nuova impostazione (es. **In Condivisione**): il badge cambierà colore all'istante e la nota diventerà immediatamente visibile e consultabile dall'intero team, senza ricaricare la pagina!
+### Ferie
 
----
+Dal profilo personale è possibile inserire un intervallo di ferie con una motivazione facoltativa e rimuovere periodi non più validi.
 
-## ⚙ 9. Pannello di Amministrazione (`Admin`)
+Quando una fase assegnata si sovrappone alle ferie:
 
-Se possiedi il ruolo di **Amministratore**, avrai accesso alla pagina esclusiva **`⚙ Admin`** situata in fondo al menu laterale di sinistra. Questo pannello è suddiviso in due sezioni operative cruciali:
+- la fase può essere segnalata come in conflitto;
+- l'utente visualizza il periodo e le attività coinvolte;
+- al rientro può comparire un promemoria delle attività da recuperare.
 
-### 1. Gestione Utenti e Ruoli del Sistema
+La registrazione delle ferie non sposta automaticamente le fasi.
 
-Qui trovi l'elenco completo delle persone registrate all'applicativo web (Email, Username, Nome Completo).
+## 9. TODO
 
-- Cliccando sul menu a tendina accanto al nome di un utente, puoi modificare il suo livello di privilegio in tempo reale:
-  - Promuovere un `viewer` a **`Project Manager (pm)`** per abilitarlo alla creazione di commesse.
-  - Elevare un utente ad **`Amministratore (admin)`**.
-  - Retrocedere un utente in caso di cambio mansione.
+Un TODO comprende:
 
-### 2. Gestione Anagrafica Addetti Operativi
+- titolo e descrizione;
+- autore;
+- uno o più assegnatari;
+- data di notifica;
+- data di scadenza;
+- allegati;
+- invio email opzionale;
+- stato aperto o completato.
 
-Per fare in modo che i Project Manager possano assegnare persone fisiche (tecnici, installatori, operai, consulenti) alle fasi delle commesse:
+Sono disponibili filtri per stato e relazione con l'utente. Il creatore e gli utenti autorizzati possono modificare o completare il TODO.
 
-1. Scorri nella sezione **"Anagrafica Addetti Operativi"** del pannello Admin.
-2. Digita il nome e cognome dell'operatore nel campo di testo (es. _Sandro Botticelli_) e clicca su **`+ Aggiungi Addetto`**.
-3. Da quel momento, il nuovo nominativo sarà immediatamente selezionabile durante la creazione di qualsiasi fase operativa all'interno dei progetti e nel filtro del Calendario.
-4. Per rimuovere un addetto non più in organico, ti basta cliccare sul pulsante rosso **`🗑️ Rimuovi`** accanto al suo nome.
+Il backend controlla periodicamente le notifiche programmate e le scadenze imminenti. Se SMTP è configurato e l'opzione email è attiva, invia anche il messaggio ai destinatari.
+
+## 10. Ticket
+
+Un ticket può essere collegato a una commessa attiva oppure a un codice inserito manualmente. Contiene:
+
+- titolo e descrizione;
+- autore e responsabile;
+- assegnatari;
+- priorità;
+- stato;
+- allegati.
+
+La scheda del ticket mantiene la conversazione, gli allegati delle singole risposte e i messaggi di sistema relativi alle variazioni di stato.
+
+Gli stati configurati inizialmente comprendono **Da gestire**, **In attesa del cliente**, **In elaborazione** e **Completato**. L'amministratore può gestire le fasi disponibili dal pannello Admin.
+
+I ticket possono essere esportati in PDF o Excel. Visibilità, eliminazione e riapertura dipendono dal ruolo e dal rapporto dell'utente con il ticket.
+
+## 11. Blocchi Note
+
+Le note possono essere:
+
+- **private**, visibili al proprietario;
+- **condivise**, accessibili al team autorizzato.
+
+L'editor supporta formattazione visuale, titoli, enfasi, citazioni, codice e checklist. È possibile cercare le note, filtrarle per visibilità e aggiungere allegati.
+
+Le modifiche vengono salvate sul server; prima di uscire da una nota è comunque opportuno verificare l'indicatore di salvataggio.
+
+## 12. Amministrazione
+
+Il pannello Admin comprende:
+
+- annunci globali con tipo e scadenza;
+- utenti, ruoli, reparto, stato e reset password;
+- template delle fasi per reparto;
+- configurazione delle fasi dei ticket;
+- backup JSON e ripristino;
+- data e dimensione dell'ultimo backup automatico;
+- registro delle email inviate;
+- notifiche email programmate e possibilità di annullarle.
+
+Il ripristino JSON sovrascrive i dati correnti. Prima di procedere è consigliato scaricare un backup aggiornato e verificare che il file appartenga alla stessa versione applicativa.
+
+## 13. Export e backup
+
+Gli export PDF ed Excel sono pensati per condividere viste leggibili di commesse, fasi, Gantt, ore e ticket. Non sostituiscono il backup.
+
+Il backup JSON amministrativo contiene i dati necessari al ripristino dell'applicazione. Gli allegati caricati sono file separati: verificare la politica di backup dell'ambiente di installazione per assicurarsi che la directory degli upload sia inclusa.
+
+## 14. Funzionalità future
+
+Le funzionalità proposte, ma non ancora disponibili, sono descritte separatamente nella [roadmap](ROADMAP.md). Questa separazione evita di confondere il comportamento corrente con le idee in valutazione.

@@ -1,5 +1,7 @@
 import enum
+# pyrefly: ignore [missing-import]
 from sqlalchemy import Column, String, Date, Integer, Float, Enum, ForeignKey, Text
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import relationship
 from app.models.base import Base, TimestampMixin, uuid_pk, uuid_fk
 
