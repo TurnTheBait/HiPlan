@@ -112,11 +112,6 @@ async def send_todo_notification_email(
                     {content_html}
                     {date_html}
                 </div>
-                <div style="text-align: center; margin: 32px 0;">
-                    <a href="{settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else 'http://localhost:3000'}" style="background-color: #185FA5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 1rem; display: inline-block;">
-                        Apri HiPlan
-                    </a>
-                </div>
                 <p style="color: #64748b; font-size: 0.9rem; border-top: 1px solid #e2e8f0; padding-top: 24px;">Accedi a HiPlan per visualizzare il dettaglio e gestire il TODO.</p>
             </div>
             <div style="background-color: #f1f5f9; padding: 24px; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #64748b; line-height: 1.5; text-align: justify;">
