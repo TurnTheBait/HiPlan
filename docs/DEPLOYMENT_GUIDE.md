@@ -1,105 +1,222 @@
-# 🚀 Guida al Deployment su Server Aziendale
+# Guida al deployment di HiPlan
 
-Questa guida spiega passo passo come prendere questa applicazione Gantt e renderla accessibile a tutti i computer della rete locale della tua azienda tramite un server centrale.
+Questa guida copre due scenari:
 
----
+- avvio rapido su un computer della rete aziendale;
+- deployment Docker con PostgreSQL e Nginx.
 
-## 1. Individuare l'indirizzo IP del Server
+Per un'esposizione su Internet servono inoltre HTTPS, gestione sicura dei segreti, backup esterni, monitoraggio e un reverse proxy configurato dall'amministratore di sistema.
 
-Il primissimo passo è scoprire l'indirizzo IP locale del server su cui farai girare l'applicazione. Questo sarà l'indirizzo che i tuoi colleghi digiteranno nei loro browser (es. `192.168.1.100`).
+## 1. Prerequisiti
 
-- **Se il server è Windows:**
-  1. Apri il menu Start e cerca `cmd` (Prompt dei comandi).
-  2. Digita il comando `ipconfig` e premi Invio.
-  3. Cerca la voce **Indirizzo IPv4** (es. `192.168.1.X`). Annotalo, sarà il tuo IP aziendale.
-- **Se il server è Linux/Mac:**
-  1. Apri il terminale.
-  2. Digita `ifconfig` o `ip a` e cerca l'IP locale (di solito sotto `eth0` o `en0`).
+Per l'avvio tramite script:
 
----
+- Python 3.12 o successivo;
+- Node.js 18 o successivo;
+- accesso amministrativo al firewall del server;
+- indirizzo IP stabile oppure prenotazione DHCP.
 
-## 2. Modificare il Codice Frontend
+Per Docker:
 
-Di base, il frontend (l'interfaccia utente) è impostato per cercare il backend sul computer stesso in cui viene aperto il browser (`localhost`). Se un collega apre l'app dal suo PC, il suo browser cercherà il backend sul *suo* PC, generando un errore. 
-Devi dire al frontend di chiamare sempre il tuo Server.
+- Docker Engine o Docker Desktop;
+- plugin Docker Compose;
+- spazio persistente per database, backup e allegati.
 
-1. Apri il file `frontend/src/api/client.js`.
-2. Trova la **riga 3**:
-   ```javascript
-   // PRIMA:
-   const API_BASE = 'http://localhost:8000/api';
-   ```
-3. Modificala inserendo l'IP del tuo server che hai trovato nel Passo 1:
-   ```javascript
-   // DOPO (sostituisci 192.168.1.100 con il tuo vero IP):
-   const API_BASE = 'http://192.168.1.100:8000/api';
-   ```
+## 2. Configurazione iniziale
 
----
+Creare `backend/.env` partendo dal file di esempio:
 
-## 3. Esporre i Server alla Rete Locale
-
-Di default, per motivi di sicurezza, sia il Backend (Python/Uvicorn) che il Frontend (Vite) sono "chiusi" su se stessi e rifiutano connessioni esterne. Dobbiamo "aprirli" dicendogli di ascoltare su tutte le interfacce di rete (`0.0.0.0`).
-
-### Opzione A: Modificare lo script `start.sh` (Consigliata)
-Se usi lo script `start.sh` creato in precedenza, modificalo in questo modo:
-
-**Per il Backend (Riga 6):**
 ```bash
-# Prima:
-uvicorn app.main:app --reload --port 8000 &
-# Dopo:
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 &
+cp backend/.env.example backend/.env
 ```
 
-**Per il Frontend (Riga 11):**
-```bash
-# Prima:
-npm run dev &
-# Dopo:
-npm run dev -- --host &
+Impostare almeno:
+
+```dotenv
+SECRET_KEY=una-chiave-lunga-casuale
+CORS_ORIGINS=["http://IP-DEL-SERVER:5173"]
+DEBUG=false
 ```
 
-### Opzione B: Lanciare i comandi manualmente
-Se preferisci avviare due terminali separati:
-- **Terminale 1 (Backend):** `python -m uvicorn app.main:app --host 0.0.0.0 --port 8000`
-- **Terminale 2 (Frontend):** `npm run dev -- --host`
+Se si usano le notifiche email, configurare anche le variabili `SMTP_*` descritte nella documentazione tecnica.
 
----
+Il frontend usa automaticamente il nome host dal quale è stato aperto e contatta l'API sulla porta `8000`. Per il normale utilizzo in LAN non è quindi necessario modificare `frontend/src/api/client.js`.
 
-## 4. Configurare il Firewall (Windows Server)
+## 3. Avvio rapido in rete locale
 
-Questo è lo scoglio principale. Anche se hai esposto i server, il Firewall di Windows bloccherà i colleghi che tentano di connettersi. Devi creare due regole per aprire le porte in entrata.
+Questa modalità utilizza Uvicorn e il server di sviluppo Vite. È adatta a test, dimostrazioni o piccoli ambienti controllati, non a un servizio esposto su Internet.
 
-1. Sul Server, apri il menu Start e cerca **"Windows Defender Firewall con sicurezza avanzata"**.
-2. Nel menu a sinistra, clicca su **Regole in entrata (Inbound Rules)**.
-3. Nel menu a destra, clicca su **Nuova regola...**
-4. Seleziona **Porta** e clicca su Avanti.
-5. Scegli **TCP** e, in "Porte locali specifiche", scrivi: `8000, 5173` (le porte del Backend e del Frontend).
-6. Clicca Avanti, seleziona **Consenti la connessione**.
-7. Clicca Avanti (lascia spuntati Dominio, Privato, Pubblico).
-8. Dai un nome alla regola (es. "Gantt App Ports") e clicca **Fine**.
+### macOS
 
----
+Preparare una volta le dipendenze:
 
-## 5. Fatto! Come accedere dai PC dei colleghi
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 
-Adesso il server è configurato e in ascolto.
+cd ../frontend
+npm install
+```
 
-1. Avvia l'applicazione sul Server (tramite il tuo script `./start.sh` aggiornato).
-2. Chiunque, da qualsiasi computer connesso al WiFi o alla rete LAN dell'azienda, dovrà semplicemente aprire **Chrome**, **Edge** o **Firefox**.
-3. Nella barra in alto, dovranno digitare:
-   ```
-   http://<IP-DEL-SERVER>:5173
-   ```
-   *(Esempio: `http://192.168.1.100:5173`)*
+Avviare poi dalla radice del repository:
 
-L'interfaccia si caricherà e tutte le operazioni verranno sincronizzate in tempo reale sul database del server centrale!
+```bash
+./start_mac_server.sh
+```
 
----
+In alternativa è disponibile `./start.sh`, che mantiene i log nel terminale.
 
-### 💡 Extra: Modalità Produzione (Per utenti avanzati)
-Attualmente stiamo usando `npm run dev`, che va benissimo per piccoli team, ma non è il metodo più ottimizzato (il caricamento delle pagine è gestito da un server di sviluppo).
-Per un utilizzo in produzione "reale":
-1. Sul server, nella cartella `frontend`, esegui `npm run build`. Verrà creata una cartella `dist/`.
-2. Puoi servire i file statici di quella cartella usando un web server vero e proprio come **Nginx**, **Apache** o **IIS di Windows**, facendolo girare sulla normale porta 80. In questo modo i colleghi dovranno digitare solo `http://192.168.1.100` senza il `:5173` finale.
+### Windows
+
+Eseguire una volta:
+
+```text
+setup_windows.bat
+```
+
+Avviare quindi:
+
+```text
+start_windows.bat
+```
+
+I processi vengono eseguiti in background e scrivono nella cartella `logs`. Per arrestarli usare `stop_windows.bat`.
+
+### Accesso dai client
+
+Individuare l'IPv4 del server:
+
+- Windows: `ipconfig`;
+- macOS: Impostazioni di Sistema → Rete, oppure `ipconfig getifaddr en0`;
+- Linux: `ip address`.
+
+Da un altro computer della stessa rete aprire:
+
+```text
+http://IP-DEL-SERVER:5173
+```
+
+L'API deve essere raggiungibile su:
+
+```text
+http://IP-DEL-SERVER:8000/api/health
+```
+
+## 4. Firewall
+
+Per la modalità LAN devono essere raggiungibili:
+
+| Porta | Servizio |
+| ---: | --- |
+| `5173/TCP` | frontend Vite |
+| `8000/TCP` | API FastAPI |
+
+Su Windows è disponibile `allow_firewall_windows.bat`. Prima di utilizzarlo, verificare con l'amministratore di rete il profilo e l'ambito consentiti: lo script corrente apre entrambe le porte su tutti i profili.
+
+È preferibile creare regole limitate:
+
+- al solo profilo **Privato** o **Dominio**;
+- alla subnet aziendale;
+- alle sole porte necessarie.
+
+Non aprire PostgreSQL `5432` ai client dell'applicazione.
+
+## 5. Deployment Docker
+
+Il file `docker-compose.yml` avvia:
+
+- PostgreSQL 16;
+- FastAPI sulla porta `8000`;
+- frontend Nginx sulla porta `80`.
+
+Prima dell'avvio modificare nel file Compose:
+
+- password del database;
+- `SECRET_KEY`;
+- `CORS_ORIGINS`;
+- nomi e policy dei volumi secondo l'ambiente.
+
+Avviare:
+
+```bash
+docker compose up -d --build
+```
+
+Controllare lo stato:
+
+```bash
+docker compose ps
+docker compose logs backend
+docker compose logs frontend
+docker compose logs db
+```
+
+Accesso predefinito:
+
+```text
+http://IP-DEL-SERVER
+```
+
+Il frontend compilato continua a contattare l'API su `http://IP-DEL-SERVER:8000/api` se non è definita `VITE_API_URL` durante la build. Nginx contiene anche un proxy `/api`; per usare un solo endpoint pubblico occorre compilare il frontend con `VITE_API_URL=/api` e non pubblicare direttamente la porta backend, adattando di conseguenza il Compose.
+
+## 6. Persistenza e backup
+
+Il volume `postgres_data` conserva il database PostgreSQL. Gli allegati vengono invece scritti nella directory `/app/uploads` del container backend: il Compose corrente non monta ancora un volume dedicato.
+
+Prima di considerare il deployment pronto per la produzione:
+
+1. aggiungere un volume persistente per `/app/uploads`;
+2. includere database, upload e backup automatici nella politica di salvataggio;
+3. verificare periodicamente un ripristino in un ambiente isolato;
+4. copiare i backup fuori dal server applicativo;
+5. definire conservazione e cifratura.
+
+Il backup JSON scaricabile dal pannello Admin non include automaticamente il contenuto fisico degli allegati.
+
+Il job automatico integrato archivia soltanto `ganttflow.db` e la directory locale degli upload. Nel deployment PostgreSQL non sostituisce un dump del database.
+
+## 7. HTTPS e reverse proxy
+
+Per accessi fuori da una LAN controllata:
+
+- pubblicare un solo endpoint HTTPS;
+- terminare TLS su Nginx, Traefik, Caddy o un proxy aziendale;
+- inoltrare `/api` e WebSocket al backend;
+- rimuovere l'esposizione pubblica delle porte `8000`, `5173` e `5432`;
+- limitare CORS al dominio effettivo;
+- impostare cookie/token e header di sicurezza secondo la policy aziendale.
+
+## 8. Verifiche dopo il rilascio
+
+Eseguire almeno:
+
+1. `GET /api/health`;
+2. login e refresh della sessione;
+3. creazione e apertura di una commessa di prova;
+4. caricamento e download di un allegato;
+5. modifica del Gantt da due browser;
+6. export PDF ed Excel;
+7. creazione di un TODO con notifica;
+8. controllo dello stato del backup;
+9. riavvio completo dei servizi, verificando la persistenza dei dati.
+
+## 9. Aggiornamenti
+
+Prima di aggiornare:
+
+1. leggere le modifiche al modello dati;
+2. eseguire un backup del database e degli upload;
+3. provare migrazioni e build in staging;
+4. annotare la versione applicativa;
+5. predisporre una procedura di rollback.
+
+Per Docker:
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+Controllare sempre i log e completare le verifiche funzionali prima di dichiarare concluso l'aggiornamento.

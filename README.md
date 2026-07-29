@@ -44,7 +44,7 @@ Il progetto usa un backend asincrono **FastAPI + SQLAlchemy** e una SPA **React 
 - Annunci globali con scadenza.
 - Configurazione dei template di fase e degli stati dei ticket.
 - Export PDF ed Excel delle commesse, del Gantt, delle ore e dei ticket.
-- Backup JSON completo, ripristino amministrativo e backup automatico schedulato.
+- Backup JSON amministrativo dei dati supportati, ripristino e backup locale schedulato per SQLite e upload.
 - Registro delle notifiche email inviate e programmate.
 
 ## Documentazione
@@ -86,7 +86,7 @@ L'interfaccia è disponibile su `http://localhost:5173`.
 
 Il repository include script dedicati ai diversi sistemi:
 
-- macOS/Linux: `./start.sh` oppure `./start_mac_server.sh`
+- macOS: `./start.sh` oppure `./start_mac_server.sh`
 - Windows: `start_windows.bat`
 - arresto su Windows: `stop_windows.bat`
 

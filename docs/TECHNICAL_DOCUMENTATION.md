@@ -255,7 +255,7 @@ Tutte le rotte applicative usano il prefisso `/api`. La specifica completa e agg
 | `GET` | `/api/projects/{id}/export/excel` | export Excel di una commessa |
 | `POST` | `/api/projects/export-list/{formato}` | export di più commesse |
 | `GET` | `/api/tickets/{id}/export/{formato}` | export ticket |
-| `GET` | `/api/projects/backup/json` | backup completo |
+| `GET` | `/api/projects/backup/json` | backup JSON dei modelli supportati |
 | `POST` | `/api/projects/restore/json` | ripristino |
 | `GET/POST/DELETE` | `/api/settings/global-banner...` | annunci globali |
 | `GET/PUT` | `/api/settings/ticket_phases` | configurazione ticket |
@@ -292,6 +292,10 @@ Nel lifespan di FastAPI viene avviato APScheduler:
 - controllo dei TODO ogni cinque minuti.
 
 Il controllo TODO crea notifiche in-app quando arriva la data programmata o la scadenza è vicina. Se `notify_email` è attivo e SMTP è configurato, viene inviata anche un'email e registrato l'esito.
+
+Il backup JSON versione 2 include utenti, impostazioni, template di fase, commesse, membri, task, note, ferie, notifiche, link, commenti e checklist. Non include ancora ticket e risposte, TODO, log email o i file fisici degli allegati; per un ripristino completo dell'ambiente è necessario salvare anche il database e la directory degli upload.
+
+Il job automatico crea uno ZIP con `backend/ganttflow.db` e `backend/uploads`, mantenendo gli ultimi quattro archivi. È quindi efficace per l'installazione SQLite locale, ma non esegue alcun dump di PostgreSQL. Inoltre gli archivi restano sullo stesso host: un deployment di produzione deve prevedere dump PostgreSQL e copie esterne dei backup.
 
 L'esecuzione dello scheduler all'interno del processo web è adatta all'installazione corrente a singola istanza. Con più worker o repliche produrrebbe job duplicati: in quel caso occorre spostare i job in un worker dedicato o adottare un lock distribuito.
 

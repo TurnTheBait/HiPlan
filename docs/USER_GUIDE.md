@@ -241,7 +241,9 @@ Il ripristino JSON sovrascrive i dati correnti. Prima di procedere è consigliat
 
 Gli export PDF ed Excel sono pensati per condividere viste leggibili di commesse, fasi, Gantt, ore e ticket. Non sostituiscono il backup.
 
-Il backup JSON amministrativo contiene i dati necessari al ripristino dell'applicazione. Gli allegati caricati sono file separati: verificare la politica di backup dell'ambiente di installazione per assicurarsi che la directory degli upload sia inclusa.
+Il backup JSON amministrativo copre attualmente utenti, impostazioni, template di fase, commesse, membri, task, note, ferie, notifiche, dipendenze, commenti e checklist. Non comprende ancora ticket e risposte, TODO, log email o il contenuto fisico degli allegati.
+
+Il backup automatico integrato archivia il database SQLite locale e gli upload. Non esegue un dump di PostgreSQL. La politica di backup dell'ambiente deve quindi includere separatamente il database in uso, la directory degli upload e una copia esterna dei file prodotti.
 
 ## 14. Funzionalità future
 
