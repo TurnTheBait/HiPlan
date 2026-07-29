@@ -842,7 +842,7 @@ export default function AdminPage() {
         </div>
 
         {!collapsedSections.emails && (
-        <div className="table-wrapper" style={{ maxHeight: 400, overflowY: 'auto' }}>
+        <div className="table-wrapper" style={{ maxHeight: 520, overflowY: 'auto' }}>
           {emailLogTab === 'sent' ? (
             <table className="table">
               <thead>
