@@ -380,12 +380,9 @@ export default function TodoPage() {
                     {todo.is_completed && '✓'}
                   </button>
 
-                  <div className="todo-card-body">
-                    <div className="todo-card-title">{todo.title}</div>
-                    {todo.content && (
-                      <div className="todo-card-preview">{todo.content.replace(/\n/g, ' ')}</div>
-                    )}
-                    <div className="todo-card-meta">
+                  <div className="todo-card-body" style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                    <div className="todo-card-title" style={{ margin: 0, flex: 1 }}>{todo.title}</div>
+                    <div className="todo-card-meta" style={{ marginTop: 0, flexShrink: 0 }}>
                       {todo.due_date && (
                         <span className={`todo-meta-badge due-badge ${isOverdue || isWarning ? 'due-warning' : ''}`}>
                           {isOverdue ? '🔴' : isWarning ? '🟠' : '📅'}
@@ -507,9 +504,9 @@ export default function TodoPage() {
               {selected.notify_email && (
                 <div>
                   <div className="todo-detail-section-label">✉️ Notifiche email</div>
-                  <span style={{ fontSize: '0.82rem', color: '#10b981' }}>
-                    Notifiche email attive — inviata alla data di notifica e il giorno prima della scadenza se non completato.
-                  </span>
+                  <div className="todo-detail-section-value" style={{ fontSize: '0.82rem', color: '#10b981' }}>
+                    Notifiche email attive — le notifiche di base (notifica e scadenza) verranno inviate anche via email.
+                  </div>
                 </div>
               )}
 
@@ -672,7 +669,7 @@ export default function TodoPage() {
                     }}
                   />
                   <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                    Giorno in cui ricevere la notifica
+                    Giorno in cui ricevere la notifica in HiPlan
                   </span>
                 </div>
                 <div className="todo-form-group">
@@ -690,7 +687,7 @@ export default function TodoPage() {
                     }}
                   />
                   <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                    Reminder il giorno prima se non completato
+                    Reminder in HiPlan il giorno prima della scadenza
                   </span>
                 </div>
               </div>
@@ -706,7 +703,7 @@ export default function TodoPage() {
                     onChange={e => setForm(p => ({ ...p, notify_email: e.target.checked }))}
                   />
                   <label htmlFor="notify_email_check">
-                    Invia notifica email alla data prevista
+                    Invia entrambe le notifiche anche via email
                   </label>
                 </div>
                 <div className="todo-form-check-row" style={{ marginTop: 8 }}>
@@ -717,7 +714,7 @@ export default function TodoPage() {
                     onChange={e => setForm(p => ({ ...p, notify_now: e.target.checked }))}
                   />
                   <label htmlFor="notify_now_check">
-                    Invia subito una notifica email (al salvataggio)
+                    Invia subito una notifica (HiPlan + email)
                   </label>
                 </div>
               </div>
