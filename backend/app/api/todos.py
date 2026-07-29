@@ -138,19 +138,29 @@ async def create_todo(
     # Notifica in-app a tutti gli assegnati (escluso il creatore)
     from app.models.notification import Notification, NotificationType
     for uid in assignees:
-        if uid != current_user.id:
-            notif = Notification(
-                user_id=uid,
-                title=f"Nuovo TODO: {todo.title}",
-                message=f"{current_user.full_name or current_user.username} ti ha assegnato un TODO.",
-                type=NotificationType.ASSIGNMENT,
-            )
-            db.add(notif)
+        notif = Notification(
+            user_id=uid,
+            title=f"Nuovo TODO: {todo.title}",
+            message=f"{current_user.full_name or current_user.username} ti ha assegnato un TODO.",
+            type=NotificationType.ASSIGNMENT,
+        )
+        db.add(notif)
     await db.commit()
 
     # Email di notifica immediata se l'utente ha esplicitamente spuntato 'notify_now'
     if data.notify_now:
         try:
+            # Crea notifica in-app
+            for uid in assignees:
+                notif = Notification(
+                    user_id=uid,
+                    title=f"📋 TODO: {todo.title}",
+                    message=f"{current_user.full_name or current_user.username} ti ha inviato un promemoria per il TODO.",
+                    type=NotificationType.DEADLINE,
+                )
+                db.add(notif)
+            await db.commit()
+
             from app.services.email_service import send_todo_notification_email
             recipient_emails = [all_users[uid].email for uid in assignees if uid in all_users and all_users[uid].email]
             if recipient_emails:
@@ -209,8 +219,21 @@ async def update_todo(
 
     if data.notify_now:
         try:
+            from app.models.notification import Notification, NotificationType
             from app.services.email_service import send_todo_notification_email
             assignees_list = json.loads(todo.assignees) if todo.assignees else []
+            
+            # Crea notifica in-app
+            for uid in assignees_list:
+                notif = Notification(
+                    user_id=uid,
+                    title=f"📋 TODO: {todo.title}",
+                    message=f"{current_user.full_name or current_user.username} ti ha inviato un promemoria per il TODO.",
+                    type=NotificationType.DEADLINE,
+                )
+                db.add(notif)
+            await db.commit()
+
             recipient_emails = [all_users[uid].email for uid in assignees_list if uid in all_users and all_users[uid].email]
             if recipient_emails:
                 import asyncio

@@ -290,7 +290,6 @@ export default function TodoPage() {
       <div className="todo-page-header">
         <div>
           <h1>☑️ TODO</h1>
-          <p>{openCount} aperti · {completedCount} completati</p>
         </div>
         <button className="btn btn-primary" onClick={openCreate}>
           + Nuovo TODO
@@ -393,9 +392,9 @@ export default function TodoPage() {
                           {' '}{formatDate(todo.due_date)}
                           {daysLeft !== null && !todo.is_completed && (
                             daysLeft === 0 ? ' · Oggi!' :
-                            daysLeft === 1 ? ' · Domani' :
-                            daysLeft < 0 ? ` · ${Math.abs(daysLeft)}g scaduto` :
-                            ` · ${daysLeft}g`
+                              daysLeft === 1 ? ' · Domani' :
+                                daysLeft < 0 ? ` · ${Math.abs(daysLeft)}g scaduto` :
+                                  ` · ${daysLeft}g`
                           )}
                         </span>
                       )}

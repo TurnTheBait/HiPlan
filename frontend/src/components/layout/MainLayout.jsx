@@ -81,7 +81,7 @@ export default function MainLayout() {
 
   async function markAsRead(id) {
     try {
-      await api.patch(`/notifications/${id}`, { is_read: true });
+      await api.patch(`/notifications/${id}/read`);
       fetchNotifications();
       fetchUnread();
     } catch { /* ignore */ }
