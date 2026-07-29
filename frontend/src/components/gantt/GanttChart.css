@@ -95,12 +95,17 @@
   align-items: center !important;
   justify-content: center !important;
 }
+
 .gantt_tree_icon.gantt_file,
 .gantt_tree_icon.gantt_folder_open,
 .gantt_tree_icon.gantt_folder_closed,
 .gantt_tree_icon.gantt_blank {
   display: none !important;
   width: 0 !important;
+}
+
+.gantt_tree_content {
+  padding-left: 12px !important;
 }
 
 /* ==========================================
@@ -207,6 +212,7 @@
   opacity: 0;
   transition: opacity 0.2s ease;
 }
+
 .gantt_task_line:hover .gantt_task_drag {
   opacity: 0.6;
 }
@@ -243,6 +249,7 @@
   color: var(--accent-500) !important;
   font-weight: bold;
 }
+
 .gantt_add:hover {
   opacity: 1;
 }
@@ -281,18 +288,21 @@
 .gantt_marker.gantt-project-start-marker,
 .custom-project-marker.custom-start-marker {
   width: 2px !important;
-  border-left: 2px dashed #10b981 !important; /* Verde smeraldo */
+  border-left: 2px dashed #10b981 !important;
+  /* Verde smeraldo */
 }
 
 .gantt_marker.gantt-project-end-marker,
 .custom-project-marker.custom-end-marker {
   width: 2px !important;
-  border-left: 2px dashed #ef4444 !important; /* Rosso corsa */
+  border-left: 2px dashed #ef4444 !important;
+  /* Rosso corsa */
 }
 
 .custom-project-marker.custom-milestone-marker {
   width: 2px !important;
-  border-left: 2px dashed #f59e0b !important; /* Colore di default opzionale, sovrascritto inline */
+  border-left: 2px dashed #f59e0b !important;
+  /* Colore di default opzionale, sovrascritto inline */
 }
 
 .gantt_marker.gantt-project-start-marker .gantt_marker_content,
@@ -307,7 +317,7 @@
   font-size: 0.75rem !important;
   font-weight: 700 !important;
   white-space: nowrap !important;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
   pointer-events: auto !important;
   letter-spacing: 0.02em !important;
 }
@@ -316,14 +326,14 @@
 .custom-project-marker.custom-start-marker .custom-marker-badge {
   background-color: #10b981 !important;
   color: #ffffff !important;
-  border: 1px solid rgba(255,255,255,0.4) !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
 }
 
 .gantt_marker.gantt-project-end-marker .gantt_marker_content,
 .custom-project-marker.custom-end-marker .custom-marker-badge {
   background-color: #ef4444 !important;
   color: #ffffff !important;
-  border: 1px solid rgba(255,255,255,0.4) !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
 }
 
 /* Evidenziazione colonna/cella del giorno/settimana/mese/trimestre di oggi nella timeline (solo sfondo, senza linea blu verticale) */
@@ -344,6 +354,7 @@
   color: #ef4444 !important;
   font-weight: 700 !important;
 }
+
 .gantt_weekend_scale_cell.gantt_today_scale_cell {
   background-color: rgba(168, 85, 247, 0.25) !important;
   color: #c084fc !important;
@@ -351,22 +362,19 @@
 
 /* Evidenziazione colonna nella timeline per sabato, domenica e festivi (pattern rigato e leggero tint) */
 .gantt_weekend_cell {
-  background: repeating-linear-gradient(
-    -45deg,
-    rgba(239, 68, 68, 0.025),
-    rgba(239, 68, 68, 0.025) 6px,
-    rgba(239, 68, 68, 0.075) 6px,
-    rgba(239, 68, 68, 0.075) 12px
-  ) !important;
+  background: repeating-linear-gradient(-45deg,
+      rgba(239, 68, 68, 0.025),
+      rgba(239, 68, 68, 0.025) 6px,
+      rgba(239, 68, 68, 0.075) 6px,
+      rgba(239, 68, 68, 0.075) 12px) !important;
 }
+
 .gantt_weekend_cell.gantt_today_cell {
-  background: repeating-linear-gradient(
-    -45deg,
-    rgba(59, 130, 246, 0.12),
-    rgba(59, 130, 246, 0.12) 6px,
-    rgba(168, 85, 247, 0.18) 6px,
-    rgba(168, 85, 247, 0.18) 12px
-  ) !important;
+  background: repeating-linear-gradient(-45deg,
+      rgba(59, 130, 246, 0.12),
+      rgba(59, 130, 246, 0.12) 6px,
+      rgba(168, 85, 247, 0.18) 6px,
+      rgba(168, 85, 247, 0.18) 12px) !important;
 }
 
 /* Allineamento al centro per le celle dell'header con scale multiple */
@@ -381,6 +389,7 @@
 [data-theme="dark"] .gantt_task_line {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4) !important;
 }
+
 [data-theme="dark"] .gantt_task_line:hover {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
 }
@@ -420,7 +429,7 @@
   font-size: 0.75rem !important;
   font-weight: 700 !important;
   white-space: nowrap !important;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
   pointer-events: auto !important;
   letter-spacing: 0.02em !important;
   background-color: var(--bg-tertiary, #ffffff) !important;
@@ -434,6 +443,7 @@
   background-color: #10b981 !important;
   border-color: #059669 !important;
 }
+
 .gantt_task_line.gantt-task-completed .gantt_task_progress,
 .gantt_bars_area .gantt_task_line.gantt-task-completed .gantt_task_progress {
   background-color: rgba(0, 0, 0, 0.18) !important;
@@ -446,6 +456,7 @@
   background-color: rgba(16, 185, 129, 0.18) !important;
   transition: background-color 0.2s ease;
 }
+
 .gantt_grid_data .gantt_row.gantt_selected.gantt-row-completed,
 .gantt_task_bg .gantt_task_row.gantt_selected.gantt-row-completed,
 .gantt_row.gantt_selected.gantt-row-completed {
@@ -458,6 +469,7 @@
 .gantt_task {
   cursor: grab !important;
 }
+
 .gantt_task:active {
   cursor: grabbing !important;
 }
@@ -465,16 +477,15 @@
 /* Sfondo a strisce per segnalare conflitto ferie */
 .gantt_task_line.gantt-task-conflict,
 .gantt_bars_area .gantt_task_line.gantt-task-conflict {
-  background-image: repeating-linear-gradient(
-    45deg,
-    #ef4444,
-    #ef4444 10px,
-    #fca5a5 10px,
-    #fca5a5 20px
-  ) !important;
+  background-image: repeating-linear-gradient(45deg,
+      #ef4444,
+      #ef4444 10px,
+      #fca5a5 10px,
+      #fca5a5 20px) !important;
   background-color: transparent !important;
   border-color: #dc2626 !important;
 }
+
 .gantt_task_line.gantt-task-conflict .gantt_task_progress,
 .gantt_bars_area .gantt_task_line.gantt-task-conflict .gantt_task_progress {
   background-color: rgba(0, 0, 0, 0.25) !important;

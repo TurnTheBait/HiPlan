@@ -105,9 +105,9 @@ async def send_todo_notification_email(
             <div style="background: linear-gradient(135deg, #185FA5, #2563eb); padding: 24px 32px;">
                 <h1 style="margin: 0; font-size: 1.5rem; font-weight: 600; letter-spacing: 0.5px;">HiPlan</h1>
             </div>
-            <div style="padding: 32px;">
-                <p style="font-size: 1.05rem; line-height: 1.6; margin-top: 0;">{intro}</p>
-                <div style="background: #f8fafc; border-left: 5px solid #2563eb; border-radius: 6px; padding: 24px; margin: 24px 0;">
+            <div style="padding: 24px 32px 32px 32px;">
+                <p style="font-size: 1.05rem; line-height: 1.6; margin-top: 0; margin-bottom: 8px;">{intro}</p>
+                <div style="background: #f8fafc; border-left: 5px solid #2563eb; border-radius: 6px; padding: 24px; margin: 12px 0;">
                     <h2 style="margin: 0 0 12px 0; font-size: 1.3rem; color: #0f172a;">{todo_title}</h2>
                     {content_html}
                     {date_html}
