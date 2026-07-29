@@ -1,13 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../api/client';
 import { useToast } from '../context/ToastContext';
+import AppIcon from '../components/ui/AppIcon';
 import './AdminPage.css';
 
 const DEPT_LABELS = {
-  ufficio_tecnico: '🔧 Ufficio Tecnico',
-  produzione: '🏭 Produzione',
-  acquisti: '🛒 Acquisti',
-  admin: '⚙️ Admin',
+  ufficio_tecnico: 'Ufficio Tecnico',
+  produzione: 'Produzione',
+  acquisti: 'Acquisti',
+  admin: 'Admin',
 };
 const DEPT_COLORS = {
   ufficio_tecnico: '#3b82f6',
@@ -37,56 +38,6 @@ export default function AdminPage() {
   const [scheduledEmails, setScheduledEmails] = useState([]);
   const [emailLogTab, setEmailLogTab] = useState('sent'); // 'sent' | 'scheduled'
   const [loading, setLoading] = useState(true);
-  const fileInputRef = useRef(null);
-
-  async function handleBackupJson() {
-    try {
-      const { data } = await api.get('/projects/backup/json');
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const d = new Date();
-      a.download = `gantt_full_backup_${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.json`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-      toast.success('Backup JSON scaricato!');
-    } catch {
-      toast.error('Errore durante il download del backup JSON');
-    }
-  }
-
-  async function handleRestoreJson(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!window.confirm("ATTENZIONE: Caricando questo backup sovrascriverai i dati attualmente esistenti.\\n\\nSei sicuro di voler procedere?")) {
-      e.target.value = '';
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        const payload = JSON.parse(ev.target.result);
-        if (payload.version === 2 && payload.data) {
-          await api.post('/projects/restore/json', payload);
-          toast.success(`Ripristino del database (v2) completato con successo!`);
-        } else if (payload.commesse && Array.isArray(payload.commesse)) {
-          await api.post('/projects/restore/json', payload);
-          toast.success(`Caricate ${payload.commesse.length} commesse (v1) con successo!`);
-        } else {
-          throw new Error('Formato JSON non valido o non riconosciuto');
-        }
-        loadData();
-      } catch (err) {
-        toast.error('Errore nel caricamento file JSON: ' + (err.response?.data?.detail || err.message));
-      }
-      e.target.value = '';
-    };
-    reader.readAsText(file);
-  }
-
   // STATO PER COLONNE TABELLA ADMIN
   const [adminVisibleColumns, setAdminVisibleColumns] = useState(() => {
     const saved = localStorage.getItem('adminVisibleColumns');
@@ -383,43 +334,24 @@ export default function AdminPage() {
 
   return (
     <div className="admin-page animate-fadeIn">
-      <div className="admin-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 20 }}>
-        <div>
-          <h1>Pannello di Amministrazione</h1>
-          <p>Gestisci gli utenti registrati e l'elenco degli addetti assegnabili alle singole fasi delle commesse.</p>
-          {lastBackup && (
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: 8 }}>
-              💾 Ultimo backup automatico: {new Date(lastBackup.date).toLocaleString()} ({lastBackup.size_mb} MB)
-            </p>
-          )}
+      {lastBackup && (
+        <div className="page-action-bar admin-backup-status">
+          <div className="page-context-note">
+            <span><AppIcon name="save" size={15} /> Ultimo backup: {new Date(lastBackup.date).toLocaleString()} · {lastBackup.size_mb} MB</span>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button className="btn btn-secondary" style={{ width: '190px' }} onClick={handleBackupJson}>
-            💾 Salva Dati (JSON)
-          </button>
-          <button className="btn btn-secondary" style={{ width: '190px' }} onClick={() => fileInputRef.current?.click()}>
-            📂 Carica Dati (JSON)
-          </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            accept=".json"
-            style={{ display: 'none' }}
-            onChange={handleRestoreJson}
-          />
-        </div>
-      </div>
+      )}
 
       {/* SEZIONE BACHECA AZIENDALE */}
-      <div className="admin-section-card" style={{ marginBottom: 30 }}>
+      <div className={`admin-section-card ${collapsedSections.annunci ? 'is-collapsed' : ''}`} style={{ marginBottom: 30 }}>
         <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
           <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('annunci')}>
-            <h2>📢 Annunci</h2>
+            <h2><AppIcon name="megaphone" /> Annunci</h2>
             <p className="admin-section-desc">Annunci in evidenza che appariranno a tutti gli utenti in cima alla Dashboard.</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
             <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => toggleSection('annunci')}>
-              {collapsedSections.annunci ? '▼' : '▲'}
+              <AppIcon name={collapsedSections.annunci ? 'chevronDown' : 'chevronUp'} size={18} />
             </div>
           </div>
         </div>
@@ -440,10 +372,10 @@ export default function AdminPage() {
                   value={globalBannerForm.type}
                   onChange={(e) => setGlobalBannerForm({ ...globalBannerForm, type: e.target.value })}
                 >
-                  <option value="info">🔵 Info</option>
-                  <option value="warning">🟡 Avviso</option>
-                  <option value="success">🟢 Successo</option>
-                  <option value="error">🔴 Urgente</option>
+                  <option value="info">Info</option>
+                  <option value="warning">Avviso</option>
+                  <option value="success">Successo</option>
+                  <option value="error">Urgente</option>
                 </select>
               </div>
               <div className="input-group" style={{ width: 140, marginBottom: 0 }}>
@@ -502,7 +434,7 @@ export default function AdminPage() {
                       </span>
                     </div>
                     <button onClick={() => deleteGlobalBanner(b.id)} className="btn btn-ghost" style={{ padding: '6px 10px', color: 'var(--text-muted)' }} title="Elimina annuncio">
-                      🗑️
+                      <AppIcon name="trash" size={15} />
                     </button>
                   </div>
                 ))}
@@ -513,10 +445,10 @@ export default function AdminPage() {
       </div>
 
       {/* SEZIONE 1: UTENTI DI SISTEMA */}
-      <div className="admin-section-card">
+      <div className={`admin-section-card ${collapsedSections.users ? 'is-collapsed' : ''}`}>
         <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
           <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('users')}>
-            <h2>👤 Utenti di Sistema</h2>
+            <h2><AppIcon name="users" /> Utenti di sistema</h2>
             <p className="admin-section-desc">Utenti registrati con credenziali di login per accedere al gestionale HiPlan ({users.length})</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
@@ -527,7 +459,8 @@ export default function AdminPage() {
                 className="btn btn-secondary btn-sm"
                 onClick={() => setShowAdminColumnsMenu(!showAdminColumnsMenu)}
               >
-                ⚙️ Colonne
+                <AppIcon name="columns" />
+                Colonne
               </button>
               {showAdminColumnsMenu && (
                 <div className="dropdown-menu" style={{ position: 'absolute', right: 0, top: '100%', marginTop: 8, zIndex: 50, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, padding: 8, boxShadow: 'var(--shadow-lg)', minWidth: 200 }}>
@@ -547,7 +480,7 @@ export default function AdminPage() {
             </div>
             )}
             <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => toggleSection('users')}>
-              {collapsedSections.users ? '▼' : '▲'}
+              <AppIcon name={collapsedSections.users ? 'chevronDown' : 'chevronUp'} size={18} />
             </div>
           </div>
         </div>
@@ -606,10 +539,10 @@ export default function AdminPage() {
                           style={{ padding: '6px 32px 6px 10px', fontSize: '0.8125rem', width: 'max-content', minWidth: 160 }}
                         >
                           <option value="">— Nessun reparto —</option>
-                          <option value="ufficio_tecnico">🔧 Ufficio Tecnico</option>
-                          <option value="produzione">🏭 Produzione</option>
-                          <option value="acquisti">🛒 Acquisti</option>
-                          <option value="admin">⚙️ Admin</option>
+                          <option value="ufficio_tecnico">Ufficio Tecnico</option>
+                          <option value="produzione">Produzione</option>
+                          <option value="acquisti">Acquisti</option>
+                          <option value="admin">Admin</option>
                         </select>
                       </td>
                     )}
@@ -644,10 +577,10 @@ export default function AdminPage() {
       </div>
 
       {/* SEZIONE 2: FASI DI LAVORAZIONE PREIMPOSTATE */}
-      <div className="admin-section-card" style={{ marginTop: 32 }}>
+      <div className={`admin-section-card ${collapsedSections.templates ? 'is-collapsed' : ''}`} style={{ marginTop: 32 }}>
         <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
           <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('templates')}>
-            <h2>📋 Fasi di Lavorazione Preimpostate per Reparto</h2>
+            <h2><AppIcon name="list" /> Fasi di lavorazione preimpostate</h2>
             <p className="admin-section-desc">
               Gestisci l'elenco delle fasi suggerite nel menu a tendina quando gli addetti creano o modificano le attività di commessa ({phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'tutti').length} visualizzate).
             </p>
@@ -661,11 +594,11 @@ export default function AdminPage() {
               onChange={(e) => setFilterDept(e.target.value)}
               style={{ padding: '6px 12px', fontSize: '0.85rem', fontWeight: 600 }}
             >
-              <option value="all">🌐 Tutti i reparti ({phaseTemplates.length})</option>
-              <option value="ufficio_tecnico">🔧 Ufficio Tecnico ({phaseTemplates.filter(t => t.department === 'ufficio_tecnico').length})</option>
-              <option value="produzione">🏭 Produzione ({phaseTemplates.filter(t => t.department === 'produzione').length})</option>
-              <option value="acquisti">🛒 Acquisti ({phaseTemplates.filter(t => t.department === 'acquisti').length})</option>
-              <option value="tutti">⚙️ Tutti / Condivise ({phaseTemplates.filter(t => t.department === 'tutti').length})</option>
+              <option value="all">Tutti i reparti ({phaseTemplates.length})</option>
+              <option value="ufficio_tecnico">Ufficio Tecnico ({phaseTemplates.filter(t => t.department === 'ufficio_tecnico').length})</option>
+              <option value="produzione">Produzione ({phaseTemplates.filter(t => t.department === 'produzione').length})</option>
+              <option value="acquisti">Acquisti ({phaseTemplates.filter(t => t.department === 'acquisti').length})</option>
+              <option value="tutti">Tutti / Condivise ({phaseTemplates.filter(t => t.department === 'tutti').length})</option>
             </select>
             <button
               className="btn btn-primary btn-sm"
@@ -677,7 +610,7 @@ export default function AdminPage() {
               </div>
             )}
             <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => toggleSection('templates')}>
-              {collapsedSections.templates ? '▼' : '▲'}
+              <AppIcon name={collapsedSections.templates ? 'chevronDown' : 'chevronUp'} size={18} />
             </div>
           </div>
         </div>
@@ -712,7 +645,7 @@ export default function AdminPage() {
                     </td>
                     <td>
                       <span className="badge" style={{ background: DEPT_COLORS[tpl.department] ? `${DEPT_COLORS[tpl.department]}20` : 'var(--bg-tertiary)', color: DEPT_COLORS[tpl.department] || 'var(--text-secondary)', border: `1px solid ${DEPT_COLORS[tpl.department] || 'var(--border)'}40` }}>
-                        {DEPT_LABELS[tpl.department] || (tpl.department === 'tutti' ? '⚙️ Condivisa / Tutti' : tpl.department)}
+                        {DEPT_LABELS[tpl.department] || (tpl.department === 'tutti' ? 'Condivisa / Tutti' : tpl.department)}
                       </span>
                     </td>
                     <td>
@@ -729,20 +662,21 @@ export default function AdminPage() {
                     <td>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button
-                          className="btn btn-sm btn-secondary"
-                          style={{ padding: '4px 8px' }}
+                          className="btn btn-secondary btn-icon"
                           onClick={() => openEditTemplate(tpl)}
                           title="Modifica nome, reparto o colore"
+                          aria-label="Modifica fase preimpostata"
                         >
-                          ✏️
+                          <AppIcon name="edit" size={15} />
                         </button>
                         <button
-                          className="btn btn-sm btn-ghost"
-                          style={{ color: 'var(--danger)', padding: '4px 8px' }}
+                          className="btn btn-ghost btn-icon"
+                          style={{ color: 'var(--danger)' }}
                           onClick={() => handleDeleteTemplate(tpl)}
                           title="Elimina fase preimpostata"
+                          aria-label="Elimina fase preimpostata"
                         >
-                          🗑️
+                          <AppIcon name="trash" size={15} />
                         </button>
                       </div>
                     </td>
@@ -756,17 +690,17 @@ export default function AdminPage() {
       </div>
 
       {/* SEZIONE 3: FASI TICKET */}
-      <div className="admin-section-card" style={{ marginTop: 32 }}>
+      <div className={`admin-section-card ${collapsedSections.ticketPhases ? 'is-collapsed' : ''}`} style={{ marginTop: 32 }}>
         <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
           <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('ticketPhases')}>
-            <h2>🎫 Fasi Ticket</h2>
+            <h2><AppIcon name="ticket" /> Fasi ticket</h2>
             <p className="admin-section-desc">
               Personalizza l'elenco delle fasi o eventi selezionabili quando si risponde a un ticket (es. "Inviato al cliente", "In lavorazione").
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
             <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => toggleSection('ticketPhases')}>
-              {collapsedSections.ticketPhases ? '▼' : '▲'}
+              <AppIcon name={collapsedSections.ticketPhases ? 'chevronDown' : 'chevronUp'} size={18} />
             </div>
           </div>
         </div>
@@ -782,7 +716,7 @@ export default function AdminPage() {
                   style={{ color: 'var(--danger)', opacity: 0.7 }}
                   title="Elimina fase ticket"
                 >
-                  🗑️
+                  <AppIcon name="trash" size={15} />
                 </button>
               </div>
             ))}
@@ -796,7 +730,7 @@ export default function AdminPage() {
             <input
               className="input"
               style={{ flex: 1 }}
-              placeholder="Es: 📥 Risposta dal cliente"
+              placeholder="Es: Risposta dal cliente"
               value={newTicketPhase}
               onChange={e => setNewTicketPhase(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleAddTicketPhase(); }}
@@ -810,10 +744,10 @@ export default function AdminPage() {
       </div>
 
       {/* SEZIONE LOG EMAIL */}
-      <div className="admin-section-card" style={{ marginTop: 32, marginBottom: 30 }}>
+      <div className={`admin-section-card ${collapsedSections.emails ? 'is-collapsed' : ''}`} style={{ marginTop: 32, marginBottom: 30 }}>
         <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
           <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('emails')}>
-            <h2>📧 Notifiche Email</h2>
+            <h2><AppIcon name="mail" /> Notifiche email</h2>
             <p className="admin-section-desc">Cronologia delle comunicazioni e riepilogo degli invii futuri.</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
@@ -836,7 +770,7 @@ export default function AdminPage() {
             </div>
             )}
             <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => toggleSection('emails')}>
-              {collapsedSections.emails ? '▼' : '▲'}
+              <AppIcon name={collapsedSections.emails ? 'chevronDown' : 'chevronUp'} size={18} />
             </div>
           </div>
         </div>
@@ -913,8 +847,9 @@ export default function AdminPage() {
                           title="Annulla notifica"
                           onClick={() => deleteScheduledEmail(log.id)}
                           style={{ color: 'var(--danger)', padding: '4px 8px' }}
+                          aria-label="Annulla notifica"
                         >
-                          ✕
+                          <AppIcon name="close" size={14} />
                         </button>
                       </td>
                     </tr>
@@ -933,7 +868,9 @@ export default function AdminPage() {
           <div className="modal" style={{ maxWidth: 500, background: 'var(--bg-secondary)', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-xl)' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{editingTemplate ? 'Modifica Fase Preimpostata' : 'Nuova Fase Preimpostata'}</h2>
-              <button className="btn-icon" type="button" onClick={() => setShowAddTemplateModal(false)}>×</button>
+              <button className="btn-ghost btn-icon" type="button" onClick={() => setShowAddTemplateModal(false)} aria-label="Chiudi">
+                <AppIcon name="close" />
+              </button>
             </div>
             <form onSubmit={handleSaveTemplate}>
               <div className="modal-body">
@@ -955,10 +892,10 @@ export default function AdminPage() {
                     value={templateForm.department}
                     onChange={(e) => setTemplateForm({ ...templateForm, department: e.target.value })}
                   >
-                    <option value="ufficio_tecnico">🔧 Ufficio Tecnico</option>
-                    <option value="produzione">🏭 Produzione</option>
-                    <option value="acquisti">🛒 Acquisti</option>
-                    <option value="tutti">⚙️ Condivisa per tutti i reparti</option>
+                    <option value="ufficio_tecnico">Ufficio Tecnico</option>
+                    <option value="produzione">Produzione</option>
+                    <option value="acquisti">Acquisti</option>
+                    <option value="tutti">Condivisa per tutti i reparti</option>
                   </select>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
                     Questa fase comparirà nel menu a tendina di tutti gli addetti del reparto selezionato.
@@ -1003,12 +940,14 @@ export default function AdminPage() {
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 450 }}>
             <div className="modal-header">
               <h2>Azioni per @{managingUser.username}</h2>
-              <button className="btn-ghost btn-icon" onClick={() => setManagingUser(null)}>✕</button>
+              <button className="btn-ghost btn-icon" onClick={() => setManagingUser(null)} aria-label="Chiudi">
+                <AppIcon name="close" />
+              </button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               <form onSubmit={handleResetPassword} style={{ background: 'var(--bg-tertiary)', padding: 16, borderRadius: 8 }}>
-                <h4 style={{ marginBottom: 12 }}>🔑 Modifica Password</h4>
+                <h4 className="inline-heading" style={{ marginBottom: 12 }}><AppIcon name="lock" size={16} />Modifica password</h4>
                 <div className="input-group" style={{ marginBottom: 12 }}>
                   <input
                     type="text"
@@ -1022,13 +961,13 @@ export default function AdminPage() {
               </form>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <h4 style={{ margin: 0 }}>⚙️ Altre Azioni</h4>
+                <h4 className="inline-heading"><AppIcon name="settings" size={16} /> Altre azioni</h4>
                 <button
                   className={`btn ${managingUser.is_active ? 'btn-secondary' : 'btn-primary'}`}
                   style={{ justifyContent: 'center' }}
                   onClick={() => { handleToggleActive(managingUser.id, managingUser.is_active); setManagingUser(null); }}
                 >
-                  {managingUser.is_active ? '⏸ Disattiva Account' : '▶️ Attiva Account'}
+                  {managingUser.is_active ? 'Disattiva account' : 'Attiva account'}
                 </button>
 
                 {managingUser.username !== 'admin' && (
@@ -1037,7 +976,8 @@ export default function AdminPage() {
                     style={{ justifyContent: 'center' }}
                     onClick={() => handleDeleteUser(managingUser)}
                   >
-                    🗑️ Elimina Definitivamente
+                    <AppIcon name="trash" />
+                    Elimina definitivamente
                   </button>
                 )}
               </div>

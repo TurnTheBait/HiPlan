@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import AppIcon from '../components/ui/AppIcon';
 import './TodoPage.css';
 
 const BACKEND_URL = import.meta.env.VITE_API_URL
@@ -198,7 +199,7 @@ export default function TodoPage() {
       const { data } = await api.patch(`/todos/${todo.id}`, { is_completed: !todo.is_completed });
       setTodos(prev => prev.map(t => t.id === todo.id ? data : t));
       if (selected?.id === todo.id) setSelected(data);
-      toast.success(data.is_completed ? 'TODO completato ✅' : 'TODO riaperto');
+      toast.success(data.is_completed ? 'TODO completato' : 'TODO riaperto');
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Errore aggiornamento stato');
     }
@@ -286,46 +287,40 @@ export default function TodoPage() {
 
   return (
     <div className="todo-page-wrapper animate-fadeIn">
-      {/* Header */}
-      <div className="todo-page-header">
-        <div>
-          <h1>☑️ TODO</h1>
-        </div>
-        <button className="btn btn-primary" onClick={openCreate}>
-          + Nuovo TODO
-        </button>
-      </div>
-
       <div className="todo-body">
         {/* Sidebar Filters */}
         <aside className="todo-sidebar">
+          <button className="btn btn-primary sidebar-create-btn" onClick={openCreate}>
+            <AppIcon name="plus" />
+            Nuovo TODO
+          </button>
           <span className="todo-sidebar-section-title">Vista</span>
           {[
-            { key: 'all', label: '📋 Tutti', count: todos.length },
-            { key: 'open', label: '🔥 Aperti', count: openCount },
-            { key: 'completed', label: '✅ Completati', count: completedCount },
+            { key: 'all', icon: 'list', label: 'Tutti', count: todos.length },
+            { key: 'open', icon: 'clock', label: 'Aperti', count: openCount },
+            { key: 'completed', icon: 'check', label: 'Completati', count: completedCount },
           ].map(f => (
             <button
               key={f.key}
               className={`todo-filter-btn ${filter === f.key ? 'active' : ''}`}
               onClick={() => setFilter(f.key)}
             >
-              {f.label}
+              <span className="filter-label"><AppIcon name={f.icon} size={16} />{f.label}</span>
               <span style={{ marginLeft: 'auto', fontSize: '0.72rem', opacity: 0.7 }}>{f.count}</span>
             </button>
           ))}
 
           <span className="todo-sidebar-section-title" style={{ marginTop: 16 }}>Ruolo</span>
           {[
-            { key: 'mine', label: '👤 Creati da me' },
-            { key: 'assigned', label: '👥 Assegnati a me' },
+            { key: 'mine', icon: 'user', label: 'Creati da me' },
+            { key: 'assigned', icon: 'users', label: 'Assegnati a me' },
           ].map(f => (
             <button
               key={f.key}
               className={`todo-filter-btn ${filter === f.key ? 'active' : ''}`}
               onClick={() => setFilter(prev => prev === f.key ? 'all' : f.key)}
             >
-              {f.label}
+              <span className="filter-label"><AppIcon name={f.icon} size={16} />{f.label}</span>
             </button>
           ))}
         </aside>
@@ -336,7 +331,7 @@ export default function TodoPage() {
             <input
               className="todo-search"
               type="text"
-              placeholder="🔍 Cerca TODO..."
+              placeholder="Cerca TODO..."
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -354,7 +349,7 @@ export default function TodoPage() {
             )}
             {!loading && filtered.length === 0 && (
               <div className="todo-empty">
-                <div className="todo-empty-icon">☑️</div>
+                <div className="todo-empty-icon"><AppIcon name="todo" size={28} /></div>
                 <p>Nessun TODO trovato</p>
                 <button className="btn btn-primary btn-sm" onClick={openCreate}>
                   Crea il primo TODO
@@ -385,8 +380,10 @@ export default function TodoPage() {
                     <div className="todo-card-meta" style={{ marginTop: 0, flexShrink: 0 }}>
                       {todo.due_date && (
                         <span className={`todo-meta-badge due-badge ${isOverdue || isWarning ? 'due-warning' : ''}`}>
-                          {isOverdue ? '🔴' : isWarning ? '🟠' : '📅'}
-                          {' '}{formatDate(todo.due_date)}
+                          {isOverdue || isWarning
+                            ? <AppIcon name="alert" size={14} />
+                            : <AppIcon name="calendar" size={14} />}
+                          {formatDate(todo.due_date)}
                           {daysLeft !== null && !todo.is_completed && (
                             daysLeft === 0 ? ' · Oggi!' :
                               daysLeft === 1 ? ' · Domani' :
@@ -397,20 +394,23 @@ export default function TodoPage() {
                       )}
                       {todo.notify_date && (
                         <span className="todo-meta-badge notify-badge">
-                          🔔 {formatDate(todo.notify_date)}
+                          <AppIcon name="bell" size={14} />
+                          {formatDate(todo.notify_date)}
                         </span>
                       )}
                       {todo.notify_email && (
-                        <span className="todo-meta-badge email-badge">✉️ Mail</span>
+                        <span className="todo-meta-badge email-badge"><AppIcon name="mail" size={14} /> Mail</span>
                       )}
                       {todo.assignees_detail?.length > 0 && (
                         <span className="todo-meta-badge assignee-badge">
-                          👥 {todo.assignees_detail.length}
+                          <AppIcon name="users" size={14} />
+                          {todo.assignees_detail.length}
                         </span>
                       )}
                       {todo.attachments?.length > 0 && (
                         <span className="todo-meta-badge assignee-badge">
-                          📎 {todo.attachments.length}
+                          <AppIcon name="paperclip" size={14} />
+                          {todo.attachments.length}
                         </span>
                       )}
                     </div>
@@ -422,14 +422,14 @@ export default function TodoPage() {
                         className="todo-card-btn"
                         onClick={e => { e.stopPropagation(); openEdit(todo); }}
                         title="Modifica"
-                      >✏️</button>
+                      ><AppIcon name="edit" size={15} /></button>
                     )}
                     {canDelete(todo) && (
                       <button
                         className="todo-card-btn delete"
                         onClick={e => deleteTodo(todo, e)}
                         title="Elimina"
-                      >🗑️</button>
+                      ><AppIcon name="trash" size={15} /></button>
                     )}
                   </div>
                 </div>
@@ -451,28 +451,29 @@ export default function TodoPage() {
                 className={`todo-status-toggle ${selected.is_completed ? 'completed' : 'open'}`}
                 onClick={e => toggleComplete(selected, e)}
               >
-                {selected.is_completed ? '✅ Completato' : '🟡 Aperto'}
+                <span className={`status-dot ${selected.is_completed ? 'completed' : 'open'}`} />
+                {selected.is_completed ? 'Completato' : 'Aperto'}
               </button>
             </div>
             <div className="todo-detail-body">
               {selected.content && (
                 <div>
-                  <div className="todo-detail-section-label">📝 Contenuto</div>
+                  <div className="todo-detail-section-label"><AppIcon name="notes" size={13} />Contenuto</div>
                   <div className="todo-detail-content">{selected.content}</div>
                 </div>
               )}
 
               <div>
-                <div className="todo-detail-section-label">📅 Date</div>
+                <div className="todo-detail-section-label"><AppIcon name="calendar" size={13} />Date</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {selected.notify_date && (
-                    <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                      🔔 Data notifica: <strong>{formatDate(selected.notify_date)}</strong>
+                    <span className="todo-detail-date-row">
+                      <AppIcon name="bell" size={13} /> Data notifica: <strong>{formatDate(selected.notify_date)}</strong>
                     </span>
                   )}
                   {selected.due_date && (
-                    <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                      📅 Scadenza: <strong>{formatDate(selected.due_date)}</strong>
+                    <span className="todo-detail-date-row">
+                      <AppIcon name="calendar" size={13} /> Scadenza: <strong>{formatDate(selected.due_date)}</strong>
                     </span>
                   )}
                   {!selected.notify_date && !selected.due_date && (
@@ -482,7 +483,7 @@ export default function TodoPage() {
               </div>
 
               <div>
-                <div className="todo-detail-section-label">👥 Assegnati</div>
+                <div className="todo-detail-section-label"><AppIcon name="users" size={13} />Assegnati</div>
                 <div className="todo-detail-assignee-chips">
                   {(selected.assignees_detail || []).map(a => (
                     <span key={a.id} className="todo-detail-assignee-chip">
@@ -495,7 +496,7 @@ export default function TodoPage() {
                         {a.username?.[0]?.toUpperCase()}
                       </span>
                       {a.full_name || a.username}
-                      {a.id === selected.creator_id && ' 👑'}
+                      {a.id === selected.creator_id && <span className="todo-creator-label">Creatore</span>}
                     </span>
                   ))}
                 </div>
@@ -503,7 +504,7 @@ export default function TodoPage() {
 
               {selected.notify_email && (
                 <div>
-                  <div className="todo-detail-section-label">✉️ Notifiche email</div>
+                  <div className="todo-detail-section-label"><AppIcon name="mail" size={13} />Notifiche email</div>
                   <div className="todo-detail-section-value" style={{ fontSize: '0.82rem', color: '#10b981' }}>
                     Notifiche email attive — le notifiche di base (notifica e scadenza) verranno inviate anche via email.
                   </div>
@@ -511,7 +512,7 @@ export default function TodoPage() {
               )}
 
               <div>
-                <div className="todo-detail-section-label">📎 Allegati</div>
+                <div className="todo-detail-section-label"><AppIcon name="paperclip" size={13} />Allegati</div>
                 {(selected.attachments || []).length === 0 && (
                   <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Nessun allegato. Trascina qui i file o usa il pulsante.</span>
                 )}
@@ -525,13 +526,14 @@ export default function TodoPage() {
                         rel="noreferrer"
                         onClick={e => e.stopPropagation()}
                       >
-                        📎 {att.filename}
+                        <AppIcon name="paperclip" size={13} />{att.filename}
                       </a>
                       {canDelete(selected) && (
                         <button
                           className="todo-attachment-del"
                           onClick={e => removeAttachment(att.filename, e)}
-                        >✕</button>
+                          aria-label="Rimuovi allegato"
+                        ><AppIcon name="close" size={13} /></button>
                       )}
                     </div>
                   ))}
@@ -581,8 +583,10 @@ export default function TodoPage() {
             }}
           >
             <div className="todo-modal-header">
-              <h2>{editMode ? '✏️ Modifica TODO' : '+ Nuovo TODO'}</h2>
-              <button className="todo-modal-close" onClick={closeModal}>✕</button>
+              <h2>{editMode ? 'Modifica TODO' : 'Nuovo TODO'}</h2>
+              <button className="todo-modal-close" onClick={closeModal} aria-label="Chiudi">
+                <AppIcon name="close" />
+              </button>
             </div>
 
             <div className="todo-modal-body">
@@ -612,10 +616,19 @@ export default function TodoPage() {
 
               {/* Allegati nel modal */}
               <div className="todo-form-group">
-                <label className="todo-form-label">📎 Allegati{pendingFiles.length > 0 ? ` (${pendingFiles.length})` : ''}</label>
-                <div className={`todo-modal-dropzone ${dragOver ? 'active' : ''}`}>
-                  <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                    {dragOver ? '📂 Rilascia i file qui' : 'Trascina i file qui oppure'}
+                <label className="todo-form-label"><AppIcon name="paperclip" size={13} />Allegati{pendingFiles.length > 0 ? ` (${pendingFiles.length})` : ''}</label>
+                <div
+                  ref={dropZoneRef}
+                  className={`todo-modal-dropzone ${dragOver ? 'active' : ''}`}
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false);
+                  }}
+                  onDrop={handleModalDrop}
+                >
+                  <span className="inline-detail-row" style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                    <AppIcon name="folder" size={15} />
+                    {dragOver ? 'Rilascia i file qui' : 'Trascina i file qui oppure'}
                   </span>
                   {!dragOver && (
                     <>
@@ -632,7 +645,8 @@ export default function TodoPage() {
                         style={{ width: 'auto', padding: '6px 14px' }}
                         onClick={() => modalFileRef.current?.click()}
                       >
-                        + Seleziona file
+                        <AppIcon name="plus" size={14} />
+                        Seleziona file
                       </button>
                     </>
                   )}
@@ -641,8 +655,10 @@ export default function TodoPage() {
                   <div className="todo-attachment-list" style={{ marginTop: 6 }}>
                     {pendingFiles.map((f, i) => (
                       <div key={i} className="todo-attachment-item">
-                        <span className="todo-attachment-name">📎 {f.name}</span>
-                        <button className="todo-attachment-del" onClick={() => removePendingFile(i)}>✕</button>
+                        <span className="todo-attachment-name"><AppIcon name="paperclip" size={13} />{f.name}</span>
+                        <button className="todo-attachment-del" onClick={() => removePendingFile(i)} aria-label="Rimuovi allegato">
+                          <AppIcon name="close" size={13} />
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -655,7 +671,7 @@ export default function TodoPage() {
               {/* Date */}
               <div className="todo-form-row">
                 <div className="todo-form-group">
-                  <label className="todo-form-label">🔔 Data e Ora notifica</label>
+                  <label className="todo-form-label"><AppIcon name="bell" size={13} />Data e ora notifica</label>
                   <input
                     className="todo-form-input"
                     type="datetime-local"
@@ -673,7 +689,7 @@ export default function TodoPage() {
                   </span>
                 </div>
                 <div className="todo-form-group">
-                  <label className="todo-form-label">📅 Data e Ora scadenza</label>
+                  <label className="todo-form-label"><AppIcon name="calendar" size={13} />Data e ora scadenza</label>
                   <input
                     className="todo-form-input"
                     type="datetime-local"
@@ -694,7 +710,7 @@ export default function TodoPage() {
 
               {/* Email flag */}
               <div className="todo-form-group">
-                <label className="todo-form-label">✉️ Notifiche</label>
+                <label className="todo-form-label"><AppIcon name="mail" size={13} />Notifiche</label>
                 <div className="todo-form-check-row">
                   <input
                     type="checkbox"
@@ -722,7 +738,8 @@ export default function TodoPage() {
               {/* Assegnati */}
               <div className="todo-form-group">
                 <label className="todo-form-label">
-                  👥 Assegnati ({form.assignees.length})
+                  <AppIcon name="users" size={13} />
+                  Assegnati ({form.assignees.length})
                   {form.assignees.length === 0 && (
                     <span style={{ color: '#ef4444', fontWeight: 400, marginLeft: 6 }}>
                       — Nessun assegnato
@@ -745,7 +762,7 @@ export default function TodoPage() {
                         <div style={{ flex: 1 }}>
                           <div className="todo-assignee-name">{u.full_name || u.username}</div>
                           <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                            {isCurrentUser ? '👤 Tu' : u.username}
+                            {isCurrentUser ? 'Tu' : u.username}
                           </div>
                         </div>
                         {isSelected && <span className="todo-assignee-check">✓</span>}

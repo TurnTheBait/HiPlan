@@ -30,15 +30,15 @@ if %BACKEND_RUNNING%==0 (
 )
 
 echo.
-echo [2/4] Controllo e configurazione Profilo Rete (Privata vs Pubblica)...
-echo       Se la rete e' "Pubblica", Windows blocca spesso l'accesso esterno persino con le porte aperte.
-powershell -Command "Get-NetConnectionProfile | Where-Object { $_.NetworkCategory -ne 'Private' } | ForEach-Object { echo '   [ATTENZIONE] Rete pubblica rilevata (' $_.Name '). Conversione in Privata in corso...'; Set-NetConnectionProfile -Name $_.Name -NetworkCategory Private -ErrorAction SilentlyContinue }"
-echo   [OK] Profilo di rete verificato/impostato su PRIVATA.
+echo [2/4] Controllo Profilo Rete (Privata, Dominio o Pubblica)...
+echo       Lo script esegue solo una diagnosi e non modifica il profilo di rete.
+powershell -NoProfile -Command "Get-NetConnectionProfile | ForEach-Object { Write-Output ('   Profilo: ' + $_.Name + ' - Categoria: ' + $_.NetworkCategory) }"
+echo       Se la rete corretta risulta Pubblica, chiedi all'amministratore prima di modificarla.
 
 echo.
 echo [3/4] Verifica regole Firewall di Windows sulle porte 5173 e 8000...
 netsh advfirewall firewall delete rule name="HiPlan Server Ports (5173, 8000)" >nul 2>&1
-netsh advfirewall firewall add rule name="HiPlan Server Ports (5173, 8000)" dir=in action=allow protocol=TCP localport=5173,8000 profile=any edge=yes >nul 2>&1
+netsh advfirewall firewall add rule name="HiPlan Server Ports (5173, 8000)" dir=in action=allow protocol=TCP localport=5173,8000 profile=private,domain >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
     echo   [OK] Regole Firewall di Windows aggiornate con successo.
 ) else (

@@ -80,17 +80,35 @@ npm run dev
 
 L'interfaccia è disponibile su `http://localhost:5173`.
 
+Il frontend richiede Node.js `20.19` o successivo.
+
 > La configurazione Vite corrente non definisce un proxy `/api`: il client frontend contatta il backend usando la configurazione presente in `frontend/src/api/client.js`.
 
 ## Avvio tramite script
 
 Il repository include script dedicati ai diversi sistemi:
 
-- macOS: `./start.sh` oppure `./start_mac_server.sh`
-- Windows: `start_windows.bat`
+- configurazione macOS: `./setup_mac.sh`
+- avvio macOS con log nel terminale: `./start.sh`
+- avvio macOS come server LAN con log nella cartella `logs`: `./start_mac_server.sh`
+- configurazione Windows: `setup_windows.bat`
+- avvio Windows in background: `start_windows.bat`
 - arresto su Windows: `stop_windows.bat`
 
-Prima del primo avvio verificare le variabili del backend partendo da `backend/.env.example`.
+Gli script di avvio lanciano automaticamente il setup se mancano l'ambiente
+Python o i moduli frontend. Il setup usa `npm ci`, verifica Python 3.12+ e
+Node.js 20.19+, crea `backend/.env` se assente e compila il frontend.
+
+I dati dimostrativi non vengono più inseriti automaticamente. Per aggiungerli
+esplicitamente:
+
+```bash
+./setup_mac.sh --seed
+```
+
+Su Windows usare `setup_windows.bat --seed`.
+
+Prima del primo avvio verificare le variabili generate in `backend/.env`.
 
 ## Docker
 

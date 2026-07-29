@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useToast } from '../context/ToastContext';
-import { getTaskColor } from '../utils/phaseColors';
 import { isWeekendOrHoliday } from '../utils/workingDays';
 import TimelineView from '../components/calendar/TimelineView';
+import AppIcon from '../components/ui/AppIcon';
 import './CalendarPage.css';
 
 
@@ -47,7 +47,6 @@ export default function CalendarPage() {
   const [filterWorker, setFilterWorker] = useState('all');
   const [filterDepartment, setFilterDepartment] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedProjects, setExpandedProjects] = useState({});
   const [systemUsers, setSystemUsers] = useState([]);
 
   // Modali dettaglio
@@ -245,18 +244,7 @@ export default function CalendarPage() {
     <div className="calendar-page">
       {/* Intestazione e Toolbar */}
       <div className="calendar-header-toolbar">
-        <div className="calendar-nav-section">
-          <h1 className="calendar-month-title">
-            {MONTH_NAMES_IT[currMonth]} {currYear}
-          </h1>
-          <div className="calendar-nav-buttons">
-            <button className="calendar-nav-btn" onClick={prevMonth} title="Mese precedente">‹ Prec.</button>
-            <button className="calendar-nav-btn today" onClick={goToToday} title="Vai a oggi">Oggi</button>
-            <button className="calendar-nav-btn" onClick={nextMonth} title="Mese successivo">Succ. ›</button>
-          </div>
-        </div>
-
-        <div className="calendar-actions-section">
+        <div className="calendar-search-row">
           <div className="hiway-search-bar" style={{ position: 'relative', display: 'flex', alignItems: 'center', minWidth: 200, flex: '1 1 220px' }}>
             <img
               src="/hiway-icon.png"
@@ -276,12 +264,28 @@ export default function CalendarPage() {
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
+                aria-label="Cancella ricerca"
                 style={{ position: 'absolute', right: 10, background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 13 }}
               >
-                ✕
+                <AppIcon name="close" size={14} />
               </button>
             )}
           </div>
+        </div>
+
+        <div className="calendar-controls-row">
+          <div className="calendar-nav-section">
+            <h1 className="calendar-month-title">
+              {MONTH_NAMES_IT[currMonth]} {currYear}
+            </h1>
+            <div className="calendar-nav-buttons">
+              <button className="calendar-nav-btn" onClick={prevMonth} title="Mese precedente">‹ Prec.</button>
+              <button className="calendar-nav-btn today" onClick={goToToday} title="Vai a oggi">Oggi</button>
+              <button className="calendar-nav-btn" onClick={nextMonth} title="Mese successivo">Succ. ›</button>
+            </div>
+          </div>
+
+          <div className="calendar-actions-section">
 
           <select
             className="input"
@@ -302,10 +306,10 @@ export default function CalendarPage() {
             value={filterDepartment}
             onChange={(e) => setFilterDepartment(e.target.value)}
           >
-            <option value="all">🏢 Tutti i reparti</option>
-            <option value="ufficio_tecnico">🔧 Ufficio Tecnico</option>
-            <option value="produzione">🏭 Produzione</option>
-            <option value="acquisti">🛒 Acquisti</option>
+            <option value="all">Tutti i reparti</option>
+            <option value="ufficio_tecnico">Ufficio Tecnico</option>
+            <option value="produzione">Produzione</option>
+            <option value="acquisti">Acquisti</option>
           </select>
 
           <select
@@ -314,9 +318,9 @@ export default function CalendarPage() {
             value={filterWorker}
             onChange={(e) => setFilterWorker(e.target.value)}
           >
-            <option value="all">👥 Tutti gli utenti</option>
+            <option value="all">Tutti gli utenti</option>
             {allWorkers.map(w => (
-              <option key={w.username} value={w.username}>👤 {w.name}</option>
+              <option key={w.username} value={w.username}>{w.name}</option>
             ))}
           </select>
 
@@ -325,14 +329,17 @@ export default function CalendarPage() {
               className={`calendar-view-btn ${viewMode === 'grid' ? 'active' : ''}`}
               onClick={() => setViewMode('grid')}
             >
-              <span>▦</span> Griglia Mese
+              <AppIcon name="grid" size={15} />
+              Griglia mese
             </button>
             <button
               className={`calendar-view-btn ${viewMode === 'timeline' ? 'active' : ''}`}
               onClick={() => setViewMode('timeline')}
             >
-              <span>▤</span> Timeline
+              <AppIcon name="timeline" size={15} />
+              Timeline
             </button>
+          </div>
           </div>
         </div>
       </div>
@@ -455,7 +462,9 @@ export default function CalendarPage() {
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
             <div className="modal-header">
               <h2>Scheda Commessa</h2>
-              <button className="btn-ghost btn-icon" onClick={() => setSelectedProject(null)}>✕</button>
+              <button className="btn-ghost btn-icon" onClick={() => setSelectedProject(null)} aria-label="Chiudi">
+                <AppIcon name="close" />
+              </button>
             </div>
 
             <div className="calendar-modal-content">
@@ -516,8 +525,9 @@ export default function CalendarPage() {
 
               {/* Box Fasi e Addetti */}
               <div style={{ marginTop: 10, background: 'var(--bg-primary)', padding: 14, borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
-                <span className="calendar-modal-label" style={{ display: 'block', marginBottom: 8, color: 'var(--accent-400)', fontWeight: 700 }}>
-                  📌 Fasi Operative {filterWorker !== 'all' ? `di ${filterWorker}` : `nella Commessa (${selectedProject.tasks?.length || 0})`}
+                <span className="calendar-modal-label inline-detail-row" style={{ marginBottom: 8, color: 'var(--accent-400)', fontWeight: 700 }}>
+                  <AppIcon name="gantt" size={15} />
+                  Fasi Operative {filterWorker !== 'all' ? `di ${filterWorker}` : `nella Commessa (${selectedProject.tasks?.length || 0})`}
                 </span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 180, overflowY: 'auto' }}>
                   {(filterWorker !== 'all' && selectedProject.matchingPhases ? selectedProject.matchingPhases : (selectedProject.tasks || [])).map(t => (
@@ -533,10 +543,13 @@ export default function CalendarPage() {
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: 'var(--text-primary)' }}>
                         <span>↳ {t.text}</span>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>⏱ {t.planned_hours || 8}h</span>
+                        <span className="inline-detail-row" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}><AppIcon name="clock" size={12} />{t.planned_hours || 8}h</span>
                       </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-                        📅 <strong>{t.start_date?.slice(0, 10)}</strong> ➔ <strong>{t.end_date?.slice(0, 10) || 'N/D'}</strong> | 👤 Addetti: <strong>{Array.isArray(t.workers) && t.workers.length > 0 ? t.workers.join(', ') : 'Nessuno'}</strong>
+                      <div className="inline-detail-row" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                        <AppIcon name="calendar" size={12} />
+                        <strong>{t.start_date?.slice(0, 10)}</strong> → <strong>{t.end_date?.slice(0, 10) || 'N/D'}</strong>
+                        <AppIcon name="users" size={12} />
+                        Addetti: <strong>{Array.isArray(t.workers) && t.workers.length > 0 ? t.workers.join(', ') : 'Nessuno'}</strong>
                       </div>
                     </div>
                   ))}
@@ -569,7 +582,9 @@ export default function CalendarPage() {
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
             <div className="modal-header">
               <h2>Commesse attive il {selectedDayProjects.dayNum} {MONTH_NAMES_IT[currMonth]} {currYear}</h2>
-              <button className="btn-ghost btn-icon" onClick={() => setSelectedDayProjects(null)}>✕</button>
+              <button className="btn-ghost btn-icon" onClick={() => setSelectedDayProjects(null)} aria-label="Chiudi">
+                <AppIcon name="close" />
+              </button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '60vh', overflowY: 'auto' }}>

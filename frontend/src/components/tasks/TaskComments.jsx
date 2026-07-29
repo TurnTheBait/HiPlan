@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import AppIcon from '../ui/AppIcon';
 
 export default function TaskComments({ projectId, taskId, currentUser }) {
   const toast = useToast();
@@ -94,10 +95,11 @@ export default function TaskComments({ projectId, taskId, currentUser }) {
                       onClick={() => handleDeleteComment(c.id)}
                       style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, marginLeft: 10, opacity: 0.8 }}
                       title="Elimina commento"
-                      onMouseOver={e => e.target.style.opacity = 1}
-                      onMouseOut={e => e.target.style.opacity = 0.8}
+                      aria-label="Elimina commento"
+                      onMouseOver={e => e.currentTarget.style.opacity = 1}
+                      onMouseOut={e => e.currentTarget.style.opacity = 0.8}
                     >
-                      ✕
+                      <AppIcon name="close" size={12} />
                     </button>
                   )}
                 </div>

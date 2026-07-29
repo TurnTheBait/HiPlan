@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import AppIcon from '../components/ui/AppIcon';
 import './TicketsPage.css';
 
 const BACKEND_URL = import.meta.env.VITE_API_URL
@@ -10,7 +11,6 @@ const BACKEND_URL = import.meta.env.VITE_API_URL
   : `http://${window.location.hostname}:8000`;
 
 /* ─── helpers ─── */
-const PRIORITY_ICON = { low: '🔵', medium: '🟡', high: '🔴' };
 const PRIORITY_LABEL = { low: 'Bassa', medium: 'Media', high: 'Alta' };
 const STATUS_CLASS = {
   'Da gestire': 'da-gestire',
@@ -27,6 +27,12 @@ function fmtDate(dt) {
 function fmtDateTime(dt) {
   if (!dt) return '';
   return new Date(dt).toLocaleString('it-IT', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function cleanActionLabel(value) {
+  const label = String(value || 'Nota interna');
+  const [first, ...rest] = label.split(' ');
+  return /[\p{L}\p{N}]/u.test(first) ? label : rest.join(' ');
 }
 
 const AVATAR_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#e11d48', '#0891b2'];
@@ -88,7 +94,9 @@ function AssigneeInput({ selected, onChange, users }) {
       {selected.map(u => (
         <span key={u} className="assignee-tag">
           {u}
-          <button type="button" onClick={() => remove(u)}>×</button>
+          <button type="button" onClick={() => remove(u)} aria-label={`Rimuovi ${u}`}>
+            <AppIcon name="close" size={11} />
+          </button>
         </span>
       ))}
       <div className="assignee-input-wrap">
@@ -190,7 +198,9 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
       <div className="tickets-modal">
         <div className="tickets-modal-header">
           <h2 className="tickets-modal-title">Nuovo Ticket</h2>
-          <button className="tickets-modal-close" onClick={onClose}>✕</button>
+          <button className="tickets-modal-close" onClick={onClose} aria-label="Chiudi">
+            <AppIcon name="close" />
+          </button>
         </div>
         <form className="tickets-modal-body" onSubmit={handleSubmit}>
           <div className="tkt-field">
@@ -216,7 +226,7 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
               <label>Commessa</label>
               <select value={form.project_id} onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))}>
                 <option value="">— Nessuna —</option>
-                <option value="custom">✏️ Inserimento manuale</option>
+                <option value="custom">Inserimento manuale</option>
                 {projects.filter(p => p.status !== 'archived').map(p => (
                   <option key={p.id} value={p.id}>{p.code ? `${p.code} – ` : ''}{p.client || p.name}</option>
                 ))}
@@ -235,9 +245,9 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
             <div className="tkt-field">
               <label>Priorità</label>
               <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
-                <option value="low">🔵 Bassa</option>
-                <option value="medium">🟡 Media</option>
-                <option value="high">🔴 Alta</option>
+                <option value="low">Bassa</option>
+                <option value="medium">Media</option>
+                <option value="high">Alta</option>
               </select>
             </div>
           </div>
@@ -264,7 +274,8 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
             >
               Trascina qui i file o
               <label className="ticket-upload-label" style={{ display: 'inline-block', marginLeft: 8 }}>
-                📎 Scegli file
+                <AppIcon name="paperclip" size={14} />
+                Scegli file
                 <input ref={fileRef} type="file" multiple style={{ display: 'none' }} onChange={e => setFiles(prev => [...prev, ...Array.from(e.target.files)])} />
               </label>
             </div>
@@ -272,8 +283,10 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
               <div className="ticket-pending-files">
                 {files.map((f, i) => (
                   <span key={i} className="ticket-pending-chip">
-                    📄 {f.name}
-                    <button type="button" onClick={() => setFiles(p => p.filter((_, j) => j !== i))}>×</button>
+                    <AppIcon name="paperclip" size={12} />{f.name}
+                    <button type="button" onClick={() => setFiles(p => p.filter((_, j) => j !== i))} aria-label="Rimuovi file">
+                      <AppIcon name="close" size={11} />
+                    </button>
                   </span>
                 ))}
               </div>
@@ -331,7 +344,9 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
       <div className="tickets-modal">
         <div className="tickets-modal-header">
           <h2 className="tickets-modal-title">Modifica Ticket</h2>
-          <button className="tickets-modal-close" onClick={onClose}>✕</button>
+          <button className="tickets-modal-close" onClick={onClose} aria-label="Chiudi">
+            <AppIcon name="close" />
+          </button>
         </div>
         <form className="tickets-modal-body" onSubmit={handleSubmit}>
           <div className="tkt-field">
@@ -347,7 +362,7 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
               <label>Commessa</label>
               <select value={form.project_id} onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))}>
                 <option value="">— Nessuna —</option>
-                <option value="custom">✏️ Inserimento manuale</option>
+                <option value="custom">Inserimento manuale</option>
                 {projects.filter(p => p.status !== 'archived').map(p => (
                   <option key={p.id} value={p.id}>{p.code ? `${p.code} – ` : ''}{p.client || p.name}</option>
                 ))}
@@ -366,9 +381,9 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
             <div className="tkt-field">
               <label>Priorità</label>
               <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
-                <option value="low">🔵 Bassa</option>
-                <option value="medium">🟡 Media</option>
-                <option value="high">🔴 Alta</option>
+                <option value="low">Bassa</option>
+                <option value="medium">Media</option>
+                <option value="high">Alta</option>
               </select>
             </div>
           </div>
@@ -403,7 +418,8 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
           <div className="tkt-modal-footer">
             <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>Annulla</button>
             <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
-              {saving ? 'Salvataggio...' : '💾 Salva'}
+              {!saving && <AppIcon name="save" size={15} />}
+              {saving ? 'Salvataggio…' : 'Salva'}
             </button>
           </div>
         </form>
@@ -576,15 +592,15 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
             {canEdit && (
               <>
 
-                <button className="btn btn-ghost btn-sm" onClick={() => setShowEdit(true)} title="Modifica" style={{ fontSize: '0.78rem' }}>
-                  ✏️
+                <button className="btn btn-ghost btn-icon" onClick={() => setShowEdit(true)} title="Modifica" aria-label="Modifica ticket">
+                  <AppIcon name="edit" size={16} />
                 </button>
                 <div style={{ position: 'relative' }} ref={exportMenuRef}>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setShowExportMenu(!showExportMenu)} title="Esporta / Analizza" style={{ fontSize: '0.78rem' }}>
-                    📥
+                  <button className="btn btn-ghost btn-icon" onClick={() => setShowExportMenu(!showExportMenu)} title="Esporta o analizza" aria-label="Esporta o analizza ticket">
+                    <AppIcon name="download" size={16} />
                   </button>
                   {showExportMenu && (
-                    <div style={{
+                    <div className="action-popover" style={{
                       position: 'absolute', top: '100%', right: 0, marginTop: 6,
                       background: 'var(--bg-card)', border: '1px solid var(--border-default)',
                       borderRadius: 10, padding: 16, zIndex: 300, minWidth: 260,
@@ -603,7 +619,7 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
                           transition: 'all 0.2s ease'
                         }}>
                           <input type="radio" name="exportFormat" value="pdf" checked={exportFormat === 'pdf'} onChange={() => setExportFormat('pdf')} style={{ display: 'none' }} />
-                          📄 PDF
+                          <AppIcon name="download" size={14} /> PDF
                         </label>
                         <label style={{
                           flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -614,7 +630,7 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
                           transition: 'all 0.2s ease'
                         }}>
                           <input type="radio" name="exportFormat" value="excel" checked={exportFormat === 'excel'} onChange={() => setExportFormat('excel')} style={{ display: 'none' }} />
-                          📊 Excel
+                          <AppIcon name="download" size={14} /> Excel
                         </label>
                       </div>
 
@@ -643,12 +659,13 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
                   )}
                 </div>
                 <button
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-ghost btn-icon"
                   onClick={deleteTicket}
                   title="Elimina"
-                  style={{ fontSize: '0.78rem', color: 'var(--danger)' }}
+                  aria-label="Elimina ticket"
+                  style={{ color: 'var(--danger)' }}
                 >
-                  🗑️
+                  <AppIcon name="trash" size={16} />
                 </button>
               </>
             )}
@@ -674,31 +691,36 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
               ● {ticket.status}
             </span>
           )}
-          <span className={`ticket-priority-badge ${ticket.priority}`}>
-            {PRIORITY_ICON[ticket.priority]} {PRIORITY_LABEL[ticket.priority]}
+            <span className={`ticket-priority-badge ${ticket.priority}`}>
+              <span className={`priority-dot ${ticket.priority}`} />
+              {PRIORITY_LABEL[ticket.priority]}
           </span>
           {ticket.project_id ? (
             <>
               <span style={{ color: 'var(--border-default)' }}>·</span>
               <button className="ticket-detail-project-link" onClick={() => navigate(`/projects/${ticket.project_id}`)}>
-                📂 {ticket.project_code || ticket.project_name}
+                <AppIcon name="folder" size={14} />
+                {ticket.project_code || ticket.project_name}
               </button>
             </>
           ) : ticket.custom_project_code ? (
             <>
               <span style={{ color: 'var(--border-default)' }}>·</span>
               <span className="ticket-detail-meta-item">
-                📂 {ticket.custom_project_code}
+                <AppIcon name="folder" size={14} />
+                {ticket.custom_project_code}
               </span>
             </>
           ) : null}
           <span style={{ color: 'var(--border-default)' }}>·</span>
           <span className="ticket-detail-meta-item">
-            👤 Resp: {ticket.responsible_full_name || ticket.responsible_username || 'Nessuno'}
+            <AppIcon name="user" size={14} />
+            Responsabile: {ticket.responsible_full_name || ticket.responsible_username || 'Nessuno'}
           </span>
           <span style={{ color: 'var(--border-default)' }}>·</span>
           <span className="ticket-detail-meta-item">
-            👥 Addetti: {ticket.assigned_to?.length > 0 ? ticket.assigned_to.join(', ') : 'Tutti'}
+            <AppIcon name="users" size={14} />
+            Addetti: {ticket.assigned_to?.length > 0 ? ticket.assigned_to.join(', ') : 'Tutti'}
           </span>
           <span style={{ color: 'var(--border-default)' }}>·</span>
           <span className="ticket-detail-meta-item">
@@ -727,15 +749,16 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
               {ticketAtts.map((att, i) => (
                 <span key={i} className="ticket-attachment-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, paddingRight: currentUser?.role === 'admin' ? 8 : undefined }}>
                   <a href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
-                    📄 {att.name}
+                    <AppIcon name="paperclip" size={12} />{att.name}
                   </a>
                   {currentUser?.role === 'admin' && (
                     <button
                       onClick={(e) => { e.preventDefault(); deleteTicketAttachment(i); }}
                       style={{ background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: 0, fontSize: '1em', display: 'flex', alignItems: 'center' }}
                       title="Elimina allegato"
+                      aria-label="Elimina allegato"
                     >
-                      ✕
+                      <AppIcon name="close" size={13} />
                     </button>
                   )}
                 </span>
@@ -743,7 +766,8 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
             </div>
             {canEdit && (
               <label className="ticket-upload-label">
-                {uploadingTicket ? '⏳ Upload...' : '📎 Aggiungi allegato'}
+                {!uploadingTicket && <AppIcon name="paperclip" size={14} />}
+                {uploadingTicket ? 'Caricamento…' : 'Aggiungi allegato'}
                 <input ref={ticketFileRef} type="file" multiple style={{ display: 'none' }}
                   onChange={e => { uploadTicketFile(Array.from(e.target.files)); e.target.value = ''; }} />
               </label>
@@ -774,10 +798,12 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
                       <span className="ticket-timeline-date">{fmtDateTime(reply.created_at)}</span>
                     </div>
                     <span className="ticket-timeline-badge">
-                      {reply.action_type || '📝 Nota Interna'}
+                      {cleanActionLabel(reply.action_type)}
                     </span>
                     {canDel && (
-                      <button className="ticket-timeline-delete" onClick={() => deleteReply(reply.id)}>🗑️</button>
+                      <button className="ticket-timeline-delete" onClick={() => deleteReply(reply.id)} aria-label="Elimina risposta">
+                        <AppIcon name="trash" size={14} />
+                      </button>
                     )}
                   </div>
                   <div className="ticket-timeline-body">
@@ -789,15 +815,16 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
                         {ratts.map((att, i) => (
                           <span key={i} className="ticket-attachment-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, paddingRight: currentUser?.role === 'admin' ? 8 : undefined }}>
                             <a href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
-                              📄 {att.name}
+                              <AppIcon name="paperclip" size={12} />{att.name}
                             </a>
                             {currentUser?.role === 'admin' && (
                               <button
                                 onClick={(e) => { e.preventDefault(); deleteReplyAttachment(reply.id, i); }}
                                 style={{ background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: 0, fontSize: '1em', display: 'flex', alignItems: 'center' }}
                                 title="Elimina allegato"
+                                aria-label="Elimina allegato"
                               >
-                                ✕
+                                <AppIcon name="close" size={13} />
                               </button>
                             )}
                           </span>
@@ -815,7 +842,8 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
       {/* Reply input */}
       {isClosed ? (
         <div className="ticket-closed-notice">
-          🔒 Ticket chiuso.{canEdit && ' Puoi riaprirlo per continuare la discussione.'}
+          <AppIcon name="lock" size={15} />
+          Ticket chiuso.{canEdit && ' Puoi riaprirlo per continuare la discussione.'}
         </div>
       ) : (
         <div
@@ -830,7 +858,7 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
               onChange={e => setReplyActionType(e.target.value)}
             >
               {(phases || []).map(p => (
-                <option key={p} value={p}>{p}</option>
+                <option key={p} value={p}>{cleanActionLabel(p)}</option>
               ))}
             </select>
           </div>
@@ -848,8 +876,10 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
             <div className="ticket-pending-files" style={{ paddingLeft: 42 }}>
               {replyFiles.map((f, i) => (
                 <span key={i} className="ticket-pending-chip">
-                  📄 {f.name}
-                  <button type="button" onClick={() => setReplyFiles(p => p.filter((_, j) => j !== i))}>×</button>
+                  <AppIcon name="paperclip" size={12} />{f.name}
+                  <button type="button" onClick={() => setReplyFiles(p => p.filter((_, j) => j !== i))} aria-label="Rimuovi file">
+                    <AppIcon name="close" size={11} />
+                  </button>
                 </span>
               ))}
             </div>
@@ -857,7 +887,7 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
           <div className="ticket-reply-actions">
             <span className="ticket-reply-hint">Ctrl+Invio per inviare</span>
             <label className="ticket-upload-label" style={{ cursor: 'pointer' }}>
-              📎
+              <AppIcon name="paperclip" size={16} />
               <input ref={replyFileRef} type="file" multiple style={{ display: 'none' }}
                 onChange={e => setReplyFiles(p => [...p, ...Array.from(e.target.files)])} />
             </label>
@@ -866,7 +896,8 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
               onClick={sendReply}
               disabled={sending || (!replyText.trim() && replyFiles.length === 0)}
             >
-              {sending ? '⏳' : '✉️ Invia'}
+              {!sending && <AppIcon name="mail" size={15} />}
+              {sending ? 'Invio…' : 'Invia'}
             </button>
           </div>
         </div>
@@ -965,17 +996,6 @@ export default function TicketsPage() {
 
   return (
     <div className="tickets-page-wrapper">
-      {/* Header */}
-      <div className="tickets-page-header">
-        <div>
-          <h1>Gestione Ticket</h1>
-          <p>Segnalazioni, problemi ed eventi legati alle commesse</p>
-        </div>
-        <button className="btn btn-primary" onClick={() => setShowNew(true)}>
-          + Nuovo Ticket
-        </button>
-      </div>
-
       {showNew && (
         <NewTicketModal
           currentUser={user}
@@ -990,37 +1010,44 @@ export default function TicketsPage() {
       <div className="tickets-body">
         {/* Sidebar */}
         <aside className="tickets-sidebar">
+          <button className="btn btn-primary sidebar-create-btn" onClick={() => setShowNew(true)}>
+            <AppIcon name="plus" />
+            Nuovo ticket
+          </button>
           <div className="tickets-sidebar-section-title">Stato</div>
           {[
-            { key: 'open_all', icon: '🔥', label: 'Aperti', count: projectFilteredTickets.filter(t => t.status !== 'Completato').length },
-            { key: 'Da gestire', icon: '⏳', label: 'Da gestire', count: projectFilteredTickets.filter(t => t.status === 'Da gestire').length },
-            { key: 'In attesa del cliente', icon: '📞', label: 'In attesa cliente', count: projectFilteredTickets.filter(t => t.status === 'In attesa del cliente').length },
-            { key: 'In elaborazione', icon: '⚙️', label: 'In elaborazione', count: projectFilteredTickets.filter(t => t.status === 'In elaborazione').length },
-            { key: 'Completato', icon: '✅', label: 'Completato', count: projectFilteredTickets.filter(t => t.status === 'Completato').length },
+            { key: 'open_all', icon: 'ticket', label: 'Aperti', count: projectFilteredTickets.filter(t => t.status !== 'Completato').length },
+            { key: 'Da gestire', icon: 'clock', label: 'Da gestire', count: projectFilteredTickets.filter(t => t.status === 'Da gestire').length },
+            { key: 'In attesa del cliente', icon: 'user', label: 'In attesa cliente', count: projectFilteredTickets.filter(t => t.status === 'In attesa del cliente').length },
+            { key: 'In elaborazione', icon: 'settings', label: 'In elaborazione', count: projectFilteredTickets.filter(t => t.status === 'In elaborazione').length },
+            { key: 'Completato', icon: 'check', label: 'Completato', count: projectFilteredTickets.filter(t => t.status === 'Completato').length },
           ].map(f => (
             <button
               key={f.key}
               className={`tickets-filter-btn ${statusFilter === f.key ? 'active' : ''}`}
               onClick={() => setStatusFilter(f.key)}
             >
-              <span>{f.icon} {f.label}</span>
+              <span className="filter-label"><AppIcon name={f.icon} size={16} />{f.label}</span>
               <span className="tickets-filter-count">{f.count}</span>
             </button>
           ))}
 
           <div className="tickets-sidebar-section-title">Priorità</div>
           {[
-            { key: 'all', icon: '📋', label: 'Tutte', count: baseTickets.length },
-            { key: 'high', icon: '🔴', label: 'Alta', count: highCount },
-            { key: 'medium', icon: '🟡', label: 'Media', count: mediumCount },
-            { key: 'low', icon: '🔵', label: 'Bassa', count: lowCount },
+            { key: 'all', label: 'Tutte', count: baseTickets.length },
+            { key: 'high', label: 'Alta', count: highCount },
+            { key: 'medium', label: 'Media', count: mediumCount },
+            { key: 'low', label: 'Bassa', count: lowCount },
           ].map(f => (
             <button
               key={f.key}
               className={`tickets-filter-btn ${priorityFilter === f.key ? 'active' : ''}`}
               onClick={() => setPriorityFilter(f.key)}
             >
-              <span>{f.icon} {f.label}</span>
+              <span className="filter-label">
+                {f.key === 'all' ? <AppIcon name="list" size={16} /> : <span className={`priority-dot ${f.key}`} />}
+                {f.label}
+              </span>
               {f.count !== null && <span className="tickets-filter-count">{f.count}</span>}
             </button>
           ))}
@@ -1033,36 +1060,40 @@ export default function TicketsPage() {
                 onClick={() => { setProjectFilter('all'); window.history.replaceState({}, ''); }}
               >
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  📂 {projects.find(p => p.id === projectFilter)?.code || 'Commessa'}
+                  <AppIcon name="folder" size={14} />
+                  {projects.find(p => p.id === projectFilter)?.code || 'Commessa'}
                 </span>
-                <span className="tickets-filter-count" style={{ cursor: 'pointer' }}>✖</span>
+                <span className="tickets-filter-count" style={{ cursor: 'pointer' }}><AppIcon name="close" size={12} /></span>
               </button>
             </>
           )}
         </aside>
 
-        {/* Ticket list */}
-        <div className="tickets-list-panel">
-          <div className="tickets-list-header">
-            <h3>{filtered.length} ticket</h3>
-          </div>
-          <div className="tickets-search-wrap">
+        <div className="tickets-workspace">
+          <div className="tickets-main-toolbar">
             <input
               className="tickets-search"
-              placeholder="🔍 Cerca ticket..."
+              placeholder="Cerca ticket..."
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
+            <span className="tickets-results-count">
+              {filtered.length} risultat{filtered.length === 1 ? 'o' : 'i'}
+            </span>
           </div>
-          <div className="tickets-list">
+
+          <div className="tickets-workspace-body">
+            {/* Ticket list */}
+            <div className="tickets-list-panel">
+              <div className="tickets-list">
             {loading ? (
               <div className="tickets-empty">
-                <div className="tickets-empty-icon">⏳</div>
+                <div className="tickets-empty-icon"><AppIcon name="clock" size={24} /></div>
                 <div>Caricamento...</div>
               </div>
             ) : filtered.length === 0 ? (
               <div className="tickets-empty">
-                <div className="tickets-empty-icon">📋</div>
+                <div className="tickets-empty-icon"><AppIcon name="ticket" size={24} /></div>
                 <div>{tickets.length === 0 ? 'Nessun ticket aperto' : 'Nessun risultato'}</div>
                 {tickets.length === 0 && (
                   <button className="btn btn-primary btn-sm" onClick={() => setShowNew(true)}>
@@ -1083,51 +1114,54 @@ export default function TicketsPage() {
                       ● {t.status}
                     </span>
                     <span className={`ticket-priority-badge ${t.priority}`}>
-                      {PRIORITY_ICON[t.priority]} {PRIORITY_LABEL[t.priority]}
+                      <span className={`priority-dot ${t.priority}`} />
+                      {PRIORITY_LABEL[t.priority]}
                     </span>
                   </div>
                   {t.project_id ? (
-                    <div className="ticket-card-project">📂 {t.project_code || t.project_name}</div>
+                    <div className="ticket-card-project"><AppIcon name="folder" size={13} />{t.project_code || t.project_name}</div>
                   ) : t.custom_project_code ? (
-                    <div className="ticket-card-project">📂 {t.custom_project_code}</div>
+                    <div className="ticket-card-project"><AppIcon name="folder" size={13} />{t.custom_project_code}</div>
                   ) : null}
                   <div className="ticket-card-footer">
                     <span className="ticket-card-author">{t.author_full_name || t.author_username}</span>
-                    <span className="ticket-card-replies">💬 {t.reply_count}</span>
+                    <span className="ticket-card-replies"><AppIcon name="message" size={13} />{t.reply_count}</span>
                   </div>
                 </div>
               ))
             )}
+              </div>
+            </div>
+
+            {/* Detail */}
+            {selectedTicket ? (
+              <TicketDetail
+                key={selectedTicket.id}
+                ticket={selectedTicket}
+                currentUser={user}
+                onRefresh={(reset) => refreshTickets(reset === true)}
+                users={users}
+                projects={projects}
+                phases={phases}
+              />
+            ) : (
+              <div className="tickets-detail">
+                <div className="tickets-detail-placeholder">
+                  <div className="tickets-detail-placeholder-icon"><AppIcon name="ticket" size={28} /></div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Seleziona un ticket dalla lista
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                    oppure crea un nuovo ticket
+                  </div>
+                  <button className="btn btn-primary btn-sm" onClick={() => setShowNew(true)}>
+                    + Nuovo Ticket
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Detail */}
-        {selectedTicket ? (
-          <TicketDetail
-            key={selectedTicket.id}
-            ticket={selectedTicket}
-            currentUser={user}
-            onRefresh={(reset) => refreshTickets(reset === true)}
-            users={users}
-            projects={projects}
-            phases={phases}
-          />
-        ) : (
-          <div className="tickets-detail">
-            <div className="tickets-detail-placeholder">
-              <div className="tickets-detail-placeholder-icon">📋</div>
-              <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                Seleziona un ticket dalla lista
-              </div>
-              <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                oppure crea un nuovo ticket
-              </div>
-              <button className="btn btn-primary btn-sm" onClick={() => setShowNew(true)}>
-                + Nuovo Ticket
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

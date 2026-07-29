@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import AppIcon from '../ui/AppIcon';
 
 export default function TaskChecklist({ projectId, taskId }) {
   const toast = useToast();
@@ -95,8 +96,8 @@ export default function TaskChecklist({ projectId, taskId }) {
               <span style={{ flex: 1, textDecoration: item.is_completed ? 'line-through' : 'none', opacity: item.is_completed ? 0.6 : 1 }}>
                 {item.text}
               </span>
-              <button className="btn-ghost btn-icon" onClick={() => deleteItem(item.id)} style={{ color: 'var(--danger)' }}>
-                ✕
+              <button className="btn-ghost btn-icon" onClick={() => deleteItem(item.id)} style={{ color: 'var(--danger)' }} aria-label="Elimina voce">
+                <AppIcon name="trash" size={14} />
               </button>
             </div>
           ))

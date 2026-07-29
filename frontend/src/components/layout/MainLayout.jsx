@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import api from '../../api/client';
@@ -40,11 +40,101 @@ function MonitorIcon() {
   );
 }
 
+function AppIcon({ name, size = 19 }) {
+  const commonProps = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  };
+
+  const icons = {
+    dashboard: (
+      <>
+        <rect x="3" y="3" width="7" height="7" rx="2" />
+        <rect x="14" y="3" width="7" height="7" rx="2" />
+        <rect x="3" y="14" width="7" height="7" rx="2" />
+        <rect x="14" y="14" width="7" height="7" rx="2" />
+      </>
+    ),
+    projects: (
+      <>
+        <path d="M3.5 7.5h6l2-2h9a1.5 1.5 0 0 1 1.5 1.5v11.5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-9a2 2 0 0 1 1.5-2Z" />
+        <path d="M2.5 10h19" />
+      </>
+    ),
+    calendar: (
+      <>
+        <rect x="3" y="5" width="18" height="16" rx="3" />
+        <path d="M8 3v4M16 3v4M3 10h18" />
+        <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" />
+      </>
+    ),
+    notes: (
+      <>
+        <path d="M5 3h11l3 3v15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+        <path d="M15 3v4h4M7.5 11h7M7.5 15h7M7.5 19h4" />
+      </>
+    ),
+    todo: (
+      <>
+        <rect x="3" y="3" width="18" height="18" rx="4" />
+        <path d="m8 12 2.5 2.5L16.5 8" />
+      </>
+    ),
+    users: (
+      <>
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+      </>
+    ),
+    ticket: (
+      <>
+        <path d="M4 5h16a2 2 0 0 1 2 2v3a2.5 2.5 0 0 0 0 5v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2a2.5 2.5 0 0 0 0-5V7a2 2 0 0 1 2-2Z" />
+        <path d="M13 8v8M9 8v8" />
+      </>
+    ),
+    settings: (
+      <>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.63 15 1.7 1.7 0 0 0 3.08 14H3v-4h.09A1.7 1.7 0 0 0 4.64 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.63h.01A1.7 1.7 0 0 0 10 3.08V3h4v.09A1.7 1.7 0 0 0 15 4.64a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.37 9v.01A1.7 1.7 0 0 0 20.92 10H21v4h-.09A1.7 1.7 0 0 0 19.4 15Z" />
+      </>
+    ),
+    bell: (
+      <>
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+        <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+      </>
+    ),
+    menu: <path d="M4 7h16M4 12h16M4 17h16" />,
+    logout: (
+      <>
+        <path d="M10 17l5-5-5-5M15 12H3" />
+        <path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5" />
+      </>
+    ),
+    chevronLeft: <path d="m15 18-6-6 6-6" />,
+    chevronRight: <path d="m9 18 6-6-6-6" />,
+    close: <path d="m6 6 12 12M18 6 6 18" />,
+    check: <path d="m5 12 4 4L19 6" />,
+  };
+
+  return <svg {...commonProps}>{icons[name]}</svg>;
+}
+
 export default function MainLayout() {
   const { user, logout } = useAuth();
   const { theme, cycleTheme } = useTheme();
   const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
+  const location = useLocation();
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('hiplan-sidebar-collapsed') === 'true');
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -110,15 +200,47 @@ export default function MainLayout() {
 
   const themeLabel = theme === 'system' ? 'Sistema' : theme === 'light' ? 'Chiaro' : 'Scuro';
   const ThemeIcon = theme === 'system' ? MonitorIcon : theme === 'light' ? SunIcon : MoonIcon;
+  const showSidebarText = !collapsed || mobileOpen;
+  const layoutPageKey = location.pathname.startsWith('/projects/')
+    ? 'project-detail'
+    : location.pathname.split('/')[1] || 'dashboard';
+  const pageMeta = location.pathname.startsWith('/projects/')
+    ? { title: 'Dettaglio commessa', subtitle: 'Pianificazione, ore e avanzamento' }
+    : {
+      '/dashboard': { title: 'Dashboard', subtitle: 'Il tuo spazio di lavoro' },
+      '/projects': { title: 'Commesse', subtitle: 'Pianificazione e avanzamento' },
+      '/calendar': { title: 'Calendario', subtitle: 'Attività e disponibilità' },
+      '/notes': { title: 'Blocchi Note', subtitle: 'Appunti e documenti condivisi' },
+      '/todo': { title: 'TODO', subtitle: 'Priorità personali e di team' },
+      '/conflicts': { title: 'Panoramica addetti', subtitle: 'Carichi e sovrapposizioni' },
+      '/tickets': { title: 'Ticket', subtitle: 'Richieste e supporto operativo' },
+      '/admin': { title: 'Amministrazione', subtitle: 'Utenti e configurazione' },
+      '/me': { title: 'Il mio profilo', subtitle: 'Profilo, reparto e ferie' },
+    }[location.pathname] || { title: 'HiPlan', subtitle: 'Workspace operativo' };
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  function toggleSidebar() {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem('hiplan-sidebar-collapsed', String(next));
+  }
 
   return (
-    <div className={`app-layout ${collapsed ? 'sidebar-collapsed' : ''}`}>
+    <div className={`app-layout ${collapsed ? 'sidebar-collapsed' : ''} ${mobileOpen ? 'sidebar-mobile-open' : ''}`}>
+      <button
+        className="sidebar-mobile-backdrop"
+        type="button"
+        aria-label="Chiudi menu"
+        onClick={() => setMobileOpen(false)}
+      />
       <aside className="sidebar">
         <div className="sidebar-header">
           <div
             className="sidebar-logo"
             onClick={() => navigate('/dashboard')}
-            style={{ cursor: 'pointer' }}
             title="Torna alla Dashboard"
           >
             <img
@@ -126,134 +248,164 @@ export default function MainLayout() {
               alt="HiWay"
               className="hiway-sidebar-img"
             />
-            {!collapsed && (
-              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
-                <span className="sidebar-logo-text" style={{ fontSize: '1.05rem' }}>HiPlan</span>
-                <span style={{ fontSize: '0.62rem', color: 'var(--sidebar-text)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>for HiWay</span>
+            {showSidebarText && (
+              <div className="sidebar-brand-copy">
+                <span className="sidebar-logo-text">HiPlan</span>
+                <span className="sidebar-logo-caption">for HiWay</span>
               </div>
             )}
           </div>
-          <button className="sidebar-toggle" onClick={() => setCollapsed(!collapsed)} title={collapsed ? 'Espandi' : 'Comprimi'}>
-            {collapsed ? '→' : '←'}
+          <button className="sidebar-toggle" onClick={toggleSidebar} title={collapsed ? 'Espandi' : 'Comprimi'} aria-label={collapsed ? 'Espandi menu' : 'Comprimi menu'}>
+            <AppIcon name={collapsed ? 'chevronRight' : 'chevronLeft'} size={17} />
           </button>
         </div>
 
         <nav className="sidebar-nav">
+          <span className="sidebar-section-label">Workspace</span>
           <NavLink to="/dashboard" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            <span className="sidebar-link-icon">📊</span>
-            {!collapsed && <span>Dashboard</span>}
+            <span className="sidebar-link-icon"><AppIcon name="dashboard" /></span>
+            {showSidebarText && <span>Dashboard</span>}
           </NavLink>
           <NavLink to="/projects" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            <span className="sidebar-link-icon">📂</span>
-            {!collapsed && <span>Commesse</span>}
+            <span className="sidebar-link-icon"><AppIcon name="projects" /></span>
+            {showSidebarText && <span>Commesse</span>}
           </NavLink>
           <NavLink to="/calendar" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            <span className="sidebar-link-icon">📅</span>
-            {!collapsed && <span>Calendario</span>}
+            <span className="sidebar-link-icon"><AppIcon name="calendar" /></span>
+            {showSidebarText && <span>Calendario</span>}
           </NavLink>
+          <span className="sidebar-section-label">Collaborazione</span>
           <NavLink to="/notes" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            <span className="sidebar-link-icon">📝</span>
-            {!collapsed && <span>Blocchi Note</span>}
+            <span className="sidebar-link-icon"><AppIcon name="notes" /></span>
+            {showSidebarText && <span>Blocchi Note</span>}
           </NavLink>
           <NavLink to="/todo" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            <span className="sidebar-link-icon">☑️</span>
-            {!collapsed && <span>TODO</span>}
-          </NavLink>
-          <NavLink to="/conflicts" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            <span className="sidebar-link-icon">👷‍♂️</span>
-            {!collapsed && <span>Panoramica addetti</span>}
+            <span className="sidebar-link-icon"><AppIcon name="todo" /></span>
+            {showSidebarText && <span>TODO</span>}
           </NavLink>
           <NavLink to="/tickets" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            <span className="sidebar-link-icon">🎫</span>
-            {!collapsed && <span>Ticket</span>}
+            <span className="sidebar-link-icon"><AppIcon name="ticket" /></span>
+            {showSidebarText && <span>Ticket</span>}
+          </NavLink>
+          <span className="sidebar-section-label">Controllo</span>
+          <NavLink to="/conflicts" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon"><AppIcon name="users" /></span>
+            {showSidebarText && <span>Panoramica addetti</span>}
           </NavLink>
           {user?.role === 'admin' && (
             <NavLink to="/admin" end className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-              <span className="sidebar-link-icon">⚙️</span>
-              {!collapsed && <span>Admin</span>}
+              <span className="sidebar-link-icon"><AppIcon name="settings" /></span>
+              {showSidebarText && <span>Admin</span>}
             </NavLink>
           )}
         </nav>
 
         <div className="sidebar-footer">
-          <button
-            className="theme-toggle-btn"
-            onClick={() => setShowNotifications(true)}
-            title="Notifiche"
-            style={{ position: 'relative' }}
-          >
-            <div style={{ width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>🔔</div>
-            {!collapsed && <span>Notifiche</span>}
-            {unreadCount > 0 && (
-              <div
-                className="notification-badge"
-                style={{
-                  position: 'absolute',
-                  top: '-4px',
-                  right: collapsed ? '-4px' : '8px',
-                }}
-              >
-                {unreadCount}
-              </div>
-            )}
-          </button>
-
-          <button
-            className="theme-toggle-btn"
-            onClick={cycleTheme}
-            title={`Tema: ${themeLabel}. Clicca per cambiare.`}
-          >
-            <ThemeIcon />
-            {!collapsed && <span>{themeLabel}</span>}
-          </button>
-
-          <div className="sidebar-user" style={{ cursor: 'pointer' }} onClick={() => navigate('/me')} title="Apri il mio profilo">
+          <button className="sidebar-user" type="button" onClick={() => navigate('/me')} title="Apri il mio profilo">
             <div className="sidebar-avatar">{user?.username?.[0]?.toUpperCase() || '?'}</div>
-            {!collapsed && (
+            {showSidebarText && (
               <div className="sidebar-user-info">
                 <span className="sidebar-user-name">{user?.full_name || user?.username}</span>
-                <span className="sidebar-user-role">{user?.role?.toUpperCase()}</span>
+                <span className="sidebar-user-role">{user?.role} · {user?.department?.replace('_', ' ') || 'team'}</span>
               </div>
             )}
-          </div>
+          </button>
 
-          <button className="btn-ghost btn-sm sidebar-logout" onClick={handleLogout} title="Esci">
-            {collapsed ? '❌' : '❌ Esci'}
+          <button className="sidebar-logout" onClick={handleLogout} title="Esci">
+            <AppIcon name="logout" size={18} />
+            {showSidebarText && <span>Esci</span>}
           </button>
         </div>
       </aside>
 
       <main className="main-content">
-        <div className="main-body">
+        <header className="app-topbar">
+          <div className="topbar-page">
+            <button
+              type="button"
+              className="topbar-icon-btn topbar-menu-btn"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Apri menu"
+            >
+              <AppIcon name="menu" size={21} />
+            </button>
+            <div>
+              <h1>{pageMeta.title}</h1>
+              <p>{pageMeta.subtitle}</p>
+            </div>
+          </div>
+          <div className="topbar-actions">
+            <button
+              type="button"
+              className="topbar-icon-btn"
+              onClick={() => setShowNotifications(true)}
+              title="Notifiche"
+              aria-label={`Notifiche${unreadCount > 0 ? `, ${unreadCount} non lette` : ''}`}
+            >
+              <AppIcon name="bell" size={20} />
+              {unreadCount > 0 && <span className="notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
+            </button>
+            <button
+              type="button"
+              className="topbar-theme-btn"
+              onClick={cycleTheme}
+              title={`Tema: ${themeLabel}. Clicca per cambiare.`}
+            >
+              <ThemeIcon />
+              <span>{themeLabel}</span>
+            </button>
+            <button type="button" className="topbar-profile" onClick={() => navigate('/me')} title="Apri il mio profilo">
+              <span className="topbar-avatar">{user?.username?.[0]?.toUpperCase() || '?'}</span>
+              <span className="topbar-profile-copy">
+                <strong>{user?.full_name || user?.username}</strong>
+                <small>{user?.role}</small>
+              </span>
+            </button>
+          </div>
+        </header>
+        <div className={`main-body main-body-${layoutPageKey}`}>
           <Outlet />
         </div>
       </main>
 
       {showNotifications && (
         <div className="modal-overlay" onClick={() => setShowNotifications(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 650, padding: 0, overflow: 'hidden' }}>
-            <div className="modal-header" style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-subtle)' }}>
-              <h2>Notifiche</h2>
-              {notifications.length > 0 && (
+          <div className="modal layout-notification-modal" onClick={e => e.stopPropagation()}>
+            <div className="layout-notification-header">
+              <div>
+                <span>Centro attività</span>
+                <h2>Notifiche</h2>
+              </div>
+              <div className="layout-notification-header-actions">
+                {notifications.length > 0 && (
+                  <button
+                    className="btn btn-ghost btn-sm notification-delete-all"
+                    onClick={deleteAllNotifications}
+                    title="Elimina tutte le notifiche"
+                  >
+                    Elimina tutte
+                  </button>
+                )}
                 <button
-                  className="btn btn-ghost btn-sm notification-delete-all"
-                  onClick={deleteAllNotifications}
-                  title="Elimina tutte le notifiche"
+                  type="button"
+                  className="layout-notification-close"
+                  onClick={() => setShowNotifications(false)}
+                  aria-label="Chiudi notifiche"
                 >
-                  🗑️ Elimina tutte
+                  <AppIcon name="close" size={17} />
                 </button>
-              )}
+              </div>
             </div>
 
-            <div style={{ maxHeight: '60vh', overflowY: 'auto', padding: '20px 24px' }}>
+            <div className="layout-notification-body">
               {notifications.length === 0 ? (
-                <div className="empty-state" style={{ padding: '40px 0' }}>
-                  <div className="empty-state-icon">🔔</div>
+                <div className="empty-state layout-notification-empty">
+                  <div className="empty-state-icon"><AppIcon name="bell" size={22} /></div>
                   <h3>Nessuna notifica</h3>
-                  <p>Tutto tranquillo per ora</p>
+                  <p>Quando ci saranno novità le troverai qui.</p>
                 </div>
               ) : (
-                <div className="notifications-list">
+                <div className="layout-notification-list">
                   {notifications.map((n) => (
                     <div key={n.id} className={`notification-item ${n.is_read ? '' : 'unread'}`}
                       onClick={() => {
@@ -264,46 +416,47 @@ export default function MainLayout() {
                         }
                         setShowNotifications(false);
                       }}
-                      style={{ cursor: n.project_id ? 'pointer' : 'default', padding: '16px', background: 'var(--bg-card)', borderRadius: '12px', border: '1px solid var(--border-subtle)', marginBottom: '12px', display: 'flex', gap: '16px' }}
+                      role={n.project_id ? 'button' : undefined}
+                      tabIndex={n.project_id ? 0 : undefined}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && n.project_id) {
+                          navigate(n.task_id ? `/projects/${n.project_id}?open_task=${n.task_id}` : `/projects/${n.project_id}`);
+                          setShowNotifications(false);
+                        }
+                      }}
                     >
-                      <span className="notification-icon" style={{ fontSize: '1.4rem' }}>
-                        {n.type === 'assignment' ? '👤' : n.type === 'deadline' ? '⏰' : '📝'}
+                      <span className={`notification-type-icon notification-type-${n.type || 'update'}`} aria-hidden="true">
+                        {n.type === 'assignment' ? 'A' : n.type === 'deadline' ? '!' : 'i'}
                       </span>
-                      <div className="notification-content" style={{ flex: 1 }}>
-                        <div className="notification-title" style={{ fontWeight: 600, marginBottom: '4px', fontSize: '0.95rem' }}>{n.title}</div>
-                        <div className="notification-message" style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{n.message}</div>
-                        <div className="notification-time" style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '6px' }}>
+                      <div className="notification-content">
+                        <div className="notification-title">{n.title}</div>
+                        <div className="notification-message">{n.message}</div>
+                        <div className="notification-time">
                           {new Date(n.created_at).toLocaleString('it-IT')}
                         </div>
                       </div>
-                      <div className="notification-actions" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div className="notification-actions">
                         {!n.is_read && (
                           <button
-                            className="btn-icon"
+                            className="notification-action-btn notification-read-btn"
                             title="Segna come letta"
                             onClick={(e) => { e.stopPropagation(); markAsRead(n.id); }}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', opacity: 0.6 }}
                           >
-                            ✅
+                            <AppIcon name="check" size={14} />
                           </button>
                         )}
                         <button
-                          className="btn-icon"
+                          className="notification-action-btn notification-remove-btn"
                           title="Elimina"
                           onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', opacity: 0.6 }}
                         >
-                          🗑️
+                          <AppIcon name="close" size={14} />
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
-
-            <div className="modal-actions" style={{ padding: '16px 24px', borderTop: '1px solid var(--border-subtle)', justifyContent: 'center' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowNotifications(false)}>Chiudi</button>
             </div>
           </div>
         </div>

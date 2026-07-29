@@ -68,9 +68,9 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.config.readonly = Boolean(readOnly);
     gantt.config.date_format = "%Y-%m-%d %H:%i";
     gantt.config.xml_date = "%Y-%m-%d %H:%i";
-    gantt.config.row_height = 38;
-    gantt.config.bar_height = 24;
-    gantt.config.scale_height = 66;
+    gantt.config.row_height = 44;
+    gantt.config.bar_height = 26;
+    gantt.config.scale_height = 64;
     gantt.config.min_column_width = 38;
     gantt.config.fit_tasks = false;
     gantt.config.autosize = false;
@@ -78,8 +78,8 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.config.auto_scheduling = false;
     gantt.config.drag_links = true;
     gantt.config.drag_progress = false;
-    gantt.config.drag_resize = true;
-    gantt.config.drag_move = true;
+    gantt.config.drag_resize = false;
+    gantt.config.drag_move = false;
     gantt.config.open_tree_initially = true;
     gantt.config.order_branch = true;
     gantt.config.show_progress = true;
@@ -396,7 +396,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         name: "text",
         label: "Attività",
         tree: true,
-        width: 210,
+        width: 300,
         resize: true,
         template: function (task) {
           const isCompleted = isTaskCompleted(task);

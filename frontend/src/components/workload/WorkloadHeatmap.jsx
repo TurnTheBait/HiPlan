@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import './WorkloadHeatmap.css';
 import { isWeekendOrHoliday } from '../../utils/workingDays';
 import useDragScroll from '../../hooks/useDragScroll';
+import AppIcon from '../ui/AppIcon';
 
 export default function WorkloadHeatmap() {
   const { user } = useAuth();
@@ -175,7 +176,8 @@ export default function WorkloadHeatmap() {
             title="Centra la tabella sulla data di oggi"
             style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
           >
-            📍 Oggi
+            <AppIcon name="calendar" size={15} />
+            Oggi
           </button>
           <select 
             className="input" 

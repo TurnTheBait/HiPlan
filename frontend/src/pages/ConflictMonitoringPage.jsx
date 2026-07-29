@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useToast } from '../context/ToastContext';
+import AppIcon from '../components/ui/AppIcon';
 import './ConflictMonitoringPage.css';
 
 import WorkloadHeatmap from '../components/workload/WorkloadHeatmap';
@@ -37,23 +38,16 @@ export default function ConflictMonitoringPage() {
 
   return (
     <div className="conflicts-page animate-fadeIn">
-      <div className="projects-header">
-        <div>
-          <h1>Panoramica Addetti</h1>
-          <p>Verifica le ore di lavoro e le sovrapposizioni degli addetti sulle varie fasi</p>
-        </div>
-      </div>
-
       <WorkloadHeatmap />
 
-      <div style={{ marginTop: '32px', marginBottom: '16px' }}>
+      <div className="section-heading">
         <h2>Conflitti</h2>
         <p style={{ color: 'var(--text-secondary)' }}>Dettaglio delle sovrapposizioni critiche di pianificazione sulle fasi.</p>
       </div>
 
       {conflicts.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon">✅</div>
+          <div className="empty-state-icon"><AppIcon name="check" size={24} /></div>
           <h3>Nessuna Sovrapposizione Trovata</h3>
           <p>Tutti gli addetti hanno una schedulazione pulita a partire da oggi.</p>
         </div>
@@ -62,8 +56,8 @@ export default function ConflictMonitoringPage() {
           {conflicts.map((c, idx) => (
             <div key={idx} className="conflict-card card">
               <div className="conflict-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <h3 style={{ margin: 0, color: 'var(--accent-400)' }}>👷‍♂️ {c.worker}</h3>
-                <span className="badge badge-high" style={{ fontSize: '0.85rem' }}>📅 {formatDate(c.date)}</span>
+                <h3 style={{ margin: 0, color: 'var(--accent-400)' }}><AppIcon name="user" />{c.worker}</h3>
+                <span className="badge badge-high" style={{ fontSize: '0.85rem' }}><AppIcon name="calendar" size={14} />{formatDate(c.date)}</span>
               </div>
               <p className="conflict-desc" style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
                 Ore totali stimate: <strong>{c.total_hours}h</strong> (limite 8h superato) distribuite su <strong>{c.tasks.length}</strong> fasi:

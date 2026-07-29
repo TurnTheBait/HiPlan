@@ -1,59 +1,104 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Spostati nella cartella del progetto
-cd "$(dirname "$0")" || exit
+set -Eeuo pipefail
 
-# Rileva automaticamente l'indirizzo IP locale del Mac (Wi-Fi o Ethernet)
-MAC_IP=$(ipconfig getifaddr en0 2>/dev/null)
-if [ -z "$MAC_IP" ]; then
-    MAC_IP=$(ipconfig getifaddr en1 2>/dev/null)
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BACKEND_DIR="$ROOT_DIR/backend"
+FRONTEND_DIR="$ROOT_DIR/frontend"
+LOG_DIR="$ROOT_DIR/logs"
+BACKEND_PID=""
+FRONTEND_PID=""
+
+# Evita che la variabile generica DEBUG della shell sovrascriva backend/.env.
+unset DEBUG
+
+local_ip() {
+  local interface_name=""
+  interface_name="$(route get default 2>/dev/null | awk '/interface:/{print $2; exit}')" || true
+  if [[ -n "$interface_name" ]]; then
+    ipconfig getifaddr "$interface_name" 2>/dev/null || true
+  fi
+}
+
+port_is_busy() {
+  lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+}
+
+cleanup() {
+  trap - EXIT INT TERM
+  echo
+  echo "[STOP] Arresto dei servizi HiPlan..."
+  [[ -n "$FRONTEND_PID" ]] && kill "$FRONTEND_PID" 2>/dev/null || true
+  [[ -n "$BACKEND_PID" ]] && kill "$BACKEND_PID" 2>/dev/null || true
+  [[ -n "$FRONTEND_PID" ]] && wait "$FRONTEND_PID" 2>/dev/null || true
+  [[ -n "$BACKEND_PID" ]] && wait "$BACKEND_PID" 2>/dev/null || true
+}
+
+cd "$ROOT_DIR"
+
+if [[ ! -x "$BACKEND_DIR/venv/bin/python" || ! -d "$FRONTEND_DIR/node_modules" ]]; then
+  echo "[INFO] Installazione incompleta: avvio della configurazione iniziale."
+  bash "$ROOT_DIR/setup_mac.sh"
 fi
-if [ -z "$MAC_IP" ]; then
-    MAC_IP=$(ipconfig getifaddr en2 2>/dev/null)
+
+if port_is_busy 8000 || port_is_busy 5173; then
+  echo "[ERRORE] Le porte 8000 o 5173 sono gia' occupate."
+  echo "Arresta la precedente istanza di HiPlan e riprova."
+  exit 1
 fi
-if [ -z "$MAC_IP" ]; then
-    MAC_IP="IP_NON_TROVATO"
-fi
 
-echo "=================================================================="
-echo "    🚀 AVVIO DI HIPLAN CON IL TUO MAC COME SERVER AZIENDALE"
-echo "=================================================================="
-echo "📡 IP rilevato di questo Mac: $MAC_IP"
-echo ""
+mkdir -p "$LOG_DIR"
+trap cleanup EXIT INT TERM
 
-mkdir -p logs
-
-echo "Avvio Backend API (porta 8000 in ascolto su tutta la LAN)..."
-cd backend
-source venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level error > ../logs/backend_app.log 2>&1 &
+echo "[1/2] Avvio backend API in background..."
+(
+  cd "$BACKEND_DIR"
+  exec "$BACKEND_DIR/venv/bin/python" -m uvicorn app.main:app \
+    --host 0.0.0.0 --port 8000 --log-level info
+) >"$LOG_DIR/backend_app.log" 2>&1 &
 BACKEND_PID=$!
 
-echo "Avvio Frontend Web (porta 5173 in ascolto su tutta la LAN)..."
-cd ../frontend
-npm --silent run dev -- --host 0.0.0.0 --logLevel error > ../logs/frontend_app.log 2>&1 &
+echo "[2/2] Avvio frontend in background..."
+(
+  cd "$FRONTEND_DIR"
+  exec npm --silent run dev -- --host 0.0.0.0 --port 5173 --strictPort --logLevel error
+) >"$LOG_DIR/frontend_app.log" 2>&1 &
 FRONTEND_PID=$!
 
-echo "⏳ Inizializzazione server..."
-sleep 3
+READY=0
+for _ in {1..30}; do
+  if curl -fsS "http://localhost:8000/api/health" >/dev/null 2>&1 &&
+     curl -fsS "http://localhost:5173" >/dev/null 2>&1; then
+    READY=1
+    break
+  fi
+  if ! kill -0 "$BACKEND_PID" 2>/dev/null || ! kill -0 "$FRONTEND_PID" 2>/dev/null; then
+    break
+  fi
+  sleep 1
+done
+
+if [[ "$READY" -ne 1 ]]; then
+  echo "[ERRORE] I servizi non sono diventati disponibili."
+  echo "Controlla $LOG_DIR/backend_app.log e $LOG_DIR/frontend_app.log."
+  exit 1
+fi
+
+MAC_IP="$(local_ip)"
 open "http://localhost:5173"
 
-echo ""
+echo
 echo "=================================================================="
-echo "✅ SERVER ATTIVO! ORA TUTTI IN UFFICIO POSSONO COLLEGARSENI:"
-echo ""
-echo "💻 Direttamente da questo Mac:"
-echo "   👉 http://localhost:5173"
-echo ""
-if [ "$MAC_IP" != "IP_NON_TROVATO" ]; then
-    echo "🌐 Da TUTTI I PC Windows o Mac dell'ufficio (nella stessa rete):"
-    echo "   👉 http://${MAC_IP}:5173"
+echo "  Server HiPlan attivo"
+echo "  Questo Mac: http://localhost:5173"
+if [[ -n "$MAC_IP" ]]; then
+  echo "  Rete aziendale: http://${MAC_IP}:5173"
 else
-    echo "🌐 Da TUTTI I PC Windows o Mac dell'ufficio:"
-    echo "   👉 http://<INSERISCI_IP_DEL_MAC>:5173 (Controlla il tuo IP in Impostazioni Rete)"
+  echo "  Rete aziendale: http://<IP-DEL-MAC>:5173"
 fi
+echo "  Log backend:  $LOG_DIR/backend_app.log"
+echo "  Log frontend: $LOG_DIR/frontend_app.log"
+echo "  Premi CTRL+C per arrestare i servizi."
 echo "=================================================================="
-echo "Premere CTRL+C in questo terminale per arrestare il server."
 
-trap "echo '🛑 Chiusura dei server in corso...'; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit" SIGINT SIGTERM
-wait
+wait "$BACKEND_PID" "$FRONTEND_PID"

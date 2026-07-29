@@ -10,9 +10,9 @@
   bottom: 0;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  border: 1px solid var(--border-default);
-  background: var(--bg-secondary);
-  box-shadow: var(--shadow-md);
+  border: 1px solid var(--timeline-grid);
+  background: var(--timeline-row-bg);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Override generale tema DHTMLX Gantt */
@@ -27,7 +27,7 @@
 .gantt_grid,
 .gantt_task,
 .gantt_data_area {
-  background: var(--bg-secondary) !important;
+  background: var(--timeline-row-bg) !important;
 }
 
 /* ==========================================
@@ -38,13 +38,13 @@
 .gantt_scale_line,
 .gantt_scale_row,
 .gantt_scale_cell {
-  background: var(--bg-tertiary) !important;
+  background: var(--timeline-header-bg) !important;
   color: var(--text-secondary) !important;
-  font-size: 0.78rem !important;
-  font-weight: 600 !important;
-  letter-spacing: 0.03em !important;
-  border-bottom: 1px solid var(--border-default) !important;
-  border-right: 1px solid var(--border-subtle) !important;
+  font-size: 0.65rem !important;
+  font-weight: 750 !important;
+  letter-spacing: 0.02em !important;
+  border-bottom: 1px solid var(--timeline-grid) !important;
+  border-right: 1px solid var(--timeline-grid) !important;
 }
 
 .gantt_grid_head_cell {
@@ -60,17 +60,17 @@
    ========================================== */
 .gantt_row,
 .gantt_grid_data .gantt_cell {
-  background: var(--bg-secondary) !important;
+  background: var(--timeline-row-bg) !important;
   color: var(--text-primary) !important;
-  font-size: 0.85rem !important;
-  border-bottom: 1px solid var(--border-subtle) !important;
-  border-right: 1px solid var(--border-subtle) !important;
-  line-height: 38px !important;
+  font-size: 0.72rem !important;
+  border-bottom: 1px solid var(--timeline-grid) !important;
+  border-right: 1px solid var(--timeline-grid) !important;
+  line-height: 44px !important;
 }
 
 .gantt_row.odd,
 .gantt_row.odd .gantt_cell {
-  background: var(--bg-tertiary) !important;
+  background: var(--timeline-row-alt) !important;
 }
 
 .gantt_row:hover,
@@ -113,12 +113,12 @@
    ========================================== */
 .gantt_task_row,
 .gantt_task_bg {
-  background: var(--bg-secondary) !important;
-  border-bottom: 1px solid var(--border-subtle) !important;
+  background: var(--timeline-row-bg) !important;
+  border-bottom: 1px solid var(--timeline-grid) !important;
 }
 
 .gantt_task_row.odd {
-  background: var(--bg-tertiary) !important;
+  background: var(--timeline-row-alt) !important;
 }
 
 .gantt_task_row:hover,
@@ -133,7 +133,7 @@
 
 /* Celle verticali nella timeline dei giorni */
 .gantt_task_cell {
-  border-right: 1px solid var(--border-subtle) !important;
+  border-right: 1px solid var(--timeline-grid) !important;
   background: transparent !important;
 }
 
@@ -141,30 +141,30 @@
    BARRE DELLE ATTIVITÀ — PILL STYLE
    ========================================== */
 .gantt_task_line {
-  border-radius: 20px !important;
-  border: none !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(20, 32, 51, 0.16) !important;
+  box-shadow: var(--timeline-bar-shadow) !important;
   height: 26px !important;
   line-height: 26px !important;
-  background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(0, 0, 0, 0.15) 100%) !important;
+  background-image: linear-gradient(105deg, rgba(255, 255, 255, 0.16), transparent 46%, rgba(0, 0, 0, 0.09)) !important;
   transition: transform 0.15s ease, box-shadow 0.15s ease !important;
 }
 
 .gantt_task_line:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25) !important;
+  box-shadow: var(--timeline-bar-shadow-hover) !important;
 }
 
 .gantt_task_line .gantt_task_progress {
-  border-radius: 20px !important;
+  border-radius: 8px 0 0 8px !important;
   background: rgba(255, 255, 255, 0.28) !important;
 }
 
 .gantt_task_line .gantt_task_content {
-  font-size: 0.78rem !important;
+  font-size: 0.66rem !important;
   font-weight: 700 !important;
   color: #ffffff !important;
-  padding: 0 14px !important;
+  padding: 0 10px !important;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
@@ -233,7 +233,7 @@
 /* Splitter */
 .gantt_cell.gantt_last_cell,
 .gantt_grid_head_cell.gantt_last_cell {
-  border-right: 1px solid var(--border-default) !important;
+  border-right: 1px solid var(--timeline-grid) !important;
 }
 
 /* Scrollbar */
@@ -338,43 +338,46 @@
 
 /* Evidenziazione colonna/cella del giorno/settimana/mese/trimestre di oggi nella timeline (solo sfondo, senza linea blu verticale) */
 .gantt_today_cell {
-  background-color: rgba(59, 130, 246, 0.12) !important;
+  background-color: var(--timeline-today-bg) !important;
+  box-shadow: inset 3px 0 0 var(--timeline-today-line) !important;
 }
 
 /* Evidenziazione nell'intestazione della scala temporale per oggi/settimana/mese/trimestre corrente (solo sfondo e testo evidenziato) */
 .gantt_today_scale_cell {
-  background-color: rgba(59, 130, 246, 0.25) !important;
-  color: var(--accent-400, #60a5fa) !important;
+  background-color: var(--timeline-today-header) !important;
+  color: var(--accent-700) !important;
   font-weight: 800 !important;
+  box-shadow: inset 3px 0 0 var(--timeline-today-line) !important;
 }
 
 /* Evidenziazione nell'intestazione della scala temporale per sabato, domenica e festivi */
 .gantt_weekend_scale_cell {
-  background-color: rgba(239, 68, 68, 0.16) !important;
-  color: #ef4444 !important;
+  background-color: var(--danger-bg) !important;
+  color: var(--danger) !important;
   font-weight: 700 !important;
 }
 
 .gantt_weekend_scale_cell.gantt_today_scale_cell {
-  background-color: rgba(168, 85, 247, 0.25) !important;
-  color: #c084fc !important;
+  background-color: color-mix(in srgb, var(--timeline-today-header) 62%, var(--danger-bg)) !important;
+  color: var(--accent-700) !important;
 }
 
 /* Evidenziazione colonna nella timeline per sabato, domenica e festivi (pattern rigato e leggero tint) */
 .gantt_weekend_cell {
   background: repeating-linear-gradient(-45deg,
-      rgba(239, 68, 68, 0.025),
-      rgba(239, 68, 68, 0.025) 6px,
-      rgba(239, 68, 68, 0.075) 6px,
-      rgba(239, 68, 68, 0.075) 12px) !important;
+      var(--timeline-weekend-bg),
+      var(--timeline-weekend-bg) 6px,
+      var(--timeline-weekend-stripe) 6px,
+      var(--timeline-weekend-stripe) 12px) !important;
 }
 
 .gantt_weekend_cell.gantt_today_cell {
   background: repeating-linear-gradient(-45deg,
-      rgba(59, 130, 246, 0.12),
-      rgba(59, 130, 246, 0.12) 6px,
-      rgba(168, 85, 247, 0.18) 6px,
-      rgba(168, 85, 247, 0.18) 12px) !important;
+      var(--timeline-today-bg),
+      var(--timeline-today-bg) 6px,
+      var(--timeline-weekend-stripe) 6px,
+      var(--timeline-weekend-stripe) 12px) !important;
+  box-shadow: inset 3px 0 0 var(--timeline-today-line) !important;
 }
 
 /* Allineamento al centro per le celle dell'header con scale multiple */
@@ -387,11 +390,11 @@
 
 /* Dark mode enhanced shadows for bars */
 [data-theme="dark"] .gantt_task_line {
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4) !important;
+  box-shadow: var(--timeline-bar-shadow) !important;
 }
 
 [data-theme="dark"] .gantt_task_line:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
+  box-shadow: var(--timeline-bar-shadow-hover) !important;
 }
 
 /* Nascondere la barra/icona blu o diamante di default nella timeline del Gantt quando una fase è di tipo Evento/Milestone, lasciando solo la linea verticale e la sua etichetta */
@@ -453,7 +456,7 @@
 .gantt_grid_data .gantt_row.gantt-row-completed,
 .gantt_task_bg .gantt_task_row.gantt-row-completed,
 .gantt_row.gantt-row-completed {
-  background-color: rgba(16, 185, 129, 0.18) !important;
+  background-color: var(--timeline-completed-row) !important;
   transition: background-color 0.2s ease;
 }
 

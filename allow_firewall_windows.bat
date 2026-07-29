@@ -1,35 +1,38 @@
 @echo off
+setlocal EnableExtensions
 title HiPlan - Sblocco Porte Firewall Windows
 echo ========================================================
-echo        APERTURA E SBLOCCO PORTE FIREWALL WINDOWS
+echo        CONFIGURAZIONE FIREWALL WINDOWS PER HIPLAN
 echo ========================================================
 echo.
-echo [1/2] Rimozione di eventuali blocchi precedenti sulle porte 5173 e 8000...
+
+net session >nul 2>&1
+if errorlevel 1 (
+    echo [ERRORE] Sono richiesti i privilegi di amministratore.
+    echo Fai clic destro su questo file e scegli "Esegui come amministratore".
+    echo.
+    pause
+    exit /b 1
+)
+
+echo [1/2] Rimozione della precedente regola HiPlan...
 netsh advfirewall firewall delete rule name="HiPlan Server Ports (5173, 8000)" >nul 2>&1
-netsh advfirewall firewall delete rule name=all protocol=TCP localport=5173 >nul 2>&1
-netsh advfirewall firewall delete rule name=all protocol=TCP localport=8000 >nul 2>&1
 
 echo.
-echo [2/2] Aggiunta regola di sblocco totale per le porte 5173 e 8000...
-netsh advfirewall firewall add rule name="HiPlan Server Ports (5173, 8000)" dir=in action=allow protocol=TCP localport=5173,8000 profile=any edge=yes
+echo [2/2] Apertura porte 5173 e 8000 sui profili Privato e Dominio...
+netsh advfirewall firewall add rule name="HiPlan Server Ports (5173, 8000)" dir=in action=allow protocol=TCP localport=5173,8000 profile=private,domain
 
-if %ERRORLEVEL% NEQ 0 (
+if errorlevel 1 (
     echo.
-    echo =======================================================================
-    echo [ERRORE] PRIVILEGI DI AMMINISTRATORE RICHIESTI!
-    echo.
-    echo Per favore, chiudi questa finestra, fai CLIC DESTRO su questo file:
-    echo            allow_firewall_windows.bat
-    echo e seleziona "ESEGUI COME AMMINISTRATORE".
-    echo =======================================================================
-    echo.
+    echo [ERRORE] Impossibile creare la regola firewall.
+    pause
+    exit /b 1
 ) else (
     echo.
-    echo =======================================================================
-    echo ✅ PORTE 5173 E 8000 SBLOCCATE CON SUCCESSO SU TUTTI I PROFILI!
-    echo =======================================================================
-    echo Ora l'applicazione e' perfettamente accessibile dal Mac e da tutti i PC
-    echo della rete digitando nel browser: http://[IP_ADDRESS]
-    echo.
+    echo ========================================================
+    echo   FIREWALL CONFIGURATO
+    echo   Accesso LAN: http://IP-DEL-SERVER:5173
+    echo ========================================================
 )
 pause
+exit /b 0

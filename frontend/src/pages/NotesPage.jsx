@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import AppIcon from '../components/ui/AppIcon';
 import './NotesPage.css';
 
 const BACKEND_URL = import.meta.env.VITE_API_URL
@@ -422,7 +423,7 @@ export default function NotesPage() {
       <aside className="notes-sidebar">
         <div className="notes-sidebar-top">
           <div className="notes-sidebar-title">
-            <span>📋 Blocchi Note</span>
+            <span>Le tue note</span>
           </div>
           <button
             className="btn btn-primary btn-sm"
@@ -431,9 +432,9 @@ export default function NotesPage() {
               setNewIsShared(false);
               setShowNewModal(true);
             }}
-            style={{ borderRadius: '20px', padding: '6px 12px', fontWeight: 600 }}
           >
-            + Nuova
+            <AppIcon name="plus" size={15} />
+            Nuova
           </button>
         </div>
 
@@ -458,9 +459,10 @@ export default function NotesPage() {
             <button
               type="button"
               onClick={() => setSearchQuery('')}
+              aria-label="Cancella ricerca"
               style={{ position: 'absolute', right: 12, background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 13 }}
             >
-              ✕
+              <AppIcon name="close" size={14} />
             </button>
           )}
         </div>
@@ -477,13 +479,15 @@ export default function NotesPage() {
             className={`notes-tab-btn ${activeTab === 'private' ? 'active' : ''}`}
             onClick={() => setActiveTab('private')}
           >
-            🔒 Private
+            <AppIcon name="lock" size={14} />
+            Private
           </button>
           <button
             className={`notes-tab-btn ${activeTab === 'shared' ? 'active' : ''}`}
             onClick={() => setActiveTab('shared')}
           >
-            👥 Condivise
+            <AppIcon name="users" size={14} />
+            Condivise
           </button>
         </div>
 
@@ -506,14 +510,15 @@ export default function NotesPage() {
                   <div className="note-card-header">
                     <span className="note-card-title">{note.title || 'Senza Titolo'}</span>
                     <span className={`note-visibility-badge ${note.is_shared ? 'badge-shared' : 'badge-private'}`}>
-                      {note.is_shared ? '👥 Condiviso' : '🔒 Privato'}
+                      <AppIcon name={note.is_shared ? 'users' : 'lock'} size={12} />
+                      {note.is_shared ? 'Condiviso' : 'Privato'}
                     </span>
                   </div>
                   <div className="note-card-snippet">
                     {getCleanSnippet(note.content)}
                   </div>
                   <div className="note-card-meta">
-                    <span>👤 {note.owner?.full_name || note.owner?.username || (isMine ? 'Tu' : 'Utente')}</span>
+                    <span className="note-meta-owner"><AppIcon name="user" size={12} />{note.owner?.full_name || note.owner?.username || (isMine ? 'Tu' : 'Utente')}</span>
                     <span>{formatRelativeDate(note.updated_at || note.created_at)}</span>
                   </div>
                 </div>
@@ -527,7 +532,7 @@ export default function NotesPage() {
       <main className="notes-editor-container">
         {!activeNote ? (
           <div className="notes-empty-selection">
-            <span style={{ fontSize: '3rem', marginBottom: '16px' }}>📝</span>
+            <span className="empty-state-icon"><AppIcon name="notes" size={28} /></span>
             <h3 style={{ fontSize: '1.25rem', color: 'var(--text-primary)', marginBottom: '8px' }}>Seleziona o crea un blocco note</h3>
             <p style={{ maxWidth: 400, marginBottom: '24px', lineHeight: 1.5 }}>
               Scrivi appunti, specifiche di commessa o check-list con formattazione visuale in stile Notion. Puoi decidere in qualsiasi momento se mantenere il file privato o condividerlo con il resto del team.
@@ -540,7 +545,8 @@ export default function NotesPage() {
                 setShowNewModal(true);
               }}
             >
-              + Crea il primo Blocco Note
+              <AppIcon name="plus" />
+              Crea il primo blocco note
             </button>
           </div>
         ) : (
@@ -554,8 +560,8 @@ export default function NotesPage() {
                 <span>
                   Autore: <strong>{activeNote.owner?.full_name || activeNote.owner?.username || (activeNote.owner_id === user?.id ? 'Tu' : 'Utente')}</strong>
                 </span>
-                {saving && <span style={{ color: '#38bdf8', fontSize: '0.75rem', marginLeft: 12 }}>⏳ Salvataggio...</span>}
-                {!saving && lastSaved && <span style={{ color: '#34d399', fontSize: '0.75rem', marginLeft: 12 }}>✓ Salvato {lastSaved.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>}
+                {saving && <span className="note-save-state">Salvataggio…</span>}
+                {!saving && lastSaved && <span className="note-save-state saved"><AppIcon name="check" size={13} />Salvato {lastSaved.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>}
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -572,8 +578,9 @@ export default function NotesPage() {
                     title={activeNote.owner_id === user?.id ? "Clicca per modificare la visibilità del blocco note" : "Solo l'autore può modificare la visibilità"}
                     style={{ cursor: activeNote.owner_id === user?.id ? 'pointer' : 'default', opacity: activeNote.owner_id === user?.id ? 1 : 0.8 }}
                   >
-                    {isShared ? '👥 Condiviso' : '🔒 Privato'}
-                    {activeNote.owner_id === user?.id && ' ▼'}
+                    <AppIcon name={isShared ? 'users' : 'lock'} size={14} />
+                    {isShared ? 'Condiviso' : 'Privato'}
+                    {activeNote.owner_id === user?.id && <AppIcon name="chevronDown" size={12} />}
                   </button>
 
                   {showVisibilityMenu && activeNote.owner_id === user?.id && (
@@ -585,7 +592,7 @@ export default function NotesPage() {
                         className={`visibility-option ${!isShared ? 'selected' : ''}`}
                         onClick={() => handleToggleVisibility(false)}
                       >
-                        <span style={{ fontSize: '1.2rem' }}>🔒</span>
+                        <AppIcon name="lock" size={18} />
                         <div>
                           <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>File Privato</div>
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Visibile solo al tuo account personale</div>
@@ -596,7 +603,7 @@ export default function NotesPage() {
                         onClick={() => handleToggleVisibility(true)}
                         style={{ marginTop: 6 }}
                       >
-                        <span style={{ fontSize: '1.2rem' }}>👥</span>
+                        <AppIcon name="users" size={18} />
                         <div>
                           <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>In Condivisione</div>
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Accessibile in lettura/modifica a tutto il team</div>
@@ -614,7 +621,8 @@ export default function NotesPage() {
                   style={{ color: '#f87171' }}
                   title="Elimina nota"
                 >
-                  🗑️ Elimina
+                  <AppIcon name="trash" size={15} />
+                  Elimina
                 </button>
               </div>
             </div>
@@ -629,7 +637,7 @@ export default function NotesPage() {
                 <button type="button" className="format-btn" onClick={() => applyFormatting('bold')} title="Grassetto"><strong>B</strong> Grassetto</button>
                 <button type="button" className="format-btn" onClick={() => applyFormatting('italic')} title="Corsivo"><em>I</em> Corsivo</button>
                 <button type="button" className="format-btn" onClick={() => applyFormatting('bullet')} title="Elenco puntato">• Elenco</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('todo')} title="Check-list interattiva">☑ Check-list [ ]</button>
+                <button type="button" className="format-btn" onClick={() => applyFormatting('todo')} title="Check-list interattiva"><AppIcon name="check" size={14} /> Check-list [ ]</button>
                 <button type="button" className="format-btn" onClick={() => applyFormatting('quote')} title="Citazione">❝ Citazione</button>
                 <button type="button" className="format-btn" onClick={() => applyFormatting('code')} title="Blocco Codice">⟨/⟩ Codice</button>
               </div>
@@ -686,15 +694,16 @@ export default function NotesPage() {
                           padding: '4px 12px', background: 'var(--bg-secondary)', 
                           border: '1px solid var(--border-subtle)', borderRadius: 16, fontSize: 13 
                         }}>
-                          <a href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-500)', textDecoration: 'none' }}>
-                            📎 {att.name}
+                          <a className="inline-detail-row" href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-500)', textDecoration: 'none' }}>
+                            <AppIcon name="paperclip" size={13} />{att.name}
                           </a>
                           <button 
                             onClick={() => handleDeleteAttachment(att.name)}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: 0, fontSize: 14 }}
                             title="Elimina allegato"
+                            aria-label="Elimina allegato"
                           >
-                            ×
+                            <AppIcon name="close" size={13} />
                           </button>
                         </div>
                       ))}
@@ -717,15 +726,15 @@ export default function NotesPage() {
           <div className="note-modal-box" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                ▤ Nuovo Blocco Note
+                Nuovo blocco note
               </h3>
               <button
                 type="button"
-                className="btn-ghost"
+                className="btn-ghost btn-icon"
                 onClick={() => setShowNewModal(false)}
-                style={{ fontSize: '1.2rem', padding: '4px 8px' }}
+                aria-label="Chiudi"
               >
-                ✕
+                <AppIcon name="close" />
               </button>
             </div>
 
@@ -766,7 +775,7 @@ export default function NotesPage() {
                       style={{ marginTop: 3 }}
                     />
                     <div>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>🔒 File Privato</div>
+                      <div className="inline-heading" style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}><AppIcon name="lock" size={15} />File privato</div>
                       <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: 2 }}>
                         Visibile solo a te. Potrai comunque renderlo condiviso in qualsiasi momento una volta aperto.
                       </div>
@@ -793,7 +802,7 @@ export default function NotesPage() {
                       style={{ marginTop: 3 }}
                     />
                     <div>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>👥 In Condivisione con il Team</div>
+                      <div className="inline-heading" style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}><AppIcon name="users" size={15} />Condiviso con il team</div>
                       <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: 2 }}>
                         Accessibile a tutto il personale per la consultazione e la collaborazione comune.
                       </div>

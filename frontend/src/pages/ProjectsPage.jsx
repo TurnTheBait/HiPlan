@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import AppIcon from '../components/ui/AppIcon';
 import './ProjectsPage.css';
 import { STATUS_LABELS_IT, STATUS_OPTIONS } from '../utils/statusLabels';
 
@@ -171,22 +172,20 @@ export default function ProjectsPage() {
 
   return (
     <div className="projects-page animate-fadeIn">
-      <div className="projects-header">
-        <div>
-          <h1>Commesse</h1>
-          <p>{filtered.length} commesse</p>
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+      <div className="projects-command-stack">
+        <span className="page-result-count">{filtered.length} commesse</span>
+        <div className="page-action-group">
           <div style={{ position: 'relative' }} ref={exportMenuRef}>
             <button
-              className="btn btn-primary"
-              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              className="btn btn-secondary btn-icon"
               onClick={() => setShowExportMenu(!showExportMenu)}
+              title="Esporta commesse"
+              aria-label="Esporta commesse"
             >
-              📥
+              <AppIcon name="download" />
             </button>
             {showExportMenu && (
-              <div style={{
+              <div className="action-popover" style={{
                 position: 'absolute', top: '100%', right: 0, marginTop: 6,
                 background: 'var(--bg-card)', border: '1px solid var(--border-default)',
                 borderRadius: 10, padding: 16, zIndex: 300, minWidth: 260,
@@ -212,7 +211,7 @@ export default function ProjectsPage() {
                       onChange={() => setExportFormat('pdf')}
                       style={{ display: 'none' }}
                     />
-                    📄 PDF
+                    <AppIcon name="download" size={14} /> PDF
                   </label>
                   <label style={{
                     flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -230,7 +229,7 @@ export default function ProjectsPage() {
                       onChange={() => setExportFormat('excel')}
                       style={{ display: 'none' }}
                     />
-                    📊 Excel
+                    <AppIcon name="download" size={14} /> Excel
                   </label>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -241,14 +240,13 @@ export default function ProjectsPage() {
             )}
           </div>
           {canCreate && (
-            <button className="btn btn-primary" style={{ width: '190px' }} onClick={() => setShowModal(true)}>
-              + Nuova Commessa
+            <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+              <AppIcon name="plus" />
+              Nuova commessa
             </button>
           )}
         </div>
-      </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
         <div className="projects-filters" style={{ marginBottom: 0 }}>
           {['my_projects', 'all', 'planning', 'active', 'completed', 'archived'].map((f) => (
             <button
@@ -262,7 +260,7 @@ export default function ProjectsPage() {
         </div>
 
         {/* BARRA DI RICERCA CON ICONA HIWAY */}
-        <div className="hiway-search-bar" style={{ position: 'relative', display: 'flex', alignItems: 'center', minWidth: 260, flex: '1 1 280px', maxWidth: 400 }}>
+        <div className="hiway-search-bar" style={{ position: 'relative', display: 'flex', alignItems: 'center', minWidth: 220, flex: '1 1 280px', maxWidth: 400 }}>
           <img
             src="/hiway-icon.png"
             alt="HiWay"
@@ -283,7 +281,7 @@ export default function ProjectsPage() {
               onClick={() => setSearchQuery('')}
               style={{ position: 'absolute', right: 10, background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 14 }}
             >
-              ✕
+              <AppIcon name="close" size={15} />
             </button>
           )}
         </div>
@@ -291,12 +289,13 @@ export default function ProjectsPage() {
 
       {filtered.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon">{filter === 'my_projects' ? '👤' : '📂'}</div>
+          <div className="empty-state-icon"><AppIcon name={filter === 'my_projects' ? 'user' : 'folder'} size={26} /></div>
           <h3>{filter === 'my_projects' ? 'Nessuna commessa assegnata a te' : 'Nessuna commessa trovata'}</h3>
-          <p>{filter === 'my_projects' ? 'Non risulti ancora Responsabile o Addetto di alcuna commessa o fase.' : (filter !== 'all' ? 'Prova a cambiare filtro' : 'Aggiungi la tua prima commessa o carica un file JSON')}</p>
+          <p>{filter === 'my_projects' ? 'Non risulti ancora Responsabile o Addetto di alcuna commessa o fase.' : (filter !== 'all' ? 'Prova a cambiare filtro' : 'Aggiungi la tua prima commessa per iniziare')}</p>
           {filter === 'my_projects' && (
             <button className="btn btn-secondary" style={{ marginTop: 16 }} onClick={() => setFilter('all')}>
-              📋 Vedi Tutte le Commesse
+              <AppIcon name="list" />
+              Vedi tutte le commesse
             </button>
           )}
         </div>
@@ -311,21 +310,24 @@ export default function ProjectsPage() {
             >
               <div className="project-card-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontWeight: 600, color: '#64b5f6', fontSize: 13 }}>
+                  <span className="project-card-code">
                     {project.code || 'UT-COMM'}
                   </span>
-                  <h3>{project.name || project.code || 'Senza Titolo'}</h3>
+                  {project.name && project.name !== project.code && <h3>{project.name}</h3>}
                 </div>
                 <span className={`badge badge-${project.status}`}>{STATUS_LABELS_IT[project.status] || project.status}</span>
               </div>
-              <div style={{ fontSize: 12, color: '#aaa', marginBottom: 4 }}>
-                🏢 <strong>Cliente:</strong> {project.client || 'Non specificato'}
+              <div className="project-card-meta">
+                <AppIcon name="building" size={14} />
+                <strong>Cliente:</strong> {project.client || 'Non specificato'}
               </div>
-              <div style={{ fontSize: 12, color: '#bbb', marginBottom: 4 }}>
-                👤 <strong>Responsabile:</strong> {project.responsible_name || project.responsible_username || (project.owner_id === user?.id ? user?.username : 'Non specificato')}
+              <div className="project-card-meta">
+                <AppIcon name="user" size={14} />
+                <strong>Responsabile:</strong> {project.responsible_name || project.responsible_username || (project.owner_id === user?.id ? user?.username : 'Non specificato')}
               </div>
-              <div style={{ fontSize: 12, color: '#bbb', marginBottom: 6 }}>
-                👥 <strong>Addetti Commessa:</strong> {project.assigned_workers?.length > 0 ? project.assigned_workers.join(', ') : 'Vedi fasi'}
+              <div className="project-card-meta">
+                <AppIcon name="users" size={14} />
+                <strong>Addetti:</strong> {project.assigned_workers?.length > 0 ? project.assigned_workers.join(', ') : 'Vedi fasi'}
               </div>
               {project.description && (
                 <p className="project-card-desc">{project.description}</p>
@@ -340,8 +342,8 @@ export default function ProjectsPage() {
                 <span className="progress-label">{Math.round((project.progress || 0) * 100)}%</span>
               </div>
               <div className="project-card-footer">
-                <span>📋 {project.task_count} fasi</span>
-                <span>👥 {project.member_count} totali</span>
+                <span><AppIcon name="list" size={13} />{project.task_count} fasi</span>
+                <span><AppIcon name="users" size={13} />{project.member_count} addetti</span>
                 {(user?.role === 'admin' || user?.role === 'editor' || project.owner_id === user?.id || project.responsible_id === user?.id || project.responsible_username === user?.username) && (
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button
@@ -350,7 +352,7 @@ export default function ProjectsPage() {
                       title="Modifica commessa (titolo, cliente, codice, responsabile, addetti)"
                       style={{ fontSize: 14 }}
                     >
-                      ✏️
+                      <AppIcon name="edit" size={16} />
                     </button>
                     {user?.role === 'admin' && (
                       <button
@@ -358,7 +360,7 @@ export default function ProjectsPage() {
                         onClick={(e) => handleDelete(project.id, e)}
                         title="Elimina commessa"
                       >
-                        🗑
+                        <AppIcon name="trash" size={16} />
                       </button>
                     )}
                   </div>
@@ -374,7 +376,9 @@ export default function ProjectsPage() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Nuova Commessa</h2>
-              <button className="btn-ghost btn-icon" onClick={() => setShowModal(false)}>✕</button>
+              <button className="btn-ghost btn-icon" onClick={() => setShowModal(false)} aria-label="Chiudi">
+                <AppIcon name="close" />
+              </button>
             </div>
             <form onSubmit={handleCreate}>
               <div style={{ display: 'flex', gap: 12 }}>
@@ -535,7 +539,9 @@ export default function ProjectsPage() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Modifica Dati Commessa</h2>
-              <button className="btn-ghost btn-icon" onClick={() => setShowEditModal(false)}>✕</button>
+              <button className="btn-ghost btn-icon" onClick={() => setShowEditModal(false)} aria-label="Chiudi">
+                <AppIcon name="close" />
+              </button>
             </div>
             <form onSubmit={handleEditSubmit}>
               <div style={{ display: 'flex', gap: 12 }}>
@@ -690,4 +696,3 @@ export default function ProjectsPage() {
     </div>
   );
 }
-

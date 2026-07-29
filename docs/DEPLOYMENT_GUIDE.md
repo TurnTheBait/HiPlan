@@ -12,7 +12,7 @@ Per un'esposizione su Internet servono inoltre HTTPS, gestione sicura dei segret
 Per l'avvio tramite script:
 
 - Python 3.12 o successivo;
-- Node.js 18 o successivo;
+- Node.js 20.19 o successivo;
 - accesso amministrativo al firewall del server;
 - indirizzo IP stabile oppure prenotazione DHCP.
 
@@ -48,16 +48,10 @@ Questa modalità utilizza Uvicorn e il server di sviluppo Vite. È adatta a test
 
 ### macOS
 
-Preparare una volta le dipendenze:
+Preparare una volta ambiente, dipendenze e build:
 
 ```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-cd ../frontend
-npm install
+./setup_mac.sh
 ```
 
 Avviare poi dalla radice del repository:
@@ -67,6 +61,14 @@ Avviare poi dalla radice del repository:
 ```
 
 In alternativa è disponibile `./start.sh`, che mantiene i log nel terminale.
+Entrambi i launcher eseguono automaticamente il setup se rilevano
+un'installazione incompleta.
+
+Per inserire anche i dati dimostrativi usare esplicitamente:
+
+```bash
+./setup_mac.sh --seed
+```
 
 ### Windows
 
@@ -76,6 +78,14 @@ Eseguire una volta:
 setup_windows.bat
 ```
 
+Il setup verifica Python e Node.js, installa le dipendenze con `npm ci`, crea
+`backend\.env` se assente e verifica la build. I dati dimostrativi sono
+opzionali e si installano con:
+
+```text
+setup_windows.bat --seed
+```
+
 Avviare quindi:
 
 ```text
@@ -83,6 +93,8 @@ start_windows.bat
 ```
 
 I processi vengono eseguiti in background e scrivono nella cartella `logs`. Per arrestarli usare `stop_windows.bat`.
+All'avvio vengono inoltre controllate le porte `8000` e `5173` e la
+disponibilità effettiva di API e frontend prima di aprire il browser.
 
 ### Accesso dai client
 
@@ -113,7 +125,9 @@ Per la modalità LAN devono essere raggiungibili:
 | `5173/TCP` | frontend Vite |
 | `8000/TCP` | API FastAPI |
 
-Su Windows è disponibile `allow_firewall_windows.bat`. Prima di utilizzarlo, verificare con l'amministratore di rete il profilo e l'ambito consentiti: lo script corrente apre entrambe le porte su tutti i profili.
+Su Windows è disponibile `allow_firewall_windows.bat`, da eseguire come
+amministratore. Lo script apre entrambe le porte soltanto sui profili
+**Privato** e **Dominio**.
 
 È preferibile creare regole limitate:
 

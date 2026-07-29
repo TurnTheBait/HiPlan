@@ -112,6 +112,40 @@
 }
 
 /* ---- Ticket List ---- */
+.tickets-workspace {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tickets-main-toolbar {
+  display: flex;
+  min-height: 55px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+
+.tickets-results-count {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.tickets-workspace-body {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
 .tickets-list-panel {
   width: 300px;
   flex-shrink: 0;
@@ -144,13 +178,14 @@
 }
 
 .tickets-search {
-  width: 100%;
-  padding: 7px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-default);
+  width: min(100%, 340px);
+  min-width: 200px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
   background: var(--bg-input);
   color: var(--text-primary);
-  font-size: 0.84rem;
+  font-size: 0.875rem;
   font-family: inherit;
   outline: none;
   transition: border-color var(--transition-fast);

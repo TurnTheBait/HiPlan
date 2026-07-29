@@ -1,54 +1,92 @@
 @echo off
-for /f "tokens=2 delims=:" %%i in ('ipconfig ^| findstr /i "IPv4"') do (
-    for /f "tokens=1 delims= " %%j in ("%%i") do set MY_IP=%%j
-)
-if not defined MY_IP set MY_IP=192.168.2.10
-
-title HiPlan - Server Aziendale (%MY_IP%)
-echo ========================================================
-echo         AVVIO DEL SERVIZIO HIPLAN SU WINDOWS
-echo ========================================================
-echo.
-
+setlocal EnableExtensions EnableDelayedExpansion
+title HiPlan - Avvio Windows
 cd /d "%~dp0"
 
-if not exist "backend\venv\Scripts\activate.bat" (
-    echo [ATTENZIONE] Ambiente virtuale non trovato! Avvio installazione automatica prima dell'accensione...
-    call setup_windows.bat
+rem Evita che una variabile DEBUG globale sovrascriva backend\.env.
+set "DEBUG="
+
+echo ========================================================
+echo   HiPlan - Avvio servizi Windows
+echo ========================================================
+
+if not exist "backend\venv\Scripts\python.exe" goto setup_required
+if not exist "frontend\node_modules" goto setup_required
+goto setup_done
+
+:setup_required
+echo [INFO] Installazione incompleta: avvio della configurazione iniziale.
+call "%~dp0setup_windows.bat" --no-pause
+if errorlevel 1 goto error
+
+:setup_done
+netstat -aon | findstr /R /C:":8000 .*LISTENING" >nul 2>&1
+if not errorlevel 1 (
+    echo [ERRORE] La porta 8000 e' gia' occupata.
+    echo Arresta la precedente istanza di HiPlan e riprova.
+    goto error
+)
+netstat -aon | findstr /R /C:":5173 .*LISTENING" >nul 2>&1
+if not errorlevel 1 (
+    echo [ERRORE] La porta 5173 e' gia' occupata.
+    echo Arresta la precedente istanza di HiPlan e riprova.
+    goto error
 )
 
-if not exist "logs" mkdir logs
-
-echo [1/2] Avvio del Backend API in background sulla porta 8000...
-wscript run_backend_hidden.vbs
-
-echo [2/2] Avvio del Frontend Web in background sulla porta 5173...
-wscript run_frontend_hidden.vbs
+if not exist "logs" mkdir "logs"
 
 echo.
-echo Attendere qualche secondo per l'accensione dei servizi...
-timeout /t 3 /nobreak > nul
+echo [1/2] Avvio backend API sulla porta 8000...
+"%SystemRoot%\System32\wscript.exe" "%~dp0run_backend_hidden.vbs"
+if errorlevel 1 goto error
+
+echo [2/2] Avvio frontend sulla porta 5173...
+"%SystemRoot%\System32\wscript.exe" "%~dp0run_frontend_hidden.vbs"
+if errorlevel 1 goto error
 
 echo.
-echo ===================================================================
-echo ✅ SERVER HIPLAN AVVIATO IN BACKGROUND CON SUCCESSO!
-echo ===================================================================
+echo Attesa disponibilita' dei servizi...
+set "READY=0"
+for /L %%i in (1,1,30) do (
+    powershell -NoProfile -Command "try { $api=Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:8000/api/health' -TimeoutSec 2; $web=Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:5173' -TimeoutSec 2; if($api.StatusCode -eq 200 -and $web.StatusCode -eq 200){exit 0}; exit 1 } catch { exit 1 }" >nul 2>&1
+    if not errorlevel 1 (
+        set "READY=1"
+        goto services_ready
+    )
+    timeout /t 1 /nobreak >nul
+)
+
+:services_ready
+if "!READY!"=="0" (
+    echo [ERRORE] I servizi non sono diventati disponibili.
+    echo Controlla logs\backend_app.log e logs\frontend_app.log.
+    call "%~dp0stop_windows.bat" --no-pause
+    goto error
+)
+
+set "MY_IP="
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "$ip=Get-NetIPConfiguration ^| Where-Object {$_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up'} ^| ForEach-Object {$_.IPv4Address.IPAddress} ^| Select-Object -First 1; if($ip){$ip}"`) do set "MY_IP=%%i"
+
+start "" "http://localhost:5173"
+
 echo.
-echo 🌐 Da qualsiasi PC (Windows o Mac) in ufficio digita nel browser:
-echo    http://%MY_IP%:5173
+echo ========================================================
+echo   HIPLAN AVVIATO
+echo   Questo PC: http://localhost:5173
+if defined MY_IP (
+    echo   Rete locale: http://!MY_IP!:5173
+) else (
+    echo   Rete locale: http://IP-DEL-PC:5173
+)
 echo.
-echo 💻 Direttamente da questo Server Windows digita:
-echo    http://localhost:5173
+echo   Arresto: stop_windows.bat
+echo   Log: logs\backend_app.log e logs\frontend_app.log
+echo ========================================================
+timeout /t 8 /nobreak >nul
+exit /b 0
+
+:error
 echo.
-echo ===================================================================
-echo NOTA SU ARRESTO, FIREWALL E LOG:
-echo - I servizi sono attivi in background senza finestre nere aperte.
-echo - Per ARRESTARE l'applicazione in qualsiasi momento, fai doppio
-echo   clic sul file: stop_windows.bat
-echo - Se dai PC dell'ufficio non si apre la pagina, fai CLIC DESTRO sul
-echo   file "allow_firewall_windows.bat" e scegli "Esegui come amministratore".
-echo - I log degli errori sono consultabili nella cartella dedicata: logs\
-echo ===================================================================
-echo.
-echo Questa finestra di conferma si chiudera' automaticamente tra 10 secondi...
-timeout /t 10 > nul
+echo Avvio non completato.
+pause
+exit /b 1

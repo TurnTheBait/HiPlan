@@ -255,8 +255,6 @@ Tutte le rotte applicative usano il prefisso `/api`. La specifica completa e agg
 | `GET` | `/api/projects/{id}/export/excel` | export Excel di una commessa |
 | `POST` | `/api/projects/export-list/{formato}` | export di più commesse |
 | `GET` | `/api/tickets/{id}/export/{formato}` | export ticket |
-| `GET` | `/api/projects/backup/json` | backup JSON dei modelli supportati |
-| `POST` | `/api/projects/restore/json` | ripristino |
 | `GET/POST/DELETE` | `/api/settings/global-banner...` | annunci globali |
 | `GET/PUT` | `/api/settings/ticket_phases` | configurazione ticket |
 | `GET` | `/api/settings/backup/status` | ultimo backup |
@@ -364,6 +362,14 @@ npm run dev
 ```
 
 Vite ascolta su tutte le interfacce alla porta `5173`. Non è definito un proxy nel file `vite.config.js`; la destinazione API è determinata dal client in `frontend/src/api/client.js`.
+
+Il toolchain frontend richiede Node.js `20.19` o successivo.
+
+### Stato delle dipendenze frontend
+
+Le dipendenze dirette vengono mantenute sulle versioni compatibili più recenti verificate dal progetto. Vite è fissato alla serie `6.4.x` e React Router alla versione `7.18.2`.
+
+Al 29 luglio 2026 `npm audit` segnala ancora `GHSA-qwww-vcr4-c8h2` per React Router. L'avviso riguarda l'uso di React Server Components e Server Actions; HiPlan usa `BrowserRouter` come SPA client-side e non espone quelle funzionalità, quindi il percorso vulnerabile non è attivo nell'applicazione. Non esiste ancora una release pubblica successiva non segnalata: l'eccezione va rivalutata a ogni aggiornamento del lockfile.
 
 ## 11. Database e migrazioni
 

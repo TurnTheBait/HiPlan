@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import TimelineView from '../components/calendar/TimelineView';
+import AppIcon from '../components/ui/AppIcon';
 import './DashboardPage.css';
 import { STATUS_LABELS_IT } from '../utils/statusLabels';
 
@@ -134,179 +135,214 @@ export default function DashboardPage() {
     return <div className="loading-screen"><div className="spinner" /></div>;
   }
 
+  const todayLabel = today.toLocaleDateString('it-IT', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+  const timeLabel = today.toLocaleTimeString('it-IT', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
   return (
-    <div className="dashboard animate-fadeIn">
+    <div className="dashboard dashboard-shell animate-fadeIn">
       {globalBanners.map(banner => (
-        <div key={banner.id} style={{
-          background: banner.type === 'error' ? 'rgba(239, 68, 68, 0.15)' :
-            banner.type === 'warning' ? 'rgba(245, 158, 11, 0.15)' :
-              banner.type === 'success' ? 'rgba(16, 185, 129, 0.15)' :
-                'rgba(59, 130, 246, 0.15)',
-          border: `6px solid ${banner.type === 'error' ? '#ef4444' :
-            banner.type === 'warning' ? '#f59e0b' :
-              banner.type === 'success' ? '#10b981' :
-                '#3b82f6'
-            }`,
-          color: 'var(--text-primary)',
-          padding: '16px 20px',
-          borderRadius: '8px',
-          marginBottom: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)'
-        }}>
-          <span style={{ fontSize: '1.4rem' }}>📢</span>
-          <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>{banner.text}</span>
+        <div key={banner.id} className={`dashboard-banner dashboard-banner-${banner.type || 'info'}`}>
+          <span className="dashboard-banner-icon" aria-hidden="true"><AppIcon name="megaphone" size={19} /></span>
+          <span className="dashboard-banner-content">
+            <span className="dashboard-banner-label">Annuncio aziendale</span>
+            <span>{banner.text}</span>
+          </span>
         </div>
       ))}
 
-      <div className="dashboard-welcome">
-        <h1>Ciao, {user?.full_name || user?.username} 👋</h1>
-        <p>Ecco un riepilogo dei tuoi progetti</p>
+      <div className="dashboard-hero">
+        <div className="dashboard-welcome">
+          <span className="dashboard-eyebrow">Workspace personale</span>
+          <h1>Bentornato, {user?.full_name || user?.username}</h1>
+          <p>Attività, scadenze e avanzamento in un unico colpo d'occhio.</p>
+        </div>
+        <div className="dashboard-date">
+          <span className="dashboard-date-dot" />
+          <span>{todayLabel} · {timeLabel}</span>
+        </div>
       </div>
 
       <div className="stats-grid">
         <div className="stat-card stat-total">
-          <div className="stat-icon">📁</div>
+          <div className="stat-icon" aria-hidden="true">P</div>
           <div className="stat-info">
+            <span className="stat-label">Totale commesse</span>
             <span className="stat-value">{stats.total}</span>
-            <span className="stat-label">Totale Progetti</span>
           </div>
+          <span className="stat-detail">{stats.planning} in pianificazione</span>
         </div>
         <div className="stat-card stat-active">
-          <div className="stat-icon">🚀</div>
+          <div className="stat-icon" aria-hidden="true">A</div>
           <div className="stat-info">
+            <span className="stat-label">Commesse attive</span>
             <span className="stat-value">{stats.active}</span>
-            <span className="stat-label">Attivi</span>
           </div>
+          <span className="stat-detail">In lavorazione</span>
         </div>
         <div className="stat-card stat-completed">
-          <div className="stat-icon">✅</div>
+          <div className="stat-icon" aria-hidden="true">C</div>
           <div className="stat-info">
+            <span className="stat-label">Completate</span>
             <span className="stat-value">{stats.completed}</span>
-            <span className="stat-label">Completati</span>
           </div>
+          <span className="stat-detail">Chiuse con successo</span>
         </div>
         <div className="stat-card stat-progress">
-          <div className="stat-icon">📈</div>
+          <div className="stat-icon" aria-hidden="true">%</div>
           <div className="stat-info">
+            <span className="stat-label">Progresso medio</span>
             <span className="stat-value">{avgProgress}%</span>
-            <span className="stat-label">Progresso Medio</span>
           </div>
+          <span className="stat-detail">Su tutte le commesse</span>
         </div>
       </div>
 
-      <div className="card dashboard-section" style={{ marginTop: 24, marginBottom: 24, overflowX: 'auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
-            <span>📅</span> La tua Timeline ({MONTH_NAMES_IT[timelineMonth]} {timelineYear})
-          </h2>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <section className="card dashboard-section dashboard-timeline-panel">
+        <div className="dashboard-panel-header">
+          <div className="dashboard-panel-title">
+            <span className="dashboard-panel-icon calendar-icon" aria-hidden="true">31</span>
+            <div>
+              <h2>La tua timeline</h2>
+              <p>{MONTH_NAMES_IT[timelineMonth]} {timelineYear} · attività assegnate</p>
+            </div>
+          </div>
+          <div className="timeline-controls" aria-label="Navigazione timeline">
             <button
               type="button"
               onClick={prevMonth}
-              className="btn btn-secondary"
-              style={{ padding: '4px 10px', fontSize: '0.85rem' }}
+              className="btn btn-secondary btn-sm"
+              aria-label="Mese precedente"
             >
-              &lt; Prec.
+              ‹
             </button>
             <button
               type="button"
               onClick={goToToday}
-              className="btn btn-primary"
-              style={{ padding: '4px 12px', fontSize: '0.85rem' }}
+              className="btn btn-primary btn-sm"
             >
               Oggi
             </button>
             <button
               type="button"
               onClick={nextMonth}
-              className="btn btn-secondary"
-              style={{ padding: '4px 10px', fontSize: '0.85rem' }}
+              className="btn btn-secondary btn-sm"
+              aria-label="Mese successivo"
             >
-              Succ. &gt;
+              ›
             </button>
           </div>
         </div>
-        <TimelineView
-          projects={timelineProjects}
-          currYear={timelineYear}
-          currMonth={timelineMonth}
-          filterWorker={user?.username}
-          onSelectProject={(proj) => navigate(`/projects/${proj.id}`)}
-          vacations={vacations}
-        />
-      </div>
+        <div className="dashboard-timeline-scroll">
+          <TimelineView
+            projects={timelineProjects}
+            currYear={timelineYear}
+            currMonth={timelineMonth}
+            filterWorker={user?.username}
+            onSelectProject={(proj) => navigate(`/projects/${proj.id}`)}
+            vacations={vacations}
+          />
+        </div>
+      </section>
 
       <div className="dashboard-grid">
-        <div className="card dashboard-section" style={{ gridColumn: '1 / -1' }}>
-          <h2>I Miei Task di Oggi</h2>
+        <section className="card dashboard-section dashboard-tasks-panel">
+          <div className="dashboard-panel-header">
+            <div className="dashboard-panel-title">
+              <span className="dashboard-panel-icon task-icon" aria-hidden="true">✓</span>
+              <div>
+                <h2>I miei task di oggi</h2>
+                <p>{myTasksToday.length} {myTasksToday.length === 1 ? 'attività pianificata' : 'attività pianificate'}</p>
+              </div>
+            </div>
+            <button type="button" className="dashboard-link-btn" onClick={() => navigate('/calendar')}>
+              Apri calendario <span aria-hidden="true">→</span>
+            </button>
+          </div>
           {myTasksToday.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-state-icon">🎉</div>
-              <h3>Nessun task per oggi!</h3>
-              <p>Hai la giornata libera oppure i tuoi task sono già completati.</p>
+            <div className="empty-state dashboard-empty-state">
+              <div className="empty-state-icon">✓</div>
+              <h3>Nessun task per oggi</h3>
+              <p>La giornata è libera oppure le attività sono già completate.</p>
             </div>
           ) : (
-            <div className="recent-projects" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+            <div className="today-tasks-grid">
               {myTasksToday.map(task => (
-                <div
+                <button
+                  type="button"
                   key={task.id}
-                  className="recent-project-item"
+                  className="recent-project-item today-task-item"
                   onClick={() => navigate(`/projects/${task.project_id}`)}
-                  style={{ borderLeft: '4px solid var(--accent-500)', padding: '16px' }}
                 >
-                  <div className="recent-project-info" style={{ marginBottom: '8px' }}>
-                    <span className="recent-project-name" style={{ fontSize: '1.1rem' }}>{task.text}</span>
+                  <div className="recent-project-info">
+                    <span className="recent-project-name">{task.text}</span>
+                    <span className="task-progress-label">{task.progress}%</span>
                   </div>
-                  <div className="recent-project-meta" style={{ marginBottom: '12px' }}>
-                    <span style={{ color: 'var(--accent-400)' }}>🏢 {task.project_name}</span>
+                  <div className="recent-project-meta">
+                    <span>{task.project_name}</span>
                     {task.my_assigned_hours ? (
-                      <span style={{ color: '#10b981', fontWeight: 600 }}>⏱ {task.my_assigned_hours}h a te (su {task.planned_hours}h totali)</span>
+                      <span>{task.my_assigned_hours}h assegnate / {task.planned_hours}h</span>
                     ) : (
-                      <span>⏱ {task.planned_hours}h stimate (totali)</span>
+                      <span>{task.planned_hours}h pianificate</span>
                     )}
                   </div>
-                  <div className="progress-bar" style={{ width: '100%' }}>
+                  <div className="progress-bar">
                     <div
                       className="progress-bar-fill"
-                      style={{ width: `${task.progress}%`, background: task.progress === 100 ? 'var(--success-color)' : 'var(--accent-500)' }}
+                      style={{ width: `${task.progress}%`, background: task.progress === 100 ? 'var(--success)' : undefined }}
                     />
                   </div>
-                  <div style={{ textAlign: 'right', marginTop: '4px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    {task.progress}% completato
-                  </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
-        </div>
+        </section>
 
-        <div className="card dashboard-section" style={{ height: '420px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-          <h2>📂 Commesse Recenti</h2>
+        <section className="card dashboard-section dashboard-list-panel">
+          <div className="dashboard-panel-header">
+            <div className="dashboard-panel-title">
+              <span className="dashboard-panel-icon project-icon" aria-hidden="true">P</span>
+              <div>
+                <h2>Commesse recenti</h2>
+                <p>Ultimi progetti aggiornati</p>
+              </div>
+            </div>
+            <button type="button" className="dashboard-link-btn" onClick={() => navigate('/projects')}>
+              Vedi tutte <span aria-hidden="true">→</span>
+            </button>
+          </div>
           {projects.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-state-icon">📋</div>
-              <h3>Nessun progetto</h3>
-              <p>Crea il tuo primo progetto per iniziare</p>
-              <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => navigate('/projects')}>
-                + Nuovo Progetto
+            <div className="empty-state dashboard-empty-state">
+              <div className="empty-state-icon">P</div>
+              <h3>Nessuna commessa</h3>
+              <p>Crea la prima commessa per iniziare a pianificare.</p>
+              <button className="btn btn-primary" onClick={() => navigate('/projects')}>
+                Apri commesse
               </button>
             </div>
           ) : (
-            <div className="recent-projects" style={{ paddingBottom: '24px' }}>
+            <div className="recent-projects dashboard-scroll-list">
               {projects.filter(p => p.status !== 'archived').slice(0, 5).map((project) => (
-                <div
+                <button
+                  type="button"
                   key={project.id}
                   className="recent-project-item"
                   onClick={() => navigate(`/projects/${project.id}`)}
                 >
                   <div className="recent-project-info">
-                    <span className="recent-project-name">{project.code} {project.name}</span>
+                    <span className="recent-project-name">
+                      {project.code && <small>{project.code}</small>}
+                      {project.name}
+                    </span>
                     <span className={`badge badge-${project.status}`}>{STATUS_LABELS_IT[project.status] || project.status}</span>
                   </div>
-                  <div className="progress-bar" style={{ width: '100%' }}>
+                  <div className="progress-bar">
                     <div
                       className="progress-bar-fill"
                       style={{ width: `${(project.progress || 0) * 100}%` }}
@@ -317,116 +353,130 @@ export default function DashboardPage() {
                     <span>{project.member_count} membri</span>
                     <span>{Math.round((project.progress || 0) * 100)}%</span>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
-        </div>
+        </section>
 
-        <div className="card dashboard-section" style={{ height: '420px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-          <div className="notification-header">
-            <h2>☑️ TODO Assegnati a te</h2>
+        <section className="card dashboard-section dashboard-list-panel">
+          <div className="dashboard-panel-header">
+            <div className="dashboard-panel-title">
+              <span className="dashboard-panel-icon todo-icon" aria-hidden="true">✓</span>
+              <div>
+                <h2>TODO assegnati</h2>
+                <p>{assignedTodos.length} ancora da completare</p>
+              </div>
+            </div>
+            <button type="button" className="dashboard-link-btn" onClick={() => navigate('/todo')}>
+              Vedi tutti <span aria-hidden="true">→</span>
+            </button>
           </div>
           {assignedTodos.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-state-icon">✅</div>
+            <div className="empty-state dashboard-empty-state">
+              <div className="empty-state-icon">✓</div>
               <h3>Nessun TODO in sospeso</h3>
-              <p>Hai completato tutti i tuoi compiti!</p>
+              <p>Hai completato tutte le attività assegnate.</p>
             </div>
           ) : (
-            <div className="notifications-list" style={{ paddingBottom: '24px' }}>
+            <div className="notifications-list dashboard-scroll-list">
               {assignedTodos.slice(0, 8).map((todo) => {
                 const due = todo.due_date ? (todo.due_date.includes('T') ? new Date(todo.due_date) : new Date(todo.due_date + 'T00:00:00')) : null;
-                const today = new Date(); today.setHours(0,0,0,0);
+                const dueReference = new Date(); dueReference.setHours(0,0,0,0);
                 const dueDay = due ? new Date(due) : null;
                 if (dueDay) dueDay.setHours(0,0,0,0);
-                const daysLeft = dueDay ? Math.ceil((dueDay - today)/86400000) : null;
+                const daysLeft = dueDay ? Math.ceil((dueDay - dueReference)/86400000) : null;
                 const isOverdue = daysLeft !== null && daysLeft < 0;
                 
                 return (
-                  <div key={todo.id} className="notification-item unread"
+                  <button
+                    type="button"
+                    key={todo.id}
+                    className={`notification-item dashboard-todo-item ${isOverdue ? 'is-overdue' : ''}`}
                     onClick={() => navigate('/todo')}
-                    style={{ cursor: 'pointer', padding: '16px', background: 'var(--bg-secondary)', borderRadius: '12px', marginBottom: '12px', display: 'flex', gap: '16px', alignItems: 'center' }}
                   >
-                    <span className="notification-icon" style={{ fontSize: '1.4rem' }}>
-                      {isOverdue ? '🔴' : '📝'}
+                    <span className="todo-status-dot" aria-hidden="true">
+                      {isOverdue ? '!' : '•'}
                     </span>
-                    <div className="notification-content" style={{ flex: 1, overflow: 'hidden' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                        <span className="notification-title" style={{ fontWeight: 600, fontSize: '0.95rem' }}>{todo.title}</span>
+                    <div className="notification-content">
+                      <div className="todo-item-heading">
+                        <span className="notification-title">{todo.title}</span>
                         {due && (
-                          <span style={{ fontSize: '0.75rem', color: isOverdue ? '#ef4444' : 'var(--text-tertiary)', whiteSpace: 'nowrap', fontWeight: isOverdue ? 700 : 500 }}>
-                            Scad: {due.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '')}
+                          <span className="todo-due-date">
+                            {isOverdue ? 'Scaduto · ' : ''}
+                            {due.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}
                           </span>
                         )}
                       </div>
-                      <div className="notification-message" style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '4px' }}>
+                      <div className="notification-message">
                         {todo.content || 'Nessuna descrizione'}
                       </div>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
           )}
-        </div>
-
+        </section>
 
         {recoveryItems.filter(item => !dismissedKeys.has(getRecoveryKey(item))).length > 0 && (
-          <div className="card dashboard-section" style={{ gridColumn: '1 / -1', border: '2px solid #f59e0b', background: 'rgba(245,158,11,0.05)' }}>
-            <h2 style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: 8 }}>
-              ⚠️ Ore da Recuperare per Ferie
-            </h2>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: 16, fontSize: '0.9rem' }}>
-              Hai ore pianificate che cadono nei tuoi giorni di ferie. Coordinati con il tuo responsabile per recuperarle.
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <section className="card dashboard-section recovery-panel">
+            <div className="dashboard-panel-header">
+              <div className="dashboard-panel-title">
+                <span className="dashboard-panel-icon warning-icon" aria-hidden="true">
+                  <AppIcon name="alert" size={18} />
+                </span>
+                <div>
+                  <h2>Ore da recuperare per ferie</h2>
+                  <p>Coordina il recupero con il tuo responsabile.</p>
+                </div>
+              </div>
+            </div>
+            <div className="recovery-list">
               {recoveryItems
                 .filter(item => !dismissedKeys.has(getRecoveryKey(item)))
                 .map((item, i) => (
                   <div
                     key={i}
+                    className="recovery-item"
                     onClick={() => navigate(`/projects/${item.project_id}`)}
-                    style={{
-                      background: 'var(--bg-secondary)', borderRadius: 10, padding: '12px 16px',
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      borderLeft: '4px solid #f59e0b', gap: 12, flexWrap: 'wrap',
-                      cursor: 'pointer'
-                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && navigate(`/projects/${item.project_id}`)}
+                    role="button"
+                    tabIndex={0}
                   >
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700 }}>📋 {item.task_name}</div>
-                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Progetto: {item.project_name}</div>
-                      <div style={{ color: '#6b7280', fontSize: '0.8rem', marginTop: 3 }}>
-                        {item.vacation_days?.length || 0} gg lavorativi sovrapposti
-                      </div>
+                    <span className="recovery-item-icon" aria-hidden="true">
+                      <AppIcon name="clock" size={17} />
+                    </span>
+                    <div className="recovery-copy">
+                      <strong>{item.task_name}</strong>
+                      <span>
+                        <AppIcon name="projects" size={13} />
+                        {item.project_name}
+                      </span>
+                      <small>
+                        <AppIcon name="calendar" size={13} />
+                        {item.vacation_days?.length || 0} giorni lavorativi sovrapposti
+                      </small>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{
-                        background: '#f59e0b', color: '#fff', borderRadius: 8, padding: '6px 14px',
-                        fontWeight: 800, fontSize: '1rem', whiteSpace: 'nowrap'
-                      }}>
-                        {item.hours_to_recover}h
-                      </div>
+                    <div className="recovery-actions">
+                      <span className="recovery-hours">
+                        <strong>{item.hours_to_recover}h</strong>
+                        <small>da recuperare</small>
+                      </span>
                       <button
+                        type="button"
                         onClick={(e) => dismissRecoveryItem(e, item)}
                         title="Segna come recuperata e rimuovi dalla lista"
-                        style={{
-                          background: 'none', border: '1.5px solid #e5e7eb', borderRadius: 8,
-                          cursor: 'pointer', padding: '5px 9px', fontSize: '1rem',
-                          color: '#6b7280', transition: 'all 0.15s',
-                          display: 'flex', alignItems: 'center'
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.color = '#6b7280'; }}
+                        aria-label={`Segna come recuperate le ore di ${item.task_name}`}
+                        className="recovery-dismiss"
                       >
-                        🗑️
+                        <AppIcon name="check" size={16} />
                       </button>
                     </div>
                   </div>
                 ))}
             </div>
-          </div>
+          </section>
         )}
       </div>
     </div>

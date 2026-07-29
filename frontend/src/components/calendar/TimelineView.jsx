@@ -3,6 +3,7 @@ import useDragScroll from '../../hooks/useDragScroll';
 import { getTaskColor } from '../../utils/phaseColors';
 import { isTaskCompleted } from '../../utils/taskCompletion';
 import { isWeekendOrHoliday } from '../../utils/workingDays';
+import AppIcon from '../ui/AppIcon';
 
 const STATUS_LABELS_IT = {
   planning: 'In pianificazione',
@@ -19,11 +20,21 @@ const STATUS_COLORS = {
 };
 
 const WEEKDAYS_IT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+const TIMELINE_DAY_WIDTH = 38;
+
+const toLocalDateKey = (date) => (
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+);
 
 export default function TimelineView({ projects, currYear, currMonth, filterWorker, onSelectProject, vacations = [] }) {
   const today = new Date();
+  const todayKey = toLocalDateKey(today);
   const daysInMonth = new Date(currYear, currMonth + 1, 0).getDate();
   const [expandedProjects, setExpandedProjects] = useState({});
+  const monthLabel = new Intl.DateTimeFormat('it-IT', {
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(currYear, currMonth, 1));
 
   const scrollRef = useDragScroll();
 
@@ -31,21 +42,22 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
     <div className="calendar-timeline-container" ref={scrollRef}>
       <div className="timeline-header-row">
         <div className="timeline-project-col">Commessa / Progetto</div>
-        <div className="timeline-days-scroll">
-          {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
-            const dayDate = new Date(currYear, currMonth, d);
-            const dayOfWeek = dayDate.getDay();
-            const isWknd = isWeekendOrHoliday(dayDate);
-            const monthStr = String(currMonth + 1).padStart(2, '0');
-            const dayStr = String(d).padStart(2, '0');
-            const isToday = `${currYear}-${monthStr}-${dayStr}` === today.toISOString().substring(0, 10);
-            return (
-              <div key={d} className={`timeline-day-col-header ${isWknd ? 'weekend' : ''} ${isToday ? 'today' : ''}`}>
-                <span>{WEEKDAYS_IT[dayOfWeek === 0 ? 6 : dayOfWeek - 1]}</span>
-                <span>{d}</span>
-              </div>
-            );
-          })}
+        <div className="timeline-date-header" style={{ width: `${daysInMonth * TIMELINE_DAY_WIDTH}px` }}>
+          <div className="timeline-month-band">{monthLabel}</div>
+          <div className="timeline-days-scroll">
+            {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
+              const dayDate = new Date(currYear, currMonth, d);
+              const dayOfWeek = dayDate.getDay();
+              const isWknd = isWeekendOrHoliday(dayDate);
+              const isToday = toLocalDateKey(dayDate) === todayKey;
+              return (
+                <div key={d} className={`timeline-day-col-header ${isWknd ? 'weekend' : ''} ${isToday ? 'today' : ''}`}>
+                  <span>{WEEKDAYS_IT[dayOfWeek === 0 ? 6 : dayOfWeek - 1]}</span>
+                  <span>{String(d).padStart(2, '0')}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
       
@@ -68,32 +80,27 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
           
           return (
             <div key={v.id || `vac-${vStart}-${vEnd}`} className="timeline-project-row">
-              <div className="timeline-project-info" style={{ cursor: 'default', borderLeft: '3px solid #f59e0b' }}>
-                <span className="timeline-proj-title" style={{ color: '#f59e0b' }}>
+              <div className="timeline-project-info timeline-vacation-info">
+                <span className="timeline-proj-title timeline-vacation-title">
                   🏖️ Ferie
                 </span>
                 <span className="timeline-proj-meta">
                   {v.reason || ''}
-                </span> {/* <-- CORRETTO: Aggiunta chiusura span */}
-              </div> {/* <-- CORRETTO: Aggiunta chiusura div info */}
+                </span>
+              </div>
               
               <div className="timeline-row-grid">
                 {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
                   const dayDate = new Date(currYear, currMonth, d);
                   const isWk = isWeekendOrHoliday(dayDate);
-                  const monthStr = String(currMonth + 1).padStart(2, '0');
-                  const dayStr = String(d).padStart(2, '0');
-                  const isToday = `${currYear}-${monthStr}-${dayStr}` === today.toISOString().substring(0, 10);
+                  const isToday = toLocalDateKey(dayDate) === todayKey;
                   return <div key={d} className={`timeline-cell ${isWk ? 'weekend' : ''} ${isToday ? 'today' : ''}`} />;
                 })}
                 <div
-                  className="timeline-bar"
+                  className="timeline-bar timeline-vacation-bar"
                   style={{
-                    left: `${(startDayNum - 1) * 38 + 2}px`,
-                    width: `${spanDays * 38 - 4}px`,
-                    background: 'linear-gradient(135deg, #f59e0b, #f97316)',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
+                    left: `${(startDayNum - 1) * TIMELINE_DAY_WIDTH + 3}px`,
+                    width: `${spanDays * TIMELINE_DAY_WIDTH - 6}px`,
                   }}
                   title={`Ferie: ${vStart} → ${vEnd}${v.reason ? ` (${v.reason})` : ''}`}
                 >
@@ -103,7 +110,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
             </div>
           );
         });
-      })()} {/* <-- CORRETTO: Aggiunte le () per invocare la funzione IIFE */}
+      })()}
 
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {projects.length === 0 ? (
@@ -131,7 +138,8 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                     {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
                       const dayDate = new Date(currYear, currMonth, d);
                       const isWk = isWeekendOrHoliday(dayDate);
-                      return <div key={d} className={`timeline-cell ${isWk ? 'weekend' : ''}`} />;
+                      const isToday = toLocalDateKey(dayDate) === todayKey;
+                      return <div key={d} className={`timeline-cell ${isWk ? 'weekend' : ''} ${isToday ? 'today' : ''}`} />;
                     })}
                   </div>
                 </div>
@@ -160,7 +168,10 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                       {proj.name}
                     </span>
                     <span className="timeline-proj-meta">
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLORS[proj.status] || '#a5b4fc', display: 'inline-block', marginRight: '4px' }} />
+                      <span
+                        className="timeline-status-dot"
+                        style={{ '--timeline-status-color': STATUS_COLORS[proj.status] || '#a5b4fc' }}
+                      />
                       {STATUS_LABELS_IT[proj.status] || proj.status}
                       <button
                         type="button"
@@ -168,19 +179,12 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                           e.stopPropagation();
                           setExpandedProjects(prev => ({ ...prev, [proj.id]: !prev[proj.id] }));
                         }}
-                        style={{
-                          background: 'var(--bg-primary)',
-                          border: '1px solid var(--border-subtle)',
-                          borderRadius: 4,
-                          padding: '1px 6px',
-                          fontSize: '0.68rem',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer',
-                          marginLeft: 'auto'
-                        }}
+                        className="timeline-phase-toggle"
                         title="Mostra singole fasi"
+                        aria-expanded={Boolean(isExpanded)}
                       >
-                        {isExpanded ? '▼ Fasi' : `► Fasi (${proj.tasks?.length || 0})`}
+                        <AppIcon name={isExpanded ? 'chevronDown' : 'chevronRight'} size={12} />
+                        Fasi ({proj.tasks?.length || 0})
                       </button>
                     </span>
                   </div>
@@ -189,19 +193,17 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                     {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
                       const dayDate = new Date(currYear, currMonth, d);
                       const isWk = isWeekendOrHoliday(dayDate);
-                      const monthStr = String(currMonth + 1).padStart(2, '0');
-                      const dayStr = String(d).padStart(2, '0');
-                      const isToday = `${currYear}-${monthStr}-${dayStr}` === today.toISOString().substring(0, 10);
+                      const isToday = toLocalDateKey(dayDate) === todayKey;
                       return <div key={d} className={`timeline-cell ${isWk ? 'weekend' : ''} ${isToday ? 'today' : ''}`} />;
                     })}
 
                     {/* Barra Commessa Principale */}
                     <div
-                      className="timeline-bar"
+                      className="timeline-bar timeline-project-bar"
                       style={{
-                        left: `${(startDayNum - 1) * 38 + 2}px`,
-                        width: `${spanDays * 38 - 4}px`,
-                        background: `linear-gradient(135deg, ${color}, ${color}dd)`,
+                        '--timeline-bar-color': color,
+                        left: `${(startDayNum - 1) * TIMELINE_DAY_WIDTH + 3}px`,
+                        width: `${spanDays * TIMELINE_DAY_WIDTH - 6}px`,
                       }}
                       onClick={() => onSelectProject(proj)}
                       title={`${proj.name} (${pStart} -> ${pEnd})`}
@@ -228,39 +230,43 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                       <div
                         className={`timeline-project-info timeline-task-info ${isCompleted ? 'timeline-row-completed' : ''}`}
                         onClick={() => onSelectProject({ ...proj, selectedPhase: t })}
-                        style={{ cursor: 'pointer', paddingLeft: 24, borderLeft: `3px solid ${isCompleted ? '#10b981' : tColor}` }}
+                        style={{ '--timeline-row-accent': isCompleted ? '#10b981' : tColor }}
                       >
-                        <span className="timeline-proj-title" style={{ fontSize: '0.8125rem', color: 'var(--text-primary)' }} title={t.text}>
-                          ↳ {isCompleted && <span style={{ color: '#10b981', fontWeight: 'bold', marginRight: '6px' }} title="Fase completata">✓</span>}
+                        <span className="timeline-proj-title timeline-task-title" title={t.text}>
+                          <span className="timeline-task-branch" aria-hidden="true">↳</span>
+                          {isCompleted && <AppIcon name="check" size={14} className="timeline-completed-icon" />}
                           <strong>{t.text}</strong>
                         </span>
-                        <span className="timeline-proj-meta" style={{ fontSize: '0.72rem' }}>
-                          👤 {Array.isArray(t.workers) && t.workers.length > 0 ? t.workers.join(', ') : 'Nessuno'} | ⏱ {t.planned_hours || 8}h
+                        <span className="timeline-proj-meta timeline-task-meta">
+                          <AppIcon name="users" size={13} />
+                          <span>{Array.isArray(t.workers) && t.workers.length > 0 ? t.workers.join(', ') : 'Nessuno'}</span>
+                          <span className="timeline-meta-separator" aria-hidden="true" />
+                          <AppIcon name="clock" size={13} />
+                          <span>{t.planned_hours || 8}h</span>
                         </span>
                       </div>
 
-                      <div className="timeline-row-grid" style={{ height: 44 }}>
+                      <div className="timeline-row-grid timeline-task-grid">
                         {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
                           const dayDate = new Date(currYear, currMonth, d);
                           const isWk = isWeekendOrHoliday(dayDate);
-                          const monthStr = String(currMonth + 1).padStart(2, '0');
-                          const dayStr = String(d).padStart(2, '0');
-                          const isToday = `${currYear}-${monthStr}-${dayStr}` === today.toISOString().substring(0, 10);
-                          return <div key={d} className={`timeline-cell ${isWk ? 'weekend' : ''} ${isToday ? 'today' : ''}`} style={{ height: 44 }} />;
+                          const isToday = toLocalDateKey(dayDate) === todayKey;
+                          return <div key={d} className={`timeline-cell ${isWk ? 'weekend' : ''} ${isToday ? 'today' : ''}`} />;
                         })}
 
                         <div
                           className="timeline-bar timeline-task-bar"
                           style={{
-                            left: `${(tStartDayNum - 1) * 38 + 2}px`,
-                            width: `${tSpanDays * 38 - 4}px`,
-                            background: isCompleted ? '#10b981' : `linear-gradient(135deg, ${tColor}ee, ${tColor}99)`,
-                            border: `1px solid ${isCompleted ? '#059669' : tColor}`,
+                            '--timeline-bar-color': isCompleted ? '#10b981' : tColor,
+                            left: `${(tStartDayNum - 1) * TIMELINE_DAY_WIDTH + 3}px`,
+                            width: `${tSpanDays * TIMELINE_DAY_WIDTH - 6}px`,
                           }}
                           onClick={() => onSelectProject({ ...proj, selectedPhase: t })}
                           title={`[Fase] ${t.text} (${tStart} -> ${tEnd}) - Addetti: ${Array.isArray(t.workers) ? t.workers.join(', ') : ''}`}
                         >
-                          ↳ {isCompleted ? '✓ ' : ''}{t.text} {(filterWorker && filterWorker !== 'all') ? `(${filterWorker})` : ''}
+                          <span aria-hidden="true">↳</span>
+                          {isCompleted && <AppIcon name="check" size={13} />}
+                          <span>{t.text} {(filterWorker && filterWorker !== 'all') ? `(${filterWorker})` : ''}</span>
                         </div>
                       </div>
                     </div>

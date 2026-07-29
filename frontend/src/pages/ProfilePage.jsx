@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import AppIcon from '../components/ui/AppIcon';
 import './ProfilePage.css';
 
 export default function ProfilePage() {
@@ -144,39 +145,39 @@ export default function ProfilePage() {
 
   return (
     <div className="profile-page">
-      <div className="profile-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <p className="page-kicker">Gestione personale</p>
-          <h1>Il mio profilo</h1>
-        </div>
-        <button className="btn btn-secondary" onClick={openEditModal}>✏️</button>
+      <div className="page-action-bar">
+        <span className="page-context-note">Dati personali e disponibilità</span>
+        <button className="btn btn-secondary" onClick={openEditModal}>
+          <AppIcon name="edit" />
+          Modifica profilo
+        </button>
       </div>
 
       {/* Card statistiche utente */}
       <div className="profile-stats-grid">
         <div className="stat-card">
-          <div className="stat-icon">👤</div>
+          <div className="stat-icon"><AppIcon name="user" /></div>
           <div className="stat-content">
             <div className="stat-value">{user?.full_name || user?.username}</div>
             <div className="stat-label">Nome Utente</div>
           </div>
         </div>
         <div className="stat-card stat-card-email">
-          <div className="stat-icon">📧</div>
+          <div className="stat-icon"><AppIcon name="mail" /></div>
           <div className="stat-content">
             <div className="stat-value stat-email-text">{user?.email}</div>
             <div className="stat-label">Email</div>
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon">🏷️</div>
+          <div className="stat-icon"><AppIcon name="settings" /></div>
           <div className="stat-content">
             <div className="stat-value">{user?.role?.toUpperCase()}</div>
             <div className="stat-label">Ruolo</div>
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon">🏢</div>
+          <div className="stat-icon"><AppIcon name="building" /></div>
           <div className="stat-content">
             <div className="stat-value">
               {user?.department === 'ufficio_tecnico' ? 'Ufficio Tecnico' :
@@ -237,7 +238,9 @@ export default function ProfilePage() {
                       <div className="vacation-duration">{workdays} giorni</div>
                       <div className="vacation-reason">{v.reason || 'Nessun motivo specificato'}</div>
                     </div>
-                    <button className="btn-delete" onClick={() => handleDelete(v.id)}>✕</button>
+                    <button className="btn-delete" onClick={() => handleDelete(v.id)} aria-label="Elimina ferie">
+                      <AppIcon name="trash" size={15} />
+                    </button>
                   </div>
                 );
               })
@@ -306,7 +309,9 @@ export default function ProfilePage() {
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>👤 Modifica Profilo</h2>
-              <button className="btn-ghost btn-icon" onClick={() => setShowEditModal(false)}>✕</button>
+              <button className="btn-ghost btn-icon" onClick={() => setShowEditModal(false)} aria-label="Chiudi">
+                <AppIcon name="close" />
+              </button>
             </div>
             <form onSubmit={handleSaveProfile}>
               <div className="input-group">

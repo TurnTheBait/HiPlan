@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import AppIcon from '../ui/AppIcon';
 
 export default function ActivityLogPanel({ projectId }) {
   const toast = useToast();
@@ -31,31 +32,24 @@ export default function ActivityLogPanel({ projectId }) {
   const renderLogList = (logList) => {
     if (logList.length === 0) {
       return (
-        <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+        <div className="activity-log-empty">
           Nessuna attività registrata in questa sezione.
         </div>
       );
     }
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div className="activity-log-list">
         {logList.map(log => (
-          <div key={log.id} style={{
-            padding: '12px',
-            backgroundColor: 'var(--bg-secondary)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-color)',
-            fontSize: '0.9rem'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <strong style={{ color: 'var(--accent-500)' }}>{log.user_name}</strong>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-                {log.created_at ? new Date(log.created_at).toLocaleString() : ''}
-              </span>
+          <div key={log.id} className="activity-log-entry">
+            <span className="activity-log-entry-icon">
+              <AppIcon name={activeTab === 'ore' ? 'clock' : 'list'} size={15} />
+            </span>
+            <div className="activity-log-entry-body">
+              <strong>{log.user_name}</strong>
+              <span>{log.action_text}</span>
             </div>
-            <div style={{ color: 'var(--text-primary)' }}>
-              {log.action_text}
-            </div>
+            <time>{log.created_at ? new Date(log.created_at).toLocaleString('it-IT') : ''}</time>
           </div>
         ))}
       </div>
@@ -63,29 +57,31 @@ export default function ActivityLogPanel({ projectId }) {
   };
 
   return (
-    <div className="activity-log-panel card" style={{ marginTop: '20px', display: 'flex', flexDirection: 'column' }}>
-      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Cronologia Modifiche</h2>
+    <div className="activity-log-panel">
+      <div className="activity-log-header">
+        <h2>Cronologia modifiche</h2>
       </div>
       
-      <div className="ut-tabs" style={{ marginBottom: 16, paddingBottom: 0, paddingTop: 16 }}>
-        <button 
-          className={`ut-tab-btn ${activeTab === 'fasi' ? 'active' : ''}`} 
+      <div className="activity-log-tabs">
+        <button
+          className={`activity-log-tab ${activeTab === 'fasi' ? 'active' : ''}`}
           onClick={() => setActiveTab('fasi')}
         >
-          Fasi e Commessa
+          <AppIcon name="list" size={15} />
+          Fasi e commessa
         </button>
-        <button 
-          className={`ut-tab-btn ${activeTab === 'ore' ? 'active' : ''}`} 
+        <button
+          className={`activity-log-tab ${activeTab === 'ore' ? 'active' : ''}`}
           onClick={() => setActiveTab('ore')}
         >
-          Inserimento Consuntivo Ore
+          <AppIcon name="clock" size={15} />
+          Inserimento consuntivo ore
         </button>
       </div>
 
-      <div style={{ padding: '0 16px 16px' }}>
+      <div className="activity-log-content">
         {loading ? (
-          <div style={{ padding: '20px', textAlign: 'center' }}>Caricamento in corso...</div>
+          <div className="activity-log-empty">Caricamento in corso...</div>
         ) : (
           <>
             {activeTab === 'fasi' && renderLogList(fasiLogs)}

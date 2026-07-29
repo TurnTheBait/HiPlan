@@ -15,6 +15,7 @@ import ProfilePage from './pages/ProfilePage';
 import TicketsPage from './pages/TicketsPage';
 import TodoPage from './pages/TodoPage';
 import './index.css';
+import './workspace-restyle.css';
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { user, loading } = useAuth();

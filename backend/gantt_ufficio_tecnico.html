@@ -20,7 +20,6 @@ body{font-family:var(--font);font-size:13px;background:#e8e5de;min-height:100vh;
 .sb-head{padding:.75rem 1rem .6rem;border-bottom:0.5px solid var(--bd)}
 .sb-head h1{font-size:14px;font-weight:600;color:var(--tx);display:flex;align-items:center;gap:6px}
 .sb-head p{font-size:11px;color:var(--tx3);margin-top:2px}
-.save-bar{display:flex;gap:6px;padding:.6rem 1rem;border-bottom:0.5px solid var(--bd);background:var(--bg2)}
 .si{padding:.75rem 1rem 1.5rem;display:flex;flex-direction:column;gap:.75rem}
 .main{padding:1rem 1.25rem;overflow:auto}
 .stit{font-size:10px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);margin-bottom:.4rem}
@@ -35,8 +34,6 @@ select[multiple]{height:90px}
 .btn:hover{opacity:.82}
 .b-blue{background:var(--bg-info);color:var(--tx-info);border:0.5px solid var(--bd-info)}
 .b-green{background:var(--bg-ok);color:var(--tx-ok);border:0.5px solid var(--bd-ok)}
-.b-save{background:#185fa5;color:#fff;border:0.5px solid #185fa5;flex:1;margin-top:0;padding:6px 10px;font-size:11px}
-.b-load{background:var(--bg2);color:var(--tx2);border:0.5px solid var(--bd);flex:1;margin-top:0;padding:6px 10px;font-size:11px}
 .btn-del{background:none;border:none;color:var(--tx-err);cursor:pointer;padding:2px 5px;border-radius:4px;font-size:15px;line-height:1}
 .btn-del:hover{background:var(--bg-err)}
 .btn-edit{background:none;border:0.5px solid var(--bd);color:var(--tx2);cursor:pointer;padding:2px 6px;border-radius:4px;font-size:12px;line-height:1.4}
@@ -88,13 +85,6 @@ select[multiple]{height:90px}
   <div class="sb-head">
     <h1><i class="ti ti-chart-gantt"></i> Gantt Ufficio Tecnico</h1>
     <p>Gestione commesse e fasi di lavorazione</p>
-  </div>
-
-  <!-- BARRA SALVA / CARICA -->
-  <div class="save-bar">
-    <button class="btn b-save" onclick="salvaJSON()"><i class="ti ti-device-floppy"></i> Salva dati</button>
-    <button class="btn b-load" onclick="document.getElementById('file-input').click()"><i class="ti ti-upload"></i> Carica dati</button>
-    <input type="file" id="file-input" accept=".json" style="display:none" onchange="caricaJSON(event)">
   </div>
 
   <div class="si">
@@ -157,7 +147,7 @@ select[multiple]{height:90px}
     <button class="tab" onclick="showTab('ore',this)"><i class="ti ti-clock"></i> Ore</button>
     <button class="tab" id="tab-alert" onclick="showTab('alert',this)"><i class="ti ti-alert-triangle"></i> Ritardi</button>
   </div>
-  <div id="view-gantt" class="view active"><div id="g-cont"><div class="empty"><i class="ti ti-chart-gantt" style="font-size:32px;display:block;margin-bottom:.5rem"></i>Nessuna commessa inserita.<br><small style="margin-top:.4rem;display:block;font-size:11px">Aggiungi una commessa oppure carica un file JSON salvato in precedenza.</small></div></div></div>
+  <div id="view-gantt" class="view active"><div id="g-cont"><div class="empty"><i class="ti ti-chart-gantt" style="font-size:32px;display:block;margin-bottom:.5rem"></i>Nessuna commessa inserita.<br><small style="margin-top:.4rem;display:block;font-size:11px">Aggiungi una commessa per iniziare.</small></div></div></div>
   <div id="view-commesse" class="view"><div id="c-cont"><div class="empty">Nessuna commessa inserita.</div></div></div>
   <div id="view-ore" class="view"><div id="o-cont"><div class="empty">Inserisci fasi per registrare le ore.</div></div></div>
   <div id="view-alert" class="view"><div id="a-cont"><div class="empty"><i class="ti ti-check" style="font-size:32px;display:block;margin-bottom:.5rem;color:#3b6d11"></i>Nessun ritardo rilevato.</div></div></div>
@@ -226,38 +216,6 @@ function toast(msg,ico='ti-check'){
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer=setTimeout(()=>el.classList.remove('show'),2800);
-}
-
-/* ── SALVA / CARICA JSON ── */
-function salvaJSON(){
-  if(!commesse.length){toast('Nessun dato da salvare','ti-alert-triangle');return;}
-  const payload={version:1,savedAt:new Date().toISOString(),nextId,commesse};
-  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  const d=new Date();
-  a.download=`commesse_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.json`;
-  a.click();URL.revokeObjectURL(a.href);
-  toast('Dati salvati correttamente');
-}
-
-function caricaJSON(e){
-  const file=e.target.files[0];if(!file)return;
-  const reader=new FileReader();
-  reader.onload=function(ev){
-    try{
-      const payload=JSON.parse(ev.target.result);
-      if(!payload.commesse||!Array.isArray(payload.commesse))throw new Error('Formato non valido');
-      commesse=payload.commesse;
-      nextId=payload.nextId||commesse.reduce((m,c)=>Math.max(m,c.id),0)+1;
-      updateSel();renderAll();
-      toast(`Caricati ${commesse.length} commesse`);
-    }catch(err){
-      toast('Errore nel file JSON','ti-alert-circle');
-    }
-    e.target.value='';
-  };
-  reader.readAsText(file);
 }
 
 /* ── UTILS ── */
@@ -393,7 +351,7 @@ function updateAlertTab(){
 function renderGantt(){
   const el=document.getElementById('g-cont');
   const allFasi=commesse.flatMap(c=>c.fasi);
-  if(!allFasi.length){el.innerHTML='<div class="empty"><i class="ti ti-chart-gantt" style="font-size:32px;display:block;margin-bottom:.5rem"></i>Nessuna commessa inserita.<br><small style="margin-top:.4rem;display:block;font-size:11px">Aggiungi una commessa oppure carica un file JSON.</small></div>';return;}
+  if(!allFasi.length){el.innerHTML='<div class="empty"><i class="ti ti-chart-gantt" style="font-size:32px;display:block;margin-bottom:.5rem"></i>Nessuna commessa inserita.<br><small style="margin-top:.4rem;display:block;font-size:11px">Aggiungi una commessa per iniziare.</small></div>';return;}
   const minD=allFasi.reduce((m,f)=>f.start<m?f.start:m,allFasi[0].start);
   const maxD=allFasi.reduce((m,f)=>f.end>m?f.end:m,allFasi[0].end);
   const startD=parseDate(minD),endD=addDays(parseDate(maxD),4);

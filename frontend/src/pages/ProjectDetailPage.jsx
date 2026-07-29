@@ -13,12 +13,13 @@ import { addWorkingDays, subtractWorkingDays, countWorkingDays, isWeekendOrHolid
 import TaskComments from '../components/tasks/TaskComments';
 import TaskChecklist from '../components/tasks/TaskChecklist';
 import ActivityLogPanel from '../components/projects/ActivityLogModal';
+import AppIcon from '../components/ui/AppIcon';
 import useWebSocket from '../hooks/useWebSocket';
 
 const DEPT_OPTIONS = [
-  { value: 'ufficio_tecnico', label: '🔧 Ufficio Tecnico', color: '#3b82f6' },
-  { value: 'produzione', label: '🏭 Produzione', color: '#10b981' },
-  { value: 'acquisti', label: '🛒 Acquisti', color: '#f59e0b' },
+  { value: 'ufficio_tecnico', label: 'Ufficio Tecnico', color: '#3b82f6' },
+  { value: 'produzione', label: 'Produzione', color: '#10b981' },
+  { value: 'acquisti', label: 'Acquisti', color: '#f59e0b' },
 ];
 
 const BACKEND_URL = import.meta.env.VITE_API_URL
@@ -1086,8 +1087,8 @@ export default function ProjectDetailPage() {
     <div className="project-detail animate-fadeIn">
       <div className="project-detail-header">
         <div className="project-detail-info">
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/projects')}>
-            ←
+          <button className="btn btn-secondary btn-icon" onClick={() => navigate('/projects')} title="Torna alle commesse" aria-label="Torna alle commesse">
+            <AppIcon name="arrowLeft" />
           </button>
           <div className="commessa-meta" style={{
             display: 'flex',
@@ -1105,7 +1106,7 @@ export default function ProjectDetailPage() {
             {project?.client && (
               <>
                 <span style={{ color: 'var(--border-subtle)', fontSize: '1.2rem' }}>—</span>
-                <span className="commessa-client" style={{ color: 'var(--text-secondary)' }}>🏢 {project.client}</span>
+                <span className="commessa-client" style={{ color: 'var(--text-secondary)' }}><AppIcon name="building" size={15} />{project.client}</span>
               </>
             )}
             {project?.name && project.name !== project.code && (
@@ -1122,20 +1123,23 @@ export default function ProjectDetailPage() {
       <div className="ut-tabs" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         {canManageProject && (
           <button className="btn btn-primary" onClick={openNewTaskModal} style={{ padding: '9px 14px', fontSize: '0.85 rem' }}>
-            + Nuova Fase
+            <AppIcon name="plus" />
+            Nuova fase
           </button>
         )}
         <button
           className={`ut-tab-btn ${activeTab === 'gantt' ? 'active' : ''}`}
           onClick={() => setActiveTab('gantt')}
         >
-          📊 Gantt
+          <AppIcon name="gantt" />
+          Gantt
         </button>
         <button
           className={`ut-tab-btn ${activeTab === 'commessa' ? 'active' : ''}`}
           onClick={() => setActiveTab('commessa')}
         >
-          📋 Fasi <span className="tab-badge">{ganttData.tasks.length}</span>
+          <AppIcon name="list" />
+          Fasi <span className="tab-badge">{ganttData.tasks.length}</span>
         </button>
         <button
           className={`ut-tab-btn ${activeTab === 'note' ? 'active' : ''}`}
@@ -1146,14 +1150,16 @@ export default function ProjectDetailPage() {
             backgroundColor: openTicketsCount > 0 && activeTab !== 'note' ? 'rgba(245, 158, 11, 0.1)' : undefined
           }}
         >
-          📝 Note
+          <AppIcon name="notes" />
+          Note
         </button>
         {delaysList.length > 0 && (
           <button
             className={`ut-tab-btn ${activeTab === 'alert' ? 'active' : ''}`}
             onClick={() => setActiveTab('alert')}
           >
-            ⚠️ Ritardi
+            <AppIcon name="alert" />
+            Ritardi
             <span className="tab-badge tab-badge-danger">{delaysList.length}</span>
           </button>
         )}
@@ -1165,7 +1171,8 @@ export default function ProjectDetailPage() {
             title="Visualizza la cronologia delle modifiche e delle ore"
             style={{ display: 'flex', alignItems: 'center', gap: 6 }}
           >
-            🕒 Cronologia
+            <AppIcon name="clock" />
+            Cronologia
           </button>
         )}
 
@@ -1187,7 +1194,7 @@ export default function ProjectDetailPage() {
                 borderRadius: '10px'
               }}
             >
-              ✏️
+              <AppIcon name="edit" />
             </button>
           )}
 
@@ -1198,10 +1205,10 @@ export default function ProjectDetailPage() {
               title="Esporta commessa"
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38, padding: 0, fontSize: '1.3rem', borderRadius: '10px' }}
             >
-              📥
+              <AppIcon name="download" />
             </button>
             {showExportMenu && (
-              <div style={{
+              <div className="action-popover" style={{
                 position: 'absolute', top: '100%', right: 0, marginTop: 6,
                 background: 'var(--bg-card)', border: '1px solid var(--border-default)',
                 borderRadius: 10, padding: 16, zIndex: 300, minWidth: 280,
@@ -1211,9 +1218,9 @@ export default function ProjectDetailPage() {
                   Sezioni da esportare:
                 </div>
                 {[
-                  { id: 'tasks', label: '📋 Fasi', desc: 'Tabella fasi, date, addetti, budget ore' },
-                  { id: 'hours', label: '⏱ Consuntivazione Ore', desc: 'Ore previste vs effettive, saldo' },
-                  { id: 'gantt', label: '📊 Diagramma Gantt', desc: 'Timeline visiva delle fasi' },
+                  { id: 'tasks', icon: 'list', label: 'Fasi', desc: 'Tabella fasi, date, addetti, budget ore' },
+                  { id: 'hours', icon: 'clock', label: 'Consuntivazione Ore', desc: 'Ore previste vs effettive, saldo' },
+                  { id: 'gantt', icon: 'gantt', label: 'Diagramma Gantt', desc: 'Timeline visiva delle fasi' },
                 ].map(sec => (
                   <label key={sec.id} style={{
                     display: 'flex', alignItems: 'flex-start', gap: 10,
@@ -1227,7 +1234,7 @@ export default function ProjectDetailPage() {
                       style={{ marginTop: 2, cursor: 'pointer' }}
                     />
                     <div>
-                      <div style={{ fontWeight: 600 }}>{sec.label}</div>
+                      <div className="inline-detail-row" style={{ fontWeight: 600 }}><AppIcon name={sec.icon} size={14} />{sec.label}</div>
                       <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{sec.desc}</div>
                     </div>
                   </label>
@@ -1253,7 +1260,7 @@ export default function ProjectDetailPage() {
                         onChange={() => setExportFormat('pdf')}
                         style={{ display: 'none' }}
                       />
-                      📄 PDF
+                      <AppIcon name="download" size={14} /> PDF
                     </label>
                     <label style={{
                       flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -1270,7 +1277,7 @@ export default function ProjectDetailPage() {
                         onChange={() => setExportFormat('excel')}
                         style={{ display: 'none' }}
                       />
-                      📊 Excel
+                      <AppIcon name="download" size={14} /> Excel
                     </label>
                   </div>
                 </div>
@@ -1310,7 +1317,7 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* TOOLBAR DI AZIONE POSIZIONATA SOTTO ALLE TABS */}
-      <div className="project-toolbar">
+      {activeTab === 'gantt' && <div className="project-toolbar">
         <div className="toolbar-left" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
 
 
@@ -1320,11 +1327,12 @@ export default function ProjectDetailPage() {
                 className="btn btn-secondary"
                 onClick={() => setShowColumnsMenu(!showColumnsMenu)}
               >
-                ⚙️ Colonne
+                <AppIcon name="columns" />
+                Colonne
               </button>
 
               {showColumnsMenu && (
-                <div style={{
+                <div className="action-popover" style={{
                   position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-default)',
                   borderRadius: 8, padding: 10, zIndex: 100, minWidth: 200, boxShadow: 'var(--shadow-md)'
                 }}>
@@ -1363,7 +1371,8 @@ export default function ProjectDetailPage() {
                 onClick={() => { setShowDeptMenu(!showDeptMenu); setShowColumnsMenu(false); }}
                 style={{ display: 'flex', alignItems: 'center', gap: 6 }}
               >
-                🏢 Reparto
+                <AppIcon name="building" />
+                Reparto
                 {activeDepartments.length < ALL_DEPTS.length && (
                   <span style={{ background: '#6366f1', color: '#fff', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px' }}>
                     {activeDepartments.length}/{ALL_DEPTS.length}
@@ -1371,7 +1380,7 @@ export default function ProjectDetailPage() {
                 )}
               </button>
               {showDeptMenu && (
-                <div style={{
+                <div className="action-popover" style={{
                   position: 'absolute', top: '100%', left: 0, marginTop: 4,
                   background: 'var(--bg-card)', border: '1px solid var(--border-default)',
                   borderRadius: 10, padding: 12, zIndex: 200, minWidth: 200,
@@ -1420,18 +1429,11 @@ export default function ProjectDetailPage() {
           )}
 
         </div>
-      </div>
+      </div>}
 
       {/* TAB 1: GANTT */}
       {activeTab === 'gantt' && (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, width: '100%', maxWidth: '100%' }}>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
-            <span>
-              {canManageProject
-                ? '💡 Clicca e trascina per modificare le fasi. Per registrare le ore effettive di lavoro o consuntivare per singolo addetto, passa alla tab Consuntivazione Ore o clicca sul pulsante + Nuova Fase.'
-                : '🔒 Gantt in Sola Lettura: Fai doppio click su una fase per aprire il Giornale Ore Consuntivate e inserire le ore realmente svolte per le attività a te assegnate.'}
-            </span>
-          </div>
           <div className="gantt-wrapper">
             <GanttChart
               tasks={ganttData.tasks.filter(t => !t.department || activeDepartments.includes(t.department))}
@@ -1489,9 +1491,9 @@ export default function ProjectDetailPage() {
                 <div className="stat-box-label">Stato Avanzamento</div>
                 <div className="stat-box-value">
                   {delaysList.length > 0 ? (
-                    <span className="semaforo-ritardo">🔴 {delaysList.length} Fasi in Allarme</span>
+                    <span className="semaforo-ritardo"><span className="status-dot danger" />{delaysList.length} Fasi in allarme</span>
                   ) : (
-                    <span className="semaforo-ok">🟢 In Linea</span>
+                    <span className="semaforo-ok"><span className="status-dot completed" />In linea</span>
                   )}
                 </div>
               </div>
@@ -1520,7 +1522,9 @@ export default function ProjectDetailPage() {
               className="btn btn-secondary btn-sm"
               onClick={() => setShowTableColumnsMenu(!showTableColumnsMenu)}
             >
-              ⚙️ Colonne ▾
+              <AppIcon name="columns" size={15} />
+              Colonne
+              <AppIcon name="chevronDown" size={13} />
             </button>
             {showTableColumnsMenu && (
               <div style={{
@@ -1607,7 +1611,7 @@ export default function ProjectDetailPage() {
 
                             {Array.isArray(task.workers) && task.workers.length > 0 ? (
                               task.workers.map(w => (
-                                <span key={w} className="worker-chip">👤 {w}</span>
+                                <span key={w} className="worker-chip"><AppIcon name="user" size={12} />{w}</span>
                               ))
                             ) : (
                               <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>Nessun addetto</span>
@@ -1618,7 +1622,7 @@ export default function ProjectDetailPage() {
                           <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                             <div>{formatDateOnly(task.start_date)} → {formatDateOnly(task.end_date)}</div>
                             <div style={{ fontSize: 11, color: 'var(--accent-500)', fontWeight: 600, marginTop: 2 }}>
-                              🗓️ Durata: {task.duration || 1} {task.duration === 1 ? 'giorno' : 'giorni'}
+                              <AppIcon name="calendar" size={12} />Durata: {task.duration || 1} {task.duration === 1 ? 'giorno' : 'giorni'}
                             </div>
                           </td>
                         )}
@@ -1632,11 +1636,11 @@ export default function ProjectDetailPage() {
                         )}
                         {tableVisibleColumns.includes('semaforo') && (
                           <td>
-                            {st === 'ok' && <span className="semaforo-ok">🟢 OK (Regolare)</span>}
-                            {st === 'attenzione' && <span className="semaforo-attenzione">🟡 Attenzione</span>}
-                            {st === 'ritardo_ferie' && <span className="semaforo-ritardo">🔴 Rischio Ritardo (Ferie)</span>}
-                            {st === 'ritardo' && <span className="semaforo-ritardo">🔴 Ritardo Lavorazione</span>}
-                            {st === 'sforamento' && <span className="semaforo-ritardo" style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#ef4444', border: '1px solid #dc2626', padding: '3px 10px', borderRadius: '12px', fontWeight: 700 }}>🔴 Sforamento Ore</span>}
+                            {st === 'ok' && <span className="semaforo-ok"><span className="status-dot completed" />Regolare</span>}
+                            {st === 'attenzione' && <span className="semaforo-attenzione"><span className="status-dot open" />Attenzione</span>}
+                            {st === 'ritardo_ferie' && <span className="semaforo-ritardo"><span className="status-dot danger" />Rischio ritardo ferie</span>}
+                            {st === 'ritardo' && <span className="semaforo-ritardo"><span className="status-dot danger" />Ritardo lavorazione</span>}
+                            {st === 'sforamento' && <span className="semaforo-ritardo"><span className="status-dot danger" />Sforamento ore</span>}
                           </td>
                         )}
                         {tableVisibleColumns.includes('azioni') && (
@@ -1648,25 +1652,26 @@ export default function ProjectDetailPage() {
                                 onClick={() => openOreModalForTask(task)}
                                 title="Inserisci ore lavorate (Giornale ore)"
                               >
-                                ⏱️ Consuntiva
+                                <AppIcon name="clock" size={15} />
+                                Consuntiva
                               </button>
                             )}
                             {canManageProject && (
                               <>
                                 <button
-                                  className="btn btn-secondary btn-sm"
+                                  className="btn btn-secondary btn-icon"
                                   style={{ marginRight: 6 }}
                                   onClick={() => openEditTaskModal(task)}
                                   title="Modifica fase"
                                 >
-                                  ✏️
+                                  <AppIcon name="edit" size={15} />
                                 </button>
                                 <button
-                                  className="btn-ghost btn-sm project-delete"
+                                  className="btn-ghost btn-icon project-delete"
                                   onClick={() => handleTaskDelete(task.id)}
                                   title="Elimina fase"
                                 >
-                                  🗑️
+                                  <AppIcon name="trash" size={15} />
                                 </button>
                               </>
                             )}
@@ -1698,7 +1703,7 @@ export default function ProjectDetailPage() {
                 style={{ borderColor: openTicketsCount > 0 ? 'var(--warning)' : 'var(--border-default)', color: openTicketsCount > 0 ? 'var(--warning)' : 'inherit' }}
                 onClick={() => navigate('/tickets', { state: { projectId: id } })}
               >
-                🎫 Gestione Ticket
+                <AppIcon name="ticket" size={16} />Gestione ticket
                 {openTicketsCount > 0 && (
                   <span className="tab-badge" style={{ backgroundColor: 'var(--warning)', color: '#fff', marginLeft: 8 }}>{openTicketsCount} Aperti</span>
                 )}
@@ -1763,7 +1768,7 @@ export default function ProjectDetailPage() {
                         border: '1px solid var(--border-subtle)', borderRadius: 8, fontSize: 13
                       }}>
                         <a href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-500)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          <span style={{ fontSize: 16 }}>📎</span> {att.name}
+                          <AppIcon name="paperclip" size={14} /> {att.name}
                         </a>
                         <button
                           onClick={() => handleDeleteAttachment(att.name)}
@@ -1804,7 +1809,7 @@ export default function ProjectDetailPage() {
 
           {delaysList.length === 0 ? (
             <div className="commessa-summary-card" style={{ textAlign: 'center', padding: 48, borderColor: 'rgba(16, 185, 129, 0.4)' }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>🎉</div>
+              <div className="empty-state-icon"><AppIcon name="check" size={26} /></div>
               <h3 style={{ color: 'var(--success)', margin: 0 }}>Nessuna Allerta di Ritardo!</h3>
               <p style={{ color: 'var(--text-secondary)', marginTop: 8 }}>
                 Tutte le {ganttData.tasks.length} fasi di lavorazione della commessa sono regolarmente coperte dalla consuntivazione oraria degli addetti.
@@ -1819,28 +1824,29 @@ export default function ProjectDetailPage() {
                       {item.task.text}
                     </span>
                     {item.stato === 'ritardo' ? (
-                      <span className="semaforo-ritardo">🔴 RITARDO CRITICO (&lt; 50% ORE / 0 ORE IN GIORNI TRASCORSI)</span>
+                      <span className="semaforo-ritardo"><span className="status-dot danger" />Ritardo critico</span>
                     ) : item.stato === 'ritardo_ferie' ? (
-                      <span className="semaforo-ritardo">🔴 RISCHIO RITARDO CAUSA FERIE</span>
+                      <span className="semaforo-ritardo"><span className="status-dot danger" />Rischio ritardo ferie</span>
                     ) : item.stato === 'sforamento' ? (
-                      <span className="semaforo-ritardo" style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#ef4444', border: '1px solid #dc2626', padding: '3px 10px', borderRadius: '12px', fontWeight: 700 }}>🔴 Sforamento Ore</span>
+                      <span className="semaforo-ritardo"><span className="status-dot danger" />Sforamento ore</span>
                     ) : (
-                      <span className="semaforo-attenzione">🟡 ATTENZIONE (&lt; ORE ATTESE GIORNALIERE)</span>
+                      <span className="semaforo-attenzione"><span className="status-dot open" />Attenzione</span>
                     )}
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                    📅 Inizio/Fine: <strong>{formatDateOnly(item.task.start_date)} → {formatDateOnly(item.task.end_date)}</strong> |{' '}
+                  <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    <AppIcon name="calendar" size={14} /> Inizio/Fine: <strong>{formatDateOnly(item.task.start_date)} → {formatDateOnly(item.task.end_date)}</strong> |{' '}
                     Addetti: <strong>{Array.isArray(item.task.workers) ? item.task.workers.join(', ') : 'Nessuno'}</strong>
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                    📊 Ore Previste: <strong>{item.task.planned_hours || 8}h</strong> | Consuntivate finora: <strong>{item.tEff}h</strong>
+                  <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                    <AppIcon name="clock" size={13} />Ore previste: <strong>{item.task.planned_hours || 8}h</strong> | Consuntivate finora: <strong>{item.tEff}h</strong>
                   </div>
                 </div>
                 <button
                   className="btn btn-primary"
                   onClick={() => openOreModalForTask(item.task)}
                 >
-                  ⏱️ Intervieni e Registra Ore
+                  <AppIcon name="clock" />
+                  Registra ore
                 </button>
               </div>
             ))
@@ -1851,10 +1857,12 @@ export default function ProjectDetailPage() {
       {/* MODALE NUOVA / MODIFICA FASE (TASK MODAL) */}
       {showTaskModal && (
         <div className="modal-overlay" onClick={() => setShowTaskModal(false)}>
-          <div className="modal" style={{ maxWidth: 900 }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal task-editor-modal" style={{ maxWidth: 900 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{editingTask ? 'Dettagli Fase Lavorazione' : 'Nuova Fase Lavorazione (Ufficio Tecnico)'}</h2>
-              <button className="btn-ghost btn-icon" onClick={() => setShowTaskModal(false)}>✕</button>
+              <button className="btn-ghost btn-icon" onClick={() => setShowTaskModal(false)} aria-label="Chiudi">
+                <AppIcon name="close" />
+              </button>
             </div>
 
             {editingTask && (
@@ -1876,10 +1884,10 @@ export default function ProjectDetailPage() {
             {taskModalTab === 'generale' && (
               <form onSubmit={handleSaveTaskForm}>
                 {/* Scelta Tipo Fase: Normale o Milestone (Linea Verticale / Evento) */}
-                <div style={{ marginBottom: 16, padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
+                <div className="task-type-selector">
                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Tipo di Voce:</label>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: taskForm.taskType !== 'milestone' ? 600 : 400 }}>
+                    <label className={`task-type-option ${taskForm.taskType !== 'milestone' ? 'selected' : ''}`}>
                       <input
                         type="radio"
                         name="taskType"
@@ -1887,9 +1895,11 @@ export default function ProjectDetailPage() {
                         checked={taskForm.taskType !== 'milestone'}
                         onChange={() => setTaskForm({ ...taskForm, taskType: 'task' })}
                       />
-                      📋 Fase di Lavorazione (con durata e ore)
+                      <AppIcon name="list" />
+                      Fase di lavorazione
+                      <small>Con durata e budget ore</small>
                     </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: taskForm.taskType === 'milestone' ? 600 : 400 }}>
+                    <label className={`task-type-option ${taskForm.taskType === 'milestone' ? 'selected' : ''}`}>
                       <input
                         type="radio"
                         name="taskType"
@@ -1897,7 +1907,9 @@ export default function ProjectDetailPage() {
                         checked={taskForm.taskType === 'milestone'}
                         onChange={() => setTaskForm({ ...taskForm, taskType: 'milestone', color: taskForm.color === PHASE_DEFAULT_COLORS[PREDEFINED_PHASES[0]] ? '#f59e0b' : taskForm.color })}
                       />
-                      📍 Evento / Scadenza
+                      <AppIcon name="calendar" />
+                      Evento o scadenza
+                      <small>Milestone nel Gantt</small>
                     </label>
                   </div>
                 </div>
@@ -1921,7 +1933,8 @@ export default function ProjectDetailPage() {
                       style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                     />
                     <label htmlFor="taskCompleted" style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)', margin: 0 }}>
-                      ✅ Fase Completata
+                      <AppIcon name="check" size={16} />
+                      Fase completata
                     </label>
                   </div>
                 )}
@@ -1945,7 +1958,7 @@ export default function ProjectDetailPage() {
                         <span style={{ width: 14, height: 14, borderRadius: '50%', background: taskForm.color || '#3b82f6', border: '1px solid var(--border-default)', flexShrink: 0 }} />
                       )}
                       <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>
-                        {taskForm.faseSel === '__custom__' ? '✏️ Altra lavorazione personalizzata...' : taskForm.faseSel}
+                        {taskForm.faseSel === '__custom__' ? 'Altra lavorazione personalizzata…' : taskForm.faseSel}
                       </span>
                     </div>
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{showPhaseDropdown ? '▲' : '▼'}</span>
@@ -1974,10 +1987,10 @@ export default function ProjectDetailPage() {
                         if (user?.role === 'admin') {
                           const depts = ['ufficio_tecnico', 'produzione', 'acquisti', 'tutti'];
                           const deptLabels = {
-                            ufficio_tecnico: '🔧 Ufficio Tecnico',
-                            produzione: '🏭 Produzione',
-                            acquisti: '🛒 Acquisti',
-                            tutti: '⚙️ Condivise / Tutti',
+                            ufficio_tecnico: 'Ufficio Tecnico',
+                            produzione: 'Produzione',
+                            acquisti: 'Acquisti',
+                            tutti: 'Condivise / Tutti',
                           };
                           return depts.map(dKey => {
                             const dItems = available.filter(t => t.department === dKey);
@@ -2010,11 +2023,11 @@ export default function ProjectDetailPage() {
                                         e.stopPropagation();
                                         handleDeleteTemplateFromDropdown(tpl);
                                       }}
-                                      className="btn-ghost btn-sm"
+                                      className="btn-ghost btn-icon"
                                       style={{ padding: '2px 6px', color: 'var(--danger)', fontSize: '0.9rem' }}
                                       title="Elimina dall'elenco a tendina"
                                     >
-                                      🗑️
+                                      <AppIcon name="trash" size={14} />
                                     </button>
                                   </div>
                                 ))}
@@ -2045,11 +2058,11 @@ export default function ProjectDetailPage() {
                                   e.stopPropagation();
                                   handleDeleteTemplateFromDropdown(tpl);
                                 }}
-                                className="btn-ghost btn-sm"
+                                className="btn-ghost btn-icon"
                                 style={{ padding: '2px 6px', color: 'var(--danger)', fontSize: '0.9rem' }}
                                 title="Elimina dall'elenco a tendina"
                               >
-                                🗑️
+                                <AppIcon name="trash" size={14} />
                               </button>
                             </div>
                           ));
@@ -2063,7 +2076,7 @@ export default function ProjectDetailPage() {
                         }}
                         style={{ padding: '10px 12px', cursor: 'pointer', fontWeight: 600, color: 'var(--primary)', borderTop: '2px solid var(--border-default)', display: 'flex', alignItems: 'center', gap: 8, background: taskForm.faseSel === '__custom__' ? 'var(--primary-subtle, rgba(59,130,246,0.15))' : 'transparent' }}
                       >
-                        <span>✏️</span>
+                        <AppIcon name="edit" size={15} />
                         <span>Altra lavorazione personalizzata...</span>
                       </div>
                     </div>
@@ -2080,8 +2093,8 @@ export default function ProjectDetailPage() {
                       required
                       placeholder="es. Verifica requisiti speciali con fornitore"
                     />
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
-                      💡 Questa nuova fase verrà automaticamente aggiunta all'elenco suggerito per il reparto {user?.role === 'admin' ? 'di competenza' : (user?.department ? user.department.replace('_', ' ') : 'ufficio tecnico')}.
+                    <span className="inline-detail-row" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                      <AppIcon name="alert" size={13} />Questa nuova fase verrà automaticamente aggiunta all'elenco suggerito per il reparto {user?.role === 'admin' ? 'di competenza' : (user?.department ? user.department.replace('_', ' ') : 'ufficio tecnico')}.
                     </span>
                   </div>
                 )}
@@ -2133,9 +2146,10 @@ export default function ProjectDetailPage() {
 
                 {/* Sezione Pianificazione Temporale e Durate / Data Evento */}
                 {taskForm.taskType === 'milestone' ? (
-                  <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: 14, marginTop: 16 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-                      📍 Data Evento / Milestone (Linea Verticale e Diamante nel Gantt)
+                  <div className="task-form-section milestone-section">
+                    <div className="task-form-section-title">
+                      <AppIcon name="calendar" />
+                      Data evento o milestone
                     </div>
                     <div className="input-group" style={{ maxWidth: 260 }}>
                       <label>Data Evento</label>
@@ -2149,9 +2163,10 @@ export default function ProjectDetailPage() {
                   </div>
                 ) : (
                   <>
-                    <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: 14, marginTop: 16 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-500)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-                        🗓️ Pianificazione e Durata (Impostabile in Giorni e in Ore)
+                    <div className="task-form-section">
+                      <div className="task-form-section-title">
+                        <AppIcon name="calendar" />
+                        Pianificazione e durata
                       </div>
 
                       {/* Scelta Modalità Budget e Pianificazione Date */}
@@ -2165,13 +2180,13 @@ export default function ProjectDetailPage() {
                           value={budgetMode}
                           onChange={(e) => handleBudgetModeChange(e.target.value)}
                         >
-                          <option value="start_end">📅 Data Inizio / Data Fine (calcola giorni lavorativi ed ore escludendo sab/dom e festivi)</option>
-                          <option value="start_hours">⏳ Data Inizio / Ore (calcola data fine escludendo sab/dom e festivi, giorni = ore/8)</option>
-                          <option value="end_hours">⏳ Data Fine / Ore (calcola data inizio a ritroso escludendo sab/dom e festivi)</option>
-                          <option value="start_days">📆 Data Inizio / Giorni (calcola data fine escludendo sab/dom e festivi, ore = giorni×8)</option>
-                          <option value="end_days">📆 Data Fine / Giorni (calcola data inizio a ritroso escludendo sab/dom e festivi)</option>
-                          <option value="start_days_hours">⚡ Data Inizio / Giorni / Ore (es. 24h spalmate su 10 gg escludendo sab/dom e festivi)</option>
-                          <option value="end_days_hours">⚡ Data Fine / Giorni / Ore (es. 24h spalmate a ritroso su 10 gg escludendo sab/dom e festivi)</option>
+                          <option value="start_end">Data Inizio / Data Fine (calcola giorni lavorativi ed ore escludendo sab/dom e festivi)</option>
+                          <option value="start_hours">Data Inizio / Ore (calcola data fine escludendo sab/dom e festivi, giorni = ore/8)</option>
+                          <option value="end_hours">Data Fine / Ore (calcola data inizio a ritroso escludendo sab/dom e festivi)</option>
+                          <option value="start_days">Data Inizio / Giorni (calcola data fine escludendo sab/dom e festivi, ore = giorni×8)</option>
+                          <option value="end_days">Data Fine / Giorni (calcola data inizio a ritroso escludendo sab/dom e festivi)</option>
+                          <option value="start_days_hours">Data Inizio / Giorni / Ore (es. 24h spalmate su 10 gg escludendo sab/dom e festivi)</option>
+                          <option value="end_days_hours">Data Fine / Giorni / Ore (es. 24h spalmate a ritroso su 10 gg escludendo sab/dom e festivi)</option>
                         </select>
                       </div>
 
@@ -2240,7 +2255,8 @@ export default function ProjectDetailPage() {
                       {/* Reparto */}
                       <div className="input-group" style={{ marginTop: 12 }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          🏢 Reparto
+                          <AppIcon name="building" size={15} />
+                          Reparto
                           {user?.role !== 'admin' && (
                             <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(assegnato automaticamente)</span>
                           )}
@@ -2312,7 +2328,10 @@ export default function ProjectDetailPage() {
                           return (
                             <>
                               <div style={{ fontSize: 12, fontWeight: 700, color: overBudget ? '#ef4444' : 'var(--accent-500)', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                                <span>{overBudget ? '⚠️' : '✅'} Addetti Assegnati a questa fase ({taskForm.workers.length}):</span>
+                                <span className="inline-heading">
+                                  <AppIcon name={overBudget ? 'alert' : 'check'} size={14} />
+                                  Addetti assegnati ({taskForm.workers.length})
+                                </span>
                                 <span>Totale assegnato: {currentAssignedTotal}h / {currentBudgetTotal}h</span>
                               </div>
                               {taskForm.workers.length === 0 ? (
@@ -2398,7 +2417,7 @@ export default function ProjectDetailPage() {
           <div className="modal" style={{ maxWidth: 840 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div>
-                <h2 style={{ margin: 0 }}>⏱️ Giornale Ore Consuntivate</h2>
+                <h2 className="inline-heading"><AppIcon name="clock" size={18} />Giornale ore consuntivate</h2>
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
                   Fase: <strong style={{ color: 'var(--accent-500)' }}>{selectedTaskForHours.text}</strong> |{' '}
                   Ore previste: <strong>{selectedTaskForHours.planned_hours || 8}h</strong>
@@ -2413,7 +2432,7 @@ export default function ProjectDetailPage() {
                     style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 600, color: '#ef4444' }}
                     title="Rimuovi l'ultimo giorno extra aggiunto"
                   >
-                    ➖ Rimuovi Ultimo Giorno
+                    <AppIcon name="trash" size={14} />Rimuovi ultimo giorno
                   </button>
                 )}
                 <button
@@ -2423,9 +2442,11 @@ export default function ProjectDetailPage() {
                   style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 600 }}
                   title="Aggiungi una colonna giorno extra al giornale ore (senza modificare la data fine fase)"
                 >
-                  ➕ Aggiungi Giorno Extra
+                  <AppIcon name="plus" size={14} />Aggiungi giorno extra
                 </button>
-                <button className="btn-ghost btn-icon" onClick={() => setShowOreModal(false)}>✕</button>
+                <button className="btn-ghost btn-icon" onClick={() => setShowOreModal(false)} aria-label="Chiudi">
+                  <AppIcon name="close" />
+                </button>
               </div>
             </div>
 
@@ -2464,7 +2485,7 @@ export default function ProjectDetailPage() {
                             </th>
                           ))}
                           <th style={{ minWidth: 90, background: 'rgba(245, 158, 11, 0.1)' }}>
-                            ⭐ Ore extra<br />
+                            Ore extra<br />
                             <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-tertiary)' }}>(ritardo/straord.)</span>
                           </th>
                           <th style={{ minWidth: 135 }}>Totale Addetto</th>
@@ -2484,7 +2505,7 @@ export default function ProjectDetailPage() {
                           return (
                             <tr key={w} style={isCurrentUser ? { background: 'rgba(59,130,246,0.10)', outline: '2px solid rgba(59,130,246,0.35)', outlineOffset: '-2px', borderRadius: 8 } : {}}>
                               <td style={{ textAlign: 'left', fontWeight: isCurrentUser ? 800 : 600, color: isCurrentUser ? 'var(--accent-400)' : undefined }}>
-                                👤 {w}{isCurrentUser ? ' (tu)' : ''}
+                                <span className="inline-detail-row"><AppIcon name="user" size={13} />{w}{isCurrentUser ? ' (tu)' : ''}</span>
                               </td>
                               {dates.map(d => {
                                 const val = (actualHoursMap[w] && actualHoursMap[w][d]) || '';
@@ -2512,7 +2533,7 @@ export default function ProjectDetailPage() {
                                           });
                                         }}
                                       />
-                                      {isHoliday && <span style={{ fontSize: '0.65rem', color: '#b45309', fontWeight: 'bold' }}>🌴 Ferie</span>}
+                                      {isHoliday && <span style={{ fontSize: '0.65rem', color: '#b45309', fontWeight: 'bold' }}>Ferie</span>}
                                       <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-tertiary)' }}>
                                         ({workerDailyTarget.toFixed(1)}h prev)
                                       </span>
@@ -2580,11 +2601,11 @@ export default function ProjectDetailPage() {
                             <span style={{ fontSize: 15, color: 'var(--text-primary)' }}>
                               Totale consuntivato finora: <strong style={{ color: 'var(--accent-500)' }}>{totAll} h</strong> / {plannedH} h prev
                             </span>
-                            {st === 'ok' && <span className="semaforo-ok">🟢 Stato OK (Regolare)</span>}
-                            {st === 'attenzione' && <span className="semaforo-attenzione">🟡 Stato Attenzione</span>}
-                            {st === 'ritardo_ferie' && <span className="semaforo-ritardo">🔴 Rischio Ritardo (Ferie)</span>}
-                            {st === 'ritardo' && <span className="semaforo-ritardo">🔴 Stato Ritardo</span>}
-                            {st === 'sforamento' && <span className="semaforo-ritardo" style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#ef4444', border: '1px solid #dc2626', padding: '3px 10px', borderRadius: '12px', fontWeight: 700 }}>🔴 Sforamento Ore</span>}
+                            {st === 'ok' && <span className="semaforo-ok"><span className="status-dot completed" />Stato regolare</span>}
+                            {st === 'attenzione' && <span className="semaforo-attenzione"><span className="status-dot open" />Stato attenzione</span>}
+                            {st === 'ritardo_ferie' && <span className="semaforo-ritardo"><span className="status-dot danger" />Rischio ritardo (ferie)</span>}
+                            {st === 'ritardo' && <span className="semaforo-ritardo"><span className="status-dot danger" />Stato ritardo</span>}
+                            {st === 'sforamento' && <span className="semaforo-ritardo" style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#ef4444', border: '1px solid #dc2626', padding: '3px 10px', borderRadius: '12px', fontWeight: 700 }}><span className="status-dot danger" />Sforamento ore</span>}
                             {isModalCompleted && (
                               <span style={{ background: 'rgba(16, 185, 129, 0.18)', color: '#10b981', padding: '3px 10px', borderRadius: '12px', fontWeight: 600, fontSize: '0.82rem', border: '1px solid #059669' }}>
                                 ✓ Fase Completata (100% Ore / Flaggata)
@@ -2616,7 +2637,9 @@ export default function ProjectDetailPage() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Modifica Dati Commessa</h2>
-              <button className="btn-ghost btn-icon" onClick={() => setShowEditProjectModal(false)}>✕</button>
+              <button className="btn-ghost btn-icon" onClick={() => setShowEditProjectModal(false)} aria-label="Chiudi">
+                <AppIcon name="close" />
+              </button>
             </div>
             <form onSubmit={handleSaveProject}>
               <div style={{ display: 'flex', gap: 12 }}>
@@ -2790,4 +2813,3 @@ export default function ProjectDetailPage() {
     </div>
   );
 }
-
