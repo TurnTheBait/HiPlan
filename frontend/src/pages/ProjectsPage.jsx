@@ -173,7 +173,7 @@ export default function ProjectsPage() {
     <div className="projects-page animate-fadeIn">
       <div className="projects-header">
         <div>
-          <h1>Commesse & Progetti</h1>
+          <h1>Commesse</h1>
           <p>{filtered.length} commesse</p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>

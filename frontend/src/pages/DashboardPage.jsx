@@ -14,7 +14,7 @@ export default function DashboardPage() {
   const [timelineMonth, setTimelineMonth] = useState(today.getMonth());
   const [projects, setProjects] = useState([]);
   const [projectsWithTasks, setProjectsWithTasks] = useState([]);
-  const [notifications, setNotifications] = useState([]);
+  const [assignedTodos, setAssignedTodos] = useState([]);
   const [myTasksToday, setMyTasksToday] = useState([]);
   const [vacations, setVacations] = useState([]);
   const [recoveryItems, setRecoveryItems] = useState([]);
@@ -59,9 +59,9 @@ export default function DashboardPage() {
 
   async function loadData() {
     try {
-      const [projRes, notifRes, tasksRes, vacRes, recoveryRes, bannerRes] = await Promise.all([
+      const [projRes, todosRes, tasksRes, vacRes, recoveryRes, bannerRes] = await Promise.all([
         api.get('/projects'),
-        api.get('/notifications'),
+        api.get('/todos'),
         api.get('/users/me/tasks/today'),
         api.get('/vacations/me').catch(() => ({ data: [] })),
         api.get('/vacations/me/recovery').catch(() => ({ data: [] })),
@@ -71,7 +71,9 @@ export default function DashboardPage() {
       if (Array.isArray(bannerRes.data)) {
         setGlobalBanners(bannerRes.data);
       }
-      setNotifications(notifRes.data);
+      const todosData = todosRes.data || [];
+      const openAssigned = todosData.filter(t => !t.is_completed && t.assignees?.includes(user?.id));
+      setAssignedTodos(openAssigned);
       setMyTasksToday(tasksRes.data);
       setVacations(vacRes.data || []);
       setRecoveryItems(recoveryRes.data || []);
@@ -92,21 +94,7 @@ export default function DashboardPage() {
     finally { setLoading(false); }
   }
 
-  async function deleteNotification(id) {
-    try {
-      await api.delete(`/notifications/${id}`);
-      setNotifications(prev => prev.filter(n => n.id !== id));
-      window.dispatchEvent(new Event('notifications-changed'));
-    } catch { /* ignore */ }
-  }
 
-  async function deleteAllNotifications() {
-    try {
-      await api.delete('/notifications');
-      setNotifications([]);
-      window.dispatchEvent(new Event('notifications-changed'));
-    } catch { /* ignore */ }
-  }
 
   function getRecoveryKey(item) {
     return `${item.task_id}_${item.vacation_start}`;
@@ -154,7 +142,7 @@ export default function DashboardPage() {
             banner.type === 'warning' ? 'rgba(245, 158, 11, 0.15)' :
               banner.type === 'success' ? 'rgba(16, 185, 129, 0.15)' :
                 'rgba(59, 130, 246, 0.15)',
-          borderLeft: `6px solid ${banner.type === 'error' ? '#ef4444' :
+          border: `6px solid ${banner.type === 'error' ? '#ef4444' :
             banner.type === 'warning' ? '#f59e0b' :
               banner.type === 'success' ? '#10b981' :
                 '#3b82f6'
@@ -295,7 +283,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <div className="card dashboard-section">
+        <div className="card dashboard-section" style={{ height: '420px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
           <h2>Commesse Recenti</h2>
           {projects.length === 0 ? (
             <div className="empty-state">
@@ -307,7 +295,7 @@ export default function DashboardPage() {
               </button>
             </div>
           ) : (
-            <div className="recent-projects">
+            <div className="recent-projects" style={{ paddingBottom: '24px' }}>
               {projects.filter(p => p.status !== 'archived').slice(0, 5).map((project) => (
                 <div
                   key={project.id}
@@ -335,64 +323,54 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <div className="card dashboard-section">
+        <div className="card dashboard-section" style={{ height: '420px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
           <div className="notification-header">
-            <h2>Notifiche</h2>
-            {notifications.length > 0 && (
-              <button
-                className="btn btn-ghost btn-sm notification-delete-all"
-                onClick={deleteAllNotifications}
-                title="Elimina tutte le notifiche"
-              >
-                🗑️ Elimina tutte
-              </button>
-            )}
+            <h2>☑️ TODO Assegnati a te</h2>
           </div>
-          {notifications.length === 0 ? (
+          {assignedTodos.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-state-icon">🔔</div>
-              <h3>Nessuna notifica</h3>
-              <p>Tutto tranquillo per ora</p>
+              <div className="empty-state-icon">✅</div>
+              <h3>Nessun TODO in sospeso</h3>
+              <p>Hai completato tutti i tuoi compiti!</p>
             </div>
           ) : (
-            <div className="notifications-list">
-              {notifications.slice(0, 8).map((n) => (
-                <div key={n.id} className={`notification-item ${n.is_read ? '' : 'unread'}`}
-                  onClick={() => {
-                    if (n.project_id && n.task_id) {
-                      navigate(`/projects/${n.project_id}?open_task=${n.task_id}`);
-                    } else if (n.project_id) {
-                      navigate(`/projects/${n.project_id}`);
-                    }
-                  }}
-                  style={{ cursor: n.project_id ? 'pointer' : 'default' }}
-                >
-                  <span className="notification-icon">
-                    {n.type === 'assignment' ? '👤' : n.type === 'deadline' ? '⏰' : '📝'}
-                  </span>
-                  <div className="notification-content">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                      <span className="notification-title">{n.title}</span>
-                      {n.created_at && (
-                        <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
-                          {new Date(n.created_at).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      )}
-                    </div>
-                    {n.message && <span className="notification-message">{n.message}</span>}
-                  </div>
-                  <button
-                    className="notification-delete-btn"
-                    onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}
-                    title="Elimina notifica"
+            <div className="notifications-list" style={{ paddingBottom: '24px' }}>
+              {assignedTodos.slice(0, 8).map((todo) => {
+                const due = todo.due_date ? (todo.due_date.includes('T') ? new Date(todo.due_date) : new Date(todo.due_date + 'T00:00:00')) : null;
+                const today = new Date(); today.setHours(0,0,0,0);
+                const dueDay = due ? new Date(due) : null;
+                if (dueDay) dueDay.setHours(0,0,0,0);
+                const daysLeft = dueDay ? Math.ceil((dueDay - today)/86400000) : null;
+                const isOverdue = daysLeft !== null && daysLeft < 0;
+                
+                return (
+                  <div key={todo.id} className="notification-item unread"
+                    onClick={() => navigate('/todo')}
+                    style={{ cursor: 'pointer', padding: '16px', background: 'var(--bg-secondary)', borderRadius: '12px', marginBottom: '12px', display: 'flex', gap: '16px', alignItems: 'center' }}
                   >
-                    ✕
-                  </button>
-                </div>
-              ))}
+                    <span className="notification-icon" style={{ fontSize: '1.4rem' }}>
+                      {isOverdue ? '🔴' : '📝'}
+                    </span>
+                    <div className="notification-content" style={{ flex: 1, overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                        <span className="notification-title" style={{ fontWeight: 600, fontSize: '0.95rem' }}>{todo.title}</span>
+                        {due && (
+                          <span style={{ fontSize: '0.75rem', color: isOverdue ? '#ef4444' : 'var(--text-tertiary)', whiteSpace: 'nowrap', fontWeight: isOverdue ? 700 : 500 }}>
+                            Scad: {due.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '')}
+                          </span>
+                        )}
+                      </div>
+                      <div className="notification-message" style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '4px' }}>
+                        {todo.content || 'Nessuna descrizione'}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
+
 
         {recoveryItems.filter(item => !dismissedKeys.has(getRecoveryKey(item))).length > 0 && (
           <div className="card dashboard-section" style={{ gridColumn: '1 / -1', border: '2px solid #f59e0b', background: 'rgba(245,158,11,0.05)' }}>

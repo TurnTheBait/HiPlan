@@ -1,15 +1,25 @@
-import asyncio
-from sqlalchemy.ext.asyncio import create_async_engine
-from app.core.config import settings
+import sqlite3
 
-async def run():
-    engine = create_async_engine(settings.DATABASE_URL)
-    async with engine.begin() as conn:
-        try:
-            await conn.exec_driver_sql("ALTER TABLE tickets ADD COLUMN custom_project_code VARCHAR(255);")
-            print("Added custom_project_code to tickets")
-        except Exception as e:
-            print("Error:", e)
-    await engine.dispose()
+def add_columns():
+    conn = sqlite3.connect('ganttflow.db')
+    cursor = conn.cursor()
+    
+    # Try adding notify_sent
+    try:
+        cursor.execute("ALTER TABLE todos ADD COLUMN notify_sent BOOLEAN DEFAULT 0 NOT NULL;")
+        print("Aggiunta colonna notify_sent")
+    except sqlite3.OperationalError as e:
+        print(f"Colonna notify_sent forse già esiste: {e}")
+        
+    # Try adding due_reminder_sent
+    try:
+        cursor.execute("ALTER TABLE todos ADD COLUMN due_reminder_sent BOOLEAN DEFAULT 0 NOT NULL;")
+        print("Aggiunta colonna due_reminder_sent")
+    except sqlite3.OperationalError as e:
+        print(f"Colonna due_reminder_sent forse già esiste: {e}")
+        
+    conn.commit()
+    conn.close()
 
-asyncio.run(run())
+if __name__ == "__main__":
+    add_columns()

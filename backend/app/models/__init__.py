@@ -11,6 +11,8 @@ from app.models.phase_template import PhaseTemplate
 from app.models.setting import Setting
 from app.models.ticket import Ticket, TicketReply, TicketStatus, TicketPriority
 from app.models.activity_log import ActivityLog, ActivityCategory
+from app.models.todo import Todo
+from app.models.email_log import EmailLog
 
 __all__ = [
     "Base", "engine", "AsyncSessionLocal",
@@ -21,8 +23,10 @@ __all__ = [
     "Notification", "NotificationType",
     "Note",
     "TaskComment", "TaskChecklistItem",
+    "EmailLog",
     "Vacation", "PhaseTemplate",
     "Setting",
     "Ticket", "TicketReply", "TicketStatus", "TicketPriority",
-    "ActivityLog", "ActivityCategory"
+    "ActivityLog", "ActivityCategory",
+    "Todo"
 ]

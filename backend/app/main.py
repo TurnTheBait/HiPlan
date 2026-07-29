@@ -8,7 +8,11 @@ from app.models.base import Base, engine
 import app.models  # Assicura il caricamento di tutti i modelli per create_all
 # pyrefly: ignore [missing-import]
 from fastapi.staticfiles import StaticFiles
-from app.api import auth, users, projects, tasks, notifications, export, notes, task_collaboration, workload, vacations, phase_templates, settings as api_settings, tickets, activity_logs, websockets
+from app.api import (
+    auth, users, projects, tasks, notes, export, 
+    notifications, phase_templates, workload, vacations, 
+    tickets, task_collaboration, websockets, settings as api_settings, activity_logs, todos, email_logs
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -113,8 +117,118 @@ async def lifespan(app: FastAPI):
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(run_backup, 'cron', day_of_week='sun', hour=3, minute=0)
+
+    # Scheduler: invia notifiche TODO regolarmente controllando la data e ora esatta
+    async def run_todo_notifications():
+        from app.models.base import AsyncSessionLocal
+        from app.models.todo import Todo
+        from app.models.notification import Notification, NotificationType
+        from app.models.user import User
+        from app.services.email_service import send_todo_notification_email
+        import json
+        from datetime import datetime, timedelta
+        # pyrefly: ignore [missing-import]
+        from sqlalchemy import select
+
+        now = datetime.now()
+        tomorrow_now = now + timedelta(days=1)
+
+        async with AsyncSessionLocal() as session:
+            # 1) Invia notifica se notify_date è passato e non ancora inviato
+            todos_notify = await session.execute(
+                select(Todo).where(
+                    Todo.notify_date <= now,
+                    Todo.is_completed == False,
+                    Todo.notify_sent == False
+                )
+            )
+            for todo in todos_notify.scalars().all():
+                todo.notify_sent = True
+                try:
+                    assignees = json.loads(todo.assignees) if todo.assignees else []
+                except Exception:
+                    assignees = []
+
+                # Notifica in-app
+                for uid in assignees:
+                    notif = Notification(
+                        user_id=uid,
+                        title=f"📋 TODO: {todo.title}",
+                        message="Data di notifica raggiunta per il tuo TODO.",
+                        type=NotificationType.DEADLINE,
+                    )
+                    session.add(notif)
+
+                # Email
+                if todo.notify_email:
+                    users_res = await session.execute(
+                        select(User).where(User.id.in_(assignees), User.is_active == True)
+                    )
+                    users_list = users_res.scalars().all()
+                    emails = [u.email for u in users_list if u.email]
+                    creator_res = await session.execute(select(User).where(User.id == todo.creator_id))
+                    creator = creator_res.scalar_one_or_none()
+                    if emails:
+                        await send_todo_notification_email(
+                            to_addresses=emails,
+                            todo_title=todo.title,
+                            todo_content=todo.content,
+                            creator_name=creator.full_name or creator.username if creator else "HiPlan",
+                            notify_type="notification",
+                        )
+
+            await session.commit()
+
+            await session.commit()
+
+            # 2) Invia reminder scadenza se manca <= 24 ore e non ancora inviato
+            todos_due = await session.execute(
+                select(Todo).where(
+                    Todo.due_date <= tomorrow_now,
+                    Todo.is_completed == False,
+                    Todo.due_reminder_sent == False
+                )
+            )
+            for todo in todos_due.scalars().all():
+                todo.due_reminder_sent = True
+                try:
+                    assignees = json.loads(todo.assignees) if todo.assignees else []
+                except Exception:
+                    assignees = []
+
+                # Notifica in-app
+                for uid in assignees:
+                    notif = Notification(
+                        user_id=uid,
+                        title=f"⏰ Scadenza domani: {todo.title}",
+                        message="Un TODO non ancora completato è in scadenza domani.",
+                        type=NotificationType.DEADLINE,
+                    )
+                    session.add(notif)
+
+                # Email
+                if todo.notify_email:
+                    users_res = await session.execute(
+                        select(User).where(User.id.in_(assignees), User.is_active == True)
+                    )
+                    users_list = users_res.scalars().all()
+                    emails = [u.email for u in users_list if u.email]
+                    creator_res = await session.execute(select(User).where(User.id == todo.creator_id))
+                    creator = creator_res.scalar_one_or_none()
+                    if emails:
+                        await send_todo_notification_email(
+                            to_addresses=emails,
+                            todo_title=todo.title,
+                            todo_content=todo.content,
+                            creator_name=creator.full_name or creator.username if creator else "HiPlan",
+                            notify_type="due_reminder",
+                        )
+
+            await session.commit()
+
+    scheduler.add_job(run_todo_notifications, 'interval', minutes=5)
     scheduler.start()
-    print("[INIT] Scheduler di backup avviato (domenica ore 03:00)")
+    print("[INIT] Scheduler avviato (controllo TODO ogni 5 minuti)")
 
     yield
     await engine.dispose()
@@ -162,6 +276,8 @@ app.include_router(phase_templates.router)
 app.include_router(tickets.router)
 app.include_router(activity_logs.router)
 app.include_router(websockets.router)
+app.include_router(todos.router)
+app.include_router(email_logs.router, prefix="/api/admin/email-logs", tags=["Admin"])
 
 @app.get("/api/health")
 async def health_check():

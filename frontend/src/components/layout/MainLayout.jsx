@@ -46,6 +46,8 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     fetchUnread();
@@ -61,6 +63,43 @@ export default function MainLayout() {
     try {
       const { data } = await api.get('/notifications/unread-count');
       setUnreadCount(data.count);
+    } catch { /* ignore */ }
+  }
+
+  async function fetchNotifications() {
+    try {
+      const { data } = await api.get('/notifications');
+      setNotifications(data);
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => {
+    if (showNotifications) {
+      fetchNotifications();
+    }
+  }, [showNotifications]);
+
+  async function markAsRead(id) {
+    try {
+      await api.patch(`/notifications/${id}`, { is_read: true });
+      fetchNotifications();
+      fetchUnread();
+    } catch { /* ignore */ }
+  }
+
+  async function deleteNotification(id) {
+    try {
+      await api.delete(`/notifications/${id}`);
+      fetchNotifications();
+      fetchUnread();
+    } catch { /* ignore */ }
+  }
+
+  async function deleteAllNotifications() {
+    try {
+      await api.delete('/notifications');
+      fetchNotifications();
+      fetchUnread();
     } catch { /* ignore */ }
   }
 
@@ -103,23 +142,10 @@ export default function MainLayout() {
           <NavLink to="/dashboard" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon">📊</span>
             {!collapsed && <span>Dashboard</span>}
-            {unreadCount > 0 && (
-              <span
-                className="notification-badge"
-                style={{
-                  position: collapsed ? 'absolute' : 'static',
-                  top: collapsed ? '4px' : 'auto',
-                  right: collapsed ? '4px' : 'auto',
-                  marginLeft: collapsed ? 0 : 'auto',
-                }}
-              >
-                {unreadCount}
-              </span>
-            )}
           </NavLink>
           <NavLink to="/projects" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon">📂</span>
-            {!collapsed && <span>Progetti</span>}
+            {!collapsed && <span>Commesse</span>}
           </NavLink>
           <NavLink to="/calendar" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon">📅</span>
@@ -128,6 +154,10 @@ export default function MainLayout() {
           <NavLink to="/notes" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon">📝</span>
             {!collapsed && <span>Blocchi Note</span>}
+          </NavLink>
+          <NavLink to="/todo" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon">☑️</span>
+            {!collapsed && <span>TODO</span>}
           </NavLink>
           <NavLink to="/conflicts" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon">👷‍♂️</span>
@@ -146,6 +176,28 @@ export default function MainLayout() {
         </nav>
 
         <div className="sidebar-footer">
+          <button
+            className="theme-toggle-btn"
+            onClick={() => setShowNotifications(true)}
+            title="Notifiche"
+            style={{ position: 'relative' }}
+          >
+            <div style={{ width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>🔔</div>
+            {!collapsed && <span>Notifiche</span>}
+            {unreadCount > 0 && (
+              <div
+                className="notification-badge"
+                style={{
+                  position: 'absolute',
+                  top: '-4px',
+                  right: collapsed ? '-4px' : '8px',
+                }}
+              >
+                {unreadCount}
+              </div>
+            )}
+          </button>
+
           <button
             className="theme-toggle-btn"
             onClick={cycleTheme}
@@ -176,6 +228,86 @@ export default function MainLayout() {
           <Outlet />
         </div>
       </main>
+
+      {showNotifications && (
+        <div className="modal-overlay" onClick={() => setShowNotifications(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 650, padding: 0, overflow: 'hidden' }}>
+            <div className="modal-header" style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-subtle)' }}>
+              <h2>Notifiche</h2>
+              {notifications.length > 0 && (
+                <button
+                  className="btn btn-ghost btn-sm notification-delete-all"
+                  onClick={deleteAllNotifications}
+                  title="Elimina tutte le notifiche"
+                >
+                  🗑️ Elimina tutte
+                </button>
+              )}
+            </div>
+
+            <div style={{ maxHeight: '60vh', overflowY: 'auto', padding: '20px 24px' }}>
+              {notifications.length === 0 ? (
+                <div className="empty-state" style={{ padding: '40px 0' }}>
+                  <div className="empty-state-icon">🔔</div>
+                  <h3>Nessuna notifica</h3>
+                  <p>Tutto tranquillo per ora</p>
+                </div>
+              ) : (
+                <div className="notifications-list">
+                  {notifications.map((n) => (
+                    <div key={n.id} className={`notification-item ${n.is_read ? '' : 'unread'}`}
+                      onClick={() => {
+                        if (n.project_id && n.task_id) {
+                          navigate(`/projects/${n.project_id}?open_task=${n.task_id}`);
+                        } else if (n.project_id) {
+                          navigate(`/projects/${n.project_id}`);
+                        }
+                        setShowNotifications(false);
+                      }}
+                      style={{ cursor: n.project_id ? 'pointer' : 'default', padding: '16px', background: 'var(--bg-card)', borderRadius: '12px', border: '1px solid var(--border-subtle)', marginBottom: '12px', display: 'flex', gap: '16px' }}
+                    >
+                      <span className="notification-icon" style={{ fontSize: '1.4rem' }}>
+                        {n.type === 'assignment' ? '👤' : n.type === 'deadline' ? '⏰' : '📝'}
+                      </span>
+                      <div className="notification-content" style={{ flex: 1 }}>
+                        <div className="notification-title" style={{ fontWeight: 600, marginBottom: '4px', fontSize: '0.95rem' }}>{n.title}</div>
+                        <div className="notification-message" style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{n.message}</div>
+                        <div className="notification-time" style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '6px' }}>
+                          {new Date(n.created_at).toLocaleString('it-IT')}
+                        </div>
+                      </div>
+                      <div className="notification-actions" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {!n.is_read && (
+                          <button
+                            className="btn-icon"
+                            title="Segna come letta"
+                            onClick={(e) => { e.stopPropagation(); markAsRead(n.id); }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', opacity: 0.6 }}
+                          >
+                            ✅
+                          </button>
+                        )}
+                        <button
+                          className="btn-icon"
+                          title="Elimina"
+                          onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', opacity: 0.6 }}
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-actions" style={{ padding: '16px 24px', borderTop: '1px solid var(--border-subtle)', justifyContent: 'center' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowNotifications(false)}>Chiudi</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

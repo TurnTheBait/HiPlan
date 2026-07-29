@@ -18,6 +18,14 @@ class Settings(BaseSettings):
     APP_NAME: str = "HiPlan"
     DEBUG: bool = True
 
+    # Email SMTP
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_USE_TLS: bool = True
+
     @property
     def cors_origins_list(self) -> List[str]:
         return json.loads(self.CORS_ORIGINS)

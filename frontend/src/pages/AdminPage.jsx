@@ -33,6 +33,9 @@ export default function AdminPage() {
   const [ticketPhases, setTicketPhases] = useState([]);
   const [newTicketPhase, setNewTicketPhase] = useState('');
   const [lastBackup, setLastBackup] = useState(null);
+  const [emailLogs, setEmailLogs] = useState([]);
+  const [scheduledEmails, setScheduledEmails] = useState([]);
+  const [emailLogTab, setEmailLogTab] = useState('sent'); // 'sent' | 'scheduled'
   const [loading, setLoading] = useState(true);
   const fileInputRef = useRef(null);
 
@@ -93,6 +96,18 @@ export default function AdminPage() {
   const [managingUser, setManagingUser] = useState(null);
   const [newPassword, setNewPassword] = useState('');
 
+  const [collapsedSections, setCollapsedSections] = useState({
+    annunci: false,
+    users: false,
+    templates: false,
+    ticketPhases: false,
+    emails: false
+  });
+
+  const toggleSection = (section) => {
+    setCollapsedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
   function toggleAdminColumn(col) {
     setAdminVisibleColumns(prev => {
       const next = prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col];
@@ -108,7 +123,7 @@ export default function AdminPage() {
   async function loadData() {
     setLoading(true);
     try {
-      await Promise.all([loadUsers(), loadPhaseTemplates(), loadGlobalBanners(), loadTicketPhases(), loadLastBackup()]);
+      await Promise.all([loadUsers(), loadPhaseTemplates(), loadGlobalBanners(), loadTicketPhases(), loadLastBackup(), loadEmailLogs()]);
     } finally {
       setLoading(false);
     }
@@ -132,10 +147,34 @@ export default function AdminPage() {
     }
   }
 
+  async function loadEmailLogs() {
+    try {
+      const [{ data: logs }, { data: sched }] = await Promise.all([
+        api.get('/admin/email-logs'),
+        api.get('/admin/email-logs/scheduled')
+      ]);
+      setEmailLogs(Array.isArray(logs) ? logs : []);
+      setScheduledEmails(Array.isArray(sched) ? sched : []);
+    } catch (e) {
+      console.error('Errore caricamento log email:', e);
+    }
+  }
+
+  async function deleteScheduledEmail(todoId) {
+    if (!window.confirm("Sei sicuro di voler annullare questa notifica programmata?")) return;
+    try {
+      await api.delete(`/admin/email-logs/scheduled/${todoId}`);
+      toast.success('Notifica annullata');
+      await loadEmailLogs();
+    } catch {
+      toast.error('Errore durante l\'annullamento della notifica');
+    }
+  }
+
   async function addGlobalBanner(e) {
     e.preventDefault();
     if (!globalBannerForm.text.trim()) return;
-    
+
     let hours = globalBannerForm.duration_hours;
     if (globalBannerForm.isManualDate) {
       if (!globalBannerForm.manualDate) {
@@ -373,225 +412,249 @@ export default function AdminPage() {
 
       {/* SEZIONE BACHECA AZIENDALE */}
       <div className="admin-section-card" style={{ marginBottom: 30 }}>
-        <div className="admin-section-header">
-          <h2>📢 Annunci</h2>
-          <p className="admin-section-desc">Annunci in evidenza che appariranno a tutti gli utenti in cima alla Dashboard.</p>
-        </div>
-        <form onSubmit={addGlobalBanner} style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div className="input-group" style={{ flex: 1, minWidth: 250, marginBottom: 0 }}>
-            <input
-              className="input"
-              placeholder="Es. Venerdì gli uffici chiudono alle 16:00..."
-              value={globalBannerForm.text}
-              onChange={(e) => setGlobalBannerForm({ ...globalBannerForm, text: e.target.value })}
-            />
+        <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+          <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('annunci')}>
+            <h2>📢 Annunci</h2>
+            <p className="admin-section-desc">Annunci in evidenza che appariranno a tutti gli utenti in cima alla Dashboard.</p>
           </div>
-          <div className="input-group" style={{ width: 150, marginBottom: 0 }}>
-            <select
-              className="input"
-              value={globalBannerForm.type}
-              onChange={(e) => setGlobalBannerForm({ ...globalBannerForm, type: e.target.value })}
-            >
-              <option value="info">🔵 Info</option>
-              <option value="warning">🟡 Avviso</option>
-              <option value="success">🟢 Successo</option>
-              <option value="error">🔴 Urgente</option>
-            </select>
-          </div>
-          <div className="input-group" style={{ width: 140, marginBottom: 0 }}>
-            <select
-              className="input"
-              value={globalBannerForm.isManualDate ? 'manual' : globalBannerForm.duration_hours}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === 'manual') {
-                  setGlobalBannerForm({ ...globalBannerForm, isManualDate: true });
-                } else {
-                  setGlobalBannerForm({ ...globalBannerForm, isManualDate: false, duration_hours: Number(val) });
-                }
-              }}
-            >
-              <option value={12}>1/2 Giornata</option>
-              <option value={24}>1 Giorno</option>
-              <option value={48}>2 Giorni</option>
-              <option value={168}>1 Settimana</option>
-              <option value={336}>2 Settimane</option>
-              <option value={504}>3 Settimane</option>
-              <option value={720}>1 Mese</option>
-              <option value="manual">Data Manuale...</option>
-            </select>
-          </div>
-          {globalBannerForm.isManualDate && (
-            <div className="input-group" style={{ width: 200, marginBottom: 0 }}>
-              <input
-                type="datetime-local"
-                className="input"
-                value={globalBannerForm.manualDate}
-                min={new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0,16)}
-                onChange={(e) => setGlobalBannerForm({ ...globalBannerForm, manualDate: e.target.value })}
-              />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
+            <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => toggleSection('annunci')}>
+              {collapsedSections.annunci ? '▼' : '▲'}
             </div>
-          )}
-          <button type="submit" className="btn btn-primary" style={{ height: 42 }}>
-            Aggiungi Annuncio
-          </button>
-        </form>
-
-        {globalBanners.length > 0 && (
-          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Annunci Attivi</h4>
-            {globalBanners.map(b => (
-              <div key={b.id} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                background: 'var(--bg-tertiary)', padding: '10px 14px', borderRadius: 'var(--radius-sm)',
-                borderLeft: `3px solid ${b.type === 'error' ? '#ef4444' : b.type === 'warning' ? '#f59e0b' : b.type === 'success' ? '#10b981' : '#3b82f6'}`
-              }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{b.text}</span>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    Creato: {new Date(b.created_at).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                    {' | '}Scadenza: {new Date(new Date(b.created_at).getTime() + (b.duration_hours || 24) * 60 * 60 * 1000).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-                <button onClick={() => deleteGlobalBanner(b.id)} className="btn btn-ghost" style={{ padding: '6px 10px', color: 'var(--text-muted)' }} title="Elimina annuncio">
-                  🗑️
-                </button>
+          </div>
+        </div>
+        {!collapsedSections.annunci && (
+          <div className="admin-section-content">
+            <form onSubmit={addGlobalBanner} style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div className="input-group" style={{ flex: 1, minWidth: 250, marginBottom: 0 }}>
+                <input
+                  className="input"
+                  placeholder="Es. Venerdì gli uffici chiudono alle 16:00..."
+                  value={globalBannerForm.text}
+                  onChange={(e) => setGlobalBannerForm({ ...globalBannerForm, text: e.target.value })}
+                />
               </div>
-            ))}
+              <div className="input-group" style={{ width: 150, marginBottom: 0 }}>
+                <select
+                  className="input"
+                  value={globalBannerForm.type}
+                  onChange={(e) => setGlobalBannerForm({ ...globalBannerForm, type: e.target.value })}
+                >
+                  <option value="info">🔵 Info</option>
+                  <option value="warning">🟡 Avviso</option>
+                  <option value="success">🟢 Successo</option>
+                  <option value="error">🔴 Urgente</option>
+                </select>
+              </div>
+              <div className="input-group" style={{ width: 140, marginBottom: 0 }}>
+                <select
+                  className="input"
+                  value={globalBannerForm.isManualDate ? 'manual' : globalBannerForm.duration_hours}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'manual') {
+                      setGlobalBannerForm({ ...globalBannerForm, isManualDate: true });
+                    } else {
+                      setGlobalBannerForm({ ...globalBannerForm, isManualDate: false, duration_hours: Number(val) });
+                    }
+                  }}
+                >
+                  <option value={12}>1/2 Giornata</option>
+                  <option value={24}>1 Giorno</option>
+                  <option value={48}>2 Giorni</option>
+                  <option value={168}>1 Settimana</option>
+                  <option value={336}>2 Settimane</option>
+                  <option value={504}>3 Settimane</option>
+                  <option value={720}>1 Mese</option>
+                  <option value="manual">Data Manuale...</option>
+                </select>
+              </div>
+              {globalBannerForm.isManualDate && (
+                <div className="input-group" style={{ width: 200, marginBottom: 0 }}>
+                  <input
+                    type="datetime-local"
+                    className="input"
+                    value={globalBannerForm.manualDate}
+                    min={new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
+                    onChange={(e) => setGlobalBannerForm({ ...globalBannerForm, manualDate: e.target.value })}
+                  />
+                </div>
+              )}
+              <button type="submit" className="btn btn-primary" style={{ height: 42 }}>
+                Aggiungi Annuncio
+              </button>
+            </form>
+
+            {globalBanners.length > 0 && (
+              <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Annunci Attivi</h4>
+                {globalBanners.map(b => (
+                  <div key={b.id} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    background: 'var(--bg-tertiary)', padding: '10px 14px', borderRadius: 'var(--radius-sm)',
+                    borderLeft: `3px solid ${b.type === 'error' ? '#ef4444' : b.type === 'warning' ? '#f59e0b' : b.type === 'success' ? '#10b981' : '#3b82f6'}`
+                  }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{b.text}</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        Creato: {new Date(b.created_at).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        {' | '}Scadenza: {new Date(new Date(b.created_at).getTime() + (b.duration_hours || 24) * 60 * 60 * 1000).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <button onClick={() => deleteGlobalBanner(b.id)} className="btn btn-ghost" style={{ padding: '6px 10px', color: 'var(--text-muted)' }} title="Elimina annuncio">
+                      🗑️
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* SEZIONE 1: UTENTI DI SISTEMA */}
       <div className="admin-section-card">
-        <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
+        <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+          <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('users')}>
             <h2>👤 Utenti di Sistema</h2>
             <p className="admin-section-desc">Utenti registrati con credenziali di login per accedere al gestionale HiPlan ({users.length})</p>
           </div>
-          <div style={{ position: 'relative' }}>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => setShowAdminColumnsMenu(!showAdminColumnsMenu)}
-            >
-              ⚙️ Colonne
-            </button>
-            {showAdminColumnsMenu && (
-              <div className="dropdown-menu" style={{ position: 'absolute', right: 0, top: '100%', marginTop: 8, zIndex: 50, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, padding: 8, boxShadow: 'var(--shadow-lg)', minWidth: 200 }}>
-                {['utente', 'email', 'ruolo', 'reparto', 'stato', 'registrato', 'azioni'].map(col => (
-                  <label key={col} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', cursor: 'pointer', textTransform: 'capitalize' }}>
-                    <input
-                      type="checkbox"
-                      checked={adminVisibleColumns.includes(col)}
-                      onChange={() => toggleAdminColumn(col)}
-                    />
-                    {col}
-                  </label>
-                ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
+            {!collapsedSections.users && (
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <div style={{ position: 'relative' }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowAdminColumnsMenu(!showAdminColumnsMenu)}
+              >
+                ⚙️ Colonne
+              </button>
+              {showAdminColumnsMenu && (
+                <div className="dropdown-menu" style={{ position: 'absolute', right: 0, top: '100%', marginTop: 8, zIndex: 50, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, padding: 8, boxShadow: 'var(--shadow-lg)', minWidth: 200 }}>
+                  {['utente', 'email', 'ruolo', 'reparto', 'stato', 'registrato', 'azioni'].map(col => (
+                    <label key={col} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', cursor: 'pointer', textTransform: 'capitalize' }}>
+                      <input
+                        type="checkbox"
+                        checked={adminVisibleColumns.includes(col)}
+                        onChange={() => toggleAdminColumn(col)}
+                      />
+                      {col}
+                    </label>
+                  ))}
+                </div>
+              )}
               </div>
+            </div>
             )}
+            <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => toggleSection('users')}>
+              {collapsedSections.users ? '▼' : '▲'}
+            </div>
           </div>
         </div>
 
-        <div className="table-wrapper">
-          <table className="table">
-            <thead>
-              <tr>
-                {adminVisibleColumns.includes('utente') && <th>Utente</th>}
-                {adminVisibleColumns.includes('email') && <th>Email</th>}
-                {adminVisibleColumns.includes('ruolo') && <th>Ruolo</th>}
-                {adminVisibleColumns.includes('reparto') && <th>Reparto</th>}
-                {adminVisibleColumns.includes('stato') && <th>Stato</th>}
-                {adminVisibleColumns.includes('registrato') && <th>Registrato</th>}
-                {adminVisibleColumns.includes('azioni') && <th>Azioni</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {[...users].sort((a, b) => (a.full_name || a.username || '').localeCompare(b.full_name || b.username || '', 'it')).map((u) => (
-                <tr key={u.id}>
-                  {adminVisibleColumns.includes('utente') && (
-                    <td>
-                      <div className="admin-user-cell">
-                        <div className="sidebar-avatar" style={{ width: 30, height: 30, fontSize: '0.75rem' }}>
-                          {u.username?.[0]?.toUpperCase() || '?'}
-                        </div>
-                        <div>
-                          <span className="admin-username">{u.full_name || u.username}</span>
-                          <span className="admin-handle">@{u.username}</span>
-                        </div>
-                      </div>
-                    </td>
-                  )}
-                  {adminVisibleColumns.includes('email') && <td>{u.email}</td>}
-                  {adminVisibleColumns.includes('ruolo') && (
-                    <td>
-                      <select
-                        className="input"
-                        value={u.role}
-                        onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                        style={{ padding: '6px 32px 6px 10px', fontSize: '0.8125rem', minWidth: 100 }}
-                      >
-                        <option value="admin">Admin</option>
-                        <option value="editor">Editor</option>
-                        <option value="viewer">Viewer</option>
-                      </select>
-                    </td>
-                  )}
-                  {adminVisibleColumns.includes('reparto') && (
-                    <td>
-                      <select
-                        className="input"
-                        value={u.department || ''}
-                        onChange={(e) => handleDepartmentChange(u.id, e.target.value)}
-                        style={{ padding: '6px 32px 6px 10px', fontSize: '0.8125rem', width: 'max-content', minWidth: 160 }}
-                      >
-                        <option value="">— Nessun reparto —</option>
-                        <option value="ufficio_tecnico">🔧 Ufficio Tecnico</option>
-                        <option value="produzione">🏭 Produzione</option>
-                        <option value="acquisti">🛒 Acquisti</option>
-                        <option value="admin">⚙️ Admin</option>
-                      </select>
-                    </td>
-                  )}
-                  {adminVisibleColumns.includes('stato') && (
-                    <td>
-                      <span className={`badge ${u.is_active ? 'badge-active' : 'badge-archived'}`}>
-                        {u.is_active ? 'Attivo' : 'Disattivato'}
-                      </span>
-                    </td>
-                  )}
-                  {adminVisibleColumns.includes('registrato') && (
-                    <td style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-                      {u.created_at ? new Date(u.created_at).toLocaleDateString('it-IT') : '-'}
-                    </td>
-                  )}
-                  {adminVisibleColumns.includes('azioni') && (
-                    <td>
-                      <button
-                        className="btn btn-sm btn-secondary"
-                        onClick={() => { setManagingUser(u); setNewPassword(''); }}
-                      >
-                        Gestisci
-                      </button>
-                    </td>
-                  )}
+        {!collapsedSections.users && (
+          <div className="table-wrapper">
+            <table className="table">
+              <thead>
+                <tr>
+                  {adminVisibleColumns.includes('utente') && <th>Utente</th>}
+                  {adminVisibleColumns.includes('email') && <th>Email</th>}
+                  {adminVisibleColumns.includes('ruolo') && <th>Ruolo</th>}
+                  {adminVisibleColumns.includes('reparto') && <th>Reparto</th>}
+                  {adminVisibleColumns.includes('stato') && <th>Stato</th>}
+                  {adminVisibleColumns.includes('registrato') && <th>Registrato</th>}
+                  {adminVisibleColumns.includes('azioni') && <th>Azioni</th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {[...users].sort((a, b) => (a.full_name || a.username || '').localeCompare(b.full_name || b.username || '', 'it')).map((u) => (
+                  <tr key={u.id}>
+                    {adminVisibleColumns.includes('utente') && (
+                      <td>
+                        <div className="admin-user-cell">
+                          <div className="sidebar-avatar" style={{ width: 30, height: 30, fontSize: '0.75rem' }}>
+                            {u.username?.[0]?.toUpperCase() || '?'}
+                          </div>
+                          <div>
+                            <span className="admin-username">{u.full_name || u.username}</span>
+                            <span className="admin-handle">@{u.username}</span>
+                          </div>
+                        </div>
+                      </td>
+                    )}
+                    {adminVisibleColumns.includes('email') && <td>{u.email}</td>}
+                    {adminVisibleColumns.includes('ruolo') && (
+                      <td>
+                        <select
+                          className="input"
+                          value={u.role}
+                          onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                          style={{ padding: '6px 32px 6px 10px', fontSize: '0.8125rem', minWidth: 100 }}
+                        >
+                          <option value="admin">Admin</option>
+                          <option value="editor">Editor</option>
+                          <option value="viewer">Viewer</option>
+                        </select>
+                      </td>
+                    )}
+                    {adminVisibleColumns.includes('reparto') && (
+                      <td>
+                        <select
+                          className="input"
+                          value={u.department || ''}
+                          onChange={(e) => handleDepartmentChange(u.id, e.target.value)}
+                          style={{ padding: '6px 32px 6px 10px', fontSize: '0.8125rem', width: 'max-content', minWidth: 160 }}
+                        >
+                          <option value="">— Nessun reparto —</option>
+                          <option value="ufficio_tecnico">🔧 Ufficio Tecnico</option>
+                          <option value="produzione">🏭 Produzione</option>
+                          <option value="acquisti">🛒 Acquisti</option>
+                          <option value="admin">⚙️ Admin</option>
+                        </select>
+                      </td>
+                    )}
+                    {adminVisibleColumns.includes('stato') && (
+                      <td>
+                        <span className={`badge ${u.is_active ? 'badge-active' : 'badge-archived'}`}>
+                          {u.is_active ? 'Attivo' : 'Disattivato'}
+                        </span>
+                      </td>
+                    )}
+                    {adminVisibleColumns.includes('registrato') && (
+                      <td style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                        {u.created_at ? new Date(u.created_at).toLocaleDateString('it-IT') : '-'}
+                      </td>
+                    )}
+                    {adminVisibleColumns.includes('azioni') && (
+                      <td>
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          onClick={() => { setManagingUser(u); setNewPassword(''); }}
+                        >
+                          Gestisci
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* SEZIONE 2: FASI DI LAVORAZIONE PREIMPOSTATE */}
       <div className="admin-section-card" style={{ marginTop: 32 }}>
-        <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
-          <div>
+        <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+          <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('templates')}>
             <h2>📋 Fasi di Lavorazione Preimpostate per Reparto</h2>
             <p className="admin-section-desc">
               Gestisci l'elenco delle fasi suggerite nel menu a tendina quando gli addetti creano o modificano le attività di commessa ({phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'tutti').length} visualizzate).
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
+            {!collapsedSections.templates && (
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <select
               className="input"
               value={filterDept}
@@ -611,9 +674,15 @@ export default function AdminPage() {
             >
               <span>+</span> Nuova Fase Preimpostata
             </button>
+              </div>
+            )}
+            <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => toggleSection('templates')}>
+              {collapsedSections.templates ? '▼' : '▲'}
+            </div>
           </div>
         </div>
 
+        {!collapsedSections.templates && (
         <div className="table-wrapper">
           <table className="table">
             <thead>
@@ -683,16 +752,25 @@ export default function AdminPage() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       {/* SEZIONE 3: FASI TICKET */}
       <div className="admin-section-card" style={{ marginTop: 32 }}>
-        <div className="admin-section-header">
-          <h2>🎫 Fasi Ticket</h2>
-          <p className="admin-section-desc">
-            Personalizza l'elenco delle fasi o eventi selezionabili quando si risponde a un ticket (es. "Inviato al cliente", "In lavorazione").
-          </p>
+        <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+          <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('ticketPhases')}>
+            <h2>🎫 Fasi Ticket</h2>
+            <p className="admin-section-desc">
+              Personalizza l'elenco delle fasi o eventi selezionabili quando si risponde a un ticket (es. "Inviato al cliente", "In lavorazione").
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
+            <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => toggleSection('ticketPhases')}>
+              {collapsedSections.ticketPhases ? '▼' : '▲'}
+            </div>
+          </div>
         </div>
+        {!collapsedSections.ticketPhases && (
         <div style={{ maxWidth: '100%' }}>
           <div className="ticket-phases-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, marginBottom: 24 }}>
             {ticketPhases.map((phase, i) => (
@@ -728,6 +806,125 @@ export default function AdminPage() {
             </button>
           </div>
         </div>
+        )}
+      </div>
+
+      {/* SEZIONE LOG EMAIL */}
+      <div className="admin-section-card" style={{ marginTop: 32, marginBottom: 30 }}>
+        <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+          <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('emails')}>
+            <h2>📧 Notifiche Email</h2>
+            <p className="admin-section-desc">Cronologia delle comunicazioni e riepilogo degli invii futuri.</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
+            {!collapsedSections.emails && (
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <div className="tabs" style={{ display: 'flex', gap: 8 }}>
+            <button
+              className={`btn btn-sm ${emailLogTab === 'sent' ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setEmailLogTab('sent')}
+            >
+              Inviate ({emailLogs.length})
+            </button>
+            <button
+              className={`btn btn-sm ${emailLogTab === 'scheduled' ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setEmailLogTab('scheduled')}
+            >
+              In Programmazione ({scheduledEmails.length})
+            </button>
+          </div>
+            </div>
+            )}
+            <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => toggleSection('emails')}>
+              {collapsedSections.emails ? '▼' : '▲'}
+            </div>
+          </div>
+        </div>
+
+        {!collapsedSections.emails && (
+        <div className="table-wrapper" style={{ maxHeight: 400, overflowY: 'auto' }}>
+          {emailLogTab === 'sent' ? (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Destinatario</th>
+                  <th>Oggetto</th>
+                  <th>Stato</th>
+                  <th>Errore</th>
+                </tr>
+              </thead>
+              <tbody>
+                {emailLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>
+                      Nessuna email inviata di recente.
+                    </td>
+                  </tr>
+                ) : (
+                  emailLogs.map(log => (
+                    <tr key={log.id}>
+                      <td style={{ whiteSpace: 'nowrap' }}>{new Date(log.created_at).toLocaleString()}</td>
+                      <td>{log.recipient}</td>
+                      <td>{log.subject}</td>
+                      <td>
+                        {log.status === 'success' ? (
+                          <span className="badge badge-success">Inviata</span>
+                        ) : (
+                          <span className="badge badge-error">Errore</span>
+                        )}
+                      </td>
+                      <td style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>
+                        {log.error_message || '-'}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          ) : (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Data Prevista</th>
+                  <th>Tipo Promemoria</th>
+                  <th>Oggetto</th>
+                  <th>Destinatari</th>
+                  <th style={{ width: 80, textAlign: 'center' }}>Azioni</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scheduledEmails.length === 0 ? (
+                  <tr>
+                    <td colSpan="4" style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>
+                      Nessuna email in programmazione.
+                    </td>
+                  </tr>
+                ) : (
+                  scheduledEmails.map((log, index) => (
+                    <tr key={index}>
+                      <td style={{ whiteSpace: 'nowrap' }}>{new Date(log.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+                      <td><span className="badge badge-warning">{log.type}</span></td>
+                      <td>{log.subject}</td>
+                      <td>{log.recipients}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          title="Annulla notifica"
+                          onClick={() => deleteScheduledEmail(log.id)}
+                          style={{ color: 'var(--danger)', padding: '4px 8px' }}
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+        )}
       </div>
 
       {/* MODALE AGGIUNTA/MODIFICA TEMPLATE */}
@@ -808,7 +1005,7 @@ export default function AdminPage() {
               <h2>Azioni per @{managingUser.username}</h2>
               <button className="btn-ghost btn-icon" onClick={() => setManagingUser(null)}>✕</button>
             </div>
-            
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               <form onSubmit={handleResetPassword} style={{ background: 'var(--bg-tertiary)', padding: 16, borderRadius: 8 }}>
                 <h4 style={{ marginBottom: 12 }}>🔑 Modifica Password</h4>
