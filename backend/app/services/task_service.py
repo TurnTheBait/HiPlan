@@ -99,6 +99,7 @@ def _task_to_out(task: Task) -> TaskOut:
         department=task.department,
         budget_mode=task.budget_mode,
         completed=is_comp,
+        has_vacation_conflict=task.has_vacation_conflict or 0,
     )
 
 

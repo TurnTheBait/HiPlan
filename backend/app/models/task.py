@@ -41,6 +41,7 @@ class Task(Base, TimestampMixin):
     department = Column(String(50), nullable=True)  # ufficio_tecnico | produzione | acquisti
     budget_mode = Column(String(50), nullable=True)  # start_end | start_hours | end_hours | start_days | end_days | start_days_hours | end_days_hours
     completed = Column(Integer, default=0, nullable=False)  # 1=completato (spunta verde), 0=in corso/non completato
+    has_vacation_conflict = Column(Integer, default=0, nullable=False)  # Flag se la fase ha conflitti con ferie (0=no, 1=si)
 
 
     project = relationship("Project", back_populates="tasks")

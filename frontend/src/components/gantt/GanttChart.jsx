@@ -85,23 +85,24 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.config.show_progress = true;
 
     const baseColumns = [
-      { 
-        name: "text", 
-        label: "Attività", 
-        tree: true, 
-        width: 210, 
+      {
+        name: "text",
+        label: "Attività",
+        tree: true,
+        width: 300,
+        align: "left",
         resize: true,
-        template: function(task) {
+        template: function (task) {
           const isCompleted = isTaskCompleted(task);
           const checkIcon = isCompleted ? `<span style="color: #10b981; font-weight: bold; margin-right: 6px;" title="Fase completata">✓</span>` : '';
           return `${checkIcon}${task.text || ''}`;
         }
       },
       { name: "start_date", label: "Inizio", align: "center", width: 85, resize: true },
-      { 
-        name: "duration", 
-        label: "Durata", 
-        align: "center", 
+      {
+        name: "duration",
+        label: "Durata",
+        align: "center",
         width: 105,
         template: function (task) {
           return `${task.duration || 1}g (${task.planned_hours || (task.duration ? task.duration * 8 : 8)}h)`;
@@ -112,9 +113,9 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         label: "Progresso",
         align: "center",
         width: 70,
-        template: function(task) { 
+        template: function (task) {
           const isComp = isTaskCompleted(task);
-          return (isComp ? 100 : Math.round((task.progress || 0) * 100)) + "%"; 
+          return (isComp ? 100 : Math.round((task.progress || 0) * 100)) + "%";
         }
       },
       {
@@ -122,7 +123,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         label: "Priorità",
         align: "center",
         width: 80,
-        template: function(task) { 
+        template: function (task) {
           const p = task.priority || 'medium';
           if (p === 'low') return 'Bassa';
           if (p === 'high') return 'Alta';
@@ -135,12 +136,12 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         label: "Addetti",
         align: "center",
         width: 120,
-        template: function(task) { return Array.isArray(task.workers) ? task.workers.join(', ') : ''; }
+        template: function (task) { return Array.isArray(task.workers) ? task.workers.join(', ') : ''; }
       },
     ];
-    
+
     // Inizializza con le colonne visibili attuali o di default
-    gantt.config.columns = baseColumns.filter(c => 
+    gantt.config.columns = baseColumns.filter(c =>
       c.name === 'text' || (visibleColumns && visibleColumns.includes(c.name))
     );
 
@@ -184,6 +185,11 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       } else if (isOverrun) {
         classes.push('gantt-task-overrun');
       }
+
+      if (task.has_vacation_conflict) {
+        classes.push('gantt-task-conflict');
+      }
+
       return classes.join(' ');
     };
 
@@ -336,7 +342,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
 
     gantt.attachEvent("onBeforeLinkAdd", (id, link) => {
       if (!link.source || !link.target || String(link.source) === String(link.target)) return false;
-      const existing = gantt.getLinks().find(l => 
+      const existing = gantt.getLinks().find(l =>
         String(l.source) === String(link.source) && String(l.target) === String(link.target) && String(l.id) !== String(id)
       );
       if (existing) return false;
@@ -353,7 +359,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       }
     });
 
-gantt.attachEvent("onBeforeLinkDelete", (id, item) => {
+    gantt.attachEvent("onBeforeLinkDelete", (id, item) => {
       if (!window.confirm("Confermi l'eliminazione di questa dipendenza tra fasi?")) {
         return false;
       }
@@ -382,27 +388,27 @@ gantt.attachEvent("onBeforeLinkDelete", (id, item) => {
   // Ascolta i cambiamenti di visibleColumns o readOnly per aggiornare la griglia
   useEffect(() => {
     if (!initialized.current) return;
-    
+
     gantt.config.readonly = Boolean(readOnly);
 
     const baseColumns = [
-      { 
-        name: "text", 
-        label: "Attività", 
-        tree: true, 
-        width: 210, 
+      {
+        name: "text",
+        label: "Attività",
+        tree: true,
+        width: 210,
         resize: true,
-        template: function(task) {
+        template: function (task) {
           const isCompleted = isTaskCompleted(task);
           const checkIcon = isCompleted ? `<span style="color: #10b981; font-weight: bold; margin-right: 6px;" title="Fase completata">✓</span>` : '';
           return `${checkIcon}${task.text || ''}`;
         }
       },
       { name: "start_date", label: "Inizio", align: "center", width: 85, resize: true },
-      { 
-        name: "duration", 
-        label: "Durata", 
-        align: "center", 
+      {
+        name: "duration",
+        label: "Durata",
+        align: "center",
         width: 105,
         template: function (task) {
           return `${task.duration || 1}g (${task.planned_hours || (task.duration ? task.duration * 8 : 8)}h)`;
@@ -413,14 +419,14 @@ gantt.attachEvent("onBeforeLinkDelete", (id, item) => {
         label: "Progresso",
         align: "center",
         width: 70,
-        template: function(task) { return Math.round((task.progress || 0) * 100) + "%"; }
+        template: function (task) { return Math.round((task.progress || 0) * 100) + "%"; }
       },
       {
         name: "priority",
         label: "Priorità",
         align: "center",
         width: 80,
-        template: function(task) { 
+        template: function (task) {
           const p = task.priority || 'medium';
           if (p === 'low') return 'Bassa';
           if (p === 'high') return 'Alta';
@@ -433,11 +439,11 @@ gantt.attachEvent("onBeforeLinkDelete", (id, item) => {
         label: "Addetti",
         align: "center",
         width: 120,
-        template: function(task) { return Array.isArray(task.workers) ? task.workers.join(', ') : ''; }
+        template: function (task) { return Array.isArray(task.workers) ? task.workers.join(', ') : ''; }
       },
     ];
 
-    gantt.config.columns = baseColumns.filter(c => 
+    gantt.config.columns = baseColumns.filter(c =>
       c.name === 'text' || (visibleColumns && visibleColumns.includes(c.name))
     );
     gantt.render();

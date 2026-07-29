@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.dependencies import get_db, get_current_user
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.vacation import Vacation
 from app.models.task import Task
 from app.models.project import Project
@@ -174,6 +174,28 @@ async def create_my_vacation(data: VacationCreate, db: AsyncSession = Depends(ge
                 )
                 db.add(note_resp)
 
+        # Flag task as having vacation conflict
+        task_res = await db.execute(select(Task).where(Task.id == item["task_id"]))
+        task_obj = task_res.scalar_one_or_none()
+        if task_obj:
+            task_obj.has_vacation_conflict = 1
+
+        # Notify admins
+        admins_res = await db.execute(select(User).where(User.role == UserRole.ADMIN))
+        for admin_user in admins_res.scalars().all():
+            note_admin = Notification(
+                user_id=admin_user.id,
+                title=f"⚠️ Rischio ritardo per ferie: \"{item['task_name']}\"",
+                message=(
+                    f"L'addetto {current_user.username} ha inserito ferie dal {data.start_date} al {data.end_date}. "
+                    f"La fase \"{item['task_name']}\" (progetto \"{item['project_name']}\") potrebbe subire ritardi "
+                    f"per {item['hours_to_recover']}h scoperte."
+                ),
+                type=NotificationType.UPDATE,
+                project_id=item["project_id"],
+            )
+            db.add(note_admin)
+
     await db.commit()
     return {"ok": True, "id": vac.id, "recovery_items": recovery_items}
 
@@ -184,7 +206,19 @@ async def delete_my_vacation(vacation_id: str, db: AsyncSession = Depends(get_db
     vac = result.scalar_one_or_none()
     if not vac:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacanza non trovata")
+    
+    # Compute recovery items before deleting to find affected tasks
+    recovery_items = await _compute_recovery_for_user(db, current_user, vac)
+
     await db.delete(vac)
+
+    # Reset vacation conflict flag for affected tasks
+    for item in recovery_items:
+        task_res = await db.execute(select(Task).where(Task.id == item["task_id"]))
+        task_obj = task_res.scalar_one_or_none()
+        if task_obj:
+            task_obj.has_vacation_conflict = 0
+
     await db.commit()
     return {"ok": True}
 

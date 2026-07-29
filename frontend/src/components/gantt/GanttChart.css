@@ -95,6 +95,13 @@
   align-items: center !important;
   justify-content: center !important;
 }
+.gantt_tree_icon.gantt_file,
+.gantt_tree_icon.gantt_folder_open,
+.gantt_tree_icon.gantt_folder_closed,
+.gantt_tree_icon.gantt_blank {
+  display: none !important;
+  width: 0 !important;
+}
 
 /* ==========================================
    RIGHE DELLA TIMELINE A DESTRA (BARRE)
@@ -453,4 +460,22 @@
 }
 .gantt_task:active {
   cursor: grabbing !important;
+}
+
+/* Sfondo a strisce per segnalare conflitto ferie */
+.gantt_task_line.gantt-task-conflict,
+.gantt_bars_area .gantt_task_line.gantt-task-conflict {
+  background-image: repeating-linear-gradient(
+    45deg,
+    #ef4444,
+    #ef4444 10px,
+    #fca5a5 10px,
+    #fca5a5 20px
+  ) !important;
+  background-color: transparent !important;
+  border-color: #dc2626 !important;
+}
+.gantt_task_line.gantt-task-conflict .gantt_task_progress,
+.gantt_bars_area .gantt_task_line.gantt-task-conflict .gantt_task_progress {
+  background-color: rgba(0, 0, 0, 0.25) !important;
 }

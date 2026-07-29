@@ -347,6 +347,7 @@ export default function ProjectDetailPage() {
     if (plannedH > 0 && totEff === plannedH) {
       return 'ok';
     }
+    if (task.has_vacation_conflict) return 'ritardo_ferie';
     if (!task.start_date) return 'ok';
     if (isTaskCompleted(task)) return 'ok';
     const startStr = formatDateOnly(task.start_date);
@@ -442,7 +443,7 @@ export default function ProjectDetailPage() {
       eff += tEff;
 
       const st = computeStato(t);
-      if (st === 'ritardo' || st === 'attenzione') {
+      if (st === 'ritardo' || st === 'attenzione' || st === 'ritardo_ferie') {
         delays.push({ task: t, stato: st, tEff });
       }
     });
@@ -807,8 +808,8 @@ export default function ProjectDetailPage() {
 
       setShowTaskModal(false);
       loadProject();
-    } catch {
-      toast.error('Errore nel salvataggio della fase');
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Errore nel salvataggio della fase');
     }
   }
 
@@ -1633,6 +1634,7 @@ export default function ProjectDetailPage() {
                           <td>
                             {st === 'ok' && <span className="semaforo-ok">🟢 OK (Regolare)</span>}
                             {st === 'attenzione' && <span className="semaforo-attenzione">🟡 Attenzione</span>}
+                            {st === 'ritardo_ferie' && <span className="semaforo-ritardo">🔴 Rischio Ritardo (Ferie)</span>}
                             {st === 'ritardo' && <span className="semaforo-ritardo">🔴 Ritardo Lavorazione</span>}
                             {st === 'sforamento' && <span className="semaforo-ritardo" style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#ef4444', border: '1px solid #dc2626', padding: '3px 10px', borderRadius: '12px', fontWeight: 700 }}>🔴 Sforamento Ore</span>}
                           </td>
@@ -1818,6 +1820,10 @@ export default function ProjectDetailPage() {
                     </span>
                     {item.stato === 'ritardo' ? (
                       <span className="semaforo-ritardo">🔴 RITARDO CRITICO (&lt; 50% ORE / 0 ORE IN GIORNI TRASCORSI)</span>
+                    ) : item.stato === 'ritardo_ferie' ? (
+                      <span className="semaforo-ritardo">🔴 RISCHIO RITARDO CAUSA FERIE</span>
+                    ) : item.stato === 'sforamento' ? (
+                      <span className="semaforo-ritardo" style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#ef4444', border: '1px solid #dc2626', padding: '3px 10px', borderRadius: '12px', fontWeight: 700 }}>🔴 Sforamento Ore</span>
                     ) : (
                       <span className="semaforo-attenzione">🟡 ATTENZIONE (&lt; ORE ATTESE GIORNALIERE)</span>
                     )}
@@ -2576,6 +2582,7 @@ export default function ProjectDetailPage() {
                             </span>
                             {st === 'ok' && <span className="semaforo-ok">🟢 Stato OK (Regolare)</span>}
                             {st === 'attenzione' && <span className="semaforo-attenzione">🟡 Stato Attenzione</span>}
+                            {st === 'ritardo_ferie' && <span className="semaforo-ritardo">🔴 Rischio Ritardo (Ferie)</span>}
                             {st === 'ritardo' && <span className="semaforo-ritardo">🔴 Stato Ritardo</span>}
                             {st === 'sforamento' && <span className="semaforo-ritardo" style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#ef4444', border: '1px solid #dc2626', padding: '3px 10px', borderRadius: '12px', fontWeight: 700 }}>🔴 Sforamento Ore</span>}
                             {isModalCompleted && (

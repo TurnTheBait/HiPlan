@@ -28,6 +28,7 @@ class TaskCreate(BaseModel):
     department: Optional[str] = None
     budget_mode: Optional[str] = None
     completed: int = 0
+    has_vacation_conflict: int = 0
 
 
 class TaskUpdate(BaseModel):
@@ -50,6 +51,7 @@ class TaskUpdate(BaseModel):
     department: Optional[str] = None
     budget_mode: Optional[str] = None
     completed: Optional[int] = None
+    has_vacation_conflict: Optional[int] = None
 
 
 class TaskOut(BaseModel):
@@ -74,7 +76,7 @@ class TaskOut(BaseModel):
     department: Optional[str] = None
     budget_mode: Optional[str] = None
     completed: int = 0
-
+    has_vacation_conflict: int = 0
 
     class Config:
         from_attributes = True
