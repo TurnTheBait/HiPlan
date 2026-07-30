@@ -131,7 +131,7 @@ async def get_project(db: AsyncSession, project_id: str, user: User) -> Project:
 
 async def update_project(db: AsyncSession, project_id: str, data: ProjectUpdate, user: User) -> Project:
     project = await get_project(db, project_id, user)
-    if user.role != UserRole.ADMIN and project.owner_id != user.id and project.responsible_id != user.id:
+    if user.role not in (UserRole.ADMIN, UserRole.EDITOR) and project.owner_id != user.id and project.responsible_id != user.id:
         member = next((m for m in project.members if m.user_id == user.id), None)
         if not member or member.role != MemberRole.MANAGER:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo owner/manager/responsabile possono modificare")

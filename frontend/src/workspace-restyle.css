@@ -43,9 +43,17 @@
   border-radius: 50%;
 }
 
-.priority-dot.high { background: var(--danger); }
-.priority-dot.medium { background: var(--warning); }
-.priority-dot.low { background: var(--info); }
+.priority-dot.high {
+  background: var(--danger);
+}
+
+.priority-dot.medium {
+  background: var(--warning);
+}
+
+.priority-dot.low {
+  background: var(--info);
+}
 
 .section-heading {
   margin: 8px 0 0;
@@ -266,9 +274,6 @@
   overflow: hidden;
   padding: 18px;
   border-radius: var(--radius-lg);
-  background:
-    linear-gradient(145deg, transparent 65%, var(--accent-glow)),
-    var(--bg-card);
   box-shadow: var(--shadow-sm);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
 }
@@ -284,7 +289,7 @@
   padding-bottom: 3px;
 }
 
-.projects-page .project-card-header > div {
+.projects-page .project-card-header>div {
   display: flex;
   flex: 1;
   min-width: 0;
@@ -352,13 +357,13 @@
   font-size: 0.65rem;
 }
 
-.projects-page .project-card-footer > span {
+.projects-page .project-card-footer>span {
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
 
-.projects-page .project-card-footer > div:last-child {
+.projects-page .project-card-footer>div:last-child {
   margin-left: auto;
 }
 
@@ -376,8 +381,8 @@
   gap: 8px;
 }
 
-.project-detail > .animate-fadeIn,
-.project-detail > .activity-log-panel {
+.project-detail>.animate-fadeIn,
+.project-detail>.activity-log-panel {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
@@ -456,7 +461,7 @@
   margin-bottom: 0;
 }
 
-.project-detail .ut-tabs > .btn-primary {
+.project-detail .ut-tabs>.btn-primary {
   min-height: 34px;
   padding: 6px 11px !important;
   border-radius: 9px;
@@ -547,13 +552,13 @@
   background: var(--bg-primary);
 }
 
-.project-toolbar .toolbar-left > div,
-.project-toolbar .toolbar-left > div > .btn {
+.project-toolbar .toolbar-left>div,
+.project-toolbar .toolbar-left>div>.btn {
   display: inline-flex;
   align-items: center;
 }
 
-.project-toolbar .toolbar-left > div > .btn {
+.project-toolbar .toolbar-left>div>.btn {
   min-width: 104px;
   min-height: 34px;
   justify-content: center;
@@ -713,7 +718,7 @@
   background: var(--bg-elevated);
 }
 
-.task-editor-modal > .ut-tabs {
+.task-editor-modal>.ut-tabs {
   margin-bottom: 14px !important;
   border-radius: 11px;
   box-shadow: none;
@@ -727,7 +732,7 @@
   background: var(--bg-input);
 }
 
-.task-type-selector > label:first-child {
+.task-type-selector>label:first-child {
   margin-bottom: 9px !important;
   color: var(--text-tertiary) !important;
   font-size: 0.62rem !important;
@@ -736,7 +741,7 @@
   text-transform: uppercase;
 }
 
-.task-type-selector > div {
+.task-type-selector>div {
   display: grid !important;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px !important;
@@ -1375,6 +1380,7 @@
   border-radius: 11px;
   background: var(--bg-card);
   box-shadow: var(--shadow-xs);
+  overflow: hidden;
   transition: border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
 }
 
@@ -1512,9 +1518,17 @@
   border-radius: 50%;
 }
 
-.status-dot.open { background: var(--warning); }
-.status-dot.completed { background: var(--success); }
-.status-dot.danger { background: var(--danger); }
+.status-dot.open {
+  background: var(--warning);
+}
+
+.status-dot.completed {
+  background: var(--success);
+}
+
+.status-dot.danger {
+  background: var(--danger);
+}
 
 .worker-chip {
   display: inline-flex;
@@ -1599,7 +1613,7 @@
   margin-bottom: 0;
 }
 
-.conflicts-page > .card {
+.conflicts-page>.card {
   padding: 16px 18px !important;
   border-color: var(--border-subtle);
   background: var(--bg-card);
@@ -1620,24 +1634,24 @@
   box-shadow: var(--shadow-sm);
 }
 
-.workload-heatmap-container > div:first-child {
+.workload-heatmap-container>div:first-child {
   gap: 16px;
   margin-bottom: 12px !important;
 }
 
-.workload-heatmap-container > div:first-child h3 {
+.workload-heatmap-container>div:first-child h3 {
   color: var(--text-primary);
   font-size: 0.9rem;
   font-weight: 800;
   letter-spacing: -0.015em;
 }
 
-.workload-heatmap-container > div:first-child span {
+.workload-heatmap-container>div:first-child span {
   color: var(--text-tertiary) !important;
   font-size: 0.67rem !important;
 }
 
-.workload-heatmap-container > div:first-child .input {
+.workload-heatmap-container>div:first-child .input {
   min-height: 34px;
   border-radius: 9px;
   background: var(--bg-input);
@@ -1720,13 +1734,11 @@
 
 .heatmap-cell.heatmap-weekend {
   background:
-    repeating-linear-gradient(
-      -45deg,
+    repeating-linear-gradient(-45deg,
       transparent,
       transparent 6px,
       rgba(209, 67, 67, 0.05) 6px,
-      rgba(209, 67, 67, 0.05) 12px
-    ),
+      rgba(209, 67, 67, 0.05) 12px),
     var(--bg-tertiary) !important;
   color: var(--text-muted) !important;
 }
@@ -1924,7 +1936,7 @@
     min-width: 285px;
   }
 
-  .workload-heatmap-container > div:first-child {
+  .workload-heatmap-container>div:first-child {
     align-items: flex-start !important;
     flex-direction: column;
   }
@@ -1936,6 +1948,7 @@
 }
 
 @media (max-width: 820px) {
+
   .projects-header,
   .todo-page-header,
   .tickets-page-header,
@@ -2009,7 +2022,7 @@
   }
 
   .page-action-group .btn:not(.btn-icon),
-  .page-action-bar > .btn {
+  .page-action-bar>.btn {
     flex: 1;
   }
 
@@ -2020,13 +2033,13 @@
     flex-direction: column;
   }
 
-  .projects-header > div:last-child,
-  .todo-page-header > button,
-  .tickets-page-header > button {
+  .projects-header>div:last-child,
+  .todo-page-header>button,
+  .tickets-page-header>button {
     width: 100%;
   }
 
-  .projects-header > div:last-child .btn {
+  .projects-header>div:last-child .btn {
     flex: 1;
   }
 
@@ -2046,7 +2059,7 @@
     flex-wrap: wrap;
   }
 
-  .task-type-selector > div {
+  .task-type-selector>div {
     grid-template-columns: 1fr;
   }
 
@@ -2165,7 +2178,7 @@
     padding: 10px;
   }
 
-  .workload-heatmap-container > div:first-child > div:last-child {
+  .workload-heatmap-container>div:first-child>div:last-child {
     width: 100%;
     overflow-x: auto;
   }
@@ -2176,6 +2189,7 @@
 }
 
 @media (min-width: 1400px) {
+
   .calendar-controls-row,
   .calendar-actions-section {
     flex-wrap: nowrap;

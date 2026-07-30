@@ -171,28 +171,36 @@ export default function DashboardPage() {
 
       <div className="stats-grid">
         <div className="stat-card stat-total">
-          <div className="stat-icon" aria-hidden="true">P</div>
+          <div className="stat-icon" aria-hidden="true">
+            <AppIcon name="projects" size={13} />
+          </div>
           <div className="stat-info">
             <span className="stat-label">Totale commesse</span>
             <span className="stat-value">{stats.total}</span>
           </div>
         </div>
         <div className="stat-card stat-active">
-          <div className="stat-icon" aria-hidden="true">A</div>
+          <div className="stat-icon" aria-hidden="true">
+            <AppIcon name="active_projects" size={13} />
+          </div>
           <div className="stat-info">
             <span className="stat-label">Commesse attive</span>
             <span className="stat-value">{stats.active}</span>
           </div>
         </div>
         <div className="stat-card stat-completed">
-          <div className="stat-icon" aria-hidden="true">C</div>
+          <div className="stat-icon" aria-hidden="true">
+            <AppIcon name="todo" size={13} />
+          </div>
           <div className="stat-info">
             <span className="stat-label">Completate</span>
             <span className="stat-value">{stats.completed}</span>
           </div>
         </div>
         <div className="stat-card stat-progress">
-          <div className="stat-icon" aria-hidden="true">%</div>
+          <div className="stat-icon" aria-hidden="true">
+            <AppIcon name="gantt" size={13} />
+          </div>
           <div className="stat-info">
             <span className="stat-label">Progresso medio</span>
             <span className="stat-value">{avgProgress}%</span>
@@ -203,7 +211,9 @@ export default function DashboardPage() {
       <section className="card dashboard-section dashboard-timeline-panel">
         <div className="dashboard-panel-header">
           <div className="dashboard-panel-title">
-            <span className="dashboard-panel-icon calendar-icon" aria-hidden="true">31</span>
+            <span className="dashboard-panel-icon calendar-icon" aria-hidden="true">
+              <AppIcon name="calendar" size={13} />
+            </span>
             <div>
               <h2>La tua timeline</h2>
               <p>{MONTH_NAMES_IT[timelineMonth]} {timelineYear} · attività assegnate</p>
@@ -303,7 +313,9 @@ export default function DashboardPage() {
         <section className="card dashboard-section dashboard-list-panel">
           <div className="dashboard-panel-header">
             <div className="dashboard-panel-title">
-              <span className="dashboard-panel-icon project-icon" aria-hidden="true">P</span>
+              <span className="dashboard-panel-icon project-icon" aria-hidden="true">
+                <AppIcon name="projects" size={13} />
+              </span>
               <div>
                 <h2>Commesse recenti</h2>
                 <p>Ultimi progetti aggiornati</p>
@@ -358,7 +370,9 @@ export default function DashboardPage() {
         <section className="card dashboard-section dashboard-list-panel">
           <div className="dashboard-panel-header">
             <div className="dashboard-panel-title">
-              <span className="dashboard-panel-icon todo-icon" aria-hidden="true">✓</span>
+              <span className="dashboard-panel-icon todo-icon" aria-hidden="true">
+                <AppIcon name="todo" size={13} />
+              </span>
               <div>
                 <h2>TODO assegnati</h2>
                 <p>{assignedTodos.length} ancora da completare</p>
@@ -416,7 +430,7 @@ export default function DashboardPage() {
         </section>
 
         {recoveryItems.filter(item => !dismissedKeys.has(getRecoveryKey(item))).length > 0 && (
-          <section className="card dashboard-section recovery-panel">
+          <section className="conflict-card card dashboard-section recovery-panel">
             <div className="dashboard-panel-header">
               <div className="dashboard-panel-title">
                 <span className="dashboard-panel-icon warning-icon" aria-hidden="true">

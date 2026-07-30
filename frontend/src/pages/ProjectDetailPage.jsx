@@ -523,7 +523,7 @@ export default function ProjectDetailPage() {
     try {
       await api.delete(`/projects/${id}/links/${linkId}`);
       loadProject();
-    } catch (e) { 
+    } catch (e) {
       toast.error('Errore eliminazione dipendenza');
       console.error(e);
     }
@@ -1725,7 +1725,7 @@ export default function ProjectDetailPage() {
             {/* AREA NOTE */}
             <div className="commessa-summary-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h4 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>Note Commessa (Salvataggio automatico)</h4>
+                <h4 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>Note Commessa</h4>
               </div>
               <textarea
                 value={notesText}
@@ -1754,6 +1754,7 @@ export default function ProjectDetailPage() {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <h4 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>Allegati</h4>
+
                 <div>
                   <input
                     type="file"

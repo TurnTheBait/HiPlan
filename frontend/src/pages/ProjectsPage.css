@@ -4,8 +4,17 @@
   justify-content: space-between;
   margin-bottom: 24px;
 }
-.projects-header h1 { font-size: 1.75rem; font-weight: 700; }
-.projects-header p { color: var(--text-secondary); margin-top: 4px; font-size: 0.875rem; }
+
+.projects-header h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.projects-header p {
+  color: var(--text-secondary);
+  margin-top: 4px;
+  font-size: 0.875rem;
+}
 
 .projects-filters {
   display: flex;
@@ -26,12 +35,14 @@
   cursor: pointer;
   transition: all var(--transition-fast);
 }
+
 .filter-chip:hover {
   border-color: var(--border-focus, rgba(99, 102, 241, 0.3));
   background: var(--bg-hover);
   color: var(--text-primary);
   transform: translateY(-1px);
 }
+
 .filter-chip.active {
   background: linear-gradient(135deg, var(--accent-600), var(--accent-700));
   border-color: transparent;
@@ -52,6 +63,7 @@
   flex-direction: column;
   gap: 14px;
 }
+
 .project-card:hover {
   transform: translateY(-2px);
   border-color: var(--accent-500);
@@ -63,6 +75,7 @@
   justify-content: space-between;
   gap: 12px;
 }
+
 .project-card-header h3 {
   font-size: 1rem;
   font-weight: 600;
@@ -83,7 +96,11 @@
   align-items: center;
   gap: 12px;
 }
-.project-card-progress .progress-bar { flex: 1; }
+
+.project-card-progress .progress-bar {
+  flex: 1;
+}
+
 .progress-label {
   font-size: 0.75rem;
   font-weight: 600;
@@ -107,4 +124,7 @@
   opacity: 0;
   transition: opacity var(--transition-fast);
 }
-.project-card:hover .project-delete { opacity: 1; }
+
+.project-card:hover .project-delete {
+  opacity: 1;
+}

@@ -218,21 +218,18 @@
 .ticket-card::before {
   content: '';
   position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
+  left: -1px;
+  /* To cover the 1px border */
+  top: -1px;
+  bottom: -1px;
+  width: 4px;
   background: transparent;
   transition: background var(--transition-fast);
-  border-radius: 0 2px 2px 0;
+  border-radius: 11px 0 0 11px;
 }
 
 .ticket-card:hover {
   background: var(--bg-hover);
-}
-
-.ticket-card:hover::before {
-  background: var(--border-default);
 }
 
 .ticket-card.selected {
@@ -716,7 +713,6 @@
   background: var(--bg-tertiary);
   padding: 8px 12px;
   border-radius: var(--radius-sm);
-  border-left: 3px solid var(--accent-400);
   margin-top: 6px;
   font-size: 0.8125rem;
 }

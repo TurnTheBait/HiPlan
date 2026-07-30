@@ -51,6 +51,7 @@ async def create_project(
     return ProjectOut(
         id=project.id, name=project.name, code=project.code, client=project.client, color=project.color or "#185FA5",
         description=project.description,
+        notes=project.notes,
         start_date=project.start_date, end_date=project.end_date,
         status=project.status, owner_id=project.owner_id,
         responsible_id=project.responsible_id,
@@ -161,6 +162,7 @@ async def update_project(
     return ProjectOut(
         id=project.id, name=project.name, code=project.code, client=project.client, color=project.color or "#185FA5",
         description=project.description,
+        notes=project.notes,
         start_date=project.start_date, end_date=project.end_date,
         status=project.status, owner_id=project.owner_id,
         responsible_id=project.responsible_id,

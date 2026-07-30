@@ -631,16 +631,6 @@
   box-shadow: var(--shadow-sm);
 }
 
-.recovery-panel::before {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--warning), color-mix(in srgb, var(--warning) 42%, transparent));
-  content: '';
-}
-
 .recovery-panel .dashboard-panel-header {
   margin-bottom: 14px;
   padding-bottom: 13px;
@@ -667,6 +657,7 @@
   gap: 11px;
   padding: 11px 12px;
   border: 1px solid var(--border-subtle);
+  border-left: 4px solid var(--warning);
   border-radius: 12px;
   background: var(--bg-input);
   cursor: pointer;

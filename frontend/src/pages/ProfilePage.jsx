@@ -251,8 +251,8 @@ export default function ProfilePage() {
 
       {/* Sezione Ore da Recuperare */}
       {recoveryItems.filter(item => !dismissedKeys.has(getRecoveryKey(item))).length > 0 && (
-        <div className="profile-content-grid" style={{ marginTop: 24 }}>
-          <section className="card" style={{ gridColumn: '1 / -1', border: '1px solid rgba(245, 158, 11, 0.3)', background: 'rgba(245, 158, 11, 0.05)' }}>
+        <div className="profile-content-grid" >
+          <section className="conflict-card card" style={{ gridColumn: '1 / -1' }}>
             <h3 style={{ margin: 0, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
               <AppIcon name="alert-circle" /> Ore da Recuperare per Ferie
             </h3>
