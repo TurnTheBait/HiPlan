@@ -47,8 +47,8 @@ if errorlevel 1 goto error
 echo.
 echo Attesa disponibilita' dei servizi...
 set "READY=0"
-for /L %%i in (1,1,30) do (
-    powershell -NoProfile -Command "try { $api=Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:8000/api/health' -TimeoutSec 2; $web=Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:5173' -TimeoutSec 2; if($api.StatusCode -eq 200 -and $web.StatusCode -eq 200){exit 0}; exit 1 } catch { exit 1 }" >nul 2>&1
+for /L %%i in (1,1,60) do (
+    powershell -NoProfile -Command "try { $api=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/api/health' -TimeoutSec 2; $web=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:5173' -TimeoutSec 2; if($api.StatusCode -eq 200 -and $web.StatusCode -eq 200){exit 0}; exit 1 } catch { exit 1 }" >nul 2>&1
     if not errorlevel 1 (
         set "READY=1"
         goto services_ready
