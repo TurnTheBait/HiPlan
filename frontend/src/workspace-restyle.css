@@ -900,7 +900,6 @@
 }
 
 .project-detail .gantt_task_line {
-  overflow: hidden;
   border: 1px solid rgba(20, 32, 51, 0.16) !important;
   border-radius: 7px !important;
   box-shadow: var(--timeline-bar-shadow) !important;

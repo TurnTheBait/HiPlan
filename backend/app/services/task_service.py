@@ -576,6 +576,18 @@ async def delete_task(db: AsyncSession, task_id: str, user=None):
 async def create_link(db: AsyncSession, project_id: str, data: LinkCreate, user=None) -> LinkOut:
     await _check_task_manage_permissions(db, project_id, user)
     from app.models.link import LinkType
+    
+    # Prevenire duplicati esatti
+    existing = await db.execute(
+        select(Link).where(
+            Link.project_id == project_id,
+            Link.source == data.source,
+            Link.target == data.target
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Dipendenza già esistente")
+
     link = Link(
         project_id=project_id,
         source=data.source,

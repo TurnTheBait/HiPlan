@@ -523,7 +523,10 @@ export default function ProjectDetailPage() {
     try {
       await api.delete(`/projects/${id}/links/${linkId}`);
       loadProject();
-    } catch { /* già rimosso */ }
+    } catch (e) { 
+      toast.error('Errore eliminazione dipendenza');
+      console.error(e);
+    }
   }
 
   function openNewTaskModal() {
@@ -1325,6 +1328,7 @@ export default function ProjectDetailPage() {
             <div style={{ position: 'relative' }}>
               <button
                 className="btn btn-secondary"
+                style={{ fontSize: '12px' }}
                 onClick={() => setShowColumnsMenu(!showColumnsMenu)}
               >
                 <AppIcon name="columns" />
@@ -1369,7 +1373,7 @@ export default function ProjectDetailPage() {
               <button
                 className="btn btn-secondary"
                 onClick={() => { setShowDeptMenu(!showDeptMenu); setShowColumnsMenu(false); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
               >
                 <AppIcon name="building" />
                 Reparto
@@ -1628,10 +1632,16 @@ export default function ProjectDetailPage() {
                         )}
                         {tableVisibleColumns.includes('ore') && (
                           <td>
-                            <strong>{task.planned_hours || 8}h</strong> prev /{' '}
-                            <span style={{ color: tEff < (task.planned_hours * 0.5) ? 'var(--danger)' : 'var(--success)', fontWeight: 700 }}>
-                              {tEff}h eff
-                            </span>
+                            {task.type !== 'milestone' ? (
+                              <>
+                                <strong>{task.planned_hours || 8}h</strong> prev /{' '}
+                                <span style={{ color: tEff < ((task.planned_hours || 8) * 0.5) ? 'var(--danger)' : 'var(--success)', fontWeight: 700 }}>
+                                  {tEff}h eff
+                                </span>
+                              </>
+                            ) : (
+                              <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>-</span>
+                            )}
                           </td>
                         )}
                         {tableVisibleColumns.includes('semaforo') && (
@@ -1866,7 +1876,7 @@ export default function ProjectDetailPage() {
             </div>
 
             {editingTask && (
-              <div className="ut-tabs" style={{ marginBottom: 16, paddingBottom: 0 }}>
+              <div className="ut-tabs" style={{ marginBottom: 16, paddingBottom: 5 }}>
                 {canManageProject && (
                   <button className={`ut-tab-btn ${taskModalTab === 'generale' ? 'active' : ''}`} onClick={() => setTaskModalTab('generale')}>
                     Generale
@@ -1933,7 +1943,6 @@ export default function ProjectDetailPage() {
                       style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                     />
                     <label htmlFor="taskCompleted" style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)', margin: 0 }}>
-                      <AppIcon name="check" size={16} />
                       Fase completata
                     </label>
                   </div>

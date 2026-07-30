@@ -60,6 +60,7 @@ async def create_link(
 
 @router.delete("/links/{link_id}", status_code=204)
 async def delete_link(
+    project_id: str,
     link_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),

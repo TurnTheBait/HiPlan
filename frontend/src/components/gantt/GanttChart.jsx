@@ -75,11 +75,18 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.config.fit_tasks = false;
     gantt.config.autosize = false;
     gantt.config.autoscroll = true;
-    gantt.config.auto_scheduling = false;
+    // Configurazione link e task
+    gantt.config.show_links = true;
     gantt.config.drag_links = true;
-    gantt.config.drag_progress = false;
     gantt.config.drag_resize = false;
     gantt.config.drag_move = false;
+    
+    // Disabilita i popup nativi di conferma per l'eliminazione dei link
+    if (gantt.locale && gantt.locale.labels) {
+      gantt.locale.labels.confirm_link_deleting = null;
+    }
+    gantt.config.auto_scheduling = false;
+    gantt.config.drag_progress = false;
     gantt.config.open_tree_initially = true;
     gantt.config.order_branch = true;
     gantt.config.show_progress = true;
@@ -105,6 +112,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         align: "center",
         width: 105,
         template: function (task) {
+          if (task.type === 'milestone') return '-';
           return `${task.duration || 1}g (${task.planned_hours || (task.duration ? task.duration * 8 : 8)}h)`;
         }
       },
@@ -161,14 +169,18 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     // Tooltip e Marker per il giorno di oggi e Drag Timeline
     gantt.plugins({ tooltip: true, marker: true, drag_timeline: true });
     gantt.config.drag_timeline = {
-      ignore: ".gantt_task_line, .gantt_task_link",
+      ignore: ".gantt_task_line, .gantt_task_link, .gantt_link_control, .gantt_link_point",
       useKey: false
     };
     gantt.templates.tooltip_text = function (start, end, task) {
+      let durationText = `<b>${task.duration || 1} giorni</b>`;
+      if (task.type !== 'milestone') {
+        durationText += ` (${task.planned_hours || (task.duration ? task.duration * 8 : 8)} ore previste)`;
+      }
       return `<b>${task.text}</b><br/>
         Inizio: ${gantt.templates.tooltip_date_format(start)}<br/>
         Fine: ${gantt.templates.tooltip_date_format(end)}<br/>
-        Durata: <b>${task.duration || 1} giorni</b> (${task.planned_hours || (task.duration ? task.duration * 8 : 8)} ore previste)<br/>
+        Durata: ${durationText}<br/>
         Progresso: ${Math.round((task.progress || 0) * 100)}%`;
     };
 
@@ -359,15 +371,11 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       }
     });
 
-    gantt.attachEvent("onBeforeLinkDelete", (id, item) => {
-      if (!window.confirm("Confermi l'eliminazione di questa dipendenza tra fasi?")) {
-        return false;
+    gantt.attachEvent("onLinkDblClick", (id) => {
+      if (onLinkDeleteRef.current) {
+        onLinkDeleteRef.current(id, false);
       }
-      return true;
-    });
-
-    gantt.attachEvent("onAfterLinkDelete", (id) => {
-      if (onLinkDeleteRef.current) onLinkDeleteRef.current(id, true);
+      return false; // blocks native DHTMLX popup
     });
 
     const handleResize = () => {
@@ -411,6 +419,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         align: "center",
         width: 105,
         template: function (task) {
+          if (task.type === 'milestone') return '-';
           return `${task.duration || 1}g (${task.planned_hours || (task.duration ? task.duration * 8 : 8)}h)`;
         }
       },
