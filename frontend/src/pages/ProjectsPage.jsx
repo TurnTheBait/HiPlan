@@ -308,8 +308,8 @@ export default function ProjectsPage() {
               onClick={() => navigate(`/projects/${project.id}`)}
               style={{ borderLeft: `4px solid ${project.color || '#185FA5'}` }}
             >
-              <div className="project-card-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="project-card-header" style={{ alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
                   <span className="project-card-code">
                     {project.code || 'UT-COMM'}
                   </span>

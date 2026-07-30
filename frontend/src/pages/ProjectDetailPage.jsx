@@ -43,7 +43,7 @@ export default function ProjectDetailPage() {
 
   // Calcolo WebSocket URL
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsHost = import.meta.env.VITE_API_URL 
+  const wsHost = import.meta.env.VITE_API_URL
     ? new URL(import.meta.env.VITE_API_URL).host
     : `${window.location.hostname}:8000`;
   const wsUrl = `${protocol}//${wsHost}/api/ws/projects/${id}`;

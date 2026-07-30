@@ -176,7 +176,6 @@ export default function DashboardPage() {
             <span className="stat-label">Totale commesse</span>
             <span className="stat-value">{stats.total}</span>
           </div>
-          <span className="stat-detail">{stats.planning} in pianificazione</span>
         </div>
         <div className="stat-card stat-active">
           <div className="stat-icon" aria-hidden="true">A</div>
@@ -184,7 +183,6 @@ export default function DashboardPage() {
             <span className="stat-label">Commesse attive</span>
             <span className="stat-value">{stats.active}</span>
           </div>
-          <span className="stat-detail">In lavorazione</span>
         </div>
         <div className="stat-card stat-completed">
           <div className="stat-icon" aria-hidden="true">C</div>
@@ -192,7 +190,6 @@ export default function DashboardPage() {
             <span className="stat-label">Completate</span>
             <span className="stat-value">{stats.completed}</span>
           </div>
-          <span className="stat-detail">Chiuse con successo</span>
         </div>
         <div className="stat-card stat-progress">
           <div className="stat-icon" aria-hidden="true">%</div>
@@ -200,7 +197,6 @@ export default function DashboardPage() {
             <span className="stat-label">Progresso medio</span>
             <span className="stat-value">{avgProgress}%</span>
           </div>
-          <span className="stat-detail">Su tutte le commesse</span>
         </div>
       </div>
 
@@ -382,12 +378,12 @@ export default function DashboardPage() {
             <div className="notifications-list dashboard-scroll-list">
               {assignedTodos.slice(0, 8).map((todo) => {
                 const due = todo.due_date ? (todo.due_date.includes('T') ? new Date(todo.due_date) : new Date(todo.due_date + 'T00:00:00')) : null;
-                const dueReference = new Date(); dueReference.setHours(0,0,0,0);
+                const dueReference = new Date(); dueReference.setHours(0, 0, 0, 0);
                 const dueDay = due ? new Date(due) : null;
-                if (dueDay) dueDay.setHours(0,0,0,0);
-                const daysLeft = dueDay ? Math.ceil((dueDay - dueReference)/86400000) : null;
+                if (dueDay) dueDay.setHours(0, 0, 0, 0);
+                const daysLeft = dueDay ? Math.ceil((dueDay - dueReference) / 86400000) : null;
                 const isOverdue = daysLeft !== null && daysLeft < 0;
-                
+
                 return (
                   <button
                     type="button"

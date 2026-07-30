@@ -649,5 +649,13 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
   }, [tasks, links, drawCustomMarkers]);
 
 
-  return <div ref={containerRef} className="gantt-container" />;
+  const handleMouseLeave = () => {
+    if (gantt.ext && gantt.ext.tooltips && gantt.ext.tooltips.tooltip) {
+      gantt.ext.tooltips.tooltip.hide();
+    }
+    const leftoverTooltips = document.querySelectorAll('.gantt_tooltip');
+    leftoverTooltips.forEach(t => t.remove());
+  };
+
+  return <div ref={containerRef} className="gantt-container" onMouseLeave={handleMouseLeave} />;
 }

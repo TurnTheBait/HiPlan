@@ -231,6 +231,7 @@ async def get_worker_conflicts(
                     "task_name": task.text,
                     "project_id": task.project_id,
                     "project_name": task.project.name if task.project else "Sconosciuto",
+                    "project_code": task.project.code if task.project else "—",
                     "daily_hours": round(daily_hours, 1)
                 })
             current_date += timedelta(days=1)

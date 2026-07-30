@@ -92,6 +92,7 @@ async def _compute_recovery_for_user(db: AsyncSession, user: User, vacation: Vac
             "task_name": task.text,
             "project_id": task.project_id,
             "project_name": project.name if project else "—",
+            "project_code": project.code if project else "—",
             "hours_to_recover": hours_to_recover,
             "vacation_days": [str(d) for d in overlap_days],
             "vacation_start": str(vac_start),

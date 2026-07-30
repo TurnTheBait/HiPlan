@@ -56,21 +56,30 @@ export default function ConflictMonitoringPage() {
           {conflicts.map((c, idx) => (
             <div key={idx} className="conflict-card card">
               <div className="conflict-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <h3 style={{ margin: 0, color: 'var(--accent-400)' }}><AppIcon name="user" />{c.worker}</h3>
+                <h3 style={{ margin: 0, color: 'var(--accent-400)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AppIcon name="user" />
+                  {c.worker}
+                </h3>
                 <span className="badge badge-high" style={{ fontSize: '0.85rem' }}><AppIcon name="calendar" size={14} />{formatDate(c.date)}</span>
               </div>
               <p className="conflict-desc" style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
                 Ore totali stimate: <strong>{c.total_hours}h</strong> (limite 8h superato) distribuite su <strong>{c.tasks.length}</strong> fasi:
               </p>
-              
+
               <div className="conflict-tasks-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {c.tasks.map(t => (
                   <div key={t.task_id} className="conflict-task-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #f59e0b' }}>
                     <div className="task-info" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span className="task-project" style={{ fontSize: '0.85rem', color: '#9ca3af' }}>🏢 {t.project_name}</span>
-                      <span className="task-name" style={{ fontWeight: 500 }}>👉 {t.task_name} <span style={{ color: 'var(--accent-400)', fontSize: '0.85rem', marginLeft: '8px' }}>({t.daily_hours}h)</span></span>
+                      <span className="task-name" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}>
+                        <span style={{ color: 'var(--secondary)', display: 'flex', alignItems: 'center' }}><AppIcon name="list" size={15} /></span>
+                        {t.task_name} <span style={{ color: 'var(--accent-400)', fontSize: '0.85rem', marginLeft: '8px' }}>({t.daily_hours}h)</span>
+                      </span>
+                      <span className="task-project" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#9ca3af' }}>
+                        <AppIcon name="projects" size={14} />
+                        Progetto: {t.project_code && t.project_code !== "—" ? `${t.project_code}${t.project_name && t.project_name !== t.project_code && t.project_name !== "—" ? ` - ${t.project_name}` : ''}` : t.project_name}
+                      </span>
                     </div>
-                    <button 
+                    <button
                       className="btn btn-primary btn-sm"
                       onClick={() => navigate(`/projects/${t.project_id}`)}
                     >

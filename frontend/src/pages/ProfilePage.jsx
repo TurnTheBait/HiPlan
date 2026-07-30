@@ -197,15 +197,15 @@ export default function ProfilePage() {
           <h3>Aggiungi ferie</h3>
           <form onSubmit={handleCreate} className="profile-form">
             <div className="form-group">
-              <label>Inizio</label>
+              <label style={{ fontSize: '12px' }}>Inizio</label>
               <input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} required />
             </div>
             <div className="form-group">
-              <label>Fine</label>
+              <label style={{ fontSize: '12px' }}>Fine</label>
               <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} required />
             </div>
             <div className="form-group">
-              <label>Motivo</label>
+              <label style={{ fontSize: '12px' }}>Motivo</label>
               <input type="text" placeholder="Es. Riposo" value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} />
             </div>
             <button type="submit" className="btn-primary">✓ Aggiungi ferie</button>
@@ -217,7 +217,7 @@ export default function ProfilePage() {
           <div className="vacation-list">
             {vacations.length === 0 ? (
               <div className="empty-state">
-                <div className="empty-icon">📅</div>
+                <div className="empty-icon"><span className="sidebar-link-icon"><AppIcon name="calendar" size={50} /></span></div>
                 <p>Nessuna vacanza registrata</p>
               </div>
             ) : (
@@ -252,49 +252,46 @@ export default function ProfilePage() {
       {/* Sezione Ore da Recuperare */}
       {recoveryItems.filter(item => !dismissedKeys.has(getRecoveryKey(item))).length > 0 && (
         <div className="profile-content-grid" style={{ marginTop: 24 }}>
-          <section className="profile-card" style={{ gridColumn: '1 / -1', border: '2px solid #f59e0b', background: 'rgba(245,158,11,0.07)' }}>
-            <h3 style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: 8 }}>
-              ⚠️ Ore da Recuperare per Ferie
+          <section className="card" style={{ gridColumn: '1 / -1', border: '1px solid rgba(245, 158, 11, 0.3)', background: 'rgba(245, 158, 11, 0.05)' }}>
+            <h3 style={{ margin: 0, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+              <AppIcon name="alert-circle" /> Ore da Recuperare per Ferie
             </h3>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: 16, fontSize: '0.9rem' }}>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
               Le seguenti fasi hanno ore pianificate che cadono nei tuoi giorni di ferie. Queste ore andrebbero recuperate in accordo con il tuo responsabile.
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {recoveryItems
                 .filter(item => !dismissedKeys.has(getRecoveryKey(item)))
                 .map((item, i) => (
                   <div key={i} style={{
-                    background: 'var(--bg-secondary)', borderRadius: 10, padding: '14px 18px',
+                    background: 'white', borderRadius: '8px', padding: '12px',
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    borderLeft: '4px solid #f59e0b', gap: 12, flexWrap: 'wrap'
+                    gap: '12px', flexWrap: 'wrap', borderLeft: '4px solid #f59e0b'
                   }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: '1rem' }}>📋 {item.task_name}</div>
-                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Progetto: {item.project_name}</div>
-                      <div style={{ color: '#6b7280', fontSize: '0.8rem', marginTop: 4 }}>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}>
+                        <span style={{ color: 'var(--secondary)', display: 'flex', alignItems: 'center' }}><AppIcon name="list" size={15} /></span>
+                        {item.task_name}
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#9ca3af' }}>
+                        <AppIcon name="projects" size={14} />
+                        Progetto: {item.project_code && item.project_code !== "—" ? `${item.project_code}${item.project_name && item.project_name !== item.project_code && item.project_name !== "—" ? ` - ${item.project_name}` : ''}` : item.project_name}
+                      </span>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
                         {item.vacation_days?.length || 0} giorni lavorativi sovrapposti
-                      </div>
+                      </span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{
-                        background: '#f59e0b', color: '#fff', borderRadius: 8, padding: '8px 16px',
-                        fontWeight: 800, fontSize: '1.1rem', whiteSpace: 'nowrap'
-                      }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span className="badge badge-high" style={{ fontSize: '0.95rem', background: '#f59e0b', color: '#fff', border: 'none' }}>
                         {item.hours_to_recover}h
-                      </div>
+                      </span>
                       <button
+                        className="btn-delete"
                         onClick={() => dismissRecoveryItem(item)}
                         title="Segna come recuperata e rimuovi dalla lista"
-                        style={{
-                          background: 'none', border: '1.5px solid #e5e7eb', borderRadius: 8,
-                          cursor: 'pointer', padding: '6px 10px', fontSize: '1rem',
-                          color: '#6b7280', transition: 'all 0.15s',
-                          display: 'flex', alignItems: 'center', gap: 4
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.color = '#6b7280'; }}
+                        aria-label="Segna recuperata"
                       >
-                        🗑️
+                        <AppIcon name="check" size={15} />
                       </button>
                     </div>
                   </div>
