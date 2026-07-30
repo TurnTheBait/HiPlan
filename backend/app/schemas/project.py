@@ -1,5 +1,5 @@
 # pyrefly: ignore [missing-import]
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List
 from datetime import date, datetime
 from app.models.project import ProjectStatus, MemberRole
@@ -45,8 +45,7 @@ class MemberOut(BaseModel):
     full_name: Optional[str] = None
     role: MemberRole
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProjectOut(BaseModel):
@@ -73,8 +72,7 @@ class ProjectOut(BaseModel):
     member_count: int = 0
     progress: float = 0.0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProjectDetail(ProjectOut):

@@ -1,5 +1,5 @@
 # pyrefly: ignore [missing-import]
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
 class SettingBase(BaseModel):
@@ -13,8 +13,7 @@ class SettingUpdate(SettingBase):
     pass
 
 class SettingOut(SettingBase):
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 from datetime import datetime
 

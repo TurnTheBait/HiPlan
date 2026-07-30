@@ -78,3 +78,20 @@ async def auth_token(client: AsyncClient, test_user: User):
 async def auth_headers(auth_token: str):
     """Returns authorization headers using the test user's token."""
     return {"Authorization": f"Bearer {auth_token}"}
+
+from app.models.project import Project
+import datetime
+
+@pytest_asyncio.fixture(scope="function")
+async def test_project(db_session: AsyncSession, test_user: User):
+    project = Project(
+        name="Test Project",
+        description="A test project for tasks",
+        start_date=datetime.date.today(),
+        status="active",
+        owner_id=test_user.id
+    )
+    db_session.add(project)
+    await db_session.commit()
+    await db_session.refresh(project)
+    return project

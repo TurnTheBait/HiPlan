@@ -18,5 +18,5 @@ class ActivityLog(Base, TimestampMixin):
     category = Column(Enum(ActivityCategory), nullable=False)
     action_text = Column(Text, nullable=False)
 
-    project = relationship("Project", backref="activity_logs")
+    project = relationship("Project", back_populates="activity_logs")
     user = relationship("User")

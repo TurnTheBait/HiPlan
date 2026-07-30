@@ -1,5 +1,5 @@
 # pyrefly: ignore [missing-import]
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List
 from datetime import date
 from app.models.task import TaskType, TaskPriority
@@ -78,8 +78,7 @@ class TaskOut(BaseModel):
     completed: int = 0
     has_vacation_conflict: int = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Link Schemas ---
@@ -105,8 +104,7 @@ class LinkOut(BaseModel):
     type: str
     lag: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Risposta Gantt completa (task + links in un unico payload)
