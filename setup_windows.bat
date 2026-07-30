@@ -40,7 +40,7 @@ if not errorlevel 1 (
     set "PYTHON_CMD=python"
 )
 
-%PYTHON_CMD% -c "import sys; raise SystemExit(sys.version_info.major != 3 or sys.version_info.minor in range(0,12))" >nul 2>&1
+%PYTHON_CMD% -c "import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)" >nul 2>&1
 if errorlevel 1 (
     echo [ERRORE] Serve Python 3.12 o successivo.
     %PYTHON_CMD% --version
