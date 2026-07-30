@@ -158,28 +158,28 @@ export default function ProfilePage() {
         <div className="stat-card">
           <div className="stat-icon"><AppIcon name="user" /></div>
           <div className="stat-content">
-            <div className="stat-value">{user?.full_name || user?.username}</div>
+            <div className="stat-value" style={{ fontSize: 14 }}>{user?.full_name || user?.username}</div>
             <div className="stat-label">Nome Utente</div>
           </div>
         </div>
         <div className="stat-card stat-card-email">
           <div className="stat-icon"><AppIcon name="mail" /></div>
           <div className="stat-content">
-            <div className="stat-value stat-email-text">{user?.email}</div>
+            <div className="stat-value stat-email-text" style={{ fontSize: 14 }}>{user?.email}</div>
             <div className="stat-label">Email</div>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon"><AppIcon name="settings" /></div>
           <div className="stat-content">
-            <div className="stat-value">{user?.role?.toUpperCase()}</div>
+            <div className="stat-value" style={{ fontSize: 14 }}>{user?.role?.toUpperCase()}</div>
             <div className="stat-label">Ruolo</div>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon"><AppIcon name="building" /></div>
           <div className="stat-content">
-            <div className="stat-value">
+            <div className="stat-value" style={{ fontSize: 14 }}>
               {user?.department === 'ufficio_tecnico' ? 'Ufficio Tecnico' :
                 user?.department === 'produzione' ? 'Produzione' :
                   user?.department === 'acquisti' ? 'Acquisti' :

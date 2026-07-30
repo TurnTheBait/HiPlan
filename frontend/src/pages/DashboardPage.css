@@ -48,22 +48,22 @@
 }
 
 .dashboard-banner-info {
-  border-left-color: var(--info);
+  border-color: var(--info);
   background: linear-gradient(90deg, var(--info-bg), var(--bg-card) 28%);
 }
 
 .dashboard-banner-success {
-  border-left-color: var(--success);
+  border-color: var(--success);
   background: linear-gradient(90deg, var(--success-bg), var(--bg-card) 28%);
 }
 
 .dashboard-banner-warning {
-  border-left-color: var(--warning);
+  border-color: var(--warning);
   background: linear-gradient(90deg, var(--warning-bg), var(--bg-card) 32%);
 }
 
 .dashboard-banner-error {
-  border-left-color: var(--danger);
+  border-color: var(--danger);
   background: linear-gradient(90deg, var(--danger-bg), var(--bg-card) 32%);
 }
 
@@ -282,7 +282,7 @@
   gap: 11px;
 }
 
-.dashboard-panel-title > div {
+.dashboard-panel-title>div {
   min-width: 0;
 }
 
@@ -359,7 +359,7 @@
   align-items: stretch;
 }
 
-.dashboard-grid > * {
+.dashboard-grid>* {
   min-width: 0;
 }
 

@@ -287,59 +287,59 @@ export default function CalendarPage() {
 
           <div className="calendar-actions-section">
 
-          <select
-            className="input"
-            style={{ width: 160, minWidth: 120, maxWidth: '100%', flex: '0 1 auto', padding: '8px 12px' }}
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-          >
-            <option value="all">Tutti gli stati</option>
-            <option value="active">In corso</option>
-            <option value="planning">In pianificazione</option>
-            <option value="completed">Completati</option>
-            <option value="archived">Archiviati</option>
-          </select>
-
-          <select
-            className="input"
-            style={{ width: 170, minWidth: 130, maxWidth: '100%', flex: '0 1 auto', padding: '8px 12px' }}
-            value={filterDepartment}
-            onChange={(e) => setFilterDepartment(e.target.value)}
-          >
-            <option value="all">Tutti i reparti</option>
-            <option value="ufficio_tecnico">Ufficio Tecnico</option>
-            <option value="produzione">Produzione</option>
-            <option value="acquisti">Acquisti</option>
-          </select>
-
-          <select
-            className="input"
-            style={{ width: 170, minWidth: 130, maxWidth: '100%', flex: '0 1 auto', padding: '8px 12px' }}
-            value={filterWorker}
-            onChange={(e) => setFilterWorker(e.target.value)}
-          >
-            <option value="all">Tutti gli utenti</option>
-            {allWorkers.map(w => (
-              <option key={w.username} value={w.username}>{w.name}</option>
-            ))}
-          </select>
-
-          <div className="calendar-view-toggle">
-            <button
-              className={`calendar-view-btn ${viewMode === 'grid' ? 'active' : ''}`}
-              onClick={() => setViewMode('grid')}
+            <select
+              className="input"
+              style={{ width: 160, minWidth: 120, maxWidth: '100%', flex: '0 1 auto', padding: '8px 12px', fontSize: '12px' }}
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
             >
-              <AppIcon name="grid" size={15} />
-              Griglia mese
-            </button>
-            <button
-              className={`calendar-view-btn ${viewMode === 'timeline' ? 'active' : ''}`}
-              onClick={() => setViewMode('timeline')}
+              <option value="all">Tutti gli stati</option>
+              <option value="active">In corso</option>
+              <option value="planning">In pianificazione</option>
+              <option value="completed">Completati</option>
+              <option value="archived">Archiviati</option>
+            </select>
+
+            <select
+              className="input"
+              style={{ width: 170, minWidth: 130, maxWidth: '100%', flex: '0 1 auto', padding: '8px 12px', fontSize: '12px' }}
+              value={filterDepartment}
+              onChange={(e) => setFilterDepartment(e.target.value)}
             >
-              <AppIcon name="timeline" size={15} />
-              Timeline
-            </button>
-          </div>
+              <option value="all">Tutti i reparti</option>
+              <option value="ufficio_tecnico">Ufficio Tecnico</option>
+              <option value="produzione">Produzione</option>
+              <option value="acquisti">Acquisti</option>
+            </select>
+
+            <select
+              className="input"
+              style={{ width: 170, minWidth: 130, maxWidth: '100%', flex: '0 1 auto', padding: '8px 12px', fontSize: '12px' }}
+              value={filterWorker}
+              onChange={(e) => setFilterWorker(e.target.value)}
+            >
+              <option value="all">Tutti gli utenti</option>
+              {allWorkers.map(w => (
+                <option key={w.username} value={w.username}>{w.name}</option>
+              ))}
+            </select>
+
+            <div className="calendar-view-toggle">
+              <button
+                className={`calendar-view-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                onClick={() => setViewMode('grid')}
+              >
+                <AppIcon name="grid" size={15} />
+                Griglia mese
+              </button>
+              <button
+                className={`calendar-view-btn ${viewMode === 'timeline' ? 'active' : ''}`}
+                onClick={() => setViewMode('timeline')}
+              >
+                <AppIcon name="timeline" size={15} />
+                Timeline
+              </button>
+            </div>
           </div>
         </div>
       </div>

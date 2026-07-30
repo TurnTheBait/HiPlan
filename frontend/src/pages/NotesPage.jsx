@@ -82,6 +82,7 @@ export default function NotesPage() {
     }
     setLastSaved(null);
     setShowVisibilityMenu(false);
+    setIsShared(note.is_shared || false);
   }
 
   useEffect(() => {

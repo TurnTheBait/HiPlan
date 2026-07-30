@@ -453,31 +453,31 @@ export default function AdminPage() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
             {!collapsedSections.users && (
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <div style={{ position: 'relative' }}>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => setShowAdminColumnsMenu(!showAdminColumnsMenu)}
-              >
-                <AppIcon name="columns" />
-                Colonne
-              </button>
-              {showAdminColumnsMenu && (
-                <div className="dropdown-menu" style={{ position: 'absolute', right: 0, top: '100%', marginTop: 8, zIndex: 50, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, padding: 8, boxShadow: 'var(--shadow-lg)', minWidth: 200 }}>
-                  {['utente', 'email', 'ruolo', 'reparto', 'stato', 'registrato', 'azioni'].map(col => (
-                    <label key={col} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', cursor: 'pointer', textTransform: 'capitalize' }}>
-                      <input
-                        type="checkbox"
-                        checked={adminVisibleColumns.includes(col)}
-                        onChange={() => toggleAdminColumn(col)}
-                      />
-                      {col}
-                    </label>
-                  ))}
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <div style={{ position: 'relative' }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setShowAdminColumnsMenu(!showAdminColumnsMenu)}
+                  >
+                    <AppIcon name="columns" />
+                    Colonne
+                  </button>
+                  {showAdminColumnsMenu && (
+                    <div className="dropdown-menu" style={{ position: 'absolute', right: 0, top: '100%', marginTop: 8, zIndex: 50, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, padding: 8, boxShadow: 'var(--shadow-lg)', minWidth: 200 }}>
+                      {['utente', 'email', 'ruolo', 'reparto', 'stato', 'registrato', 'azioni'].map(col => (
+                        <label key={col} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', cursor: 'pointer', textTransform: 'capitalize' }}>
+                          <input
+                            type="checkbox"
+                            checked={adminVisibleColumns.includes(col)}
+                            onChange={() => toggleAdminColumn(col)}
+                          />
+                          {col}
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
               </div>
-            </div>
             )}
             <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => toggleSection('users')}>
               <AppIcon name={collapsedSections.users ? 'chevronDown' : 'chevronUp'} size={18} />
@@ -588,25 +588,25 @@ export default function AdminPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
             {!collapsedSections.templates && (
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <select
-              className="input"
-              value={filterDept}
-              onChange={(e) => setFilterDept(e.target.value)}
-              style={{ padding: '6px 12px', fontSize: '0.85rem', fontWeight: 600 }}
-            >
-              <option value="all">Tutti i reparti ({phaseTemplates.length})</option>
-              <option value="ufficio_tecnico">Ufficio Tecnico ({phaseTemplates.filter(t => t.department === 'ufficio_tecnico').length})</option>
-              <option value="produzione">Produzione ({phaseTemplates.filter(t => t.department === 'produzione').length})</option>
-              <option value="acquisti">Acquisti ({phaseTemplates.filter(t => t.department === 'acquisti').length})</option>
-              <option value="tutti">Tutti / Condivise ({phaseTemplates.filter(t => t.department === 'tutti').length})</option>
-            </select>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={openNewTemplate}
-              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-            >
-              <span>+</span> Nuova Fase Preimpostata
-            </button>
+                <select
+                  className="input"
+                  value={filterDept}
+                  onChange={(e) => setFilterDept(e.target.value)}
+                  style={{ padding: '6px 12px', fontSize: '0.85rem', fontWeight: 600 }}
+                >
+                  <option value="all">Tutti i reparti ({phaseTemplates.length})</option>
+                  <option value="ufficio_tecnico">Ufficio Tecnico ({phaseTemplates.filter(t => t.department === 'ufficio_tecnico').length})</option>
+                  <option value="produzione">Produzione ({phaseTemplates.filter(t => t.department === 'produzione').length})</option>
+                  <option value="acquisti">Acquisti ({phaseTemplates.filter(t => t.department === 'acquisti').length})</option>
+                  <option value="tutti">Tutti / Condivise ({phaseTemplates.filter(t => t.department === 'tutti').length})</option>
+                </select>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={openNewTemplate}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <span>+</span> Nuova Fase Preimpostata
+                </button>
               </div>
             )}
             <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => toggleSection('templates')}>
@@ -616,76 +616,76 @@ export default function AdminPage() {
         </div>
 
         {!collapsedSections.templates && (
-        <div className="table-wrapper">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Nome Fase / Lavorazione</th>
-                <th>Reparto Assegnato</th>
-                <th>Colore Predefinito</th>
-                <th>Tipo</th>
-                <th style={{ width: 120 }}>Azioni</th>
-              </tr>
-            </thead>
-            <tbody>
-              {phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'tutti').length === 0 ? (
+          <div className="table-wrapper">
+            <table className="table">
+              <thead>
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-muted)' }}>
-                    Nessuna fase preimpostata per il filtro selezionato.
-                  </td>
+                  <th>Nome Fase / Lavorazione</th>
+                  <th>Reparto Assegnato</th>
+                  <th>Colore Predefinito</th>
+                  <th>Tipo</th>
+                  <th style={{ width: 120 }}>Azioni</th>
                 </tr>
-              ) : (
-                phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'tutti').sort((a, b) => (a.name || '').localeCompare(b.name || '', 'it')).map((tpl) => (
-                  <tr key={tpl.id}>
-                    <td>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ display: 'inline-block', width: 14, height: 14, borderRadius: '50%', background: tpl.default_color || '#3b82f6', border: '1px solid var(--border-default)', flexShrink: 0 }} />
-                        <span>{tpl.name}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="badge" style={{ background: DEPT_COLORS[tpl.department] ? `${DEPT_COLORS[tpl.department]}20` : 'var(--bg-tertiary)', color: DEPT_COLORS[tpl.department] || 'var(--text-secondary)', border: `1px solid ${DEPT_COLORS[tpl.department] || 'var(--border)'}40` }}>
-                        {DEPT_LABELS[tpl.department] || (tpl.department === 'tutti' ? 'Condivisa / Tutti' : tpl.department)}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'monospace', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        <span style={{ display: 'inline-block', width: 22, height: 22, borderRadius: 6, background: tpl.default_color || '#3b82f6', border: '1px solid var(--border-default)' }} />
-                        {tpl.default_color || '#3b82f6'}
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`badge ${tpl.is_custom ? 'badge-archived' : 'badge-active'}`}>
-                        {tpl.is_custom ? 'Personalizzata' : 'Predefinita'}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button
-                          className="btn btn-secondary btn-icon"
-                          onClick={() => openEditTemplate(tpl)}
-                          title="Modifica nome, reparto o colore"
-                          aria-label="Modifica fase preimpostata"
-                        >
-                          <AppIcon name="edit" size={15} />
-                        </button>
-                        <button
-                          className="btn btn-ghost btn-icon"
-                          style={{ color: 'var(--danger)' }}
-                          onClick={() => handleDeleteTemplate(tpl)}
-                          title="Elimina fase preimpostata"
-                          aria-label="Elimina fase preimpostata"
-                        >
-                          <AppIcon name="trash" size={15} />
-                        </button>
-                      </div>
+              </thead>
+              <tbody>
+                {phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'tutti').length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-muted)' }}>
+                      Nessuna fase preimpostata per il filtro selezionato.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'tutti').sort((a, b) => (a.name || '').localeCompare(b.name || '', 'it')).map((tpl) => (
+                    <tr key={tpl.id}>
+                      <td>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ display: 'inline-block', width: 14, height: 14, borderRadius: '50%', background: tpl.default_color || '#3b82f6', border: '1px solid var(--border-default)', flexShrink: 0 }} />
+                          <span>{tpl.name}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <span className="badge" style={{ background: DEPT_COLORS[tpl.department] ? `${DEPT_COLORS[tpl.department]}20` : 'var(--bg-tertiary)', color: DEPT_COLORS[tpl.department] || 'var(--text-secondary)', border: `1px solid ${DEPT_COLORS[tpl.department] || 'var(--border)'}40` }}>
+                          {DEPT_LABELS[tpl.department] || (tpl.department === 'tutti' ? 'Condivisa / Tutti' : tpl.department)}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'monospace', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                          <span style={{ display: 'inline-block', width: 22, height: 22, borderRadius: 6, background: tpl.default_color || '#3b82f6', border: '1px solid var(--border-default)' }} />
+                          {tpl.default_color || '#3b82f6'}
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`badge ${tpl.is_custom ? 'badge-archived' : 'badge-active'}`}>
+                          {tpl.is_custom ? 'Personalizzata' : 'Predefinita'}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            className="btn btn-secondary btn-icon"
+                            onClick={() => openEditTemplate(tpl)}
+                            title="Modifica nome, reparto o colore"
+                            aria-label="Modifica fase preimpostata"
+                          >
+                            <AppIcon name="edit" size={15} />
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-icon"
+                            style={{ color: 'var(--danger)' }}
+                            onClick={() => handleDeleteTemplate(tpl)}
+                            title="Elimina fase preimpostata"
+                            aria-label="Elimina fase preimpostata"
+                          >
+                            <AppIcon name="trash" size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -705,41 +705,41 @@ export default function AdminPage() {
           </div>
         </div>
         {!collapsedSections.ticketPhases && (
-        <div style={{ maxWidth: '100%' }}>
-          <div className="ticket-phases-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, marginBottom: 24 }}>
-            {ticketPhases.map((phase, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-tertiary)', padding: '10px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
-                <span style={{ fontSize: '0.95rem', fontWeight: 500 }}>{phase}</span>
-                <button
-                  className="btn-icon"
-                  onClick={() => handleRemoveTicketPhase(i)}
-                  style={{ color: 'var(--danger)', opacity: 0.7 }}
-                  title="Elimina fase ticket"
-                >
-                  <AppIcon name="trash" size={15} />
-                </button>
-              </div>
-            ))}
-            {ticketPhases.length === 0 && (
-              <div style={{ padding: 12, color: 'var(--text-muted)', fontSize: '0.9rem', gridColumn: '1 / -1' }}>
-                Nessuna fase personalizzata impostata.
-              </div>
-            )}
+          <div style={{ maxWidth: '100%' }}>
+            <div className="ticket-phases-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, marginBottom: 24 }}>
+              {ticketPhases.map((phase, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-tertiary)', padding: '10px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                  <span style={{ fontSize: '0.95rem', fontWeight: 500 }}>{phase}</span>
+                  <button
+                    className="btn-icon"
+                    onClick={() => handleRemoveTicketPhase(i)}
+                    style={{ color: 'var(--danger)', opacity: 0.7 }}
+                    title="Elimina fase ticket"
+                  >
+                    <AppIcon name="trash" size={15} />
+                  </button>
+                </div>
+              ))}
+              {ticketPhases.length === 0 && (
+                <div style={{ padding: 12, color: 'var(--text-muted)', fontSize: '0.9rem', gridColumn: '1 / -1' }}>
+                  Nessuna fase personalizzata impostata.
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 12, maxWidth: 800 }}>
+              <input
+                className="input"
+                style={{ flex: 1 }}
+                placeholder="Es: Risposta dal cliente"
+                value={newTicketPhase}
+                onChange={e => setNewTicketPhase(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddTicketPhase(); }}
+              />
+              <button className="btn btn-primary" onClick={handleAddTicketPhase}>
+                Aggiungi Fase
+              </button>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 12, maxWidth: 800 }}>
-            <input
-              className="input"
-              style={{ flex: 1 }}
-              placeholder="Es: Risposta dal cliente"
-              value={newTicketPhase}
-              onChange={e => setNewTicketPhase(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleAddTicketPhase(); }}
-            />
-            <button className="btn btn-primary" onClick={handleAddTicketPhase}>
-              Aggiungi Fase
-            </button>
-          </div>
-        </div>
         )}
       </div>
 
@@ -752,22 +752,22 @@ export default function AdminPage() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
             {!collapsedSections.emails && (
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <div className="tabs" style={{ display: 'flex', gap: 8 }}>
-            <button
-              className={`btn btn-sm ${emailLogTab === 'sent' ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setEmailLogTab('sent')}
-            >
-              Inviate ({emailLogs.length})
-            </button>
-            <button
-              className={`btn btn-sm ${emailLogTab === 'scheduled' ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setEmailLogTab('scheduled')}
-            >
-              In Programmazione ({scheduledEmails.length})
-            </button>
-          </div>
-            </div>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <div className="tabs" style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    className={`btn btn-sm ${emailLogTab === 'sent' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setEmailLogTab('sent')}
+                  >
+                    Inviate ({emailLogs.length})
+                  </button>
+                  <button
+                    className={`btn btn-sm ${emailLogTab === 'scheduled' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setEmailLogTab('scheduled')}
+                  >
+                    Programmate ({scheduledEmails.length})
+                  </button>
+                </div>
+              </div>
             )}
             <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => toggleSection('emails')}>
               <AppIcon name={collapsedSections.emails ? 'chevronDown' : 'chevronUp'} size={18} />
@@ -776,89 +776,89 @@ export default function AdminPage() {
         </div>
 
         {!collapsedSections.emails && (
-        <div className="table-wrapper" style={{ maxHeight: 520, overflowY: 'auto' }}>
-          {emailLogTab === 'sent' ? (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Data</th>
-                  <th>Destinatario</th>
-                  <th>Oggetto</th>
-                  <th>Stato</th>
-                  <th>Errore</th>
-                </tr>
-              </thead>
-              <tbody>
-                {emailLogs.length === 0 ? (
+          <div className="table-wrapper" style={{ maxHeight: 520, overflowY: 'auto' }}>
+            {emailLogTab === 'sent' ? (
+              <table className="table">
+                <thead>
                   <tr>
-                    <td colSpan="5" style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>
-                      Nessuna email inviata di recente.
-                    </td>
+                    <th>Data</th>
+                    <th>Destinatario</th>
+                    <th>Oggetto</th>
+                    <th>Stato</th>
+                    <th>Errore</th>
                   </tr>
-                ) : (
-                  emailLogs.map(log => (
-                    <tr key={log.id}>
-                      <td style={{ whiteSpace: 'nowrap' }}>{new Date(log.created_at).toLocaleString()}</td>
-                      <td>{log.recipient}</td>
-                      <td>{log.subject}</td>
-                      <td>
-                        {log.status === 'success' ? (
-                          <span className="badge badge-success">Inviata</span>
-                        ) : (
-                          <span className="badge badge-error">Errore</span>
-                        )}
-                      </td>
-                      <td style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>
-                        {log.error_message || '-'}
+                </thead>
+                <tbody>
+                  {emailLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>
+                        Nessuna email inviata di recente.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          ) : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Data Prevista</th>
-                  <th>Tipo Promemoria</th>
-                  <th>Oggetto</th>
-                  <th>Destinatari</th>
-                  <th style={{ width: 80, textAlign: 'center' }}>Azioni</th>
-                </tr>
-              </thead>
-              <tbody>
-                {scheduledEmails.length === 0 ? (
+                  ) : (
+                    emailLogs.map(log => (
+                      <tr key={log.id}>
+                        <td style={{ whiteSpace: 'nowrap' }}>{new Date(log.created_at).toLocaleString()}</td>
+                        <td>{log.recipient}</td>
+                        <td>{log.subject}</td>
+                        <td>
+                          {log.status === 'success' ? (
+                            <span className="badge badge-success">Inviata</span>
+                          ) : (
+                            <span className="badge badge-error">Errore</span>
+                          )}
+                        </td>
+                        <td style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>
+                          {log.error_message || '-'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            ) : (
+              <table className="table">
+                <thead>
                   <tr>
-                    <td colSpan="4" style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>
-                      Nessuna email in programmazione.
-                    </td>
+                    <th>Data Prevista</th>
+                    <th>Tipo Promemoria</th>
+                    <th>Oggetto</th>
+                    <th>Destinatari</th>
+                    <th style={{ width: 80, textAlign: 'center' }}>Azioni</th>
                   </tr>
-                ) : (
-                  scheduledEmails.map((log, index) => (
-                    <tr key={index}>
-                      <td style={{ whiteSpace: 'nowrap' }}>{new Date(log.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
-                      <td><span className="badge badge-warning">{log.type}</span></td>
-                      <td>{log.subject}</td>
-                      <td>{log.recipients}</td>
-                      <td style={{ textAlign: 'center' }}>
-                        <button
-                          className="btn btn-sm btn-ghost"
-                          title="Annulla notifica"
-                          onClick={() => deleteScheduledEmail(log.id)}
-                          style={{ color: 'var(--danger)', padding: '4px 8px' }}
-                          aria-label="Annulla notifica"
-                        >
-                          <AppIcon name="close" size={14} />
-                        </button>
+                </thead>
+                <tbody>
+                  {scheduledEmails.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>
+                        Nessuna email programmata.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          )}
-        </div>
+                  ) : (
+                    scheduledEmails.map((log, index) => (
+                      <tr key={index}>
+                        <td style={{ whiteSpace: 'nowrap' }}>{new Date(log.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+                        <td><span className="badge badge-warning">{log.type}</span></td>
+                        <td>{log.subject}</td>
+                        <td>{log.recipients}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button
+                            className="btn btn-sm btn-ghost"
+                            title="Annulla notifica"
+                            onClick={() => deleteScheduledEmail(log.id)}
+                            style={{ color: 'var(--danger)', padding: '4px 8px' }}
+                            aria-label="Annulla notifica"
+                          >
+                            <AppIcon name="close" size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
         )}
       </div>
 
