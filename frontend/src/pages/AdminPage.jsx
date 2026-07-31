@@ -28,6 +28,8 @@ export default function AdminPage() {
     name: '',
     department: 'ufficio_tecnico',
     default_color: '#3b82f6',
+    default_days: '',
+    default_hours: '',
   });
   const [globalBannerForm, setGlobalBannerForm] = useState({ text: '', type: 'info', duration_hours: 24, isManualDate: false, manualDate: '' });
   const [globalBanners, setGlobalBanners] = useState([]);
@@ -222,16 +224,22 @@ export default function AdminPage() {
       return;
     }
     try {
+      const payload = {
+        ...templateForm,
+        default_days: templateForm.default_days !== '' ? Number(templateForm.default_days) : null,
+        default_hours: templateForm.default_hours !== '' ? Number(templateForm.default_hours) : null,
+      };
+      
       if (editingTemplate) {
-        await api.put(`/phase-templates/${editingTemplate.id}`, templateForm);
+        await api.put(`/phase-templates/${editingTemplate.id}`, payload);
         toast.success('Fase preimpostata modificata con successo');
       } else {
-        await api.post('/phase-templates', { ...templateForm, is_custom: true });
+        await api.post('/phase-templates', { ...payload, is_custom: true });
         toast.success('Nuova fase preimpostata aggiunta con successo');
       }
       setShowAddTemplateModal(false);
       setEditingTemplate(null);
-      setTemplateForm({ name: '', department: 'ufficio_tecnico', default_color: '#3b82f6' });
+      setTemplateForm({ name: '', department: 'ufficio_tecnico', default_color: '#3b82f6', default_days: '', default_hours: '' });
       loadPhaseTemplates();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Errore durante il salvataggio della fase');
@@ -255,6 +263,8 @@ export default function AdminPage() {
       name: tpl.name,
       department: tpl.department,
       default_color: tpl.default_color || '#3b82f6',
+      default_days: tpl.default_days != null ? tpl.default_days : '',
+      default_hours: tpl.default_hours != null ? tpl.default_hours : '',
     });
     setShowAddTemplateModal(true);
   }
@@ -265,6 +275,8 @@ export default function AdminPage() {
       name: '',
       department: filterDept !== 'all' ? filterDept : 'ufficio_tecnico',
       default_color: DEPT_COLORS[filterDept] || '#3b82f6',
+      default_days: '',
+      default_hours: '',
     });
     setShowAddTemplateModal(true);
   }
@@ -865,7 +877,7 @@ export default function AdminPage() {
       {/* MODALE AGGIUNTA/MODIFICA TEMPLATE */}
       {showAddTemplateModal && (
         <div className="modal-overlay animate-fadeIn" onClick={() => setShowAddTemplateModal(false)}>
-          <div className="modal" style={{ maxWidth: 500, background: 'var(--bg-secondary)', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-xl)' }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal" style={{ maxWidth: 650, background: 'var(--bg-secondary)', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-xl)' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{editingTemplate ? 'Modifica Fase Preimpostata' : 'Nuova Fase Preimpostata'}</h2>
               <button className="btn-ghost btn-icon" type="button" onClick={() => setShowAddTemplateModal(false)} aria-label="Chiudi">
@@ -900,6 +912,33 @@ export default function AdminPage() {
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
                     Questa fase comparirà nel menu a tendina di tutti gli addetti del reparto selezionato.
                   </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: 16, marginTop: 14 }}>
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Giorni Lavorativi Previsti</label>
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      className="input"
+                      value={templateForm.default_days}
+                      onChange={(e) => setTemplateForm({ ...templateForm, default_days: e.target.value })}
+                      placeholder="es. 3"
+                    />
+                  </div>
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Ore Previste</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      className="input"
+                      value={templateForm.default_hours}
+                      onChange={(e) => setTemplateForm({ ...templateForm, default_hours: e.target.value })}
+                      placeholder="es. 24"
+                    />
+                  </div>
                 </div>
 
                 <div className="input-group" style={{ marginTop: 14 }}>

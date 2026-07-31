@@ -434,7 +434,7 @@ export default function DashboardPage() {
             <div className="dashboard-panel-header">
               <div className="dashboard-panel-title">
                 <span className="dashboard-panel-icon warning-icon" aria-hidden="true">
-                  <AppIcon name="alert" size={18} />
+                  <AppIcon name="alert" size={17} />
                 </span>
                 <div>
                   <h2>Ore da recuperare per ferie</h2>

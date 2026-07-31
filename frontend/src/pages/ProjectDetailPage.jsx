@@ -2015,10 +2015,17 @@ export default function ProjectDetailPage() {
                                     key={tpl.id || tpl.name}
                                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', cursor: 'pointer', background: taskForm.faseSel === tpl.name ? 'var(--primary-subtle, rgba(59,130,246,0.15))' : 'transparent', borderBottom: '1px solid var(--border-default)' }}
                                     onClick={() => {
+                                      const newDays = tpl.default_days != null ? tpl.default_days : taskForm.duration_days;
+                                      const newHours = tpl.default_hours != null ? tpl.default_hours : taskForm.planned_hours;
+                                      const sDate = taskForm.start_date || new Date().toISOString().split('T')[0];
+                                      const newEnd = addWorkingDays(sDate, newDays);
                                       setTaskForm({
                                         ...taskForm,
                                         faseSel: tpl.name,
                                         color: tpl.default_color || PHASE_DEFAULT_COLORS[tpl.name] || taskForm.color,
+                                        duration_days: newDays,
+                                        planned_hours: newHours,
+                                        end_date: newEnd,
                                       });
                                       setShowPhaseDropdown(false);
                                     }}
@@ -2050,10 +2057,17 @@ export default function ProjectDetailPage() {
                               key={tpl.id || tpl.name}
                               style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', cursor: 'pointer', background: taskForm.faseSel === tpl.name ? 'var(--primary-subtle, rgba(59,130,246,0.15))' : 'transparent', borderBottom: '1px solid var(--border-default)' }}
                               onClick={() => {
+                                const newDays = tpl.default_days != null ? tpl.default_days : taskForm.duration_days;
+                                const newHours = tpl.default_hours != null ? tpl.default_hours : taskForm.planned_hours;
+                                const sDate = taskForm.start_date || new Date().toISOString().split('T')[0];
+                                const newEnd = addWorkingDays(sDate, newDays);
                                 setTaskForm({
                                   ...taskForm,
                                   faseSel: tpl.name,
                                   color: tpl.default_color || PHASE_DEFAULT_COLORS[tpl.name] || taskForm.color,
+                                  duration_days: newDays,
+                                  planned_hours: newHours,
+                                  end_date: newEnd,
                                 });
                                 setShowPhaseDropdown(false);
                               }}

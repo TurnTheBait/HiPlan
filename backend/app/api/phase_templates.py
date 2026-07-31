@@ -19,12 +19,16 @@ class PhaseTemplateCreate(BaseModel):
     department: str = "ufficio_tecnico"
     default_color: str = "#3b82f6"
     is_custom: bool = False
+    default_days: Optional[int] = None
+    default_hours: Optional[float] = None
 
 
 class PhaseTemplateUpdate(BaseModel):
     name: Optional[str] = None
     department: Optional[str] = None
     default_color: Optional[str] = None
+    default_days: Optional[int] = None
+    default_hours: Optional[float] = None
 
 
 @router.get("")
@@ -47,6 +51,8 @@ async def list_phase_templates(
             "department": t.department,
             "default_color": t.default_color,
             "is_custom": t.is_custom,
+            "default_days": t.default_days,
+            "default_hours": t.default_hours,
             "created_at": t.created_at.isoformat() if t.created_at else None,
         }
         for t in templates
@@ -81,6 +87,8 @@ async def create_phase_template(
             "department": existing.department,
             "default_color": existing.default_color,
             "is_custom": existing.is_custom,
+            "default_days": existing.default_days,
+            "default_hours": existing.default_hours,
         }
 
     template = PhaseTemplate(
@@ -88,6 +96,8 @@ async def create_phase_template(
         department=data.department,
         default_color=data.default_color or "#3b82f6",
         is_custom=data.is_custom,
+        default_days=data.default_days,
+        default_hours=data.default_hours,
     )
     db.add(template)
     await db.commit()
@@ -98,6 +108,8 @@ async def create_phase_template(
         "department": template.department,
         "default_color": template.default_color,
         "is_custom": template.is_custom,
+        "default_days": template.default_days,
+        "default_hours": template.default_hours,
     }
 
 
@@ -119,6 +131,10 @@ async def update_phase_template(
         template.department = data.department
     if data.default_color is not None:
         template.default_color = data.default_color
+    if hasattr(data, 'default_days'):
+        template.default_days = data.default_days
+    if hasattr(data, 'default_hours'):
+        template.default_hours = data.default_hours
 
     await db.commit()
     await db.refresh(template)
@@ -128,6 +144,8 @@ async def update_phase_template(
         "department": template.department,
         "default_color": template.default_color,
         "is_custom": template.is_custom,
+        "default_days": template.default_days,
+        "default_hours": template.default_hours,
     }
 
 
