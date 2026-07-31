@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import api from '../../api/client';
 import './MainLayout.css';
+import GlobalSearch from './GlobalSearch';
 
 /* SVG icons for theme toggle */
 function SunIcon() {
@@ -123,6 +124,12 @@ function AppIcon({ name, size = 19 }) {
     chevronRight: <path d="m9 18 6-6-6-6" />,
     close: <path d="m6 6 12 12M18 6 6 18" />,
     check: <path d="m5 12 4 4L19 6" />,
+    search: (
+      <>
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-4-4" />
+      </>
+    ),
     externalLink: (
       <>
         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
@@ -144,7 +151,19 @@ export default function MainLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [notifications, setNotifications] = useState([]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowGlobalSearch(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     fetchUnread();
@@ -351,6 +370,15 @@ export default function MainLayout() {
             <button
               type="button"
               className="topbar-icon-btn"
+              onClick={() => setShowGlobalSearch(true)}
+              title="Ricerca Globale (Ctrl+K)"
+              aria-label="Cerca"
+            >
+              <AppIcon name="search" size={20} />
+            </button>
+            <button
+              type="button"
+              className="topbar-icon-btn"
               onClick={() => setShowNotifications(true)}
               title="Notifiche"
               aria-label={`Notifiche${unreadCount > 0 ? `, ${unreadCount} non lette` : ''}`}
@@ -474,6 +502,11 @@ export default function MainLayout() {
           </div>
         </div>
       )}
+
+      <GlobalSearch 
+        isOpen={showGlobalSearch} 
+        onClose={() => setShowGlobalSearch(false)} 
+      />
     </div>
   );
 }

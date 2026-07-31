@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -52,20 +53,37 @@ export default function NotesPage() {
     loadNotes();
   }, []);
 
+  const location = useLocation();
+  const navigate = useNavigate();
+
   async function loadNotes() {
     setLoading(true);
     try {
       const { data } = await api.get('/notes');
       setNotes(data);
-      if (data.length > 0 && !activeNoteId) {
-        selectNote(data[0]);
-      }
     } catch {
       toast.error('Errore durante il caricamento dei blocchi note');
     } finally {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (notes.length > 0) {
+      const params = new URLSearchParams(location.search);
+      const urlNoteId = params.get('noteId');
+      if (urlNoteId) {
+        const targetNote = notes.find(n => n.id === urlNoteId);
+        if (targetNote) {
+          selectNote(targetNote);
+        }
+        params.delete('noteId');
+        navigate({ search: params.toString() }, { replace: true });
+      } else if (!activeNoteId) {
+        selectNote(notes[0]);
+      }
+    }
+  }, [location.search, notes]);
 
   function selectNote(note) {
     if (!note) {

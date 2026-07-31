@@ -911,6 +911,7 @@ export default function TicketsPage() {
   const { user } = useAuth();
   const toast = useToast();
   const location = useLocation();
+  const navigate = useNavigate();
   const passedProjectId = location.state?.projectId;
 
   const [tickets, setTickets] = useState([]);
@@ -940,6 +941,18 @@ export default function TicketsPage() {
       setProjectFilter('all');
     }
   }, [location.state?.projectId]);
+
+  useEffect(() => {
+    if (tickets.length > 0) {
+      const params = new URLSearchParams(location.search);
+      const ticketId = params.get('ticketId');
+      if (ticketId) {
+        setSelectedId(ticketId);
+        params.delete('ticketId');
+        navigate({ search: params.toString() }, { replace: true });
+      }
+    }
+  }, [location.search, tickets, navigate]);
 
   async function loadAll() {
     setLoading(true);

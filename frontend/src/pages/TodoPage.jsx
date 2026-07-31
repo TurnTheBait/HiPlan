@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -58,10 +59,34 @@ export default function TodoPage() {
   };
   const [form, setForm] = useState(emptyForm);
 
+  const location = useLocation();
+  const navigate = useNavigate();
+
   useEffect(() => {
     loadTodos();
     loadUsers();
   }, []);
+
+  useEffect(() => {
+    if (todos.length > 0) {
+      const params = new URLSearchParams(location.search);
+      const todoId = params.get('todoId');
+      if (todoId) {
+        const targetTodo = todos.find(t => String(t.id) === todoId);
+        if (targetTodo) {
+          setSelected(targetTodo);
+          openEdit(targetTodo);
+          if (targetTodo.is_completed) {
+            setFilter('completed');
+          } else {
+            setFilter('open');
+          }
+        }
+        params.delete('todoId');
+        navigate({ search: params.toString() }, { replace: true });
+      }
+    }
+  }, [location.search, todos, navigate]);
 
   async function loadTodos() {
     setLoading(true);

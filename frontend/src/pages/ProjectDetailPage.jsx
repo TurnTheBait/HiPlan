@@ -121,7 +121,10 @@ export default function ProjectDetailPage() {
   const [showDeptMenu, setShowDeptMenu] = useState(false);
   const [activeDepartments, setActiveDepartments] = useState(ALL_DEPTS);
   const [viewMode, setViewMode] = useState('day');
-  const [activeTab, setActiveTab] = useState('gantt');
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') || 'gantt';
+  });
 
   // Stato Modale Nuova / Modifica Fase
   const [showTaskModal, setShowTaskModal] = useState(false);

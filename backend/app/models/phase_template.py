@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 from sqlalchemy import Column, String, Boolean, Integer, Float
 from app.models.base import Base, TimestampMixin, uuid_pk
 
