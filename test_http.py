@@ -5,10 +5,12 @@ import sys
 
 token_query = os.popen("sqlite3 backend/ganttflow.db 'SELECT id FROM users LIMIT 1;'").read().strip()
 sys.path.insert(0, "backend")
+# pyrefly: ignore [missing-import]
 from app.core.security import create_access_token
 
 token = create_access_token({"sub": token_query})
-req = urllib.request.Request("http://127.0.0.1:8000/api/search?q=test", headers={"Authorization": f"Bearer {token}"})
+print("Generated Token:", token)
+req = urllib.request.Request("http://127.0.0.1:8001/api/search?q=silos", headers={"Authorization": f"Bearer {token}"})
 
 try:
     with urllib.request.urlopen(req) as response:
