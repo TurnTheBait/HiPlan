@@ -83,7 +83,7 @@ export default function ProjectDetailPage() {
   // STATO PER COLONNE GANTT (leggiamo dal localStorage)
   const [visibleColumns, setVisibleColumns] = useState(() => {
     const saved = localStorage.getItem('ganttVisibleColumns');
-    return saved ? JSON.parse(saved) : ['start_date', 'duration'];
+    return saved ? JSON.parse(saved) : ['start_date', 'end_date', 'event_date', 'duration'];
   });
   const [showColumnsMenu, setShowColumnsMenu] = useState(false);
 
@@ -978,10 +978,18 @@ export default function ProjectDetailPage() {
       case 'week':
         gantt.config.scales = [
           { unit: "month", step: 1, format: function (date) { return `${mesiItaliani[date.getMonth()]} ${date.getFullYear()}`; } },
-          { unit: "week", step: 1, format: "Sett. %W" },
+          { 
+            unit: "week", 
+            step: 1, 
+            format: function(date) {
+              const weekNum = gantt.date.date_to_str("%W")(date);
+              const endDate = gantt.date.add(date, 6, "day");
+              return `<div style="line-height: 1.2; padding-top: 4px;">Sett. ${weekNum}<br/><span style="font-size: 11px; font-weight: normal; color: var(--text-secondary);">${date.getDate()} - ${endDate.getDate()} ${mesiItaliani[endDate.getMonth()].substring(0,3).toLowerCase()}</span></div>`;
+            } 
+          },
         ];
         gantt.config.min_column_width = 80;
-        gantt.config.scale_height = 50;
+        gantt.config.scale_height = 66;
         break;
       case 'month':
         gantt.config.scales = [
@@ -1346,6 +1354,8 @@ export default function ProjectDetailPage() {
                   <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>MOSTRA/NASCONDI:</div>
                   {[
                     { id: 'start_date', label: 'Inizio' },
+                    { id: 'end_date', label: 'Fine' },
+                    { id: 'event_date', label: 'Data Evento' },
                     { id: 'duration', label: 'Durata' },
                     { id: 'progress', label: 'Progresso' },
                     { id: 'priority', label: 'Priorità' },

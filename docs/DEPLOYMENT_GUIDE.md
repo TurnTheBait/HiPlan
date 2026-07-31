@@ -233,4 +233,11 @@ docker compose build
 docker compose up -d
 ```
 
+Per installazioni standard (senza Docker e senza Git sul server):
+1. Sulla macchina di sviluppo (Mac o Windows), esegui `create_update_zip.sh` o `create_update_zip.bat`. Verrà generato il file `hiplan_update.zip` (escludendo in automatico `.env`, `gantt.db`, `venv` e `node_modules`).
+2. Trasferisci `hiplan_update.zip` sul server.
+3. Estrai l'archivio *sovrascrivendo* tutti i file della cartella del progetto HiPlan sul server. Questo aggiornerà il codice ma manterrà salvi i dati e le configurazioni.
+4. Esegui `update_windows.bat` (o `update_mac.sh`) sul server per installare automaticamente eventuali nuove dipendenze di backend e frontend.
+5. Riavvia normalmente i servizi.
+
 Controllare sempre i log e completare le verifiche funzionali prima di dichiarare concluso l'aggiornamento.

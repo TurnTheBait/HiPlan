@@ -105,7 +105,42 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
           return `${checkIcon}${task.text || ''}`;
         }
       },
-      { name: "start_date", label: "Inizio", align: "center", width: 85, resize: true },
+      { 
+        name: "start_date", 
+        label: "Inizio", 
+        align: "center", 
+        width: 85, 
+        resize: true,
+        template: function(task) {
+          if (task.type === 'milestone') return '-';
+          return gantt.templates.date_grid(task.start_date, task);
+        }
+      },
+      { 
+        name: "end_date", 
+        label: "Fine", 
+        align: "center", 
+        width: 85, 
+        resize: true,
+        template: function(task) {
+          if (task.type === 'milestone') return '-';
+          if (!task.end_date) return '';
+          const end = new Date(task.end_date);
+          end.setDate(end.getDate() - 1);
+          return gantt.templates.date_grid(end, task);
+        }
+      },
+      {
+        name: "event_date",
+        label: "Data Evento",
+        align: "center",
+        width: 95,
+        resize: true,
+        template: function(task) {
+          if (task.type === 'milestone') return gantt.templates.date_grid(task.start_date, task);
+          return '-';
+        }
+      },
       {
         name: "duration",
         label: "Durata",
@@ -173,10 +208,13 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       useKey: false
     };
     gantt.templates.tooltip_text = function (start, end, task) {
-      let durationText = `<b>${task.duration || 1} giorni</b>`;
-      if (task.type !== 'milestone') {
-        durationText += ` (${task.planned_hours || (task.duration ? task.duration * 8 : 8)} ore previste)`;
+      if (task.type === 'milestone') {
+        return `<b>${task.text}</b><br/>
+          Data Evento: ${gantt.templates.tooltip_date_format(start)}<br/>
+          <i>Evento / Scadenza</i>`;
       }
+      let durationText = `<b>${task.duration || 1} giorni</b>`;
+      durationText += ` (${task.planned_hours || (task.duration ? task.duration * 8 : 8)} ore previste)`;
       return `<b>${task.text}</b><br/>
         Inizio: ${gantt.templates.tooltip_date_format(start)}<br/>
         Fine: ${gantt.templates.tooltip_date_format(end)}<br/>
@@ -412,7 +450,42 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
           return `${checkIcon}${task.text || ''}`;
         }
       },
-      { name: "start_date", label: "Inizio", align: "center", width: 85, resize: true },
+      { 
+        name: "start_date", 
+        label: "Inizio", 
+        align: "center", 
+        width: 85, 
+        resize: true,
+        template: function(task) {
+          if (task.type === 'milestone') return '-';
+          return gantt.templates.date_grid(task.start_date, task);
+        }
+      },
+      { 
+        name: "end_date", 
+        label: "Fine", 
+        align: "center", 
+        width: 85, 
+        resize: true,
+        template: function(task) {
+          if (task.type === 'milestone') return '-';
+          if (!task.end_date) return '';
+          const end = new Date(task.end_date);
+          end.setDate(end.getDate() - 1);
+          return gantt.templates.date_grid(end, task);
+        }
+      },
+      {
+        name: "event_date",
+        label: "Data Evento",
+        align: "center",
+        width: 95,
+        resize: true,
+        template: function(task) {
+          if (task.type === 'milestone') return gantt.templates.date_grid(task.start_date, task);
+          return '-';
+        }
+      },
       {
         name: "duration",
         label: "Durata",
@@ -489,6 +562,12 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
             markerDiv.style.top = '0px';
             markerDiv.style.height = `${totalRowsHeight}px`;
             markerDiv.title = `Avvio Commessa: ${formattedS}`;
+            
+            const badgeDiv = document.createElement('div');
+            badgeDiv.className = 'custom-marker-badge';
+            badgeDiv.innerText = 'Inizio Commessa';
+            markerDiv.appendChild(badgeDiv);
+            
             gantt.$task_data.appendChild(markerDiv);
           }
         } catch (e) { /* scala non ancora pronta */ }
@@ -505,6 +584,12 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
             markerDiv.style.top = '0px';
             markerDiv.style.height = `${totalRowsHeight}px`;
             markerDiv.title = `Fine Commessa: ${formattedE}`;
+            
+            const badgeDiv = document.createElement('div');
+            badgeDiv.className = 'custom-marker-badge';
+            badgeDiv.innerText = 'Fine Commessa';
+            markerDiv.appendChild(badgeDiv);
+            
             gantt.$task_data.appendChild(markerDiv);
           }
         } catch (e) { /* scala non ancora pronta */ }

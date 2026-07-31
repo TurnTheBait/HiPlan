@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import useDragScroll from '../../hooks/useDragScroll';
 import { getTaskColor } from '../../utils/phaseColors';
 import { isTaskCompleted } from '../../utils/taskCompletion';
@@ -13,10 +13,10 @@ const STATUS_LABELS_IT = {
 };
 
 const STATUS_COLORS = {
-  planning: '#f59e0b', // Amber
-  active: '#10b981',   // Emerald
-  completed: '#3b82f6',// Blue
-  archived: '#6b7280', // Gray
+  planning: '#f59e0b',
+  active: '#10b981',
+  completed: '#3b82f6',
+  archived: '#6b7280',
 };
 
 const WEEKDAYS_IT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
@@ -29,31 +29,88 @@ const toLocalDateKey = (date) => (
 export default function TimelineView({ projects, currYear, currMonth, filterWorker, onSelectProject, vacations = [], onDoubleClickVacation }) {
   const today = new Date();
   const todayKey = toLocalDateKey(today);
-  const daysInMonth = new Date(currYear, currMonth + 1, 0).getDate();
   const [expandedProjects, setExpandedProjects] = useState({});
-  const monthLabel = new Intl.DateTimeFormat('it-IT', {
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date(currYear, currMonth, 1));
-
   const scrollRef = useDragScroll();
+
+  const { daysList, monthLabels } = useMemo(() => {
+    const list = [];
+    const labels = [];
+    const start = new Date(currYear, currMonth - 6, 1);
+    const end = new Date(currYear, currMonth + 7, 0);
+
+    let currentMonthStr = "";
+    let daysInCurrentMonth = 0;
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      list.push(new Date(d));
+      const mStr = new Intl.DateTimeFormat('it-IT', { month: 'long', year: 'numeric' }).format(d);
+      
+      if (mStr !== currentMonthStr) {
+        if (currentMonthStr) {
+          labels.push({ label: currentMonthStr, days: daysInCurrentMonth });
+        }
+        currentMonthStr = mStr;
+        daysInCurrentMonth = 1;
+      } else {
+        daysInCurrentMonth++;
+      }
+    }
+    if (currentMonthStr) {
+      labels.push({ label: currentMonthStr, days: daysInCurrentMonth });
+    }
+    
+    return { daysList: list, monthLabels: labels };
+  }, [currYear, currMonth]);
+
+  const rangeStartStr = toLocalDateKey(daysList[0]);
+  const rangeEndStr = toLocalDateKey(daysList[daysList.length - 1]);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      const targetDateStr = toLocalDateKey(new Date(currYear, currMonth, 1));
+      const idx = daysList.findIndex(d => toLocalDateKey(d) === targetDateStr);
+      if (idx >= 0) {
+        scrollRef.current.scrollLeft = idx * TIMELINE_DAY_WIDTH;
+      }
+    }
+  }, [currYear, currMonth, daysList, scrollRef]);
+
+  function getDayIndex(dateStr) {
+    const target = new Date(dateStr);
+    const start = daysList[0];
+    const diffTime = target - start;
+    return Math.round(diffTime / (1000 * 60 * 60 * 24));
+  }
+
+  const renderGrid = () => (
+    daysList.map((dayDate, i) => {
+      const isWk = isWeekendOrHoliday(dayDate);
+      const isToday = toLocalDateKey(dayDate) === todayKey;
+      return <div key={i} className={`timeline-cell ${isWk ? 'weekend' : ''} ${isToday ? 'today' : ''}`} />;
+    })
+  );
 
   return (
     <div className="calendar-timeline-container" ref={scrollRef}>
       <div className="timeline-header-row">
         <div className="timeline-project-col">Commessa / Progetto</div>
-        <div className="timeline-date-header" style={{ width: `${daysInMonth * TIMELINE_DAY_WIDTH}px` }}>
-          <div className="timeline-month-band">{monthLabel}</div>
+        <div className="timeline-date-header" style={{ width: `${daysList.length * TIMELINE_DAY_WIDTH}px` }}>
+          <div style={{ display: 'flex' }}>
+            {monthLabels.map((ml, idx) => (
+              <div key={idx} className="timeline-month-band" style={{ width: `${ml.days * TIMELINE_DAY_WIDTH}px`, flexShrink: 0, textTransform: 'capitalize' }}>
+                {ml.label}
+              </div>
+            ))}
+          </div>
           <div className="timeline-days-scroll">
-            {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
-              const dayDate = new Date(currYear, currMonth, d);
+            {daysList.map((dayDate, i) => {
               const dayOfWeek = dayDate.getDay();
               const isWknd = isWeekendOrHoliday(dayDate);
               const isToday = toLocalDateKey(dayDate) === todayKey;
               return (
-                <div key={d} className={`timeline-day-col-header ${isWknd ? 'weekend' : ''} ${isToday ? 'today' : ''}`}>
+                <div key={i} className={`timeline-day-col-header ${isWknd ? 'weekend' : ''} ${isToday ? 'today' : ''}`}>
                   <span>{WEEKDAYS_IT[dayOfWeek === 0 ? 6 : dayOfWeek - 1]}</span>
-                  <span>{String(d).padStart(2, '0')}</span>
+                  <span>{String(dayDate.getDate()).padStart(2, '0')}</span>
                 </div>
               );
             })}
@@ -61,23 +118,23 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
         </div>
       </div>
       
-      {/* Righe Ferie */}
       {(() => {
-        const monthStartStr = `${currYear}-${String(currMonth + 1).padStart(2, '0')}-01`;
-        const monthEndStr = `${currYear}-${String(currMonth + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
         const visibleVacations = vacations.filter(v => {
-          if (filterWorker !== 'all' && v.username !== filterWorker) return false;
+          if (filterWorker && filterWorker !== 'all' && v.username !== filterWorker) return false;
           const vStart = v.start_date?.substring(0, 10) || '';
           const vEnd = v.end_date?.substring(0, 10) || '';
-          return vEnd >= monthStartStr && vStart <= monthEndStr;
+          return vEnd >= rangeStartStr && vStart <= rangeEndStr;
         });
         if (visibleVacations.length === 0) return null;
         return visibleVacations.map(v => {
-          const vStart = v.start_date?.substring(0, 10) || monthStartStr;
+          const vStart = v.start_date?.substring(0, 10) || rangeStartStr;
           const vEnd = v.end_date?.substring(0, 10) || vStart;
-          const startDayNum = vStart < monthStartStr ? 1 : parseInt(vStart.substring(8, 10), 10);
-          const endDayNum = vEnd > monthEndStr ? daysInMonth : parseInt(vEnd.substring(8, 10), 10);
-          const spanDays = Math.max(1, endDayNum - startDayNum + 1);
+          
+          let startIdx = getDayIndex(vStart);
+          let endIdx = getDayIndex(vEnd);
+          if (startIdx < 0) startIdx = 0;
+          if (endIdx >= daysList.length) endIdx = daysList.length - 1;
+          const spanDays = Math.max(1, endIdx - startIdx + 1);
           
           return (
             <div 
@@ -101,16 +158,11 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
               </div>
               
               <div className="timeline-row-grid">
-                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
-                  const dayDate = new Date(currYear, currMonth, d);
-                  const isWk = isWeekendOrHoliday(dayDate);
-                  const isToday = toLocalDateKey(dayDate) === todayKey;
-                  return <div key={d} className={`timeline-cell ${isWk ? 'weekend' : ''} ${isToday ? 'today' : ''}`} />;
-                })}
+                {renderGrid()}
                 <div
                   className="timeline-bar timeline-vacation-bar"
                   style={{
-                    left: `${(startDayNum - 1) * TIMELINE_DAY_WIDTH + 3}px`,
+                    left: `${startIdx * TIMELINE_DAY_WIDTH + 3}px`,
                     width: `${spanDays * TIMELINE_DAY_WIDTH - 6}px`,
                   }}
                   title={`Ferie: ${vStart} → ${vEnd}${v.reason ? ` (${v.reason})` : ''}`}
@@ -126,19 +178,16 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {projects.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary)' }}>
-            Nessuna commessa o fase trovata per te in questo mese.
+            Nessuna commessa o fase trovata.
           </div>
         ) : (
           projects.map((proj) => {
             const color = proj.color || '#185FA5';
-            const monthStartStr = `${currYear}-${String(currMonth + 1).padStart(2, '0')}-01`;
-            const monthEndStr = `${currYear}-${String(currMonth + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
             
-            const pStart = proj.start_date ? proj.start_date.substring(0, 10) : monthStartStr;
+            const pStart = proj.start_date ? proj.start_date.substring(0, 10) : rangeStartStr;
             const pEnd = proj.end_date ? proj.end_date.substring(0, 10) : pStart;
 
-            // Controlla se visibile in questo mese
-            if (pEnd < monthStartStr || pStart > monthEndStr) {
+            if (pEnd < rangeStartStr || pStart > rangeEndStr) {
               return (
                 <div key={proj.id} className="timeline-project-row">
                   <div className="timeline-project-info" onClick={() => onSelectProject(proj)} style={{ cursor: 'pointer' }}>
@@ -146,21 +195,17 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                     <span className="timeline-proj-meta">{proj.client || 'Nessun cliente'}</span>
                   </div>
                   <div className="timeline-row-grid">
-                    {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
-                      const dayDate = new Date(currYear, currMonth, d);
-                      const isWk = isWeekendOrHoliday(dayDate);
-                      const isToday = toLocalDateKey(dayDate) === todayKey;
-                      return <div key={d} className={`timeline-cell ${isWk ? 'weekend' : ''} ${isToday ? 'today' : ''}`} />;
-                    })}
+                    {renderGrid()}
                   </div>
                 </div>
               );
             }
 
-            // Calcolo indici colonna (1-indexed)
-            const startDayNum = pStart < monthStartStr ? 1 : parseInt(pStart.substring(8, 10), 10);
-            const endDayNum = pEnd > monthEndStr ? daysInMonth : parseInt(pEnd.substring(8, 10), 10);
-            const spanDays = Math.max(1, endDayNum - startDayNum + 1);
+            let startIdx = getDayIndex(pStart);
+            let endIdx = getDayIndex(pEnd);
+            if (startIdx < 0) startIdx = 0;
+            if (endIdx >= daysList.length) endIdx = daysList.length - 1;
+            const spanDays = Math.max(1, endIdx - startIdx + 1);
 
             const matchingTasks = (proj.tasks || []).filter(t => {
               if (filterWorker && filterWorker !== 'all') {
@@ -201,19 +246,13 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                   </div>
 
                   <div className="timeline-row-grid">
-                    {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
-                      const dayDate = new Date(currYear, currMonth, d);
-                      const isWk = isWeekendOrHoliday(dayDate);
-                      const isToday = toLocalDateKey(dayDate) === todayKey;
-                      return <div key={d} className={`timeline-cell ${isWk ? 'weekend' : ''} ${isToday ? 'today' : ''}`} />;
-                    })}
+                    {renderGrid()}
 
-                    {/* Barra Commessa Principale */}
                     <div
                       className="timeline-bar timeline-project-bar"
                       style={{
                         '--timeline-bar-color': color,
-                        left: `${(startDayNum - 1) * TIMELINE_DAY_WIDTH + 3}px`,
+                        left: `${startIdx * TIMELINE_DAY_WIDTH + 3}px`,
                         width: `${spanDays * TIMELINE_DAY_WIDTH - 6}px`,
                       }}
                       onClick={() => onSelectProject(proj)}
@@ -224,15 +263,17 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                   </div>
                 </div>
 
-                {/* Sub-rows per Fasi */}
                 {isExpanded && matchingTasks.map(t => {
-                  const tStart = t.start_date ? t.start_date.substring(0, 10) : monthStartStr;
+                  const tStart = t.start_date ? t.start_date.substring(0, 10) : rangeStartStr;
                   const tEnd = t.end_date ? t.end_date.substring(0, 10) : tStart;
-                  if (tEnd < monthStartStr || tStart > monthEndStr) return null; // non in questo mese
+                  if (tEnd < rangeStartStr || tStart > rangeEndStr) return null;
 
-                  const tStartDayNum = tStart < monthStartStr ? 1 : parseInt(tStart.substring(8, 10), 10);
-                  const tEndDayNum = tEnd > monthEndStr ? daysInMonth : parseInt(tEnd.substring(8, 10), 10);
-                  const tSpanDays = Math.max(1, tEndDayNum - tStartDayNum + 1);
+                  let tStartIdx = getDayIndex(tStart);
+                  let tEndIdx = getDayIndex(tEnd);
+                  if (tStartIdx < 0) tStartIdx = 0;
+                  if (tEndIdx >= daysList.length) tEndIdx = daysList.length - 1;
+                  const tSpanDays = Math.max(1, tEndIdx - tStartIdx + 1);
+
                   const tColor = getTaskColor(t);
                   const isCompleted = isTaskCompleted(t);
 
@@ -258,18 +299,13 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                       </div>
 
                       <div className="timeline-row-grid timeline-task-grid">
-                        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
-                          const dayDate = new Date(currYear, currMonth, d);
-                          const isWk = isWeekendOrHoliday(dayDate);
-                          const isToday = toLocalDateKey(dayDate) === todayKey;
-                          return <div key={d} className={`timeline-cell ${isWk ? 'weekend' : ''} ${isToday ? 'today' : ''}`} />;
-                        })}
+                        {renderGrid()}
 
                         <div
                           className="timeline-bar timeline-task-bar"
                           style={{
                             '--timeline-bar-color': isCompleted ? '#10b981' : tColor,
-                            left: `${(tStartDayNum - 1) * TIMELINE_DAY_WIDTH + 3}px`,
+                            left: `${tStartIdx * TIMELINE_DAY_WIDTH + 3}px`,
                             width: `${tSpanDays * TIMELINE_DAY_WIDTH - 6}px`,
                           }}
                           onClick={() => onSelectProject({ ...proj, selectedPhase: t })}

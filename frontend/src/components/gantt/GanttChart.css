@@ -288,14 +288,14 @@
 .gantt_marker.gantt-project-start-marker,
 .custom-project-marker.custom-start-marker {
   width: 2px !important;
-  border-left: 2px dashed #10b981 !important;
+  border-left: 2px solid #10b981 !important;
   /* Verde smeraldo */
 }
 
 .gantt_marker.gantt-project-end-marker,
 .custom-project-marker.custom-end-marker {
   width: 2px !important;
-  border-left: 2px dashed #ef4444 !important;
+  border-left: 2px solid #ef4444 !important;
   /* Rosso corsa */
 }
 
