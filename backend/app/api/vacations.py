@@ -19,10 +19,12 @@ from app.utils.working_days import get_working_days_in_range
 router = APIRouter(prefix="/api/vacations", tags=["vacations"])
 
 
+from typing import Optional
+
 class VacationCreate(BaseModel):
     start_date: date
     end_date: date
-    reason: str | None = None
+    reason: Optional[str] = None
 
 
 def _parse_json(val, default):
