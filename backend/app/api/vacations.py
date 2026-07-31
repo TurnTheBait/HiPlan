@@ -207,6 +207,95 @@ async def create_my_vacation(data: VacationCreate, db: AsyncSession = Depends(ge
     return {"ok": True, "id": vac.id, "recovery_items": recovery_items}
 
 
+@router.post("/admin/user/{user_id}", status_code=201)
+async def create_admin_vacation(user_id: str, data: VacationCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role not in [UserRole.ADMIN, UserRole.EDITOR]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo admin/editor possono inserire ferie per altri")
+    if data.end_date < data.start_date:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="end_date must be >= start_date")
+    
+    target_res = await db.execute(select(User).where(User.id == user_id))
+    target_user = target_res.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utente non trovato")
+
+    vac = Vacation(user_id=target_user.id, start_date=data.start_date, end_date=data.end_date, reason=data.reason)
+    db.add(vac)
+    await db.commit()
+    await db.refresh(vac)
+
+    # Compute recovery items for this vacation
+    recovery_items = await _compute_recovery_for_user(db, target_user, vac)
+
+    # Notification to the target user confirming vacation creation by admin
+    note = Notification(
+        user_id=target_user.id,
+        title="Ferie inserite da Admin",
+        message=f"{current_user.full_name or current_user.username} ti ha inserito ferie dal {data.start_date} al {data.end_date}.",
+        type=NotificationType.UPDATE,
+    )
+    db.add(note)
+
+    # Notifications for ore da recuperare
+    for item in recovery_items:
+        note_recovery = Notification(
+            user_id=target_user.id,
+            title="⚠️ Ore da recuperare per ferie",
+            message=(
+                f"Hai {item['hours_to_recover']}h da recuperare sulla fase \"{item['task_name']}\" "
+                f"(progetto: {item['project_name']}) "
+                f"a causa delle ferie dal {data.start_date} al {data.end_date}."
+            ),
+            type=NotificationType.DEADLINE,
+            project_id=item["project_id"],
+        )
+        db.add(note_recovery)
+
+        # Notify project responsible/owner too
+        proj_res = await db.execute(select(Project).where(Project.id == item["project_id"]))
+        project = proj_res.scalar_one_or_none()
+        if project:
+            resp_id = project.responsible_id or project.owner_id
+            if resp_id and resp_id != target_user.id:
+                note_resp = Notification(
+                    user_id=resp_id,
+                    title=f"⚠️ Ferie: ore scoperte su \"{item['task_name']}\"",
+                    message=(
+                        f"{target_user.username} è in ferie dal {data.start_date} al {data.end_date}. "
+                        f"Sono scoperte {item['hours_to_recover']}h sulla fase \"{item['task_name']}\" "
+                        f"nel progetto \"{item['project_name']}\"."
+                    ),
+                    type=NotificationType.DEADLINE,
+                    project_id=item["project_id"],
+                )
+                db.add(note_resp)
+
+        # Flag task as having vacation conflict
+        task_res = await db.execute(select(Task).where(Task.id == item["task_id"]))
+        task_obj = task_res.scalar_one_or_none()
+        if task_obj:
+            task_obj.has_vacation_conflict = 1
+
+        # Notify admins
+        admins_res = await db.execute(select(User).where(User.role == UserRole.ADMIN))
+        for admin_user in admins_res.scalars().all():
+            note_admin = Notification(
+                user_id=admin_user.id,
+                title=f"⚠️ Rischio ritardo per ferie: \"{item['task_name']}\"",
+                message=(
+                    f"L'addetto {target_user.username} ha ferie dal {data.start_date} al {data.end_date} (inserite da {current_user.username}). "
+                    f"La fase \"{item['task_name']}\" (progetto \"{item['project_name']}\") potrebbe subire ritardi "
+                    f"per {item['hours_to_recover']}h scoperte."
+                ),
+                type=NotificationType.UPDATE,
+                project_id=item["project_id"],
+            )
+            db.add(note_admin)
+
+    await db.commit()
+    return {"ok": True, "id": vac.id, "recovery_items": recovery_items}
+
+
 @router.delete("/me/{vacation_id}")
 async def delete_my_vacation(vacation_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     result = await db.execute(select(Vacation).where(Vacation.id == vacation_id, Vacation.user_id == current_user.id))
@@ -258,15 +347,77 @@ async def get_my_recovery_hours(db: AsyncSession = Depends(get_db), current_user
 
 @router.get("/all", response_model=list)
 async def list_all_vacations(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    query = select(Vacation, User.username).join(User, Vacation.user_id == User.id)
+    query = select(Vacation, User).join(User, Vacation.user_id == User.id)
     result = await db.execute(query)
     rows = result.all()
     return [
         {
             "id": v.id,
-            "username": u,
+            "username": u.username,
+            "full_name": u.full_name,
             "start_date": str(v.start_date),
-            "end_date": str(v.end_date)
+            "end_date": str(v.end_date),
+            "reason": v.reason
         }
         for v, u in rows
     ]
+
+
+@router.delete("/admin/{vacation_id}")
+async def delete_admin_vacation(vacation_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role not in [UserRole.ADMIN, UserRole.EDITOR]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo admin/editor possono eliminare ferie per altri")
+    result = await db.execute(select(Vacation).where(Vacation.id == vacation_id))
+    vac = result.scalar_one_or_none()
+    if not vac:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacanza non trovata")
+    
+    target_res = await db.execute(select(User).where(User.id == vac.user_id))
+    target_user = target_res.scalar_one_or_none()
+    
+    recovery_items = await _compute_recovery_for_user(db, target_user, vac)
+    await db.delete(vac)
+    
+    for item in recovery_items:
+        task_res = await db.execute(select(Task).where(Task.id == item["task_id"]))
+        task_obj = task_res.scalar_one_or_none()
+        if task_obj:
+            task_obj.has_vacation_conflict = 0
+
+    await db.commit()
+    return {"ok": True}
+
+
+@router.put("/admin/{vacation_id}")
+async def update_admin_vacation(vacation_id: str, data: VacationCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role not in [UserRole.ADMIN, UserRole.EDITOR]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo admin/editor")
+    
+    result = await db.execute(select(Vacation).where(Vacation.id == vacation_id))
+    vac = result.scalar_one_or_none()
+    if not vac:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vacanza non trovata")
+        
+    target_res = await db.execute(select(User).where(User.id == vac.user_id))
+    target_user = target_res.scalar_one_or_none()
+
+    old_recovery = await _compute_recovery_for_user(db, target_user, vac)
+    for item in old_recovery:
+        task_res = await db.execute(select(Task).where(Task.id == item["task_id"]))
+        task_obj = task_res.scalar_one_or_none()
+        if task_obj:
+            task_obj.has_vacation_conflict = 0
+
+    vac.start_date = data.start_date
+    vac.end_date = data.end_date
+    vac.reason = data.reason
+    
+    new_recovery = await _compute_recovery_for_user(db, target_user, vac)
+    for item in new_recovery:
+        task_res = await db.execute(select(Task).where(Task.id == item["task_id"]))
+        task_obj = task_res.scalar_one_or_none()
+        if task_obj:
+            task_obj.has_vacation_conflict = 1
+            
+    await db.commit()
+    return {"ok": True}

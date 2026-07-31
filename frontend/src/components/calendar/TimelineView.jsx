@@ -26,7 +26,7 @@ const toLocalDateKey = (date) => (
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 );
 
-export default function TimelineView({ projects, currYear, currMonth, filterWorker, onSelectProject, vacations = [] }) {
+export default function TimelineView({ projects, currYear, currMonth, filterWorker, onSelectProject, vacations = [], onDoubleClickVacation }) {
   const today = new Date();
   const todayKey = toLocalDateKey(today);
   const daysInMonth = new Date(currYear, currMonth + 1, 0).getDate();
@@ -66,6 +66,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
         const monthStartStr = `${currYear}-${String(currMonth + 1).padStart(2, '0')}-01`;
         const monthEndStr = `${currYear}-${String(currMonth + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
         const visibleVacations = vacations.filter(v => {
+          if (filterWorker !== 'all' && v.username !== filterWorker) return false;
           const vStart = v.start_date?.substring(0, 10) || '';
           const vEnd = v.end_date?.substring(0, 10) || '';
           return vEnd >= monthStartStr && vStart <= monthEndStr;
@@ -79,10 +80,20 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
           const spanDays = Math.max(1, endDayNum - startDayNum + 1);
           
           return (
-            <div key={v.id || `vac-${vStart}-${vEnd}`} className="timeline-project-row">
+            <div 
+              key={v.id || `vac-${vStart}-${vEnd}`} 
+              className="timeline-project-row"
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                if (onDoubleClickVacation) {
+                  onDoubleClickVacation(v);
+                }
+              }}
+              style={{ cursor: onDoubleClickVacation ? 'pointer' : 'default' }}
+            >
               <div className="timeline-project-info timeline-vacation-info">
                 <span className="timeline-proj-title timeline-vacation-title">
-                  🏖️ Ferie
+                  🏖️ Ferie: {v.username}
                 </span>
                 <span className="timeline-proj-meta">
                   {v.reason || ''}

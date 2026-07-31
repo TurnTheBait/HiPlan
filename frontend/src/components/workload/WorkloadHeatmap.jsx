@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import './WorkloadHeatmap.css';
 import { isWeekendOrHoliday } from '../../utils/workingDays';
 import useDragScroll from '../../hooks/useDragScroll';
@@ -12,6 +13,11 @@ export default function WorkloadHeatmap() {
   const [loading, setLoading] = useState(true);
   const [expandedUsers, setExpandedUsers] = useState({});
   const [viewMode, setViewMode] = useState('day');
+  const [adminVacationUser, setAdminVacationUser] = useState(null);
+  const [vacationForm, setVacationForm] = useState({ start_date: '', end_date: '', reason: '' });
+  const [submittingVacation, setSubmittingVacation] = useState(false);
+  
+  const toast = useToast();
   const gridRef = React.useRef(null);
   useDragScroll(gridRef, [loading]);
   useEffect(() => {
@@ -26,6 +32,29 @@ export default function WorkloadHeatmap() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAdminAddVacation = async (e) => {
+    e.preventDefault();
+    if (!vacationForm.start_date || !vacationForm.end_date) {
+      toast.error('Seleziona la data di inizio e di fine.');
+      return;
+    }
+    setSubmittingVacation(true);
+    try {
+      const res = await api.post(`/vacations/admin/user/${adminVacationUser.id}`, vacationForm);
+      toast.success('Ferie aggiunte con successo.');
+      if (res.data.recovery_items?.length > 0) {
+        toast.warning(`⚠️ ${res.data.recovery_items.length} fase/i con ore da recuperare rilevate.`);
+      }
+      setAdminVacationUser(null);
+      setVacationForm({ start_date: '', end_date: '', reason: '' });
+      fetchWorkload();
+    } catch (err) {
+      toast.error('Errore durante l\'inserimento delle ferie.');
+    } finally {
+      setSubmittingVacation(false);
     }
   };
 
@@ -267,8 +296,25 @@ export default function WorkloadHeatmap() {
                 }}
                 title="Clicca per espandere/comprimere il dettaglio progetti e fasi"
               >
-                <span>{expandedUsers[userId] ? '\u25BC' : '\u25B6'}</span>
-                {isCurrentUser ? '' : ''}{userData.full_name}{isCurrentUser ? ' (tu)' : ''}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
+                  <span style={{ minWidth: '12px' }}>{expandedUsers[userId] ? '\u25BC' : '\u25B6'}</span>
+                  <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {userData.full_name}{isCurrentUser ? ' (tu)' : ''}
+                  </span>
+                  {(user?.role === 'admin' || user?.role === 'editor') && (
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '2px 4px', fontSize: '0.65rem', minWidth: 'auto', background: 'var(--bg-secondary)', border: '1px solid var(--border-default)' }}
+                      title={`Inserisci ferie per ${userData.full_name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAdminVacationUser({ id: userId, name: userData.full_name });
+                      }}
+                    >
+                      ✈️ +
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Cella Saturazione */}
@@ -353,6 +399,62 @@ export default function WorkloadHeatmap() {
           );
         })}
       </div> {/* <-- CORRETTO: Aggiunta la chiusura della div heatmap-grid */}
+
+      {/* Modale Inserimento Ferie da parte dell'Admin/Editor */}
+      {adminVacationUser && (
+        <div className="modal-overlay" onClick={() => setAdminVacationUser(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <div className="modal-header">
+              <h2>Inserisci Ferie per {adminVacationUser.name}</h2>
+              <button className="btn-ghost btn-icon" onClick={() => setAdminVacationUser(null)}>
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <div className="modal-content">
+              <form onSubmit={handleAdminAddVacation} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <div className="form-group">
+                  <label>Dal giorno</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={vacationForm.start_date}
+                    onChange={(e) => setVacationForm({ ...vacationForm, start_date: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Al giorno (compreso)</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={vacationForm.end_date}
+                    onChange={(e) => setVacationForm({ ...vacationForm, end_date: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Motivo (opzionale)</label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="Es. Ferie estive, Rol, Malattia..."
+                    value={vacationForm.reason}
+                    onChange={(e) => setVacationForm({ ...vacationForm, reason: e.target.value })}
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setAdminVacationUser(null)}>
+                    Annulla
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={submittingVacation}>
+                    {submittingVacation ? 'Salvataggio...' : 'Conferma Inserimento'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import { isWeekendOrHoliday } from '../utils/workingDays';
 import TimelineView from '../components/calendar/TimelineView';
 import AppIcon from '../components/ui/AppIcon';
@@ -48,10 +49,32 @@ export default function CalendarPage() {
   const [filterDepartment, setFilterDepartment] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [systemUsers, setSystemUsers] = useState([]);
+  const [vacations, setVacations] = useState([]);
 
   // Modali dettaglio
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedDayProjects, setSelectedDayProjects] = useState(null); // { dateStr, dayNum, list }
+  const [editingVacation, setEditingVacation] = useState(null);
+  const { user } = useAuth();
+
+  const handleEditVacation = async (e) => {
+    e.preventDefault();
+    try {
+      await api.put(`/vacations/admin/${editingVacation.id}`, {
+        start_date: editingVacation.start_date,
+        end_date: editingVacation.end_date,
+        reason: editingVacation.reason
+      });
+      toast.success('Ferie modificate con successo');
+      setEditingVacation(null);
+      
+      // we need to reload vacations
+      const vacRes = await api.get('/vacations/all');
+      setVacations(vacRes.data);
+    } catch (err) {
+      toast.error('Errore durante la modifica delle ferie');
+    }
+  };
 
   useEffect(() => {
     loadProjects();
@@ -60,12 +83,16 @@ export default function CalendarPage() {
   async function loadProjects() {
     setLoading(true);
     try {
-      const [projRes, usersRes] = await Promise.all([
+      const [projRes, usersRes, vacRes] = await Promise.all([
         api.get('/projects'),
-        api.get('/users').catch(() => ({ data: [] }))
+        api.get('/users').catch(() => ({ data: [] })),
+        api.get('/vacations/all').catch(() => ({ data: [] }))
       ]);
       if (Array.isArray(usersRes.data)) {
         setSystemUsers(usersRes.data);
+      }
+      if (Array.isArray(vacRes.data)) {
+        setVacations(vacRes.data);
       }
       const projectsWithTasks = await Promise.all(
         projRes.data.map(async (p) => {
@@ -181,6 +208,25 @@ export default function CalendarPage() {
       const dateStr = `${currYear}-${monthStr}-${dayStr}`;
 
       const activeList = [];
+
+      // Aggiungi ferie
+      const activeVacations = vacations.filter(v => {
+        if (filterWorker !== 'all' && v.username !== filterWorker) return false;
+        const start = v.start_date.substring(0, 10);
+        const end = v.end_date ? v.end_date.substring(0, 10) : start;
+        return dateStr >= start && dateStr <= end;
+      });
+      activeVacations.forEach(v => {
+        activeList.push({
+          id: `vac-${v.id}`,
+          isVacation: true,
+          name: `✈️ Ferie: ${v.username}`,
+          displayTitle: `✈️ Ferie: ${v.username}`,
+          color: '#f59e0b',
+          status: 'planning'
+        });
+      });
+
       filteredProjects.forEach(p => {
         if (filterWorker !== 'all') {
           // Quando si filtra per addetto, controlla le singole fasi dell'addetto attive in questa data
@@ -228,7 +274,7 @@ export default function CalendarPage() {
     }
 
     return cells;
-  }, [currYear, currMonth, filteredProjects, firstDayIndex, daysInMonth, filterWorker]);
+  }, [currYear, currMonth, filteredProjects, firstDayIndex, daysInMonth, filterWorker, vacations]);
 
   // Funzione per formattare la durata in giorni tra due date
   function getDurationDays(start, end) {
@@ -401,9 +447,21 @@ export default function CalendarPage() {
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSelectedProject(proj);
+                                if (!proj.isVacation) {
+                                  setSelectedProject(proj);
+                                }
                               }}
-                              title={`${proj.code ? `[${proj.code}] ` : ''}${proj.displayTitle || proj.name} (${STATUS_LABELS_IT[proj.status] || proj.status})`}
+                              onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                if (proj.isVacation && (user?.role === 'admin' || user?.role === 'editor')) {
+                                  const originalVacId = proj.id.replace('vac-', '');
+                                  const originalVacation = vacations.find(v => v.id.toString() === originalVacId);
+                                  if (originalVacation) {
+                                    setEditingVacation(originalVacation);
+                                  }
+                                }
+                              }}
+                              title={proj.isVacation ? proj.displayTitle : `${proj.code ? `[${proj.code}] ` : ''}${proj.displayTitle || proj.name} (${STATUS_LABELS_IT[proj.status] || proj.status})`}
                             >
                               <span className="pill-text">
                                 <strong>{proj.code ? `${proj.code} ` : ''}</strong>
@@ -446,11 +504,17 @@ export default function CalendarPage() {
           currYear={currYear}
           currMonth={currMonth}
           filterWorker={filterWorker}
+          vacations={vacations}
           onSelectProject={(proj) => {
             if (proj.selectedPhase) {
               navigate(`/projects/${proj.id}?tab=tasks`);
             } else {
               setSelectedProject(proj);
+            }
+          }}
+          onDoubleClickVacation={(vac) => {
+            if (user?.role === 'admin' || user?.role === 'editor') {
+              setEditingVacation(vac);
             }
           }}
         />
@@ -606,27 +670,44 @@ export default function CalendarPage() {
                       transition: 'all 0.2s'
                     }}
                     onClick={() => {
-                      setSelectedDayProjects(null);
-                      setSelectedProject(proj);
+                      if (!proj.isVacation) {
+                        setSelectedDayProjects(null);
+                        setSelectedProject(proj);
+                      }
+                    }}
+                    onDoubleClick={(e) => {
+                      if (proj.isVacation && (user?.role === 'admin' || user?.role === 'editor')) {
+                        const originalVacId = proj.id.replace('vac-', '');
+                        const originalVacation = vacations.find(v => v.id.toString() === originalVacId);
+                        if (originalVacation) {
+                          setSelectedDayProjects(null);
+                          setEditingVacation(originalVacation);
+                        }
+                      }
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        {proj.code ? `[${proj.code}] ` : ''}{proj.name}
+                      <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+                        {proj.code && !proj.isVacation && <span style={{ color: 'var(--text-secondary)', marginRight: 6 }}>[{proj.code}]</span>}
+                        {proj.name}
                       </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 2 }}>
-                        {proj.client ? `${proj.client} — ` : ''}{STATUS_LABELS_IT[proj.status] || proj.status}
-                      </div>
+                      {!proj.isVacation && (
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 2 }}>
+                          {proj.client ? `${proj.client} — ` : ''}{STATUS_LABELS_IT[proj.status] || proj.status}
+                        </div>
+                      )}
                     </div>
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/projects/${proj.id}`);
-                      }}
-                    >
-                      Apri ➔
-                    </button>
+                    {!proj.isVacation && (
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/projects/${proj.id}`);
+                        }}
+                      >
+                        Apri ➔
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -634,6 +715,62 @@ export default function CalendarPage() {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
               <button className="btn btn-secondary" onClick={() => setSelectedDayProjects(null)}>Chiudi</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Vacation Modal */}
+      {editingVacation && (
+        <div className="modal-overlay" onClick={() => setEditingVacation(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <div className="modal-header">
+              <h2>Modifica Ferie di {editingVacation.full_name || editingVacation.username}</h2>
+              <button className="btn-ghost btn-icon" onClick={() => setEditingVacation(null)}>
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <div className="modal-content">
+              <form onSubmit={handleEditVacation} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <div className="form-group">
+                  <label>Dal giorno</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={editingVacation.start_date}
+                    onChange={(e) => setEditingVacation({ ...editingVacation, start_date: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Al giorno (compreso)</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={editingVacation.end_date}
+                    onChange={(e) => setEditingVacation({ ...editingVacation, end_date: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Motivo (opzionale)</label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="Es. Ferie estive, Rol, Malattia..."
+                    value={editingVacation.reason || ''}
+                    onChange={(e) => setEditingVacation({ ...editingVacation, reason: e.target.value })}
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setEditingVacation(null)}>
+                    Annulla
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    Salva Modifiche
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
