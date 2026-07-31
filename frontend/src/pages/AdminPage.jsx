@@ -229,7 +229,7 @@ export default function AdminPage() {
         default_days: templateForm.default_days !== '' ? Number(templateForm.default_days) : null,
         default_hours: templateForm.default_hours !== '' ? Number(templateForm.default_hours) : null,
       };
-      
+
       if (editingTemplate) {
         await api.put(`/phase-templates/${editingTemplate.id}`, payload);
         toast.success('Fase preimpostata modificata con successo');
@@ -718,10 +718,10 @@ export default function AdminPage() {
         </div>
         {!collapsedSections.ticketPhases && (
           <div style={{ maxWidth: '100%' }}>
-            <div className="ticket-phases-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, marginBottom: 24 }}>
+            <div className="ticket-phases-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, marginBottom: 12 }}>
               {ticketPhases.map((phase, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-tertiary)', padding: '10px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
-                  <span style={{ fontSize: '0.95rem', fontWeight: 500 }}>{phase}</span>
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-tertiary)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>{phase}</span>
                   <button
                     className="btn-icon"
                     onClick={() => handleRemoveTicketPhase(i)}

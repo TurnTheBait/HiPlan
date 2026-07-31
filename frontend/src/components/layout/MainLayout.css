@@ -129,6 +129,7 @@
   height: 26px;
   border-radius: 8px 0 0 8px;
   background: #0b263d;
+  z-index: 10;
 }
 
 .sidebar-nav {
