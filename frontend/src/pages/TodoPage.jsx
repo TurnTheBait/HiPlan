@@ -166,6 +166,10 @@ export default function TodoPage() {
       toast.error('Il titolo è obbligatorio');
       return;
     }
+    if (!form.assignees || form.assignees.length === 0) {
+      toast.error('Il TODO deve avere almeno un addetto assegnato');
+      return;
+    }
     setSaving(true);
     try {
       let savedTodo;
@@ -539,7 +543,9 @@ export default function TodoPage() {
               <div>
                 <div className="todo-detail-section-label"><AppIcon name="paperclip" size={13} />Allegati</div>
                 {(selected.attachments || []).length === 0 && (
-                  <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Nessun allegato. Trascina qui i file o usa il pulsante.</span>
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                    <p>Nessun allegato. Trascina qui i file o usa il pulsante</p>
+                  </span>
                 )}
                 <div className="todo-attachment-list">
                   {(selected.attachments || []).map(att => (
@@ -730,7 +736,7 @@ export default function TodoPage() {
               <div className="todo-form-group">
                 <label className="todo-form-label">
                   <AppIcon name="users" size={13} />
-                  Assegnati ({form.assignees.length})
+                  Assegnati * ({form.assignees.length})
                 </label>
                 <div style={{ marginTop: 8 }}>
                   <AssigneeInput
