@@ -902,7 +902,7 @@ export default function AdminPage() {
         {!collapsedSections.backup && (
           <div style={{ padding: '16px 20px', background: 'var(--bg-tertiary)', borderRadius: 8, marginTop: 16 }}>
             {lastBackup ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 14 }}>
                 <div><strong>Ultimo backup completato:</strong> {new Date(lastBackup.date).toLocaleString()}</div>
                 <div><strong>Dimensione archivio:</strong> {lastBackup.size_mb} MB</div>
                 <div><strong>File:</strong> <code>{lastBackup.filename}</code></div>
