@@ -14,10 +14,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.dependencies import get_db, get_current_user
+from app.models.setting import Setting
 from app.models.user import User, UserRole
 from app.models.ticket import Ticket, TicketReply, TicketStatus, TicketPriority
 from app.models.notification import Notification, NotificationType
-from app.schemas.ticket import TicketCreate, TicketUpdate, TicketOut, TicketReplyCreate, TicketReplyOut
+from app.schemas.ticket import TicketCreate, TicketUpdate, TicketOut, TicketReplyCreate, TicketReplyOut, TicketReplyUpdate
 from app.services import export_service
 
 router = APIRouter(prefix="/api/tickets", tags=["tickets"])
@@ -74,11 +75,22 @@ def _serialize_ticket(ticket: Ticket, include_replies: bool = True) -> dict:
     }
 
 
-def _check_ticket_access(ticket: Ticket, current_user: User):
+async def _check_ticket_access(ticket: Ticket, current_user: User, db: AsyncSession):
+    res = await db.execute(select(Setting).where(Setting.key == "ticket_observers"))
+    setting = res.scalar_one_or_none()
+    observers = []
+    if setting and setting.value:
+        try:
+            observers = json.loads(setting.value)
+        except Exception:
+            pass
+
+    if current_user.role == UserRole.ADMIN or current_user.username in observers:
+        return
+
     assigned = json.loads(ticket.assigned_to) if ticket.assigned_to else []
-    if assigned:
-        if current_user.role != UserRole.ADMIN and ticket.author_id != current_user.id and ticket.responsible_id != current_user.id and current_user.username not in assigned:
-            raise HTTPException(status_code=403, detail="Non hai i permessi per accedere a questo ticket")
+    if current_user.id != ticket.author_id and current_user.id != ticket.responsible_id and current_user.username not in assigned:
+        raise HTTPException(status_code=403, detail="Non hai i permessi per accedere a questo ticket")
 
 
 async def _notify_for_ticket(db: AsyncSession, ticket: Ticket, message: str, current_user: User):
@@ -130,15 +142,28 @@ async def list_tickets(
     if priority:
         query = query.where(Ticket.priority == priority)
 
+    res = await db.execute(select(Setting).where(Setting.key == "ticket_observers"))
+    setting = res.scalar_one_or_none()
+    observers = []
+    if setting and setting.value:
+        try:
+            observers = json.loads(setting.value)
+        except Exception:
+            pass
+
     result = await db.execute(query)
     tickets = result.scalars().all()
     
     visible_tickets = []
     for t in tickets:
-        assigned = json.loads(t.assigned_to) if t.assigned_to else []
-        if assigned and current_user.role != UserRole.ADMIN and t.author_id != current_user.id and t.responsible_id != current_user.id and current_user.username not in assigned:
+        if current_user.role == UserRole.ADMIN or current_user.username in observers:
+            visible_tickets.append(t)
             continue
-        visible_tickets.append(t)
+            
+        assigned = json.loads(t.assigned_to) if t.assigned_to else []
+        if t.author_id == current_user.id or t.responsible_id == current_user.id or current_user.username in assigned:
+            visible_tickets.append(t)
+            continue
         
     return [_serialize_ticket(t) for t in visible_tickets]
 
@@ -207,7 +232,7 @@ async def get_ticket(
     ticket = result.scalar_one_or_none()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket non trovato")
-    _check_ticket_access(ticket, current_user)
+    await _check_ticket_access(ticket, current_user, db)
     return _serialize_ticket(ticket)
 
 
@@ -321,14 +346,31 @@ async def add_reply(
     ticket = result.scalar_one_or_none()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket non trovato")
-    _check_ticket_access(ticket, current_user)
+    await _check_ticket_access(ticket, current_user, db)
     if ticket.status == TicketStatus.COMPLETATO:
         raise HTTPException(status_code=400, detail="Impossibile rispondere a un ticket completato")
+
+    # Check automatic status changes based on action_type
+    new_status = None
+    action_lower = data.action_type.lower() if data.action_type else ""
+    if "inviato al cliente" in action_lower:
+        new_status = TicketStatus.IN_ATTESA
+    elif "risposta dal cliente" in action_lower or "intervento tecnico" in action_lower:
+        new_status = TicketStatus.DA_GESTIRE
+    elif "risoluzione" in action_lower:
+        new_status = TicketStatus.COMPLETATO
+
+    reply_content = data.content
+    if new_status and new_status != ticket.status:
+        old_val = ticket.status.value if hasattr(ticket.status, "value") else ticket.status
+        new_val = new_status.value if hasattr(new_status, "value") else new_status
+        reply_content += f"\n\n[STATUS_CHANGE:{old_val}->{new_val}]"
+        ticket.status = new_status
 
     reply = TicketReply(
         ticket_id=ticket.id,
         author_id=current_user.id,
-        content=data.content,
+        content=reply_content,
         action_type=data.action_type,
         attachments=json.dumps([]),
     )
@@ -381,7 +423,7 @@ async def upload_ticket_attachment(
     ticket = result.scalar_one_or_none()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket non trovato")
-    _check_ticket_access(ticket, current_user)
+    await _check_ticket_access(ticket, current_user, db)
 
     content = await file.read()
     if len(content) > MAX_FILE_SIZE_MB * 1024 * 1024:
@@ -515,7 +557,7 @@ async def export_ticket_pdf_route(
     ticket = result.scalar_one_or_none()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket non trovato")
-    _check_ticket_access(ticket, current_user)
+    await _check_ticket_access(ticket, current_user, db)
 
     buffer = await export_service.export_ticket_pdf(db, ticket_id)
     return StreamingResponse(
@@ -535,7 +577,7 @@ async def export_ticket_excel_route(
     ticket = result.scalar_one_or_none()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket non trovato")
-    _check_ticket_access(ticket, current_user)
+    await _check_ticket_access(ticket, current_user, db)
 
     buffer = await export_service.export_ticket_excel(db, ticket_id)
     return StreamingResponse(
@@ -543,3 +585,62 @@ async def export_ticket_excel_route(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=ticket_{ticket_id}.xlsx"},
     )
+
+
+@router.patch("/{ticket_id}/replies/{reply_id}", response_model=TicketReplyOut, summary="Modifica un messaggio del ticket")
+async def update_ticket_reply(
+    ticket_id: str,
+    reply_id: str,
+    data: TicketReplyUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Solo l'admin può modificare i messaggi")
+
+    result = await db.execute(
+        select(TicketReply)
+        .options(selectinload(TicketReply.author))
+        .where(TicketReply.id == reply_id, TicketReply.ticket_id == ticket_id)
+    )
+    reply = result.scalars().first()
+    if not reply:
+        raise HTTPException(status_code=404, detail="Messaggio non trovato")
+
+    ticket_result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
+    ticket = ticket_result.scalar_one_or_none()
+
+    if data.action_type is not None:
+        reply.action_type = data.action_type
+
+    import re
+    
+    # Base content update
+    new_content = data.content if data.content is not None else reply.content
+    
+    if data.ticket_status is not None and ticket and ticket.status != data.ticket_status:
+        old_val = ticket.status.value if hasattr(ticket.status, "value") else ticket.status
+        new_val = data.ticket_status.value if hasattr(data.ticket_status, "value") else data.ticket_status
+        ticket.status = data.ticket_status
+        
+        # Strip existing STATUS_CHANGE tokens from the text
+        new_content = re.sub(r'\n*\[STATUS_CHANGE:.*?\]', '', new_content)
+        new_content += f"\n\n[STATUS_CHANGE:{old_val}->{new_val}]"
+        
+    reply.content = new_content
+
+    await db.commit()
+    await db.refresh(reply)
+    
+    return {
+        "id": reply.id,
+        "ticket_id": reply.ticket_id,
+        "author_id": reply.author_id,
+        "author_username": reply.author.username if reply.author else None,
+        "author_full_name": reply.author.full_name if reply.author else None,
+        "content": reply.content,
+        "action_type": reply.action_type,
+        "attachments": json.loads(reply.attachments) if reply.attachments else [],
+        "created_at": reply.created_at,
+        "updated_at": reply.updated_at,
+    }

@@ -15,7 +15,6 @@ const PRIORITY_LABEL = { low: 'Bassa', medium: 'Media', high: 'Alta' };
 const STATUS_CLASS = {
   'Da gestire': 'da-gestire',
   'In attesa del cliente': 'in-attesa',
-  'In elaborazione': 'in-elaborazione',
   'Completato': 'completato'
 };
 
@@ -66,6 +65,44 @@ function renderSystemMessage(text) {
   return text;
 }
 
+function renderReplyContent(text) {
+  if (!text) return null;
+  let content = text;
+
+  const legacyRegex = /_Stato modificato da \*\*(.+?)\*\* a \*\*(.+?)\*\*_/g;
+  let hasStatusChange = false;
+  let oldStatus = null;
+  let newStatus = null;
+
+  let match = legacyRegex.exec(content);
+  if (match) {
+    hasStatusChange = true;
+    oldStatus = match[1];
+    newStatus = match[2];
+    content = content.replace(legacyRegex, '').trim();
+  } else {
+    const tokenRegex = /\[STATUS_CHANGE:(.+?)->(.+?)\]/g;
+    match = tokenRegex.exec(content);
+    if (match) {
+      hasStatusChange = true;
+      oldStatus = match[1];
+      newStatus = match[2];
+      content = content.replace(tokenRegex, '').trim();
+    }
+  }
+
+  return (
+    <>
+      {content && <div style={{ whiteSpace: 'pre-wrap' }}>{content}</div>}
+      {hasStatusChange && (
+        <div style={{ marginTop: '8px', fontSize: '0.9em', color: 'var(--text-secondary)' }}>
+          Stato modificato da <span className={`ticket-status-badge ${STATUS_CLASS[oldStatus] || ''}`} style={{ display: 'inline-block', margin: '0 4px', fontSize: '0.85em', padding: '2px 6px' }}>{oldStatus}</span> a <span className={`ticket-status-badge ${STATUS_CLASS[newStatus] || ''}`} style={{ display: 'inline-block', margin: '0 4px', fontSize: '0.85em', padding: '2px 6px' }}>{newStatus}</span>
+        </div>
+      )}
+    </>
+  );
+}
+
 /* ─── Assignee tag input ─── */
 function AssigneeInput({ selected, onChange, users }) {
   const [query, setQuery] = useState('');
@@ -103,7 +140,7 @@ function AssigneeInput({ selected, onChange, users }) {
         <input
           ref={inputRef}
           className="assignee-input"
-          placeholder={selected.length === 0 ? 'Tutti (lascia vuoto) o cerca utente...' : 'Aggiungi...'}
+          placeholder={selected.length === 0 ? 'Nessuno (lascia vuoto) o cerca utente...' : 'Aggiungi...'}
           value={query}
           onChange={e => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
@@ -122,6 +159,59 @@ function AssigneeInput({ selected, onChange, users }) {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* --- Observers Modal --- */
+function TicketObserversModal({ onClose, users }) {
+  const toast = useToast();
+  const [observers, setObservers] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get('/settings/ticket_observers')
+      .then(res => setObservers(Array.isArray(res.data) ? res.data : []))
+      .catch(() => toast.error('Impossibile caricare gli osservatori'));
+  }, [toast]);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await api.post('/settings/ticket_observers', { usernames: observers });
+      toast.success('Osservatori aggiornati con successo');
+      onClose();
+    } catch {
+      toast.error('Errore durante il salvataggio');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="tickets-modal-overlay">
+      <div className="tickets-modal" style={{ maxWidth: 500 }}>
+        <div className="tickets-modal-header">
+          <h2 className="tickets-modal-title">Osservatori Globali Ticket</h2>
+          <button type="button" className="tickets-modal-close" onClick={onClose} aria-label="Chiudi"><AppIcon name="close" /></button>
+        </div>
+        <div className="tickets-modal-body">
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
+            Gli utenti inseriti qui potranno visualizzare <strong>tutti</strong> i ticket presenti nel sistema,
+            anche se non sono responsabili o assegnatari. Gli amministratori hanno già questo permesso.
+          </p>
+          <div className="tkt-field">
+            <label>Osservatori Selezionati</label>
+            <AssigneeInput selected={observers} onChange={setObservers} users={users} />
+          </div>
+          <div className="tkt-modal-footer">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Annulla</button>
+            <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving}>
+              {saving ? 'Salvataggio...' : 'Salva modifiche'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -194,7 +284,7 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
   }
 
   return (
-    <div className="tickets-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="tickets-modal-overlay">
       <div className="tickets-modal">
         <div className="tickets-modal-header">
           <h2 className="tickets-modal-title">Nuovo Ticket</h2>
@@ -261,10 +351,10 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
                 ))}
               </select>
             </div>
-            <div className="tkt-field">
-              <label>Addetti (vuoto = avviso tutti)</label>
-              <AssigneeInput selected={form.assigned_to} onChange={v => setForm(f => ({ ...f, assigned_to: v }))} users={users} />
-            </div>
+          </div>
+          <div className="tkt-field">
+            <label>Addetti</label>
+            <AssigneeInput selected={form.assigned_to} onChange={v => setForm(f => ({ ...f, assigned_to: v }))} users={users} />
           </div>
           <div className="tkt-field">
             <label>Allegati</label>
@@ -273,7 +363,7 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
               onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}
             >
               Trascina qui i file o
-              <label className="ticket-upload-label" style={{ display: 'inline-block', marginLeft: 8 }}>
+              <label className="ticket-upload-label" style={{ marginLeft: 8 }}>
                 <AppIcon name="paperclip" size={14} />
                 Scegli file
                 <input ref={fileRef} type="file" multiple style={{ display: 'none' }} onChange={e => setFiles(prev => [...prev, ...Array.from(e.target.files)])} />
@@ -340,7 +430,7 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
   }
 
   return (
-    <div className="tickets-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="tickets-modal-overlay">
       <div className="tickets-modal">
         <div className="tickets-modal-header">
           <h2 className="tickets-modal-title">Modifica Ticket</h2>
@@ -397,10 +487,10 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
                 ))}
               </select>
             </div>
-            <div className="tkt-field">
-              <label>Addetti di riferimento</label>
-              <AssigneeInput selected={form.assigned_to} onChange={v => setForm(f => ({ ...f, assigned_to: v }))} users={users} />
-            </div>
+          </div>
+          <div className="tkt-field">
+            <label>Addetti di riferimento</label>
+            <AssigneeInput selected={form.assigned_to} onChange={v => setForm(f => ({ ...f, assigned_to: v }))} users={users} />
           </div>
           <div className="tkt-field">
             <label>Stato</label>
@@ -411,7 +501,6 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
             >
               <option value="Da gestire">Da gestire</option>
               <option value="In attesa del cliente">In attesa del cliente</option>
-              <option value="In elaborazione">In elaborazione</option>
               <option value="Completato">Completato</option>
             </select>
           </div>
@@ -439,6 +528,10 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
   const [dragActive, setDragActive] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exportFormat, setExportFormat] = useState('pdf');
+  const [editingReplyId, setEditingReplyId] = useState(null);
+  const [editReplyContent, setEditReplyContent] = useState('');
+  const [editReplyActionType, setEditReplyActionType] = useState('');
+  const [editReplyStatus, setEditReplyStatus] = useState('');
   const toast = useToast();
   const navigate = useNavigate();
   const replyFileRef = useRef(null);
@@ -483,6 +576,25 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
       toast.success('Risposta eliminata');
       onRefresh();
     } catch { toast.error('Errore nell\'eliminazione'); }
+  }
+
+  async function saveEditReply() {
+    if (!editReplyContent.trim()) return;
+    try {
+      await api.patch(`/tickets/${ticket.id}/replies/${editingReplyId}`, {
+        content: editReplyContent.trim(),
+        action_type: editReplyActionType || undefined,
+        ticket_status: editReplyStatus || undefined
+      });
+      toast.success('Messaggio aggiornato');
+      setEditingReplyId(null);
+      setEditReplyContent('');
+      setEditReplyActionType('');
+      setEditReplyStatus('');
+      onRefresh();
+    } catch {
+      toast.error('Errore nell\'aggiornamento del messaggio');
+    }
   }
 
   async function changeStatus(newStatus) {
@@ -683,7 +795,6 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
             >
               <option value="Da gestire">● Da gestire</option>
               <option value="In attesa del cliente">● In attesa del cliente</option>
-              <option value="In elaborazione">● In elaborazione</option>
               <option value="Completato">● Completato</option>
             </select>
           ) : (
@@ -691,9 +802,9 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
               ● {ticket.status}
             </span>
           )}
-            <span className={`ticket-priority-badge ${ticket.priority}`}>
-              <span className={`priority-dot ${ticket.priority}`} />
-              {PRIORITY_LABEL[ticket.priority]}
+          <span className={`ticket-priority-badge ${ticket.priority}`}>
+            <span className={`priority-dot ${ticket.priority}`} />
+            {PRIORITY_LABEL[ticket.priority]}
           </span>
           {ticket.project_id ? (
             <>
@@ -720,7 +831,7 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
           <span style={{ color: 'var(--border-default)' }}>·</span>
           <span className="ticket-detail-meta-item">
             <AppIcon name="users" size={14} />
-            Addetti: {ticket.assigned_to?.length > 0 ? ticket.assigned_to.join(', ') : 'Tutti'}
+            Addetti: {ticket.assigned_to?.length > 0 ? ticket.assigned_to.join(', ') : 'Nessuno'}
           </span>
           <span style={{ color: 'var(--border-default)' }}>·</span>
           <span className="ticket-detail-meta-item">
@@ -781,7 +892,7 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
             Risposte ({ticket.replies?.length || 0})
           </div>
           {!ticket.replies?.length && (
-            <div className="ticket-no-replies">Nessuna risposta ancora — sii il primo a rispondere!</div>
+            <div className="ticket-no-replies">Nessuna risposta ancora</div>
           )}
           {ticket.replies?.map(reply => {
             const ratts = Array.isArray(reply.attachments) ? reply.attachments : [];
@@ -800,16 +911,47 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
                     <span className="ticket-timeline-badge">
                       {cleanActionLabel(reply.action_type)}
                     </span>
+                    {currentUser?.role === 'admin' && (
+                      <button className="ticket-timeline-delete" onClick={() => { setEditingReplyId(reply.id); setEditReplyContent(reply.content); setEditReplyActionType(reply.action_type || phases?.[0] || '📝 Nota Interna'); setEditReplyStatus(''); }} aria-label="Modifica risposta" title="Modifica risposta">
+                        <AppIcon name="edit" size={14} />
+                      </button>
+                    )}
                     {canDel && (
-                      <button className="ticket-timeline-delete" onClick={() => deleteReply(reply.id)} aria-label="Elimina risposta">
+                      <button className="ticket-timeline-delete" onClick={() => deleteReply(reply.id)} aria-label="Elimina risposta" title="Elimina risposta">
                         <AppIcon name="trash" size={14} />
                       </button>
                     )}
                   </div>
                   <div className="ticket-timeline-body">
-                    <div className={`ticket-timeline-text ${reply.action_type === '🔄 Cambio Stato' ? 'system-message' : ''}`}>
-                      {reply.action_type === '🔄 Cambio Stato' ? renderSystemMessage(reply.content) : reply.content}
-                    </div>
+                    {editingReplyId === reply.id ? (
+                      <div className="edit-reply-box" style={{ background: 'var(--bg-primary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                          <select className="input" value={editReplyActionType} onChange={e => setEditReplyActionType(e.target.value)} style={{ padding: '4px 8px' }}>
+                            {(phases || []).map(p => <option key={p} value={p}>{cleanActionLabel(p)}</option>)}
+                          </select>
+                          <select className="input" value={editReplyStatus} onChange={e => setEditReplyStatus(e.target.value)} style={{ padding: '4px 8px' }}>
+                            <option value="">-- Non cambiare stato ticket --</option>
+                            <option value="Da gestire">Da gestire</option>
+                            <option value="In attesa del cliente">In attesa del cliente</option>
+                            <option value="Completato">Completato</option>
+                          </select>
+                        </div>
+                        <textarea
+                          value={editReplyContent}
+                          onChange={e => setEditReplyContent(e.target.value)}
+                          className="input"
+                          style={{ width: '100%', minHeight: '60px', marginBottom: '8px', fontFamily: 'inherit', resize: 'vertical' }}
+                        />
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                          <button className="btn btn-secondary btn-sm" onClick={() => setEditingReplyId(null)}>Annulla</button>
+                          <button className="btn btn-primary btn-sm" onClick={saveEditReply}>Salva</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={`ticket-timeline-text ${reply.action_type === '🔄 Cambio Stato' ? 'system-message' : ''}`}>
+                        {reply.action_type === '🔄 Cambio Stato' ? renderSystemMessage(reply.content) : renderReplyContent(reply.content)}
+                      </div>
+                    )}
                     {ratts.length > 0 && (
                       <div className="ticket-attachments-list" style={{ marginTop: 12 }}>
                         {ratts.map((att, i) => (
@@ -918,6 +1060,7 @@ export default function TicketsPage() {
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
   const [showNew, setShowNew] = useState(false);
+  const [showObservers, setShowObservers] = useState(false);
   const [statusFilter, setStatusFilter] = useState('open_all');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState(passedProjectId || 'all');
@@ -1018,6 +1161,12 @@ export default function TicketsPage() {
           users={users}
         />
       )}
+      {showObservers && (
+        <TicketObserversModal
+          onClose={() => setShowObservers(false)}
+          users={users}
+        />
+      )}
 
       {/* Body */}
       <div className="tickets-body">
@@ -1027,12 +1176,23 @@ export default function TicketsPage() {
             <AppIcon name="plus" />
             Nuovo ticket
           </button>
+
+          {user?.role === 'admin' && (
+            <button
+              className="btn btn-secondary sidebar-create-btn"
+              style={{ marginTop: '-4px', fontSize: '0.75rem', padding: '6px' }}
+              onClick={() => setShowObservers(true)}
+            >
+              <AppIcon name="users" size={14} />
+              Gestisci Osservatori
+            </button>
+          )}
+
           <div className="tickets-sidebar-section-title">Stato</div>
           {[
             { key: 'open_all', icon: 'ticket', label: 'Aperti', count: projectFilteredTickets.filter(t => t.status !== 'Completato').length },
             { key: 'Da gestire', icon: 'clock', label: 'Da gestire', count: projectFilteredTickets.filter(t => t.status === 'Da gestire').length },
             { key: 'In attesa del cliente', icon: 'user', label: 'In attesa cliente', count: projectFilteredTickets.filter(t => t.status === 'In attesa del cliente').length },
-            { key: 'In elaborazione', icon: 'settings', label: 'In elaborazione', count: projectFilteredTickets.filter(t => t.status === 'In elaborazione').length },
             { key: 'Completato', icon: 'check', label: 'Completato', count: projectFilteredTickets.filter(t => t.status === 'Completato').length },
           ].map(f => (
             <button
@@ -1099,50 +1259,42 @@ export default function TicketsPage() {
             {/* Ticket list */}
             <div className="tickets-list-panel">
               <div className="tickets-list">
-            {loading ? (
-              <div className="tickets-empty">
-                <div className="tickets-empty-icon"><AppIcon name="clock" size={24} /></div>
-                <div>Caricamento...</div>
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="tickets-empty">
-                <div className="tickets-empty-icon"><AppIcon name="ticket" size={24} /></div>
-                <div>{tickets.length === 0 ? 'Nessun ticket aperto' : 'Nessun risultato'}</div>
-                {tickets.length === 0 && (
-                  <button className="btn btn-primary btn-sm" onClick={() => setShowNew(true)}>
-                    + Nuovo Ticket
-                  </button>
+                {loading ? (
+                  <div className="tickets-empty">
+                    <div className="tickets-empty-icon"><AppIcon name="clock" size={24} /></div>
+                    <div>Caricamento...</div>
+                  </div>
+                ) : filtered.length === 0 ? (
+                  <div className="tickets-empty">
+                    <div className="tickets-empty-icon"><AppIcon name="ticket" size={24} /></div>
+                    <div>{tickets.length === 0 ? 'Nessun ticket aperto' : 'Nessun risultato'}</div>
+                    {tickets.length === 0 && (
+                      <button className="btn btn-primary btn-sm" onClick={() => setShowNew(true)}>
+                        + Nuovo Ticket
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  filtered.map(t => (
+                    <div
+                      key={t.id}
+                      className={`ticket-card ${selectedId === t.id ? 'selected' : ''}`}
+                      onClick={() => setSelectedId(t.id)}
+                    >
+                      <div className="ticket-card-title">{t.title}</div>
+                      <div className="ticket-card-badges">
+                        <span className={`ticket-status-badge ${STATUS_CLASS[t.status] || 'open'}`}>
+                          ● {t.status}
+                        </span>
+                      </div>
+                      {t.project_id ? (
+                        <div className="ticket-card-project"><AppIcon name="folder" size={13} />{t.project_code || t.project_name}</div>
+                      ) : t.custom_project_code ? (
+                        <div className="ticket-card-project"><AppIcon name="folder" size={13} />{t.custom_project_code}</div>
+                      ) : null}
+                    </div>
+                  ))
                 )}
-              </div>
-            ) : (
-              filtered.map(t => (
-                <div
-                  key={t.id}
-                  className={`ticket-card ${selectedId === t.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedId(t.id)}
-                >
-                  <div className="ticket-card-title">{t.title}</div>
-                  <div className="ticket-card-badges">
-                    <span className={`ticket-status-badge ${STATUS_CLASS[t.status] || 'open'}`}>
-                      ● {t.status}
-                    </span>
-                    <span className={`ticket-priority-badge ${t.priority}`}>
-                      <span className={`priority-dot ${t.priority}`} />
-                      {PRIORITY_LABEL[t.priority]}
-                    </span>
-                  </div>
-                  {t.project_id ? (
-                    <div className="ticket-card-project"><AppIcon name="folder" size={13} />{t.project_code || t.project_name}</div>
-                  ) : t.custom_project_code ? (
-                    <div className="ticket-card-project"><AppIcon name="folder" size={13} />{t.custom_project_code}</div>
-                  ) : null}
-                  <div className="ticket-card-footer">
-                    <span className="ticket-card-author">{t.author_full_name || t.author_username}</span>
-                    <span className="ticket-card-replies"><AppIcon name="message" size={13} />{t.reply_count}</span>
-                  </div>
-                </div>
-              ))
-            )}
               </div>
             </div>
 

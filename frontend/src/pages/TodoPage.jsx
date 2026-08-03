@@ -54,8 +54,7 @@ export default function TodoPage() {
     notify_date: '',
     due_date: '',
     assignees: [],
-    notify_email: false,
-    notify_now: false,
+    notify_email: true,
   };
   const [form, setForm] = useState(emptyForm);
 
@@ -150,8 +149,7 @@ export default function TodoPage() {
       notify_date: todo.notify_date || '',
       due_date: todo.due_date || '',
       assignees: todo.assignees || [],
-      notify_email: todo.notify_email || false,
-      notify_now: false,
+      notify_email: todo.notify_email !== undefined ? todo.notify_email : true,
     });
     setSelected(todo);
     setShowModal(true);
@@ -174,6 +172,7 @@ export default function TodoPage() {
         ...form,
         notify_date: form.notify_date || null,
         due_date: form.due_date || null,
+        notify_email: !!(form.notify_date && form.due_date),
       };
 
       if (editMode && selected) {
@@ -595,7 +594,7 @@ export default function TodoPage() {
 
       {/* Create / Edit Modal */}
       {showModal && (
-        <div className="todo-modal-overlay" onClick={closeModal}>
+        <div className="todo-modal-overlay">
           <div
             className={`todo-modal ${dragOver ? 'drag-over' : ''}`}
             onClick={e => e.stopPropagation()}
@@ -630,7 +629,7 @@ export default function TodoPage() {
 
               {/* Contenuto */}
               <div className="todo-form-group">
-                <label className="todo-form-label">Contenuto / Note</label>
+                <label className="todo-form-label">Descrizione</label>
                 <textarea
                   className="todo-form-input"
                   placeholder="Aggiungi dettagli, link, istruzioni..."
@@ -688,9 +687,6 @@ export default function TodoPage() {
                     ))}
                   </div>
                 )}
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                  Gli allegati verranno caricati al salvataggio del TODO
-                </span>
               </div>
 
               {/* Date */}
@@ -709,9 +705,6 @@ export default function TodoPage() {
                       setForm(p => ({ ...p, notify_date: v }));
                     }}
                   />
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                    Giorno in cui ricevere la notifica in HiPlan
-                  </span>
                 </div>
                 <div className="todo-form-group">
                   <label className="todo-form-label"><AppIcon name="calendar" size={13} />Data e ora scadenza</label>
@@ -727,37 +720,9 @@ export default function TodoPage() {
                       setForm(p => ({ ...p, due_date: v }));
                     }}
                   />
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                    Reminder in HiPlan il giorno prima della scadenza
-                  </span>
-                </div>
-              </div>
 
-              {/* Email flag */}
-              <div className="todo-form-group">
-                <label className="todo-form-label"><AppIcon name="mail" size={13} />Notifiche</label>
-                <div className="todo-form-check-row">
-                  <input
-                    type="checkbox"
-                    id="notify_email_check"
-                    checked={form.notify_email}
-                    onChange={e => setForm(p => ({ ...p, notify_email: e.target.checked }))}
-                  />
-                  <label htmlFor="notify_email_check">
-                    Invia entrambe le notifiche anche via email
-                  </label>
                 </div>
-                <div className="todo-form-check-row" style={{ marginTop: 8 }}>
-                  <input
-                    type="checkbox"
-                    id="notify_now_check"
-                    checked={form.notify_now}
-                    onChange={e => setForm(p => ({ ...p, notify_now: e.target.checked }))}
-                  />
-                  <label htmlFor="notify_now_check">
-                    Invia subito una notifica (HiPlan + email)
-                  </label>
-                </div>
+
               </div>
 
               {/* Assegnati */}

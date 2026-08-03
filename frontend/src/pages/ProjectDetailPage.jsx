@@ -1941,7 +1941,7 @@ export default function ProjectDetailPage() {
 
       {/* MODALE NUOVA / MODIFICA FASE (TASK MODAL) */}
       {showTaskModal && (
-        <div className="modal-overlay" onClick={() => setShowTaskModal(false)}>
+        <div className="modal-overlay">
           <div className="modal task-editor-modal" style={{ maxWidth: 900 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{editingTask ? 'Dettagli Fase Lavorazione' : 'Nuova Fase Lavorazione (Ufficio Tecnico)'}</h2>
@@ -2513,7 +2513,7 @@ export default function ProjectDetailPage() {
 
       {/* MODALE CONSUNTIVO ORE EFFETTIVE (ORE MODAL) */}
       {showOreModal && selectedTaskForHours && (
-        <div className="modal-overlay" onClick={() => setShowOreModal(false)}>
+        <div className="modal-overlay">
           <div className="modal" style={{ maxWidth: 840 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div>
@@ -2733,7 +2733,7 @@ export default function ProjectDetailPage() {
 
       {/* Modale Modifica Dati Commessa */}
       {showEditProjectModal && (
-        <div className="modal-overlay" onClick={() => setShowEditProjectModal(false)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Modifica Dati Commessa</h2>

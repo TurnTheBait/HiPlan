@@ -12,8 +12,10 @@ from app.core.dependencies import get_db, get_current_user
 from app.models.user import User, UserRole
 from app.models.setting import Setting
 from app.schemas.setting import GlobalBannerItem
-# pyrefly: ignore [missing-import]
 from pydantic import BaseModel
+
+class TicketObserversUpdate(BaseModel):
+    usernames: List[str]
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -189,3 +191,39 @@ async def trigger_manual_backup(
     
     info = get_last_backup_info()
     return {"message": "Backup completato con successo", "last_backup": info}
+
+@router.get("/ticket_observers", response_model=List[str])
+async def get_ticket_observers(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    res = await db.execute(select(Setting).where(Setting.key == "ticket_observers"))
+    setting = res.scalar_one_or_none()
+    if not setting or not setting.value:
+        return []
+    try:
+        return json.loads(setting.value)
+    except Exception:
+        return []
+
+@router.post("/ticket_observers", response_model=List[str])
+async def update_ticket_observers(
+    data: TicketObserversUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin")
+    
+    res = await db.execute(select(Setting).where(Setting.key == "ticket_observers"))
+    setting = res.scalar_one_or_none()
+    
+    value_str = json.dumps(data.usernames)
+    if setting:
+        setting.value = value_str
+    else:
+        setting = Setting(key="ticket_observers", value=value_str)
+        db.add(setting)
+        
+    await db.commit()
+    return data.usernames

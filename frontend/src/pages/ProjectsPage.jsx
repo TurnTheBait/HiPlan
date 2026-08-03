@@ -372,7 +372,7 @@ export default function ProjectsPage() {
       )}
 
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Nuova Commessa</h2>
@@ -535,7 +535,7 @@ export default function ProjectsPage() {
       )}
 
       {showEditModal && (
-        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Modifica Dati Commessa</h2>

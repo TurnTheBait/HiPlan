@@ -741,7 +741,7 @@ export default function NotesPage() {
 
       {/* MODALE NUOVA NOTA */}
       {showNewModal && (
-        <div className="note-modal-overlay animate-fadeIn" onClick={() => setShowNewModal(false)}>
+        <div className="note-modal-overlay animate-fadeIn">
           <div className="note-modal-box" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>

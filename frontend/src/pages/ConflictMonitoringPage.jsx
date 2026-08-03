@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import AppIcon from '../components/ui/AppIcon';
 import './ConflictMonitoringPage.css';
+import { isWeekendOrHoliday } from '../utils/workingDays';
 
 import WorkloadHeatmap from '../components/workload/WorkloadHeatmap';
 
@@ -23,6 +24,18 @@ export default function ConflictMonitoringPage() {
   const [addingVacation, setAddingVacation] = useState(false);
   const [newVacation, setNewVacation] = useState({ user_id: '', start_date: '', end_date: '', reason: '' });
   const [submittingVacation, setSubmittingVacation] = useState(false);
+
+  // Search Slots State
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchParams, setSearchParams] = useState({
+    department: 'all',
+    userId: 'all',
+    type: 'days',
+    quantity: 1,
+  });
+  const [searchResults, setSearchResults] = useState(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [visibleResultsCount, setVisibleResultsCount] = useState(10);
 
   const navigate = useNavigate();
   const toast = useToast();
@@ -110,9 +123,110 @@ export default function ConflictMonitoringPage() {
       // Reload heatmap is handled by page refresh or could be handled by context/events. For now it's okay.
       window.dispatchEvent(new Event('vacationsUpdated'));
     } catch (err) {
-      toast.error('Errore durante l\'inserimento delle ferie.');
+      toast.error('Errore durante l\'aggiunta delle ferie');
     } finally {
       setSubmittingVacation(false);
+    }
+  }
+
+  async function handleSearchSlots(e) {
+    e.preventDefault();
+    setIsSearching(true);
+    setSearchResults(null);
+    setIsSearchOpen(true);
+    try {
+      const { data } = await api.get('/workload/heatmap');
+      const heatmap = data.heatmap;
+
+      let results = [];
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const endDate = new Date(today);
+      endDate.setMonth(endDate.getMonth() + 6);
+
+      const targetUsers = usersList.filter(u => {
+        if (searchParams.department !== 'all' && u.department !== searchParams.department) return false;
+        if (searchParams.userId !== 'all' && String(u.id) !== String(searchParams.userId)) return false;
+        return true;
+      });
+
+      for (const targetUser of targetUsers) {
+        const uData = heatmap[targetUser.id];
+        if (!uData) continue;
+
+        let currentRun = [];
+        let totalHoursInRun = 0;
+
+        for (let d = new Date(today); d <= endDate; d.setDate(d.getDate() + 1)) {
+          const dateStr = [
+            d.getFullYear(),
+            String(d.getMonth() + 1).padStart(2, '0'),
+            String(d.getDate()).padStart(2, '0')
+          ].join('-');
+
+          if (isWeekendOrHoliday(dateStr)) continue;
+
+          const onVacation = uData.vacations && uData.vacations.some(v => dateStr >= v.start_date && dateStr <= v.end_date);
+          if (onVacation) continue;
+
+          const dailyWorkload = uData.workload[dateStr] ? uData.workload[dateStr].hours : 0;
+          const freeHours = Math.max(0, 8 - dailyWorkload);
+
+          if (searchParams.type === 'days') {
+            if (freeHours === 8) {
+              currentRun.push(dateStr);
+              if (currentRun.length === parseInt(searchParams.quantity)) {
+                results.push({
+                  user: targetUser,
+                  startDate: currentRun[0],
+                  endDate: currentRun[currentRun.length - 1],
+                  type: 'days',
+                  quantity: searchParams.quantity,
+                  totalHours: searchParams.quantity * 8
+                });
+                currentRun = [];
+              }
+            } else {
+              currentRun = [];
+            }
+          } else {
+            if (freeHours > 0) {
+              currentRun.push({ date: dateStr, hours: freeHours });
+              totalHoursInRun += freeHours;
+
+              if (totalHoursInRun >= parseInt(searchParams.quantity)) {
+                results.push({
+                  user: targetUser,
+                  startDate: currentRun[0].date,
+                  endDate: currentRun[currentRun.length - 1].date,
+                  type: 'hours',
+                  quantity: searchParams.quantity,
+                  totalHours: totalHoursInRun
+                });
+                currentRun = [];
+                totalHoursInRun = 0;
+              }
+            } else {
+              currentRun = [];
+              totalHoursInRun = 0;
+            }
+          }
+        }
+      }
+
+      results.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+
+      setSearchResults(results);
+      setVisibleResultsCount(10);
+      if (results.length === 0) {
+        toast.info('Nessuno slot trovato per i criteri selezionati.');
+      }
+    } catch (err) {
+      toast.error('Errore durante la ricerca degli slot liberi');
+    } finally {
+      setIsSearching(false);
     }
   }
 
@@ -132,12 +246,147 @@ export default function ConflictMonitoringPage() {
     const d = new Date(isoString);
     return d.toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: 'long', year: 'numeric' });
   }
-
   if (loading) return <div className="loading-screen"><div className="spinner" /></div>;
 
   return (
     <div className="conflicts-page animate-fadeIn">
       <WorkloadHeatmap />
+
+      {/* Ricerca Slot Liberi Section */}
+      <div style={{ background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-default)', overflow: 'hidden' }}>
+        <div
+          className="section-heading"
+          onClick={() => setIsSearchOpen(!isSearchOpen)}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', margin: 0, cursor: 'pointer', transition: 'background 0.2s', borderBottom: isSearchOpen ? '1px solid var(--border-default)' : 'none' }}
+        >
+          <div>
+            <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AppIcon name="search" />
+              Ricerca Slot Liberi
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>Trova gli spazi di tempo disponibili per uno o più addetti.</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {searchResults && searchResults.length > 0 && (
+              <span className="badge badge-success" style={{ padding: '4px 8px', fontSize: '0.9rem', borderRadius: '12px' }}>
+                {searchResults.length}
+              </span>
+            )}
+            {isSearchOpen ? <AppIcon name="chevronUp" /> : <AppIcon name="chevronDown" />}
+          </div>
+        </div>
+
+        {isSearchOpen && (
+          <>
+            <form onSubmit={handleSearchSlots} style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', padding: '16px', background: 'var(--bg-primary)' }}>
+              <div style={{ flex: '1 1 200px' }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: 600 }}>Reparto</label>
+                <select
+                  value={searchParams.department}
+                  onChange={e => setSearchParams({ ...searchParams, department: e.target.value, userId: 'all' })}
+                  className="input"
+                >
+                  <option value="all">Tutti i reparti</option>
+                  {[...new Set(usersList.map(u => u.department).filter(Boolean))].map(dept => (
+                    <option key={dept} value={dept}>{dept === 'ufficio_tecnico' ? 'Ufficio Tecnico' : dept.charAt(0).toUpperCase() + dept.slice(1)}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ flex: '1 1 200px' }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: 600 }}>Addetto</label>
+                <select
+                  value={searchParams.userId}
+                  onChange={e => setSearchParams({ ...searchParams, userId: e.target.value })}
+                  className="input"
+                >
+                  <option value="all">Qualsiasi Addetto</option>
+                  {usersList
+                    .filter(u => searchParams.department === 'all' || u.department === searchParams.department)
+                    .map(u => (
+                      <option key={u.id} value={u.id}>{u.full_name || u.username}</option>
+                    ))}
+                </select>
+              </div>
+
+              <div style={{ flex: '1 1 150px' }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: 600 }}>Tipo di Ricerca</label>
+                <select
+                  value={searchParams.type}
+                  onChange={e => setSearchParams({ ...searchParams, type: e.target.value })}
+                  className="input"
+                >
+                  <option value="days">Giorni Interi</option>
+                  <option value="hours">Ore (anche spalmate)</option>
+                </select>
+              </div>
+
+              <div style={{ flex: '1 1 100px' }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: 600 }}>Quantità</label>
+                <input
+                  type="number"
+                  min="1"
+                  className="input"
+                  value={searchParams.quantity}
+                  onChange={e => setSearchParams({ ...searchParams, quantity: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                <button type="submit" className="btn btn-primary" disabled={isSearching} style={{ height: '40px' }}>
+                  {isSearching ? 'Ricerca in corso...' : 'Cerca Slot'}
+                </button>
+              </div>
+            </form>
+
+            {searchResults && searchResults.length > 0 && (
+              <div style={{ borderTop: '1px solid var(--border-default)', background: 'var(--bg-primary)', overflowX: 'auto' }}>
+                <table className="table" style={{ width: '100%', margin: 0 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Addetto</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Reparto</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Inizio Slot</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Fine Slot</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {searchResults.slice(0, visibleResultsCount).map((res, idx) => (
+                      <tr key={idx} style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                        <td style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <AppIcon name="user" size={16} /> <strong>{res.user.full_name || res.user.username}</strong>
+                        </td>
+                        <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>
+                          {res.user.department === 'ufficio_tecnico' ? 'Ufficio Tecnico' : res.user.department ? res.user.department.charAt(0).toUpperCase() + res.user.department.slice(1) : '-'}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>{formatDate(res.startDate)}</td>
+                        <td style={{ padding: '12px 16px' }}>{formatDate(res.endDate)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {searchResults.length > visibleResultsCount && (
+                  <div style={{ padding: '16px', textAlign: 'center', borderTop: '1px solid var(--border-subtle)' }}>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setVisibleResultsCount(prev => prev + 10)}
+                    >
+                      Mostra altri 10 risultati
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            {isSearchOpen && (!searchResults || searchResults.length === 0) && !isSearching && (
+              <div style={{ padding: '16px', borderTop: '1px solid var(--border-default)', background: 'var(--bg-primary)', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                Nessun risultato da mostrare.
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {/* Conflitti Collapsible Section */}
       <div style={{ background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-default)', overflow: 'hidden' }}>
@@ -294,7 +543,7 @@ export default function ConflictMonitoringPage() {
 
       {/* Edit Modal */}
       {editingVacation && (
-        <div className="modal-overlay" onClick={() => setEditingVacation(null)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h2>Modifica Ferie di {editingVacation.full_name || editingVacation.username}</h2>
@@ -350,7 +599,7 @@ export default function ConflictMonitoringPage() {
 
       {/* Delete Modal */}
       {deletingVacation && (
-        <div className="modal-overlay" onClick={() => setDeletingVacation(null)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h2 style={{ color: 'var(--error-500)' }}>Elimina Ferie</h2>
@@ -376,7 +625,7 @@ export default function ConflictMonitoringPage() {
 
       {/* Modale Aggiungi Ferie */}
       {addingVacation && (
-        <div className="modal-overlay" onClick={() => setAddingVacation(false)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
             <div className="modal-header">
               <h2>Inserisci Ferie</h2>

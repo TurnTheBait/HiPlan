@@ -410,7 +410,7 @@ export default function MainLayout() {
       </main>
 
       {showNotifications && (
-        <div className="modal-overlay" onClick={() => setShowNotifications(false)}>
+        <div className="modal-overlay">
           <div className="modal layout-notification-modal" onClick={e => e.stopPropagation()}>
             <div className="layout-notification-header">
               <div>

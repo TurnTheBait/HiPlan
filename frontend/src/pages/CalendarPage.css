@@ -480,9 +480,13 @@
   left: 0;
   z-index: 15;
   border-right: 1px solid var(--timeline-grid);
-  background: inherit;
+  background: var(--timeline-row-bg, var(--bg-card));
   box-shadow: 4px 0 10px rgba(20, 32, 51, 0.045);
   box-sizing: border-box;
+}
+
+.timeline-project-row:nth-child(even) .timeline-project-info {
+  background: var(--timeline-row-alt, var(--bg-card));
 }
 
 .timeline-proj-title {
@@ -645,7 +649,7 @@
   min-height: 44px;
   padding-left: 21px;
   border-left: 3px solid var(--timeline-row-accent, var(--accent-400));
-  background: inherit;
+  background: var(--timeline-row-alt, var(--bg-card));
   justify-content: center;
   cursor: pointer;
 }

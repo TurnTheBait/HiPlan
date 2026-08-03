@@ -7,7 +7,8 @@
 .tickets-page-wrapper {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 56px);
+  height: 100%;
+  min-height: 0;
   gap: 0;
   overflow: hidden;
 }
@@ -42,6 +43,7 @@
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   box-shadow: var(--shadow-sm);
+  min-height: 0;
 }
 
 /* ---- Sidebar Filters ---- */
@@ -118,6 +120,7 @@
   flex: 1;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 
 .tickets-main-toolbar {
@@ -153,6 +156,7 @@
   flex-direction: column;
   border-right: 1px solid var(--border-subtle);
   overflow: hidden;
+  min-height: 0;
   background: var(--bg-secondary, var(--bg-card));
 }
 
@@ -202,6 +206,7 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .ticket-card {
@@ -213,6 +218,7 @@
   flex-direction: column;
   gap: 6px;
   position: relative;
+  flex-shrink: 0;
 }
 
 .ticket-card::before {
@@ -245,10 +251,9 @@
   font-weight: 600;
   color: var(--text-primary);
   line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  display: block;
+  overflow: visible;
+  word-wrap: break-word;
 }
 
 .ticket-card-badges {
@@ -318,9 +323,10 @@
 .ticket-card-project {
   font-size: 0.75rem;
   color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  word-wrap: break-word;
 }
 
 .ticket-card-footer {
@@ -534,6 +540,7 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   font-family: inherit;
+  white-space: nowrap;
 }
 
 .ticket-upload-label:hover {
@@ -973,8 +980,9 @@
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  min-height: 36px;
-  padding: 5px 8px;
+  padding: 9px 12px;
+  min-height: 42px;
+  box-sizing: border-box;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-default);
   background: var(--bg-input);

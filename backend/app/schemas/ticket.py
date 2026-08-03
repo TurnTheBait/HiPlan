@@ -10,6 +10,12 @@ class TicketReplyCreate(BaseModel):
     action_type: Optional[str] = None
 
 
+class TicketReplyUpdate(BaseModel):
+    content: Optional[str] = None
+    action_type: Optional[str] = None
+    ticket_status: Optional[TicketStatus] = None
+
+
 class TicketReplyOut(BaseModel):
     id: str
     ticket_id: str

@@ -702,7 +702,7 @@ export default function WorkloadHeatmap() {
 
       {/* Modale Dettagli Giorno (Visualizzazione al click) */}
       {dayDetails && (
-        <div className="modal-overlay" onClick={() => setDayDetails(null)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
             <div className="modal-header">
               <h2>Impegni di {dayDetails.user} - {dayDetails.dateLabel}</h2>

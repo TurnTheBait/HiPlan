@@ -9,7 +9,6 @@ from app.models.base import Base, TimestampMixin, uuid_pk, uuid_fk
 class TicketStatus(str, enum.Enum):
     DA_GESTIRE = "Da gestire"
     IN_ATTESA = "In attesa del cliente"
-    IN_ELABORAZIONE = "In elaborazione"
     COMPLETATO = "Completato"
 
 

@@ -522,7 +522,7 @@ export default function CalendarPage() {
 
       {/* MODALE DETTAGLIO COMMESSA (cliccando su una commessa) */}
       {selectedProject && (
-        <div className="modal-overlay" onClick={() => setSelectedProject(null)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
             <div className="modal-header">
               <h2>Scheda Commessa</h2>
@@ -642,7 +642,7 @@ export default function CalendarPage() {
 
       {/* MODALE LISTA COMMESSE PER IL GIORNO (cliccando su + N altre) */}
       {selectedDayProjects && (
-        <div className="modal-overlay" onClick={() => setSelectedDayProjects(null)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
             <div className="modal-header">
               <h2>Commesse attive il {selectedDayProjects.dayNum} {MONTH_NAMES_IT[currMonth]} {currYear}</h2>
@@ -722,7 +722,7 @@ export default function CalendarPage() {
 
       {/* Edit Vacation Modal */}
       {editingVacation && (
-        <div className="modal-overlay" onClick={() => setEditingVacation(null)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h2>Modifica Ferie di {editingVacation.full_name || editingVacation.username}</h2>

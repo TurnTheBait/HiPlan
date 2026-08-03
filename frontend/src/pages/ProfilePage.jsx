@@ -302,7 +302,7 @@ export default function ProfilePage() {
       )}
 
       {showEditModal && (
-        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>👤 Modifica Profilo</h2>
