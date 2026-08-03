@@ -4,6 +4,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import AppIcon from '../components/ui/AppIcon';
+import AssigneeInput from '../components/ui/AssigneeInput';
 import './TodoPage.css';
 
 const BACKEND_URL = import.meta.env.VITE_API_URL
@@ -730,35 +731,16 @@ export default function TodoPage() {
                 <label className="todo-form-label">
                   <AppIcon name="users" size={13} />
                   Assegnati ({form.assignees.length})
-                  {form.assignees.length === 0 && (
-                    <span style={{ color: '#ef4444', fontWeight: 400, marginLeft: 6 }}>
-                      — Nessun assegnato
-                    </span>
-                  )}
                 </label>
-                <div className="todo-assignee-list">
-                  {sortedUsers.map(u => {
-                    const isSelected = form.assignees.includes(u.id);
-                    const isCurrentUser = u.id === user?.id;
-                    return (
-                      <div
-                        key={u.id}
-                        className={`todo-assignee-item ${isSelected ? 'selected' : ''}`}
-                        onClick={() => toggleAssignee(u.id)}
-                      >
-                        <div className="todo-assignee-avatar">
-                          {u.username?.[0]?.toUpperCase()}
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div className="todo-assignee-name">{u.full_name || u.username}</div>
-                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                            {isCurrentUser ? 'Tu' : u.username}
-                          </div>
-                        </div>
-                        {isSelected && <span className="todo-assignee-check">✓</span>}
-                      </div>
-                    );
-                  })}
+                <div style={{ marginTop: 8 }}>
+                  <AssigneeInput
+                    selected={form.assignees}
+                    onChange={(newAssignees) => setForm(f => ({ ...f, assignees: newAssignees }))}
+                    users={sortedUsers}
+                    valueKey="id"
+                    placeholder="Aggiungi addetto..."
+                    direction="up"
+                  />
                 </div>
               </div>
             </div>

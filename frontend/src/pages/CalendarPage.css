@@ -321,20 +321,26 @@
 }
 
 .calendar-more-pill {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
   font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--accent-500);
+  font-weight: 700;
+  color: var(--accent-600);
   background: var(--accent-glow);
-  padding: 3px 8px;
-  border-radius: 4px;
+  padding: 2px 6px;
+  border-radius: 12px;
   text-align: center;
   cursor: pointer;
   transition: all var(--transition-fast);
   flex-shrink: 0;
+  z-index: 2;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 .calendar-more-pill:hover {
   background: rgba(99, 102, 241, 0.2);
+  transform: scale(1.05);
 }
 
 /* Timeline / Orizzontale View */

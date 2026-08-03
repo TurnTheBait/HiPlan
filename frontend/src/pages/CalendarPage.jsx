@@ -478,7 +478,6 @@ export default function CalendarPage() {
                       {cell.projectsList.length > 1 && (
                         <div
                           className="calendar-more-pill"
-                          style={{ marginTop: 'auto', marginBottom: 2 }}
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedDayProjects({
@@ -487,8 +486,9 @@ export default function CalendarPage() {
                               list: cell.projectsList,
                             });
                           }}
+                          title={`Vedi altre ${cell.projectsList.length - 1} commesse`}
                         >
-                          + altre {cell.projectsList.length - 1} commesse...
+                          +{cell.projectsList.length - 1}
                         </div>
                       )}
                     </div>

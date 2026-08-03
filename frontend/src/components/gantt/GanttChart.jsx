@@ -431,8 +431,13 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       if (gantt.ext && gantt.ext.tooltips && gantt.ext.tooltips.tooltip) {
         gantt.ext.tooltips.tooltip.hide();
       }
-      const leftoverTooltips = document.querySelectorAll('.gantt_tooltip');
-      leftoverTooltips.forEach(t => t.remove());
+      const removeTooltips = () => {
+        const leftoverTooltips = document.querySelectorAll('.gantt_tooltip');
+        leftoverTooltips.forEach(t => t.remove());
+      };
+      removeTooltips();
+      setTimeout(removeTooltips, 100);
+      setTimeout(removeTooltips, 500);
     };
   }, []);
 

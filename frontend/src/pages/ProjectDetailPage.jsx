@@ -540,8 +540,8 @@ export default function ProjectDetailPage() {
   function openNewTaskModal() {
     fetchPhaseTemplates();
     const available = getAvailableTemplates();
-    const initialFase = available.length > 0 ? available[0].name : PREDEFINED_PHASES[0];
-    const initialColor = available.length > 0 ? (available[0].default_color || '#3b82f6') : (PHASE_DEFAULT_COLORS[PREDEFINED_PHASES[0]] || '#3b82f6');
+    const initialFase = '__custom__';
+    const initialColor = '#3b82f6';
 
     setEditingTask(null);
     setTaskModalTab('generale');

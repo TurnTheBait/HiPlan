@@ -246,6 +246,8 @@ export default function MainLayout() {
 
   useEffect(() => {
     setMobileOpen(false);
+    // Assicura che i tooltip di DHTMLX Gantt rimasti appesi vengano eliminati al cambio di pagina
+    document.querySelectorAll('.gantt_tooltip').forEach(t => t.remove());
   }, [location.pathname]);
 
   function toggleSidebar() {

@@ -78,6 +78,13 @@
   margin-top: 4px;
 }
 
+.assignee-dropdown.assignee-dropdown-up {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
 .assignee-option {
   padding: 8px 12px;
   font-size: 0.85rem;
@@ -92,4 +99,52 @@
 
 .assignee-option:hover {
   background: var(--bg-tertiary);
+}
+
+/* Beautiful Avatar Styles */
+.assignee-dropdown-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 0.84rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background var(--transition-fast);
+}
+
+.assignee-dropdown-item:hover {
+  background: var(--bg-hover);
+}
+
+.assignee-item-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-600), var(--accent-700));
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.assignee-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.assignee-item-name {
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.assignee-item-username {
+  font-size: 0.72rem;
+  color: var(--text-muted);
 }

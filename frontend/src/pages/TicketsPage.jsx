@@ -317,7 +317,7 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
               <label>Commessa</label>
               <SearchableCombobox
                 options={[
-                  { value: '', label: '— Nessuna —' },
+                  { value: '', label: '\u00A0' },
                   ...projects.filter(p => p.status !== 'archived').map(p => ({
                     value: p.id,
                     label: p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name)
@@ -454,7 +454,7 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
               <label>Commessa</label>
               <SearchableCombobox
                 options={[
-                  { value: '', label: '— Nessuna —' },
+                  { value: '', label: '\u00A0' },
                   ...projects.filter(p => p.status !== 'archived').map(p => ({
                     value: p.id,
                     label: p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name)

@@ -125,9 +125,9 @@ export default function SearchableCombobox({
         />
         <div
           onClick={() => setIsOpen(!isOpen)}
-          style={{ padding: '0 10px', cursor: 'pointer', color: 'var(--text-muted)' }}
+          style={{ padding: '0 10px', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
         >
-          {isOpen ? '▲' : '▼'}
+          <AppIcon name={isOpen ? 'chevronUp' : 'chevronDown'} size={20} />
         </div>
       </div>
 
