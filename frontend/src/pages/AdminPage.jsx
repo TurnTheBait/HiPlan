@@ -792,6 +792,102 @@ export default function AdminPage() {
         )}
       </div>
 
+      {/* SEZIONE IMPOSTAZIONI EMAIL TODO */}
+      <div className={`admin-section-card ${collapsedSections.todoEmail ? 'is-collapsed' : ''}`} style={{ marginTop: 32, marginBottom: 30 }}>
+        <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+          <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('todoEmail')}>
+            <h2><AppIcon name="mail" /> Configurazione Email TODO</h2>
+            <p className="admin-section-desc">Email di default per le notifiche automatiche dei TODO (notifica e promemoria scadenza).</p>
+          </div>
+          <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => toggleSection('todoEmail')}>
+            <AppIcon name={collapsedSections.todoEmail ? 'chevronDown' : 'chevronUp'} size={18} />
+          </div>
+        </div>
+
+        {!collapsedSections.todoEmail && (
+          <div style={{ padding: '20px 0' }}>
+            {/* Stato configurazione SMTP */}
+            {smtpSettings && (
+              <div style={{
+                marginBottom: 24,
+                padding: '16px 20px',
+                background: smtpSettings.smtp_host ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                border: `1px solid ${smtpSettings.smtp_host ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                borderRadius: 10,
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 14,
+              }}>
+                <div style={{
+                  width: 10, height: 10, borderRadius: '50%', marginTop: 4, flexShrink: 0,
+                  background: smtpSettings.smtp_host ? '#10b981' : '#ef4444',
+                  boxShadow: smtpSettings.smtp_host ? '0 0 6px #10b981' : '0 0 6px #ef4444',
+                }} />
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: smtpSettings.smtp_host ? '#10b981' : '#ef4444' }}>
+                    {smtpSettings.smtp_host ? 'SMTP configurato nel server' : 'SMTP non configurato'}
+                  </div>
+                  {smtpSettings.smtp_host ? (
+                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.6 }}>
+                      <span><strong>Host:</strong> {smtpSettings.smtp_host}:{smtpSettings.smtp_port}</span>
+                      <span style={{ margin: '0 12px' }}>|</span>
+                      <span><strong>Mittente:</strong> {smtpSettings.smtp_from || smtpSettings.smtp_user}</span>
+                      <span style={{ margin: '0 12px' }}>|</span>
+                      <span><strong>TLS:</strong> {smtpSettings.smtp_use_tls ? 'Sì' : 'No'}</span>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                      Configura le variabili <code>SMTP_HOST</code>, <code>SMTP_USER</code> e <code>SMTP_PASSWORD</code> nel file <code>backend/.env</code> per abilitare le notifiche email.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Form email di default */}
+            <form onSubmit={saveTodoEmailSettings}>
+              <div style={{ maxWidth: 580 }}>
+                <div className="input-group" style={{ marginBottom: 8 }}>
+                  <label style={{ fontWeight: 600, fontSize: '0.88rem', marginBottom: 6, display: 'block' }}>
+                    📬 Email di default per notifiche TODO
+                  </label>
+                  <input
+                    type="email"
+                    className="input"
+                    placeholder="es. info@azienda.it oppure lascia vuoto per disabilitare"
+                    value={todoEmailSettings.todo_notification_email}
+                    onChange={e => setTodoEmailSettings({ todo_notification_email: e.target.value })}
+                  />
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 6, display: 'block', lineHeight: 1.5 }}>
+                    Questa email riceverà automaticamente tutte le notifiche dei TODO (data di notifica e promemoria scadenza), in aggiunta agli assegnatari del TODO.
+                    Lascia vuoto per inviare le email solo agli assegnatari.
+                  </span>
+                </div>
+
+                <div style={{ marginTop: 16, padding: '12px 16px', background: 'var(--bg-tertiary)', borderRadius: 8, fontSize: '0.83rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  <strong>Come funzionano le notifiche email dei TODO:</strong>
+                  <ul style={{ marginTop: 6, paddingLeft: 18 }}>
+                    <li><strong>Notifica programmata:</strong> email inviata alla data e ora esatta impostata nel TODO</li>
+                    <li><strong>Promemoria scadenza:</strong> email inviata il giorno prima della scadenza, solo se il TODO non è ancora completato</li>
+                    <li>Entrambe le notifiche vengono inviate automaticamente agli addetti assegnati (usando la loro email profilo) + all'indirizzo qui configurato</li>
+                  </ul>
+                </div>
+
+                <div style={{ marginTop: 20 }}>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={savingEmailSettings}
+                  >
+                    {savingEmailSettings ? 'Salvataggio...' : 'Salva Impostazioni Email'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        )}
+      </div>
+
       {/* SEZIONE LOG EMAIL */}
 
       <div className={`admin-section-card ${collapsedSections.emails ? 'is-collapsed' : ''}`} style={{ marginTop: 32, marginBottom: 30 }}>
