@@ -949,14 +949,22 @@ export default function ProjectDetailPage() {
   function toggleWorkerSelection(w, requireConfirm = false) {
     const isSelected = taskForm.workers.includes(w);
     if (isSelected && requireConfirm && !window.confirm(`Confermi la rimozione dell'addetto "${w}" da questa fase?`)) return;
-    let newWorkers, newWorkerHours = { ...taskForm.worker_hours };
+    
+    let newWorkers;
     if (isSelected) {
       newWorkers = taskForm.workers.filter(x => x !== w);
-      delete newWorkerHours[w];
     } else {
       newWorkers = [...taskForm.workers, w];
-      newWorkerHours[w] = 8.0;
     }
+
+    const totalHours = Number(taskForm.planned_hours) || (Number(taskForm.duration_days) * 8.0) || 8.0;
+    const hoursPerWorker = newWorkers.length > 0 ? (totalHours / newWorkers.length) : 0;
+    
+    let newWorkerHours = {};
+    newWorkers.forEach(worker => {
+      newWorkerHours[worker] = parseFloat(hoursPerWorker.toFixed(1));
+    });
+
     setTaskForm({ ...taskForm, workers: newWorkers, worker_hours: newWorkerHours });
   }
 
@@ -2342,41 +2350,42 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
 
-                      {/* Reparto */}
-                      <div className="input-group" style={{ marginTop: 12 }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <AppIcon name="building" size={15} />
-                          Reparto
-                          {user?.role !== 'admin' && (
-                            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(assegnato automaticamente)</span>
-                          )}
-                        </label>
-                        {user?.role === 'admin' ? (
-                          <select
-                            className="input"
-                            value={taskForm.department || ''}
-                            onChange={(e) => setTaskForm({ ...taskForm, department: e.target.value || null })}
-                          >
-                            <option value="">— Nessun reparto —</option>
-                            {DEPT_OPTIONS.map(d => (
-                              <option key={d.value} value={d.value}>{d.label}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div style={{
-                            padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                            background: taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') + '18' : 'var(--bg-secondary)',
-                            color: taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') : 'var(--text-muted)',
-                            border: `1px solid ${taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') + '44' : 'var(--border-subtle)'}`,
-                            display: 'flex', alignItems: 'center', gap: 8
-                          }}>
-                            {taskForm.department ? DEPT_OPTIONS.find(d => d.value === taskForm.department)?.label || taskForm.department : '— Nessun reparto —'}
-                          </div>
-                        )}
-                      </div>
                     </div>
                   </>
                 )}
+
+                {/* Reparto */}
+                <div className="input-group" style={{ marginTop: 16 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <AppIcon name="building" size={15} />
+                    Reparto
+                    {user?.role !== 'admin' && taskForm.faseSel !== '__custom__' && (
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(assegnato automaticamente)</span>
+                    )}
+                  </label>
+                  {user?.role === 'admin' || taskForm.faseSel === '__custom__' ? (
+                    <select
+                      className="input"
+                      value={taskForm.department || ''}
+                      onChange={(e) => setTaskForm({ ...taskForm, department: e.target.value || null })}
+                    >
+                      <option value="">— Seleziona reparto —</option>
+                      {DEPT_OPTIONS.map(d => (
+                        <option key={d.value} value={d.value}>{d.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div style={{
+                      padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                      background: taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') + '18' : 'var(--bg-secondary)',
+                      color: taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') : 'var(--text-muted)',
+                      border: `1px solid ${taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') + '44' : 'var(--border-subtle)'}`,
+                      display: 'flex', alignItems: 'center', gap: 8
+                    }}>
+                      {taskForm.department ? DEPT_OPTIONS.find(d => d.value === taskForm.department)?.label || taskForm.department : '— Nessun reparto —'}
+                    </div>
+                  )}
+                </div>
 
                 <div className="input-group" style={{ marginTop: 16 }}>
                   <label>Addetti Assegnati (Multi-selezione)</label>

@@ -50,11 +50,11 @@ export default function AdminPage() {
   const [newPassword, setNewPassword] = useState('');
 
   const [collapsedSections, setCollapsedSections] = useState({
-    annunci: false,
-    users: false,
-    templates: false,
-    ticketPhases: false,
-    emails: false
+    annunci: true,
+    users: true,
+    templates: true,
+    ticketPhases: true,
+    emails: true
   });
 
   const toggleSection = (section) => {

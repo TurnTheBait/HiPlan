@@ -36,7 +36,7 @@ export const PRIORITY_FALLBACK_COLORS = {
 
 export function getTaskColor(task) {
   if (!task) return '#3b82f6';
-  const name = task.text || task.faseSel;
+  const name = task.text || task.faseSel || task.name;
   // Se la fase ha un colore predefinito diverso dal verde completato, preferisci quello se il colore attuale è nullo o verde completato
   if (name && PHASE_DEFAULT_COLORS[name] && name !== 'Approvazione cliente') {
     if (!task.color || task.color === '#10b981') {

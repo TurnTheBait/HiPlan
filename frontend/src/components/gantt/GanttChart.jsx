@@ -740,7 +740,8 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     drawCustomMarkers();
 
     try {
-      const pos = gantt.posFromDate(new Date(minDate.getTime() - 7 * 86400000));
+      // Centra il gantt sul giorno di oggi (meno 3 giorni per avere un po' di margine a sinistra)
+      const pos = gantt.posFromDate(new Date(Date.now() - 3 * 86400000));
       if (typeof pos === 'number' && !isNaN(pos)) {
         gantt.scrollTo(Math.max(0, pos), null);
       }

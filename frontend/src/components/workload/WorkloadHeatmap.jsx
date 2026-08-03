@@ -4,19 +4,20 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import './WorkloadHeatmap.css';
 import { isWeekendOrHoliday } from '../../utils/workingDays';
+import { useNavigate } from 'react-router-dom';
 import useDragScroll from '../../hooks/useDragScroll';
 import AppIcon from '../ui/AppIcon';
+import { getTaskColor } from '../../utils/phaseColors';
 
 export default function WorkloadHeatmap() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [heatmapData, setHeatmapData] = useState({});
   const [loading, setLoading] = useState(true);
+  const [leftColWidth, setLeftColWidth] = useState(200);
   const [expandedUsers, setExpandedUsers] = useState({});
   const [viewMode, setViewMode] = useState('day');
-  const [adminVacationUser, setAdminVacationUser] = useState(null);
-  const [vacationForm, setVacationForm] = useState({ start_date: '', end_date: '', reason: '' });
-  const [submittingVacation, setSubmittingVacation] = useState(false);
-  
+  const [dayDetails, setDayDetails] = useState(null);
   const toast = useToast();
   const gridRef = React.useRef(null);
   useDragScroll(gridRef, [loading]);
@@ -32,29 +33,6 @@ export default function WorkloadHeatmap() {
       console.error(err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleAdminAddVacation = async (e) => {
-    e.preventDefault();
-    if (!vacationForm.start_date || !vacationForm.end_date) {
-      toast.error('Seleziona la data di inizio e di fine.');
-      return;
-    }
-    setSubmittingVacation(true);
-    try {
-      const res = await api.post(`/vacations/admin/user/${adminVacationUser.id}`, vacationForm);
-      toast.success('Ferie aggiunte con successo.');
-      if (res.data.recovery_items?.length > 0) {
-        toast.warning(`⚠️ ${res.data.recovery_items.length} fase/i con ore da recuperare rilevate.`);
-      }
-      setAdminVacationUser(null);
-      setVacationForm({ start_date: '', end_date: '', reason: '' });
-      fetchWorkload();
-    } catch (err) {
-      toast.error('Errore durante l\'inserimento delle ferie.');
-    } finally {
-      setSubmittingVacation(false);
     }
   };
 
@@ -76,24 +54,29 @@ export default function WorkloadHeatmap() {
     maxDateStr = sorted[sorted.length - 1];
   }
 
+  const today = new Date();
   if (!minDateStr || !maxDateStr) {
-    const today = new Date();
-    const fiveDaysLater = new Date(today);
-    fiveDaysLater.setDate(fiveDaysLater.getDate() + 7);
     minDateStr = today.toISOString().substring(0, 10);
-    maxDateStr = fiveDaysLater.toISOString().substring(0, 10);
+    maxDateStr = today.toISOString().substring(0, 10);
   }
 
-  // Only generate all-day grid in 'day' view
+  // Estendiamo il range per simulare lo scorrimento "infinito"
+  const minDate = new Date(minDateStr);
+  const maxDate = new Date(maxDateStr);
+  const padPast = new Date(today.getTime() - 730 * 86400000); // 2 anni prima
+  const padFuture = new Date(today.getTime() + 1825 * 86400000); // 5 anni dopo
+
+  if (padPast < minDate) minDateStr = padPast.toISOString().substring(0, 10);
+  if (padFuture > maxDate) maxDateStr = padFuture.toISOString().substring(0, 10);
+
+  // Riempiamo tutti i giorni nel range in modo che la tabella mostri anche i periodi vuoti
   const fullDatesSet = new Set(allWorkDates);
-  if (viewMode === 'day' && minDateStr && maxDateStr) {
-    const start = new Date(minDateStr);
-    const end = new Date(maxDateStr);
-    const cur = new Date(start);
-    while (cur <= end) {
-      fullDatesSet.add(cur.toISOString().substring(0, 10));
-      cur.setDate(cur.getDate() + 1);
-    }
+  const start = new Date(minDateStr);
+  const end = new Date(maxDateStr);
+  const cur = new Date(start);
+  while (cur <= end) {
+    fullDatesSet.add(cur.toISOString().substring(0, 10));
+    cur.setDate(cur.getDate() + 1);
   }
 
   const sortedDates = Array.from(fullDatesSet).sort();
@@ -187,7 +170,7 @@ export default function WorkloadHeatmap() {
     return d + '/' + m + '/' + y;
   };
 
-  if (loading) return <div>Caricamento mappa di calore...</div>;
+  if (loading) return <div>Caricamento heatmap...</div>;
 
   return (
     <div className="workload-heatmap-container">
@@ -199,8 +182,8 @@ export default function WorkloadHeatmap() {
           </span>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button 
-            className="btn btn-secondary btn-sm" 
+          <button
+            className="btn btn-secondary btn-sm"
             onClick={scrollToToday}
             title="Centra la tabella sulla data di oggi"
             style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
@@ -208,9 +191,9 @@ export default function WorkloadHeatmap() {
             <AppIcon name="calendar" size={15} />
             Oggi
           </button>
-          <select 
-            className="input" 
-            value={viewMode} 
+          <select
+            className="input"
+            value={viewMode}
             onChange={(e) => setViewMode(e.target.value)}
             style={{ width: 150 }}
           >
@@ -219,12 +202,43 @@ export default function WorkloadHeatmap() {
             <option value="month">Per Mese</option>
           </select>
         </div>
-      </div> {/* <-- CORRETTO: Chiusura del div flexbox header che mancava */}
+      </div>
 
-      <div className="heatmap-grid" ref={gridRef} style={{ gridTemplateColumns: '200px repeat(' + columns.length + ', 90px)' }}>
+      <div className="heatmap-grid" ref={gridRef} style={{ gridTemplateColumns: `${leftColWidth}px repeat(` + columns.length + ', 90px)' }}>
 
         {/* Header (Columns) */}
-        <div className="heatmap-header-cell sticky-col sticky-header-col">Addetto</div>
+        <div className="heatmap-header-cell sticky-col sticky-header-col" style={{ position: 'relative' }}>
+          Addetto
+          <div
+            style={{
+              position: 'absolute',
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: '8px',
+              cursor: 'col-resize',
+              zIndex: 10
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const startX = e.clientX;
+              const startWidth = leftColWidth;
+
+              const handleMouseMove = (moveEvent) => {
+                const newWidth = Math.max(100, Math.min(500, startWidth + moveEvent.clientX - startX));
+                setLeftColWidth(newWidth);
+              };
+
+              const handleMouseUp = () => {
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+              };
+
+              document.addEventListener('mousemove', handleMouseMove);
+              document.addEventListener('mouseup', handleMouseUp);
+            }}
+          />
+        </div>
         {columns.map(colKey => {
           const isWeekendCol = isColumnWeekend(colKey);
           const isTodayCol = colKey === todayKey;
@@ -234,8 +248,8 @@ export default function WorkloadHeatmap() {
           if (isTodayCol) titleParts.push('Oggi');
           const titleText = colDateStr + (titleParts.length > 0 ? ' - ' + titleParts.join(', ') : '');
           return (
-            <div 
-              key={colKey} 
+            <div
+              key={colKey}
               data-colkey={colKey}
               className={'heatmap-header-cell' + (isTodayCol ? ' today-header' : '') + (isWeekendCol ? ' weekend-header' : '')}
               title={titleText}
@@ -301,34 +315,19 @@ export default function WorkloadHeatmap() {
                   <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {userData.full_name}{isCurrentUser ? ' (tu)' : ''}
                   </span>
-                  {(user?.role === 'admin' || user?.role === 'editor') && (
-                    <button
-                      className="btn btn-secondary"
-                      style={{ padding: '2px 4px', fontSize: '0.65rem', minWidth: 'auto', background: 'var(--bg-secondary)', border: '1px solid var(--border-default)' }}
-                      title={`Inserisci ferie per ${userData.full_name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAdminVacationUser({ id: userId, name: userData.full_name });
-                      }}
-                    >
-                      ✈️ +
-                    </button>
-                  )}
                 </div>
               </div>
 
               {/* Cella Saturazione */}
               {columns.map(colKey => {
                 const data = aggregatedWorkload[colKey];
-                
-                // <-- CORRETTO: Dichiarate e calcolate le variabili mancanti
                 const isVacation = isUserOnVacation(userId, colKey);
                 const isWeekendCol = isColumnWeekend(colKey);
                 let colorClass = '';
-                
+
                 if (!isVacation && !isWeekendCol && data.hours > 0) {
                   if (data.hours > currentCapacity) {
-                    colorClass = 'over-capacity'; // Assumo tu abbia queste classi nel CSS
+                    colorClass = 'over-capacity';
                   } else if (data.hours === currentCapacity) {
                     colorClass = 'at-capacity';
                   } else {
@@ -337,7 +336,7 @@ export default function WorkloadHeatmap() {
                 }
 
                 let tooltipText = '';
-                
+
                 if (isVacation) {
                   tooltipText = 'Ferie (' + formatDateStr(colKey) + ')';
                 } else if (isWeekendCol) {
@@ -358,99 +357,383 @@ export default function WorkloadHeatmap() {
                 }
 
                 return (
-                  <div 
-                    key={colKey} 
+                  <div
+                    key={colKey}
                     className={'heatmap-cell ' + colorClass + (colKey === todayKey ? ' today-cell' : '') + (isWeekendCol ? ' heatmap-weekend' : '')}
                     title={tooltipText}
+                    onClick={() => {
+                      if (!isVacation && data.tasks.length > 0) {
+                        setDayDetails({
+                          user: userData.full_name,
+                          date: colKey,
+                          dateLabel: formatDateStr(colKey),
+                          tasks: data.tasks,
+                          hours: data.hours
+                        });
+                      }
+                    }}
+                    style={{ cursor: (!isVacation && data.tasks.length > 0) ? 'pointer' : 'default' }}
                   >
                     {displayContent}
                   </div>
                 );
               })}
 
-              {/* Dettagli tasks se espanso */}
-              {expandedUsers[userId] && (
-                <div style={{ gridColumn: '1 / span ' + (columns.length + 1), padding: '12px 20px', background: 'var(--bg-tertiary)', borderTop: '1px solid var(--border-default)', borderBottom: '1px solid var(--border-default)' }}>
-                  <h5 style={{ margin: '0 0 10px 0', color: 'var(--text-primary)' }}>
-                    Panoramica Fasi e Progetti assegnati a <strong>{userData.full_name}</strong>:
-                  </h5>
-                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                    {columns.map(colKey => {
-                       const tasks = aggregatedWorkload[colKey].tasks;
-                       if (tasks.length === 0) return null;
-                       return tasks.map((t, idx) => (
-                         <div key={colKey + '-' + idx} style={{ padding: '8px 12px', background: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-default)', fontSize: '0.82rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                           <div style={{ color: 'var(--accent-500)', fontWeight: 700, marginBottom: 2 }}>
-                             📁 {t.project_name || 'Progetto non specificato'}
-                           </div>
-                           <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                             📌 {t.name}
-                           </div>
-                           <div style={{ marginTop: 4, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                             <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{t.hours?.toFixed(1) || 0}h/giorno</span> ({columnsMap.get(colKey)}) • Totale fase: {t.total_assigned_hours ? t.total_assigned_hours.toFixed(1) + 'h' : '-'}
-                           </div>
-                         </div>
-                       ));
-                    })}
-                  </div>
-                </div>
-              )}
+              {/* Dettagli tasks se espanso (Timeline Nidificata) */}
+              {expandedUsers[userId] && (() => {
+                const uniqueTasks = {};
+                Object.values(userData.workload).forEach(day => {
+                  if (day.tasks) {
+                    day.tasks.forEach(t => {
+                      if (!uniqueTasks[t.id]) uniqueTasks[t.id] = t;
+                    });
+                  }
+                });
+
+                const taskRows = Object.values(uniqueTasks).map(task => (
+                  <React.Fragment key={task.id}>
+                    {/* Header del task (Colonna 1) */}
+                    <div
+                      className="heatmap-cell sticky-col"
+                      style={{
+                        gridColumn: 1,
+                        paddingLeft: '32px',
+                        fontSize: '0.8rem',
+                        textAlign: 'left',
+                        justifyContent: 'flex-start',
+                        background: 'var(--bg-tertiary)',
+                        borderBottom: '1px solid var(--border-subtle)',
+                        borderRight: '1px solid var(--border-default)',
+                        zIndex: 20,
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => navigate(`/projects/${task.project_id}`)}
+                    >
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={task.name}>
+                        {task.name}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={task.project_name}>
+                        📁 {task.project_name}
+                      </div>
+                    </div>
+
+                    {/* Timeline per il task corrente (Celle sfondo grid + barra) */}
+                    {(() => {
+                      const activeCols = columns.map(colKey => {
+                        if (viewMode === 'day') {
+                          return colKey >= task.start_date && colKey <= task.end_date;
+                        } else if (viewMode === 'week') {
+                          const weekStart = colKey;
+                          const weekEndObj = new Date(colKey);
+                          weekEndObj.setDate(weekEndObj.getDate() + 6);
+                          const weekEnd = weekEndObj.toISOString().substring(0, 10);
+                          return task.start_date <= weekEnd && task.end_date >= weekStart;
+                        } else if (viewMode === 'month') {
+                          const monthStart = colKey + '-01';
+                          const monthEndObj = new Date(monthStart);
+                          monthEndObj.setMonth(monthEndObj.getMonth() + 1);
+                          monthEndObj.setDate(0);
+                          const monthEnd = monthEndObj.toISOString().substring(0, 10);
+                          return task.start_date <= monthEnd && task.end_date >= monthStart;
+                        }
+                        return false;
+                      });
+
+                      const startIdx = activeCols.findIndex(v => v);
+                      const lastIdx = activeCols.findLastIndex(v => v);
+
+                      let startOffsetPx = 4;
+                      let endOffsetPx = 4;
+                      const COL_WIDTH = 90;
+
+                      if (startIdx !== -1 && lastIdx !== -1) {
+                        const taskStart = new Date(task.start_date);
+                        const taskEnd = new Date(task.end_date);
+                        taskStart.setHours(0, 0, 0, 0);
+                        taskEnd.setHours(0, 0, 0, 0);
+
+                        if (viewMode === 'week') {
+                          const weekStartStr = columns[startIdx];
+                          const weekStart = new Date(weekStartStr);
+                          weekStart.setHours(0, 0, 0, 0);
+                          if (taskStart > weekStart) {
+                            const diffDays = Math.round((taskStart - weekStart) / (1000 * 60 * 60 * 24));
+                            startOffsetPx = (diffDays / 7) * COL_WIDTH;
+                          }
+
+                          const weekEndStr = columns[lastIdx];
+                          const weekEndObj = new Date(weekEndStr);
+                          weekEndObj.setHours(0, 0, 0, 0);
+                          weekEndObj.setDate(weekEndObj.getDate() + 6);
+                          if (taskEnd < weekEndObj) {
+                            const diffDays = Math.round((weekEndObj - taskEnd) / (1000 * 60 * 60 * 24));
+                            endOffsetPx = (diffDays / 7) * COL_WIDTH;
+                          }
+                        } else if (viewMode === 'month') {
+                          const monthStartStr = columns[startIdx] + '-01';
+                          const monthStart = new Date(monthStartStr);
+                          monthStart.setHours(0, 0, 0, 0);
+                          const daysInStartMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+                          if (taskStart > monthStart) {
+                            const diffDays = Math.round((taskStart - monthStart) / (1000 * 60 * 60 * 24));
+                            startOffsetPx = (diffDays / daysInStartMonth) * COL_WIDTH;
+                          }
+
+                          const monthEndStr = columns[lastIdx] + '-01';
+                          const monthEndObj = new Date(monthEndStr);
+                          monthEndObj.setHours(0, 0, 0, 0);
+                          const daysInEndMonth = new Date(monthEndObj.getFullYear(), monthEndObj.getMonth() + 1, 0).getDate();
+                          monthEndObj.setDate(daysInEndMonth);
+                          if (taskEnd < monthEndObj) {
+                            const diffDays = Math.round((monthEndObj - taskEnd) / (1000 * 60 * 60 * 24));
+                            endOffsetPx = (diffDays / daysInEndMonth) * COL_WIDTH;
+                          }
+                        }
+                      }
+
+                      let barWidth = ((lastIdx - startIdx + 1) * COL_WIDTH) - startOffsetPx - endOffsetPx;
+                      if (viewMode === 'day') barWidth = ((lastIdx - startIdx + 1) * COL_WIDTH) - 8;
+                      if (barWidth < 10) barWidth = 10;
+
+                      return columns.map((colKey, idx) => {
+                        const isStart = idx === startIdx;
+
+                        return (
+                          <div
+                            key={`bg-${colKey}`}
+                            className={'heatmap-cell' + (colKey === todayKey ? ' today-cell' : '') + (isColumnWeekend(colKey) ? ' heatmap-weekend' : '')}
+                            style={{
+                              borderBottom: '1px solid var(--border-subtle)',
+                              position: isStart ? 'relative' : undefined,
+                              zIndex: isStart ? 10 : undefined,
+                              overflow: isStart ? 'visible' : undefined
+                            }}
+                          >
+                            {isStart && (
+                              <div style={{
+                                position: 'absolute',
+                                left: viewMode === 'day' ? '4px' : `${startOffsetPx}px`,
+                                width: `${barWidth}px`,
+                                top: '8px',
+                                bottom: '8px',
+                                backgroundColor: getTaskColor(task),
+                                borderRadius: '4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                padding: '0 8px',
+                                color: '#fff',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                                zIndex: 11,
+                                cursor: 'pointer'
+                              }}
+                                title={`${task.name} (${task.start_date} → ${task.end_date})`}
+                                onClick={() => navigate(`/projects/${task.project_id}`)}
+                              >
+                                {task.name}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </React.Fragment>
+                ));
+
+                const vacationRow = userData.vacations && userData.vacations.length > 0 ? (
+                  <React.Fragment key="vacation-row">
+                    <div
+                      className="heatmap-cell sticky-col"
+                      style={{
+                        gridColumn: 1,
+                        paddingLeft: '32px',
+                        fontSize: '0.8rem',
+                        textAlign: 'left',
+                        justifyContent: 'flex-start',
+                        background: 'var(--bg-tertiary)',
+                        borderBottom: '1px solid var(--border-subtle)',
+                        borderRight: '1px solid var(--border-default)',
+                        zIndex: 20
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title="Ferie">
+                        Ferie
+                      </div>
+                    </div>
+                    {(() => {
+                      const vacationRanges = userData.vacations.map(vacation => {
+                        const activeCols = columns.map(colKey => {
+                          if (viewMode === 'day') {
+                            return colKey >= vacation.start_date && colKey <= vacation.end_date;
+                          } else if (viewMode === 'week') {
+                            const weekStart = colKey;
+                            const weekEndObj = new Date(colKey);
+                            weekEndObj.setDate(weekEndObj.getDate() + 6);
+                            const weekEnd = weekEndObj.toISOString().substring(0, 10);
+                            return vacation.start_date <= weekEnd && vacation.end_date >= weekStart;
+                          } else if (viewMode === 'month') {
+                            const monthStart = colKey + '-01';
+                            const monthEndObj = new Date(monthStart);
+                            monthEndObj.setMonth(monthEndObj.getMonth() + 1);
+                            monthEndObj.setDate(0);
+                            const monthEnd = monthEndObj.toISOString().substring(0, 10);
+                            return vacation.start_date <= monthEnd && vacation.end_date >= monthStart;
+                          }
+                          return false;
+                        });
+                        const startIdx = activeCols.findIndex(v => v);
+                        const lastIdx = activeCols.findLastIndex(v => v);
+
+                        let startOffsetPx = 4;
+                        let endOffsetPx = 4;
+                        const COL_WIDTH = 90;
+
+                        if (startIdx !== -1 && lastIdx !== -1) {
+                          const vStart = new Date(vacation.start_date);
+                          const vEnd = new Date(vacation.end_date);
+                          vStart.setHours(0, 0, 0, 0);
+                          vEnd.setHours(0, 0, 0, 0);
+
+                          if (viewMode === 'week') {
+                            const weekStartStr = columns[startIdx];
+                            const weekStart = new Date(weekStartStr);
+                            weekStart.setHours(0, 0, 0, 0);
+                            if (vStart > weekStart) {
+                              const diffDays = Math.round((vStart - weekStart) / (1000 * 60 * 60 * 24));
+                              startOffsetPx = (diffDays / 7) * COL_WIDTH;
+                            }
+                            const weekEndStr = columns[lastIdx];
+                            const weekEndObj = new Date(weekEndStr);
+                            weekEndObj.setHours(0, 0, 0, 0);
+                            weekEndObj.setDate(weekEndObj.getDate() + 6);
+                            if (vEnd < weekEndObj) {
+                              const diffDays = Math.round((weekEndObj - vEnd) / (1000 * 60 * 60 * 24));
+                              endOffsetPx = (diffDays / 7) * COL_WIDTH;
+                            }
+                          } else if (viewMode === 'month') {
+                            const monthStartStr = columns[startIdx] + '-01';
+                            const monthStart = new Date(monthStartStr);
+                            monthStart.setHours(0, 0, 0, 0);
+                            const daysInStartMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+                            if (vStart > monthStart) {
+                              const diffDays = Math.round((vStart - monthStart) / (1000 * 60 * 60 * 24));
+                              startOffsetPx = (diffDays / daysInStartMonth) * COL_WIDTH;
+                            }
+                            const monthEndStr = columns[lastIdx] + '-01';
+                            const monthEndObj = new Date(monthEndStr);
+                            monthEndObj.setHours(0, 0, 0, 0);
+                            const daysInEndMonth = new Date(monthEndObj.getFullYear(), monthEndObj.getMonth() + 1, 0).getDate();
+                            monthEndObj.setDate(daysInEndMonth);
+                            if (vEnd < monthEndObj) {
+                              const diffDays = Math.round((monthEndObj - vEnd) / (1000 * 60 * 60 * 24));
+                              endOffsetPx = (diffDays / daysInEndMonth) * COL_WIDTH;
+                            }
+                          }
+                        }
+
+                        let barWidth = ((lastIdx - startIdx + 1) * COL_WIDTH) - startOffsetPx - endOffsetPx;
+                        if (viewMode === 'day') barWidth = ((lastIdx - startIdx + 1) * COL_WIDTH) - 8;
+                        if (barWidth < 10) barWidth = 10;
+
+                        return { vacation, startIdx, lastIdx, startOffsetPx, barWidth };
+                      }).filter(v => v.startIdx !== -1);
+
+                      return columns.map((colKey, idx) => {
+                        const startingVacations = vacationRanges.filter(v => v.startIdx === idx);
+                        return (
+                          <div
+                            key={`bg-vac-${colKey}`}
+                            className={'heatmap-cell' + (colKey === todayKey ? ' today-cell' : '') + (isColumnWeekend(colKey) ? ' heatmap-weekend' : '')}
+                            style={{
+                              borderBottom: '1px solid var(--border-subtle)',
+                              position: startingVacations.length > 0 ? 'relative' : undefined,
+                              zIndex: startingVacations.length > 0 ? 10 : undefined,
+                              overflow: startingVacations.length > 0 ? 'visible' : undefined
+                            }}
+                          >
+                            {startingVacations.map((v, vIdx) => (
+                              <div key={vIdx} style={{
+                                position: 'absolute',
+                                left: viewMode === 'day' ? '4px' : `${v.startOffsetPx}px`,
+                                width: `${v.barWidth}px`,
+                                top: '8px',
+                                bottom: '8px',
+                                backgroundColor: '#f59e0b',
+                                borderRadius: '4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                padding: '0 8px',
+                                color: '#fff',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                                zIndex: 11
+                              }}
+                                title={`${v.vacation.reason || 'Ferie'} (${v.vacation.start_date} → ${v.vacation.end_date})`}
+                              >
+                                {v.vacation.reason || 'Ferie'}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </React.Fragment>
+                ) : null;
+
+                return (
+                  <React.Fragment key="user-details">
+                    {vacationRow}
+                    {taskRows}
+                  </React.Fragment>
+                );
+              })()}
             </React.Fragment>
           );
         })}
-      </div> {/* <-- CORRETTO: Aggiunta la chiusura della div heatmap-grid */}
+      </div>
 
-      {/* Modale Inserimento Ferie da parte dell'Admin/Editor */}
-      {adminVacationUser && (
-        <div className="modal-overlay" onClick={() => setAdminVacationUser(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+      {/* Modale Dettagli Giorno (Visualizzazione al click) */}
+      {dayDetails && (
+        <div className="modal-overlay" onClick={() => setDayDetails(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
             <div className="modal-header">
-              <h2>Inserisci Ferie per {adminVacationUser.name}</h2>
-              <button className="btn-ghost btn-icon" onClick={() => setAdminVacationUser(null)}>
+              <h2>Impegni di {dayDetails.user} - {dayDetails.dateLabel}</h2>
+              <button className="btn-ghost btn-icon" onClick={() => setDayDetails(null)}>
                 <AppIcon name="close" />
               </button>
             </div>
             <div className="modal-content">
-              <form onSubmit={handleAdminAddVacation} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                <div className="form-group">
-                  <label>Dal giorno</label>
-                  <input
-                    type="date"
-                    className="input"
-                    value={vacationForm.start_date}
-                    onChange={(e) => setVacationForm({ ...vacationForm, start_date: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Al giorno (compreso)</label>
-                  <input
-                    type="date"
-                    className="input"
-                    value={vacationForm.end_date}
-                    onChange={(e) => setVacationForm({ ...vacationForm, end_date: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Motivo (opzionale)</label>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="Es. Ferie estive, Rol, Malattia..."
-                    value={vacationForm.reason}
-                    onChange={(e) => setVacationForm({ ...vacationForm, reason: e.target.value })}
-                  />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => setAdminVacationUser(null)}>
-                    Annulla
-                  </button>
-                  <button type="submit" className="btn btn-primary" disabled={submittingVacation}>
-                    {submittingVacation ? 'Salvataggio...' : 'Conferma Inserimento'}
-                  </button>
-                </div>
-              </form>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                Ore previste per questo giorno: <strong>{dayDetails.hours.toFixed(1)}h</strong>
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {dayDetails.tasks.map((t, idx) => (
+                  <div key={idx} style={{ padding: '12px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-default)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                    <div style={{ color: 'var(--accent-500)', fontWeight: 700, marginBottom: 4 }}>
+                      📁 {t.project_name || 'Progetto non specificato'}
+                    </div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '1rem' }}>
+                      📌 {t.name}
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                      Assegnate: <strong style={{ color: 'var(--text-primary)' }}>{t.hours?.toFixed(1) || 0}h</strong> oggi su <strong style={{ color: 'var(--text-primary)' }}>{t.total_assigned_hours ? t.total_assigned_hours.toFixed(1) + 'h' : '-'}</strong> totali per questo addetto.
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setDayDetails(null)}>
+                  Chiudi
+                </button>
+              </div>
             </div>
           </div>
         </div>

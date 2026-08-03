@@ -30,6 +30,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
   const today = new Date();
   const todayKey = toLocalDateKey(today);
   const [expandedProjects, setExpandedProjects] = useState({});
+  const [vacationsExpanded, setVacationsExpanded] = useState(false);
   const scrollRef = useDragScroll();
 
   const { daysList, monthLabels } = useMemo(() => {
@@ -44,7 +45,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       list.push(new Date(d));
       const mStr = new Intl.DateTimeFormat('it-IT', { month: 'long', year: 'numeric' }).format(d);
-      
+
       if (mStr !== currentMonthStr) {
         if (currentMonthStr) {
           labels.push({ label: currentMonthStr, days: daysInCurrentMonth });
@@ -58,7 +59,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
     if (currentMonthStr) {
       labels.push({ label: currentMonthStr, days: daysInCurrentMonth });
     }
-    
+
     return { daysList: list, monthLabels: labels };
   }, [currYear, currMonth]);
 
@@ -117,7 +118,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
           </div>
         </div>
       </div>
-      
+
       {(() => {
         const visibleVacations = vacations.filter(v => {
           if (filterWorker && filterWorker !== 'all' && v.username !== filterWorker) return false;
@@ -125,54 +126,118 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
           const vEnd = v.end_date?.substring(0, 10) || '';
           return vEnd >= rangeStartStr && vStart <= rangeEndStr;
         });
-        if (visibleVacations.length === 0) return null;
-        return visibleVacations.map(v => {
-          const vStart = v.start_date?.substring(0, 10) || rangeStartStr;
-          const vEnd = v.end_date?.substring(0, 10) || vStart;
-          
-          let startIdx = getDayIndex(vStart);
-          let endIdx = getDayIndex(vEnd);
-          if (startIdx < 0) startIdx = 0;
-          if (endIdx >= daysList.length) endIdx = daysList.length - 1;
-          const spanDays = Math.max(1, endIdx - startIdx + 1);
-          
-          return (
-            <div 
-              key={v.id || `vac-${vStart}-${vEnd}`} 
-              className="timeline-project-row"
-              onDoubleClick={(e) => {
-                e.stopPropagation();
-                if (onDoubleClickVacation) {
-                  onDoubleClickVacation(v);
-                }
-              }}
-              style={{ cursor: onDoubleClickVacation ? 'pointer' : 'default' }}
-            >
-              <div className="timeline-project-info timeline-vacation-info">
-                <span className="timeline-proj-title timeline-vacation-title">
-                  🏖️ Ferie: {v.username}
+        const groupedVacations = {};
+        visibleVacations.forEach(v => {
+          if (!groupedVacations[v.username]) groupedVacations[v.username] = [];
+          groupedVacations[v.username].push(v);
+        });
+
+        if (Object.keys(groupedVacations).length === 0) return null;
+
+        const totalWorkers = Object.keys(groupedVacations).length;
+        const totalPeriods = visibleVacations.length;
+
+        return (
+          <React.Fragment key="vacation-group-all">
+            {/* Riga genitore riassuntiva */}
+            <div className="timeline-project-row" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+              <div className="timeline-project-info timeline-vacation-info" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <span className="timeline-proj-title timeline-vacation-title" style={{ fontWeight: 'bold' }}>
+                  🏖️ Panoramica Ferie
                 </span>
                 <span className="timeline-proj-meta">
-                  {v.reason || ''}
+                  {totalWorkers} addetti • {totalPeriods} periodi
                 </span>
+                <button
+                  className="timeline-phase-toggle"
+                  style={{ position: 'absolute', right: 10, bottom: 10, padding: '2px 8px', fontSize: '0.65rem' }}
+                  onClick={() => setVacationsExpanded(!vacationsExpanded)}
+                >
+                  {vacationsExpanded ? 'v' : '>'} Addetti ({totalWorkers})
+                </button>
               </div>
-              
               <div className="timeline-row-grid">
                 {renderGrid()}
-                <div
-                  className="timeline-bar timeline-vacation-bar"
-                  style={{
-                    left: `${startIdx * TIMELINE_DAY_WIDTH + 3}px`,
-                    width: `${spanDays * TIMELINE_DAY_WIDTH - 6}px`,
-                  }}
-                  title={`Ferie: ${vStart} → ${vEnd}${v.reason ? ` (${v.reason})` : ''}`}
-                >
-                  🏖️ Ferie {vStart === vEnd ? vStart : `${vStart.substring(8,10)}/${vStart.substring(5,7)} → ${vEnd.substring(8,10)}/${vEnd.substring(5,7)}`}
-                </div>
+                {/* Mostriamo tutte le barre sovrapposte nella riga genitore in modo leggero, se si vuole */}
+                {!vacationsExpanded && visibleVacations.map(v => {
+                  const vStart = v.start_date?.substring(0, 10) || rangeStartStr;
+                  const vEnd = v.end_date?.substring(0, 10) || vStart;
+                  let startIdx = getDayIndex(vStart);
+                  let endIdx = getDayIndex(vEnd);
+                  if (startIdx < 0) startIdx = 0;
+                  if (endIdx >= daysList.length) endIdx = daysList.length - 1;
+                  const spanDays = Math.max(1, endIdx - startIdx + 1);
+                  return (
+                    <div
+                      key={`parent-vac-${v.id || vStart + vEnd}`}
+                      className="timeline-bar timeline-vacation-bar"
+                      style={{
+                        left: `${startIdx * TIMELINE_DAY_WIDTH + 3}px`,
+                        width: `${spanDays * TIMELINE_DAY_WIDTH - 6}px`,
+                        position: 'absolute',
+                        opacity: 0.5,
+                        zIndex: 1
+                      }}
+                      title={`Ferie: ${v.username} (${vStart} → ${vEnd})`}
+                    />
+                  );
+                })}
               </div>
             </div>
-          );
-        });
+
+            {/* Righe per singolo addetto */}
+            {vacationsExpanded && Object.entries(groupedVacations).map(([username, userVacations]) => {
+              return (
+                <div key={`vac-group-${username}`} className="timeline-project-row" style={{ backgroundColor: 'var(--bg-card)', borderTop: '1px dashed var(--border-subtle)' }}>
+                  <div className="timeline-project-info timeline-vacation-info" style={{ paddingLeft: '24px' }}>
+                    <span className="timeline-proj-title timeline-vacation-title">
+                      🏖️ {username}
+                    </span>
+                    <span className="timeline-proj-meta">
+                      {userVacations.length > 1 ? `${userVacations.length} periodi registrati` : (userVacations[0].reason || '')}
+                    </span>
+                  </div>
+
+                  <div className="timeline-row-grid">
+                    {renderGrid()}
+                    {userVacations.map(v => {
+                      const vStart = v.start_date?.substring(0, 10) || rangeStartStr;
+                      const vEnd = v.end_date?.substring(0, 10) || vStart;
+
+                      let startIdx = getDayIndex(vStart);
+                      let endIdx = getDayIndex(vEnd);
+                      if (startIdx < 0) startIdx = 0;
+                      if (endIdx >= daysList.length) endIdx = daysList.length - 1;
+                      const spanDays = Math.max(1, endIdx - startIdx + 1);
+
+                      return (
+                        <div
+                          key={v.id || `vac-${vStart}-${vEnd}`}
+                          className="timeline-bar timeline-vacation-bar"
+                          style={{
+                            left: `${startIdx * TIMELINE_DAY_WIDTH + 3}px`,
+                            width: `${spanDays * TIMELINE_DAY_WIDTH - 6}px`,
+                            cursor: onDoubleClickVacation ? 'pointer' : 'default',
+                            position: 'absolute'
+                          }}
+                          title={`Ferie: ${vStart} → ${vEnd}${v.reason ? ` (${v.reason})` : ''}`}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            if (onDoubleClickVacation) {
+                              onDoubleClickVacation(v);
+                            }
+                          }}
+                        >
+                          🏖️ {vStart === vEnd ? vStart.substring(8, 10) + '/' + vStart.substring(5, 7) : `${vStart.substring(8, 10)}/${vStart.substring(5, 7)} → ${vEnd.substring(8, 10)}/${vEnd.substring(5, 7)}`}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </React.Fragment>
+        );
       })()}
 
       <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -183,7 +248,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
         ) : (
           projects.map((proj) => {
             const color = proj.color || '#185FA5';
-            
+
             const pStart = proj.start_date ? proj.start_date.substring(0, 10) : rangeStartStr;
             const pEnd = proj.end_date ? proj.end_date.substring(0, 10) : pStart;
 

@@ -12,12 +12,17 @@ export default function ConflictMonitoringPage() {
   const { user } = useAuth();
   const [conflicts, setConflicts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isConflictsOpen, setIsConflictsOpen] = useState(true);
+  const [isConflictsOpen, setIsConflictsOpen] = useState(false);
 
   const [vacations, setVacations] = useState([]);
   const [isVacationsOpen, setIsVacationsOpen] = useState(false);
   const [editingVacation, setEditingVacation] = useState(null);
   const [deletingVacation, setDeletingVacation] = useState(null);
+
+  const [usersList, setUsersList] = useState([]);
+  const [addingVacation, setAddingVacation] = useState(false);
+  const [newVacation, setNewVacation] = useState({ user_id: '', start_date: '', end_date: '', reason: '' });
+  const [submittingVacation, setSubmittingVacation] = useState(false);
 
   const navigate = useNavigate();
   const toast = useToast();
@@ -25,7 +30,23 @@ export default function ConflictMonitoringPage() {
   useEffect(() => {
     loadConflicts();
     loadVacations();
+    loadUsers();
   }, []);
+
+  async function loadUsers() {
+    try {
+      const { data } = await api.get('/users');
+      // Ordine alfabetico case-insensitive
+      const sortedUsers = data.sort((a, b) => {
+        const nameA = (a.full_name || a.username || '').toLowerCase();
+        const nameB = (b.full_name || b.username || '').toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+      setUsersList(sortedUsers);
+    } catch (err) {
+      console.error('Errore caricamento utenti', err);
+    }
+  }
 
   async function loadVacations() {
     try {
@@ -65,6 +86,36 @@ export default function ConflictMonitoringPage() {
     }
   }
 
+  async function handleAddVacation(e) {
+    e.preventDefault();
+    if (!newVacation.user_id || !newVacation.start_date || !newVacation.end_date) {
+      toast.error('Compila tutti i campi obbligatori.');
+      return;
+    }
+    setSubmittingVacation(true);
+    try {
+      const res = await api.post(`/vacations/admin/user/${newVacation.user_id}`, {
+        start_date: newVacation.start_date,
+        end_date: newVacation.end_date,
+        reason: newVacation.reason
+      });
+      toast.success('Ferie aggiunte con successo.');
+      if (res.data.recovery_items?.length > 0) {
+        toast.warning(`⚠️ ${res.data.recovery_items.length} fase/i con ore da recuperare rilevate.`);
+      }
+      setAddingVacation(false);
+      setNewVacation({ user_id: '', start_date: '', end_date: '', reason: '' });
+      loadVacations();
+      loadConflicts();
+      // Reload heatmap is handled by page refresh or could be handled by context/events. For now it's okay.
+      window.dispatchEvent(new Event('vacationsUpdated'));
+    } catch (err) {
+      toast.error('Errore durante l\'inserimento delle ferie.');
+    } finally {
+      setSubmittingVacation(false);
+    }
+  }
+
   async function loadConflicts() {
     try {
       setLoading(true);
@@ -89,7 +140,7 @@ export default function ConflictMonitoringPage() {
       <WorkloadHeatmap />
 
       {/* Conflitti Collapsible Section */}
-      <div style={{ background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-default)', marginTop: '20px', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-default)', overflow: 'hidden' }}>
         <div
           className="section-heading"
           onClick={() => setIsConflictsOpen(!isConflictsOpen)}
@@ -102,64 +153,71 @@ export default function ConflictMonitoringPage() {
             </h2>
             <p style={{ color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>Dettaglio delle sovrapposizioni critiche di pianificazione sulle fasi.</p>
           </div>
-          <div>{isConflictsOpen ? <AppIcon name="chevronUp" /> : <AppIcon name="chevronDown" />}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {conflicts.length > 0 && (
+              <span className="btn btn-primary btn-sm" style={{ padding: '4px 8px', fontSize: '0.9rem', borderRadius: '12px', color: '#fff' }}>
+                {conflicts.length}
+              </span>
+            )}
+            {isConflictsOpen ? <AppIcon name="chevronUp" /> : <AppIcon name="chevronDown" />}
+          </div>
         </div>
 
         {isConflictsOpen && (
           <div style={{ padding: '16px', borderTop: '1px solid var(--border-default)', background: 'var(--bg-primary)' }}>
-          {conflicts.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-state-icon"><AppIcon name="check" size={24} /></div>
-              <h3>Nessuna Sovrapposizione Trovata</h3>
-              <p>Tutti gli addetti hanno una schedulazione pulita a partire da oggi.</p>
-            </div>
-          ) : (
-            <div className="conflicts-grid" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {conflicts.map((c, idx) => (
-                <div key={idx} className="conflict-card card">
-                  <div className="conflict-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <h3 style={{ margin: 0, color: 'var(--accent-400)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px' }}>
-                      <AppIcon name="user" />
-                      {c.worker}
-                    </h3>
-                    <span className="badge badge-high" style={{ fontSize: '0.85rem' }}><AppIcon name="calendar" size={14} />{formatDate(c.date)}</span>
-                  </div>
-                  <p className="conflict-desc" style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
-                    Ore totali stimate: <strong>{c.total_hours}h</strong> (limite 8h superato) distribuite su <strong>{c.tasks.length}</strong> fasi:
-                  </p>
+            {conflicts.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-state-icon"><AppIcon name="check" size={24} /></div>
+                <h3>Nessuna Sovrapposizione Trovata</h3>
+                <p>Tutti gli addetti hanno una schedulazione pulita a partire da oggi.</p>
+              </div>
+            ) : (
+              <div className="conflicts-grid" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {conflicts.map((c, idx) => (
+                  <div key={idx} className="conflict-card card">
+                    <div className="conflict-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <h3 style={{ margin: 0, color: 'var(--accent-400)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px' }}>
+                        <AppIcon name="user" />
+                        {c.worker}
+                      </h3>
+                      <span className="badge badge-high" style={{ fontSize: '0.85rem' }}><AppIcon name="calendar" size={14} />{formatDate(c.date)}</span>
+                    </div>
+                    <p className="conflict-desc" style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
+                      Ore totali stimate: <strong>{c.total_hours}h</strong> (limite 8h superato) distribuite su <strong>{c.tasks.length}</strong> fasi:
+                    </p>
 
-                  <div className="conflict-tasks-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {c.tasks.map(t => (
-                      <div key={t.task_id} className="conflict-task-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #f59e0b' }}>
-                        <div className="task-info" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <span className="task-name" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 500 }}>
-                            <span style={{ color: 'var(--secondary)', display: 'flex', alignItems: 'center' }}><AppIcon name="list" size={15} /></span>
-                            {t.task_name} <span style={{ color: 'var(--accent-400)', fontSize: '0.85rem', marginLeft: '0px' }}>({t.daily_hours}h)</span>
-                          </span>
-                          <span className="task-project" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#9ca3af' }}>
-                            <AppIcon name="projects" size={14} />
-                            Progetto: {t.project_code && t.project_code !== "—" ? `${t.project_code}${t.project_name && t.project_name !== t.project_code && t.project_name !== "—" ? ` - ${t.project_name}` : ''}` : t.project_name}
-                          </span>
+                    <div className="conflict-tasks-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {c.tasks.map(t => (
+                        <div key={t.task_id} className="conflict-task-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #f59e0b' }}>
+                          <div className="task-info" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span className="task-name" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 500 }}>
+                              <span style={{ color: 'var(--secondary)', display: 'flex', alignItems: 'center' }}><AppIcon name="list" size={15} /></span>
+                              {t.task_name} <span style={{ color: 'var(--accent-400)', fontSize: '0.85rem', marginLeft: '0px' }}>({t.daily_hours}h)</span>
+                            </span>
+                            <span className="task-project" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#9ca3af' }}>
+                              <AppIcon name="projects" size={14} />
+                              Progetto: {t.project_code && t.project_code !== "—" ? `${t.project_code}${t.project_name && t.project_name !== t.project_code && t.project_name !== "—" ? ` - ${t.project_name}` : ''}` : t.project_name}
+                            </span>
+                          </div>
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => navigate(`/projects/${t.project_id}`)}
+                          >
+                            Vai alla Commessa
+                          </button>
                         </div>
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => navigate(`/projects/${t.project_id}`)}
-                        >
-                          Vai alla Commessa
-                        </button>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Panoramica Ferie Collapsible Section */}
-      <div style={{ background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-default)', marginTop: '20px', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-default)', overflow: 'hidden' }}>
         <div
           className="section-heading"
           onClick={() => setIsVacationsOpen(!isVacationsOpen)}
@@ -167,55 +225,71 @@ export default function ConflictMonitoringPage() {
         >
           <div>
             <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '1.2rem' }}>🏖️</span>
+              <span style={{ fontSize: '1.2rem' }}>
+                <AppIcon name="vacations" size={20} />
+              </span>
               Panoramica Ferie
             </h2>
             <p style={{ color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>Gestione centralizzata delle ferie inserite.</p>
           </div>
-          <div>{isVacationsOpen ? <AppIcon name="chevronUp" /> : <AppIcon name="chevronDown" />}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {(user?.role === 'admin' || user?.role === 'editor') && (
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAddingVacation(true);
+                  if (!isVacationsOpen) setIsVacationsOpen(true);
+                }}
+              >
+                + Aggiungi Ferie
+              </button>
+            )}
+            <div>{isVacationsOpen ? <AppIcon name="chevronUp" /> : <AppIcon name="chevronDown" />}</div>
+          </div>
         </div>
 
         {isVacationsOpen && (
           <div style={{ padding: '16px', borderTop: '1px solid var(--border-default)', background: 'var(--bg-primary)' }}>
-          {vacations.length === 0 ? (
-            <div className="empty-state">
-              <p>Nessuna ferie inserita.</p>
-            </div>
-          ) : (
-            <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
-              <div style={{ overflowX: 'auto' }}>
-                <table className="table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
-                  <thead style={{ background: 'var(--bg-tertiary)' }}>
-                    <tr>
-                      <th style={{ padding: '12px' }}>Addetto</th>
-                      <th style={{ padding: '12px' }}>Dal</th>
-                      <th style={{ padding: '12px' }}>Al</th>
-                      <th style={{ padding: '12px' }}>Motivo</th>
-                      {(user?.role === 'admin' || user?.role === 'editor') && <th style={{ padding: '12px', textAlign: 'right' }}>Azioni</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {vacations.sort((a, b) => b.start_date.localeCompare(a.start_date)).map(v => (
-                      <tr key={v.id} style={{ borderTop: '1px solid var(--border-default)' }}>
-                        <td style={{ padding: '12px', fontWeight: 600 }}>{v.full_name || v.username}</td>
-                        <td style={{ padding: '12px' }}>{formatDate(v.start_date)}</td>
-                        <td style={{ padding: '12px' }}>{formatDate(v.end_date)}</td>
-                        <td style={{ padding: '12px', color: 'var(--text-secondary)' }}>{v.reason || '—'}</td>
-                        {(user?.role === 'admin' || user?.role === 'editor') && (
-                          <td style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                            <button className="btn btn-secondary btn-sm" style={{ marginRight: '8px' }} onClick={() => setEditingVacation(v)}>✏️ Modifica</button>
-                            <button className="btn btn-secondary btn-sm" style={{ color: 'var(--error-500)', borderColor: 'var(--error-500)' }} onClick={() => setDeletingVacation(v)}>🗑️ Elimina</button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {vacations.length === 0 ? (
+              <div className="empty-state">
+                <p>Nessuna ferie inserita.</p>
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            ) : (
+              <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
+                    <thead style={{ background: 'var(--bg-tertiary)' }}>
+                      <tr>
+                        <th style={{ padding: '12px' }}>Addetto</th>
+                        <th style={{ padding: '12px' }}>Dal</th>
+                        <th style={{ padding: '12px' }}>Al</th>
+                        <th style={{ padding: '12px' }}>Motivo</th>
+                        {(user?.role === 'admin' || user?.role === 'editor') && <th style={{ padding: '12px', textAlign: 'right' }}>Azioni</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vacations.sort((a, b) => b.start_date.localeCompare(a.start_date)).map(v => (
+                        <tr key={v.id} style={{ borderTop: '1px solid var(--border-default)' }}>
+                          <td style={{ padding: '12px', fontWeight: 600 }}>{v.full_name || v.username}</td>
+                          <td style={{ padding: '12px' }}>{formatDate(v.start_date)}</td>
+                          <td style={{ padding: '12px' }}>{formatDate(v.end_date)}</td>
+                          <td style={{ padding: '12px', color: 'var(--text-secondary)' }}>{v.reason || '—'}</td>
+                          {(user?.role === 'admin' || user?.role === 'editor') && (
+                            <td style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              <button className="btn btn-secondary btn-sm" style={{ marginRight: '8px' }} onClick={() => setEditingVacation(v)}>✏️ Modifica</button>
+                              <button className="btn btn-secondary btn-sm" style={{ color: 'var(--error-500)', borderColor: 'var(--error-500)' }} onClick={() => setDeletingVacation(v)}>🗑️ Elimina</button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Edit Modal */}
@@ -295,6 +369,76 @@ export default function ConflictMonitoringPage() {
                   Conferma Eliminazione
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale Aggiungi Ferie */}
+      {addingVacation && (
+        <div className="modal-overlay" onClick={() => setAddingVacation(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
+            <div className="modal-header">
+              <h2>Inserisci Ferie</h2>
+              <button className="btn-ghost btn-icon" onClick={() => setAddingVacation(false)}>
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <div className="modal-content">
+              <form onSubmit={handleAddVacation} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div className="form-group">
+                  <label>Addetto *</label>
+                  <select
+                    className="input"
+                    value={newVacation.user_id}
+                    onChange={(e) => setNewVacation({ ...newVacation, user_id: e.target.value })}
+                    required
+                  >
+                    <option value="">-- Seleziona Addetto --</option>
+                    {usersList.map(u => (
+                      <option key={u.id} value={u.id}>{u.full_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Data di Inizio *</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={newVacation.start_date}
+                    onChange={(e) => setNewVacation({ ...newVacation, start_date: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Data di Fine *</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={newVacation.end_date}
+                    onChange={(e) => setNewVacation({ ...newVacation, end_date: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Descrizione (Opzionale)</label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="Es. Ferie estive, Permesso..."
+                    value={newVacation.reason}
+                    onChange={(e) => setNewVacation({ ...newVacation, reason: e.target.value })}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setAddingVacation(false)}>
+                    Annulla
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={submittingVacation}>
+                    {submittingVacation ? 'Salvataggio...' : 'Conferma'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

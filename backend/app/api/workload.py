@@ -120,8 +120,12 @@ async def get_workload_heatmap(
                     "id": str(task.id),
                     "name": task.text,
                     "project_name": task.project.name if task.project else "Progetto non specificato",
+                    "project_id": str(task.project.id) if task.project else None,
+                    "start_date": task.start_date.strftime("%Y-%m-%d"),
+                    "end_date": task.end_date.strftime("%Y-%m-%d"),
                     "hours": hours_per_day,
-                    "total_assigned_hours": assigned_total
+                    "total_assigned_hours": assigned_total,
+                    "color": getattr(task, "color", None) or "#3b82f6"
                 })
                 
     return {"heatmap": heatmap}

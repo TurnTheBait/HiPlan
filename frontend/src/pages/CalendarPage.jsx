@@ -67,7 +67,7 @@ export default function CalendarPage() {
       });
       toast.success('Ferie modificate con successo');
       setEditingVacation(null);
-      
+
       // we need to reload vacations
       const vacRes = await api.get('/vacations/all');
       setVacations(vacRes.data);
@@ -220,8 +220,8 @@ export default function CalendarPage() {
         activeList.push({
           id: `vac-${v.id}`,
           isVacation: true,
-          name: `✈️ Ferie: ${v.username}`,
-          displayTitle: `✈️ Ferie: ${v.username}`,
+          name: `Ferie: ${v.username}`,
+          displayTitle: `Ferie: ${v.username}`,
           color: '#f59e0b',
           status: 'planning'
         });
