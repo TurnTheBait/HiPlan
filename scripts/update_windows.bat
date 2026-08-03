@@ -1,5 +1,6 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
+cd /d "%~dp0.."
 title HiPlan - Aggiornamento
 
 echo Esecuzione backup di sicurezza prima dell'aggiornamento...

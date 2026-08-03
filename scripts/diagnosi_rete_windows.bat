@@ -5,7 +5,7 @@ echo          DIAGNOSI E RISOLUZIONE PROBLEMI DI RETE SUL SERVER
 echo =======================================================================
 echo.
 
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 echo [1/4] Controllo se i servizi HiPlan sono in ascolto sulle porte 5173 e 8000...
 set FRONTEND_RUNNING=0

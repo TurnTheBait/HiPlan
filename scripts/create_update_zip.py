@@ -1,6 +1,9 @@
 import os
 import zipfile
 
+# Esegui lo script dalla root del progetto (dato che si trova in scripts/)
+os.chdir(os.path.dirname(os.path.abspath(__file__)) + '/..')
+
 ZIP_NAME = 'hiplan_update.zip'
 
 EXCLUDE_DIRS = {

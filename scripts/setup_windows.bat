@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 title HiPlan - Configurazione Windows
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 rem Evita che una variabile DEBUG globale sovrascriva backend\.env.
 set "DEBUG="

@@ -1,5 +1,6 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
+cd /d "%~dp0"
 title HiPlan - Crea Pacchetto Zip
 
 where py >nul 2>&1
