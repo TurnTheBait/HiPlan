@@ -4,6 +4,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import AppIcon from '../components/ui/AppIcon';
+import AssigneeInput from '../components/ui/AssigneeInput';
 import './NotesPage.css';
 
 const BACKEND_URL = import.meta.env.VITE_API_URL
@@ -24,7 +25,8 @@ export default function NotesPage() {
   const [activeNoteId, setActiveNoteId] = useState(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [isShared, setIsShared] = useState(false);
+  const [visibility, setVisibility] = useState('private');
+  const [sharedWith, setSharedWith] = useState([]);
 
   // Stato UI editor
   const [saving, setSaving] = useState(false);
@@ -34,11 +36,26 @@ export default function NotesPage() {
   // Modale Nuova Nota
   const [showNewModal, setShowNewModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
-  const [newIsShared, setNewIsShared] = useState(false);
+  const [newVisibility, setNewVisibility] = useState('private');
+  const [newSharedWith, setNewSharedWith] = useState([]);
+
+  const [users, setUsers] = useState([]);
 
   // Ref per l'editor visuale contentEditable e timeout autocalcolato
   const editorRef = useRef(null);
   const saveTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    async function loadUsers() {
+      try {
+        const { data } = await api.get('/users');
+        setUsers(data);
+      } catch (err) {
+        console.error('Failed to load users', err);
+      }
+    }
+    loadUsers();
+  }, []);
 
   useEffect(() => {
     // Aggiungi classe full-height-page al main-body per occupare tutta l'altezza
@@ -93,6 +110,8 @@ export default function NotesPage() {
     }
     setActiveNoteId(note.id);
     setTitle(note.title || '');
+    setVisibility(note.visibility || 'private');
+    setSharedWith(note.shared_with || []);
     const cleanHtml = convertMarkdownToHtml(note.content || '');
     setContent(cleanHtml);
     if (editorRef.current) {
@@ -100,7 +119,6 @@ export default function NotesPage() {
     }
     setLastSaved(null);
     setShowVisibilityMenu(false);
-    setIsShared(note.is_shared || false);
   }
 
   useEffect(() => {
@@ -245,20 +263,25 @@ export default function NotesPage() {
     }
   }
 
-  // Cambio Visibilità (Privato vs Condiviso)
-  async function handleToggleVisibility(targetShared) {
-    if (!activeNoteId || targetShared === isShared) {
+  // Cambio Visibilità
+  async function handleToggleVisibility(targetVisibility, targetSharedWith = sharedWith) {
+    if (!activeNoteId) {
       setShowVisibilityMenu(false);
       return;
     }
     try {
       const { data } = await api.patch(`/notes/${activeNoteId}`, {
-        is_shared: targetShared
+        visibility: targetVisibility,
+        shared_with: targetSharedWith
       });
-      setIsShared(data.is_shared);
+      setVisibility(data.visibility);
+      setSharedWith(data.shared_with);
       setNotes(prev => prev.map(n => n.id === activeNoteId ? data : n));
-      setShowVisibilityMenu(false);
-      toast.success(data.is_shared ? 'Blocco note condiviso con il team!' : 'Blocco note reso privato!');
+      // Only close the menu if we are clicking a major option, not while editing the user list
+      if (targetVisibility !== 'selected' || targetSharedWith === sharedWith) {
+         // Do not auto-close if we are just updating the sharedWith list interactively
+      }
+      toast.success('Visibilità blocco note aggiornata!');
     } catch {
       toast.error("Errore nell'aggiornamento della visibilità");
     }
@@ -272,13 +295,16 @@ export default function NotesPage() {
       const { data } = await api.post('/notes', {
         title: newTitle.trim(),
         content: '',
-        is_shared: newIsShared
+        visibility: newVisibility,
+        shared_with: newSharedWith,
+        is_shared: newVisibility === 'team'
       });
       setNotes(prev => [data, ...prev]);
       selectNote(data);
       setShowNewModal(false);
       setNewTitle('');
-      setNewIsShared(false);
+      setNewVisibility('private');
+      setNewSharedWith([]);
       toast.success('Nuovo blocco note creato!');
     } catch {
       toast.error('Errore nella creazione della nota');
@@ -410,9 +436,10 @@ export default function NotesPage() {
   // Filtra note per tab e ricerca
   const filteredNotes = useMemo(() => {
     return notes.filter(n => {
-      if (!n.is_shared && n.owner_id !== user?.id) return false;
-      if (activeTab === 'private' && n.is_shared) return false;
-      if (activeTab === 'shared' && !n.is_shared) return false;
+      const isActuallyShared = n.is_shared || n.visibility === 'team' || n.visibility === 'selected';
+      if (!isActuallyShared && n.owner_id !== user?.id) return false;
+      if (activeTab === 'private' && isActuallyShared) return false;
+      if (activeTab === 'shared' && !isActuallyShared) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesTitle = n.title?.toLowerCase().includes(q);
@@ -448,7 +475,8 @@ export default function NotesPage() {
             className="btn btn-primary btn-sm"
             onClick={() => {
               setNewTitle('');
-              setNewIsShared(false);
+              setNewVisibility('private');
+              setNewSharedWith([]);
               setShowNewModal(true);
             }}
           >
@@ -528,9 +556,9 @@ export default function NotesPage() {
                 >
                   <div className="note-card-header">
                     <span className="note-card-title">{note.title || 'Senza Titolo'}</span>
-                    <span className={`note-visibility-badge ${note.is_shared ? 'badge-shared' : 'badge-private'}`}>
-                      <AppIcon name={note.is_shared ? 'users' : 'lock'} size={12} />
-                      {note.is_shared ? 'Condiviso' : 'Privato'}
+                    <span className={`note-visibility-badge ${note.visibility === 'team' ? 'badge-shared' : note.visibility === 'selected' ? 'badge-selected' : 'badge-private'}`}>
+                      <AppIcon name={note.visibility === 'team' ? 'users' : note.visibility === 'selected' ? 'user-check' : 'lock'} size={12} />
+                      {note.visibility === 'team' ? 'Condiviso' : note.visibility === 'selected' ? 'Utenti Selezionati' : 'Privato'}
                     </span>
                   </div>
                   <div className="note-card-snippet">
@@ -560,7 +588,8 @@ export default function NotesPage() {
               className="btn btn-primary"
               onClick={() => {
                 setNewTitle('');
-                setNewIsShared(false);
+                setNewVisibility('private');
+                setNewSharedWith([]);
                 setShowNewModal(true);
               }}
             >
@@ -588,7 +617,7 @@ export default function NotesPage() {
                 <div className="visibility-toggle-dropdown">
                   <button
                     type="button"
-                    className={`visibility-btn-interactive ${isShared ? 'badge-shared' : 'badge-private'}`}
+                    className={`visibility-btn-interactive ${visibility === 'team' ? 'badge-shared' : visibility === 'selected' ? 'badge-selected' : 'badge-private'}`}
                     onClick={() => {
                       if (activeNote.owner_id === user?.id) {
                         setShowVisibilityMenu(!showVisibilityMenu);
@@ -597,8 +626,8 @@ export default function NotesPage() {
                     title={activeNote.owner_id === user?.id ? "Clicca per modificare la visibilità del blocco note" : "Solo l'autore può modificare la visibilità"}
                     style={{ cursor: activeNote.owner_id === user?.id ? 'pointer' : 'default', opacity: activeNote.owner_id === user?.id ? 1 : 0.8 }}
                   >
-                    <AppIcon name={isShared ? 'users' : 'lock'} size={14} />
-                    {isShared ? 'Condiviso' : 'Privato'}
+                    <AppIcon name={visibility === 'team' ? 'users' : visibility === 'selected' ? 'user-check' : 'lock'} size={14} />
+                    {visibility === 'team' ? 'Condiviso' : visibility === 'selected' ? 'Utenti Selezionati' : 'Privato'}
                     {activeNote.owner_id === user?.id && <AppIcon name="chevronDown" size={12} />}
                   </button>
 
@@ -608,8 +637,8 @@ export default function NotesPage() {
                         IMPOSTAZIONI VISIBILITÀ
                       </div>
                       <div
-                        className={`visibility-option ${!isShared ? 'selected' : ''}`}
-                        onClick={() => handleToggleVisibility(false)}
+                        className={`visibility-option ${visibility === 'private' ? 'selected' : ''}`}
+                        onClick={() => handleToggleVisibility('private')}
                       >
                         <AppIcon name="lock" size={18} />
                         <div>
@@ -618,16 +647,40 @@ export default function NotesPage() {
                         </div>
                       </div>
                       <div
-                        className={`visibility-option ${isShared ? 'selected' : ''}`}
-                        onClick={() => handleToggleVisibility(true)}
+                        className={`visibility-option ${visibility === 'team' ? 'selected' : ''}`}
+                        onClick={() => handleToggleVisibility('team')}
                         style={{ marginTop: 6 }}
                       >
                         <AppIcon name="users" size={18} />
                         <div>
                           <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>In Condivisione</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Accessibile in lettura/modifica a tutto il team</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Accessibile in lettura a tutto il team</div>
                         </div>
                       </div>
+                      <div
+                        className={`visibility-option ${visibility === 'selected' ? 'selected' : ''}`}
+                        onClick={() => handleToggleVisibility('selected', sharedWith)}
+                        style={{ marginTop: 6 }}
+                      >
+                        <AppIcon name="user-check" size={18} />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>Utenti Selezionati</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Solo gli utenti scelti possono leggere</div>
+                        </div>
+                      </div>
+                      {visibility === 'selected' && (
+                        <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border-subtle)', marginTop: 8 }}>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>SELEZIONA UTENTI</div>
+                          <AssigneeInput 
+                            selected={sharedWith} 
+                            onChange={(newShared) => {
+                              setSharedWith(newShared);
+                              handleToggleVisibility('selected', newShared);
+                            }} 
+                            users={users} 
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -781,16 +834,16 @@ export default function NotesPage() {
                       gap: 12,
                       padding: 14,
                       borderRadius: 10,
-                      background: !newIsShared ? 'rgba(56, 189, 248, 0.1)' : 'rgba(255, 255, 255, 0.03)',
-                      border: `1px solid ${!newIsShared ? '#38bdf8' : 'var(--border-subtle)'}`,
+                      background: newVisibility === 'private' ? 'rgba(56, 189, 248, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                      border: `1px solid ${newVisibility === 'private' ? '#38bdf8' : 'var(--border-subtle)'}`,
                       cursor: 'pointer'
                     }}
                   >
                     <input
                       type="radio"
                       name="visibility"
-                      checked={!newIsShared}
-                      onChange={() => setNewIsShared(false)}
+                      checked={newVisibility === 'private'}
+                      onChange={() => setNewVisibility('private')}
                       style={{ marginTop: 3 }}
                     />
                     <div>
@@ -808,16 +861,16 @@ export default function NotesPage() {
                       gap: 12,
                       padding: 14,
                       borderRadius: 10,
-                      background: newIsShared ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255, 255, 255, 0.03)',
-                      border: `1px solid ${newIsShared ? '#34d399' : 'var(--border-subtle)'}`,
+                      background: newVisibility === 'team' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                      border: `1px solid ${newVisibility === 'team' ? '#34d399' : 'var(--border-subtle)'}`,
                       cursor: 'pointer'
                     }}
                   >
                     <input
                       type="radio"
                       name="visibility"
-                      checked={newIsShared}
-                      onChange={() => setNewIsShared(true)}
+                      checked={newVisibility === 'team'}
+                      onChange={() => setNewVisibility('team')}
                       style={{ marginTop: 3 }}
                     />
                     <div>
@@ -827,6 +880,48 @@ export default function NotesPage() {
                       </div>
                     </div>
                   </label>
+
+                  <div style={{
+                    borderRadius: 10,
+                    background: newVisibility === 'selected' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                    border: `1px solid ${newVisibility === 'selected' ? '#f59e0b' : 'var(--border-subtle)'}`,
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}>
+                    <label
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 12,
+                        padding: 14,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="visibility"
+                        checked={newVisibility === 'selected'}
+                        onChange={() => setNewVisibility('selected')}
+                        style={{ marginTop: 3 }}
+                      />
+                      <div>
+                        <div className="inline-heading" style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}><AppIcon name="user-check" size={15} />Utenti selezionati</div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: 2 }}>
+                          Scegli manualmente quali utenti possono leggere questo blocco note.
+                        </div>
+                      </div>
+                    </label>
+                    {newVisibility === 'selected' && (
+                      <div style={{ padding: '0 14px 14px 44px' }}>
+                        <AssigneeInput 
+                          selected={newSharedWith} 
+                          onChange={setNewSharedWith} 
+                          users={users} 
+                          placeholder="Cerca utente per aggiungerlo..."
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

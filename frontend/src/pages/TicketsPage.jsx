@@ -4,6 +4,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import AppIcon from '../components/ui/AppIcon';
+import SearchableCombobox from '../components/ui/SearchableCombobox';
 import './TicketsPage.css';
 
 const BACKEND_URL = import.meta.env.VITE_API_URL
@@ -314,23 +315,24 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
           <div className="tkt-field-row">
             <div className="tkt-field">
               <label>Commessa</label>
-              <select value={form.project_id} onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))}>
-                <option value="">— Nessuna —</option>
-                <option value="custom">Inserimento manuale</option>
-                {projects.filter(p => p.status !== 'archived').map(p => (
-                  <option key={p.id} value={p.id}>{p.code ? `${p.code} – ` : ''}{p.client || p.name}</option>
-                ))}
-              </select>
-              {form.project_id === 'custom' && (
-                <input
-                  type="text"
-                  placeholder="Codice commessa personalizzato"
-                  value={form.custom_project_code}
-                  onChange={e => setForm(f => ({ ...f, custom_project_code: e.target.value }))}
-                  style={{ marginTop: 8 }}
-                  autoFocus
-                />
-              )}
+              <SearchableCombobox
+                options={[
+                  { value: '', label: '— Nessuna —' },
+                  ...projects.filter(p => p.status !== 'archived').map(p => ({
+                    value: p.id,
+                    label: p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name)
+                  }))
+                ]}
+                value={form.project_id === 'custom' ? form.custom_project_code : form.project_id}
+                onChange={(val, opt) => {
+                  if (opt) {
+                    setForm(f => ({ ...f, project_id: opt.value, custom_project_code: '' }));
+                  } else {
+                    setForm(f => ({ ...f, project_id: 'custom', custom_project_code: val }));
+                  }
+                }}
+                placeholder="Cerca o inserisci manualmente..."
+              />
             </div>
             <div className="tkt-field">
               <label>Priorità</label>
@@ -450,23 +452,24 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
           <div className="tkt-field-row">
             <div className="tkt-field">
               <label>Commessa</label>
-              <select value={form.project_id} onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))}>
-                <option value="">— Nessuna —</option>
-                <option value="custom">Inserimento manuale</option>
-                {projects.filter(p => p.status !== 'archived').map(p => (
-                  <option key={p.id} value={p.id}>{p.code ? `${p.code} – ` : ''}{p.client || p.name}</option>
-                ))}
-              </select>
-              {form.project_id === 'custom' && (
-                <input
-                  type="text"
-                  placeholder="Codice commessa personalizzato"
-                  value={form.custom_project_code}
-                  onChange={e => setForm(f => ({ ...f, custom_project_code: e.target.value }))}
-                  style={{ marginTop: 8 }}
-                  autoFocus
-                />
-              )}
+              <SearchableCombobox
+                options={[
+                  { value: '', label: '— Nessuna —' },
+                  ...projects.filter(p => p.status !== 'archived').map(p => ({
+                    value: p.id,
+                    label: p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name)
+                  }))
+                ]}
+                value={form.project_id === 'custom' ? form.custom_project_code : form.project_id}
+                onChange={(val, opt) => {
+                  if (opt) {
+                    setForm(f => ({ ...f, project_id: opt.value, custom_project_code: '' }));
+                  } else {
+                    setForm(f => ({ ...f, project_id: 'custom', custom_project_code: val }));
+                  }
+                }}
+                placeholder="Cerca o inserisci manualmente..."
+              />
             </div>
             <div className="tkt-field">
               <label>Priorità</label>

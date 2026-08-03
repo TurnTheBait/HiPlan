@@ -42,11 +42,22 @@ def _serialize_note(note: Note) -> dict:
             "created_at": note.owner.created_at,
         }
         
+    shared_with_list = []
+    if getattr(note, "shared_with", None):
+        try:
+            parsed_sw = json.loads(note.shared_with)
+            if isinstance(parsed_sw, list):
+                shared_with_list = parsed_sw
+        except:
+            pass
+
     return {
         "id": note.id,
         "title": note.title,
         "content": note.content,
         "is_shared": note.is_shared,
+        "visibility": getattr(note, "visibility", "private"),
+        "shared_with": shared_with_list,
         "owner_id": note.owner_id,
         "owner": owner_data,
         "attachments": attachments_list,
@@ -63,7 +74,12 @@ async def list_notes(
     query = (
         select(Note)
         .options(selectinload(Note.owner))
-        .where((Note.owner_id == current_user.id) | (Note.is_shared == True))
+        .where(
+            (Note.owner_id == current_user.id) | 
+            (Note.is_shared == True) | 
+            (Note.visibility == 'team') | 
+            (Note.shared_with.like(f'%"{current_user.username}"%'))
+        )
         .order_by(Note.updated_at.desc())
     )
     result = await db.execute(query)
@@ -82,6 +98,8 @@ async def create_note(
         title=title_clean or "Nuova Nota",
         content=data.content or "",
         is_shared=data.is_shared,
+        visibility=data.visibility,
+        shared_with=json.dumps(data.shared_with) if data.shared_with else "[]",
         owner_id=current_user.id,
     )
     db.add(note)
@@ -108,8 +126,14 @@ async def get_note(
     if not note:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nota non trovata")
     
-    if note.owner_id != current_user.id and not note.is_shared:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Non hai i permessi per visualizzare questa nota privata")
+    if note.owner_id != current_user.id and not note.is_shared and note.visibility != 'team':
+        shared_with_list = []
+        try:
+            shared_with_list = json.loads(note.shared_with) if note.shared_with else []
+        except:
+            pass
+        if current_user.username not in shared_with_list:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Non hai i permessi per visualizzare questa nota privata")
         
     return _serialize_note(note)
 
@@ -129,15 +153,15 @@ async def update_note(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nota non trovata")
 
     if note.owner_id != current_user.id:
-        if not note.is_shared:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Non hai i permessi per modificare questa nota privata")
         if current_user.role != UserRole.ADMIN:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'autore o un amministratore può modificare questa nota condivisa")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'autore o un amministratore può modificare questa nota")
 
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         if key == "title" and value is not None:
             setattr(note, key, value.strip() or "Senza Titolo")
+        elif key == "shared_with" and value is not None:
+            setattr(note, key, json.dumps(value))
         else:
             setattr(note, key, value)
 
@@ -163,10 +187,8 @@ async def delete_note(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nota non trovata")
 
     if note.owner_id != current_user.id:
-        if not note.is_shared:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Non hai i permessi per eliminare questa nota privata")
         if current_user.role != UserRole.ADMIN:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'autore o un amministratore può eliminare questa nota condivisa")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'autore o un amministratore può eliminare questa nota")
 
     await db.delete(note)
     await db.commit()
@@ -193,10 +215,8 @@ async def upload_note_attachment(
         raise HTTPException(status_code=404, detail="Nota non trovata")
         
     if note.owner_id != current_user.id:
-        if not note.is_shared:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Non hai i permessi per modificare questa nota")
         if current_user.role != UserRole.ADMIN:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'autore o un amministratore può modificare questa nota condivisa")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'autore o un amministratore può modificare questa nota")
 
     content = await file.read()
     if len(content) > MAX_FILE_SIZE_MB * 1024 * 1024:
@@ -241,10 +261,8 @@ async def delete_note_attachment(
         raise HTTPException(status_code=404, detail="Nota non trovata")
 
     if note.owner_id != current_user.id:
-        if not note.is_shared:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Non hai i permessi per modificare questa nota")
         if current_user.role != UserRole.ADMIN:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'autore o un amministratore può modificare questa nota condivisa")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'autore o un amministratore può modificare questa nota")
 
     attachments = []
     if note.attachments:

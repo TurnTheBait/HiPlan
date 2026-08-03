@@ -700,9 +700,13 @@
   align-items: center;
 }
 
-.timeline-task-subrow.timeline-row-completed,
-.timeline-task-subrow.timeline-row-completed .timeline-task-info {
+.timeline-task-subrow.timeline-row-completed {
   background-color: var(--timeline-completed-row) !important;
+}
+
+.timeline-task-subrow.timeline-row-completed .timeline-task-info {
+  background-color: var(--bg-card) !important;
+  background-image: linear-gradient(var(--timeline-completed-row), var(--timeline-completed-row)) !important;
 }
 
 .timeline-task-subrow.timeline-row-completed .timeline-task-bar {

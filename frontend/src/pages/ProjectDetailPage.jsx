@@ -14,6 +14,7 @@ import TaskComments from '../components/tasks/TaskComments';
 import TaskChecklist from '../components/tasks/TaskChecklist';
 import ActivityLogPanel from '../components/projects/ActivityLogModal';
 import AppIcon from '../components/ui/AppIcon';
+import SearchableCombobox from '../components/ui/SearchableCombobox';
 import useWebSocket from '../hooks/useWebSocket';
 
 const DEPT_OPTIONS = [
@@ -2025,177 +2026,74 @@ export default function ProjectDetailPage() {
 
                 <div className="input-group" style={{ position: 'relative' }}>
                   <label>{taskForm.taskType === 'milestone' ? 'Nome Evento / Scadenza *' : 'Fase di Lavorazione *'}</label>
-                  <div
-                    className="input"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      cursor: 'pointer',
-                      background: 'var(--bg-secondary)',
-                      userSelect: 'none',
+                  <SearchableCombobox
+                    options={getAvailableTemplates().map(tpl => ({
+                      value: tpl.name,
+                      label: tpl.name,
+                      department: tpl.department || 'tutti',
+                      ...tpl
+                    }))}
+                    value={taskForm.faseSel === '__custom__' ? taskForm.customText : taskForm.faseSel}
+                    onChange={(val, opt) => {
+                      if (opt) {
+                        const newDays = opt.default_days != null ? opt.default_days : taskForm.duration_days;
+                        const newHours = opt.default_hours != null ? opt.default_hours : taskForm.planned_hours;
+                        const sDate = taskForm.start_date || new Date().toISOString().split('T')[0];
+                        const newEnd = addWorkingDays(sDate, newDays);
+                        setTaskForm({
+                          ...taskForm,
+                          faseSel: opt.name,
+                          customText: '',
+                          color: opt.default_color || PHASE_DEFAULT_COLORS[opt.name] || taskForm.color,
+                          duration_days: newDays,
+                          planned_hours: newHours,
+                          end_date: newEnd,
+                        });
+                      } else {
+                        setTaskForm({
+                          ...taskForm,
+                          faseSel: '__custom__',
+                          customText: val
+                        });
+                      }
                     }}
-                    onClick={() => setShowPhaseDropdown(!showPhaseDropdown)}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
-                      {taskForm.faseSel !== '__custom__' && (
-                        <span style={{ width: 14, height: 14, borderRadius: '50%', background: taskForm.color || '#3b82f6', border: '1px solid var(--border-default)', flexShrink: 0 }} />
-                      )}
-                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>
-                        {taskForm.faseSel === '__custom__' ? 'Altra lavorazione personalizzata…' : taskForm.faseSel}
-                      </span>
-                    </div>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{showPhaseDropdown ? '▲' : '▼'}</span>
-                  </div>
-
-                  {showPhaseDropdown && (
-                    <div
-                      className="dropdown-menu"
-                      style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        marginTop: 4,
-                        maxHeight: 320,
-                        overflowY: 'auto',
-                        zIndex: 100,
-                        background: 'var(--bg-secondary)',
-                        border: '1px solid var(--border-default)',
-                        borderRadius: 'var(--radius-md)',
-                        boxShadow: 'var(--shadow-xl)',
-                      }}
-                    >
-                      <div
-                        onClick={() => {
-                          setTaskForm({ ...taskForm, faseSel: '__custom__' });
-                          setShowPhaseDropdown(false);
-                        }}
-                        style={{ padding: '10px 12px', cursor: 'pointer', fontWeight: 600, color: 'var(--primary)', borderBottom: '2px solid var(--border-default)', display: 'flex', alignItems: 'center', gap: 8, background: taskForm.faseSel === '__custom__' ? 'var(--primary-subtle, rgba(59,130,246,0.15))' : 'transparent' }}
-                      >
-                        <AppIcon name="edit" size={15} />
-                        <span>Altra lavorazione personalizzata...</span>
+                    placeholder="Seleziona o digita una nuova fase..."
+                    allowCustom={true}
+                    groupBy={user?.role === 'admin' ? 'department' : undefined}
+                    groupLabels={{
+                      ufficio_tecnico: 'Ufficio Tecnico',
+                      produzione: 'Produzione',
+                      acquisti: 'Acquisti',
+                      tutti: 'Condivise / Tutti'
+                    }}
+                    renderOption={(opt, searchStr) => (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ width: 12, height: 12, borderRadius: '50%', background: opt.default_color || PHASE_DEFAULT_COLORS[opt.name] || '#3b82f6', border: '1px solid var(--border-default)', flexShrink: 0 }} />
+                          <span style={{ fontWeight: (taskForm.faseSel === opt.name || taskForm.customText === opt.name) ? 600 : 400, color: 'var(--text-primary)' }}>{opt.name}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDeleteTemplateFromDropdown(opt);
+                          }}
+                          className="btn-ghost btn-icon"
+                          style={{ padding: '2px 6px', color: 'var(--danger)', fontSize: '0.9rem' }}
+                          title="Elimina dall'elenco a tendina"
+                        >
+                          <AppIcon name="trash" size={14} />
+                        </button>
                       </div>
-
-                      {(() => {
-                        const available = getAvailableTemplates();
-                        if (user?.role === 'admin') {
-                          const depts = ['ufficio_tecnico', 'produzione', 'acquisti', 'tutti'];
-                          const deptLabels = {
-                            ufficio_tecnico: 'Ufficio Tecnico',
-                            produzione: 'Produzione',
-                            acquisti: 'Acquisti',
-                            tutti: 'Condivise / Tutti',
-                          };
-                          return depts.map(dKey => {
-                            const dItems = available.filter(t => t.department === dKey);
-                            if (dItems.length === 0) return null;
-                            return (
-                              <div key={dKey}>
-                                <div style={{ padding: '6px 12px', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-default)', borderTop: '1px solid var(--border-default)', textTransform: 'uppercase' }}>
-                                  {deptLabels[dKey] || dKey}
-                                </div>
-                                {dItems.map(tpl => (
-                                  <div
-                                    key={tpl.id || tpl.name}
-                                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', cursor: 'pointer', background: taskForm.faseSel === tpl.name ? 'var(--primary-subtle, rgba(59,130,246,0.15))' : 'transparent', borderBottom: '1px solid var(--border-default)' }}
-                                    onClick={() => {
-                                      const newDays = tpl.default_days != null ? tpl.default_days : taskForm.duration_days;
-                                      const newHours = tpl.default_hours != null ? tpl.default_hours : taskForm.planned_hours;
-                                      const sDate = taskForm.start_date || new Date().toISOString().split('T')[0];
-                                      const newEnd = addWorkingDays(sDate, newDays);
-                                      setTaskForm({
-                                        ...taskForm,
-                                        faseSel: tpl.name,
-                                        color: tpl.default_color || PHASE_DEFAULT_COLORS[tpl.name] || taskForm.color,
-                                        duration_days: newDays,
-                                        planned_hours: newHours,
-                                        end_date: newEnd,
-                                      });
-                                      setShowPhaseDropdown(false);
-                                    }}
-                                  >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                      <span style={{ width: 12, height: 12, borderRadius: '50%', background: tpl.default_color || PHASE_DEFAULT_COLORS[tpl.name] || '#3b82f6', border: '1px solid var(--border-default)' }} />
-                                      <span style={{ fontWeight: taskForm.faseSel === tpl.name ? 600 : 400, color: 'var(--text-primary)' }}>{tpl.name}</span>
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDeleteTemplateFromDropdown(tpl);
-                                      }}
-                                      className="btn-ghost btn-icon"
-                                      style={{ padding: '2px 6px', color: 'var(--danger)', fontSize: '0.9rem' }}
-                                      title="Elimina dall'elenco a tendina"
-                                    >
-                                      <AppIcon name="trash" size={14} />
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            );
-                          });
-                        } else {
-                          return available.map(tpl => (
-                            <div
-                              key={tpl.id || tpl.name}
-                              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', cursor: 'pointer', background: taskForm.faseSel === tpl.name ? 'var(--primary-subtle, rgba(59,130,246,0.15))' : 'transparent', borderBottom: '1px solid var(--border-default)' }}
-                              onClick={() => {
-                                const newDays = tpl.default_days != null ? tpl.default_days : taskForm.duration_days;
-                                const newHours = tpl.default_hours != null ? tpl.default_hours : taskForm.planned_hours;
-                                const sDate = taskForm.start_date || new Date().toISOString().split('T')[0];
-                                const newEnd = addWorkingDays(sDate, newDays);
-                                setTaskForm({
-                                  ...taskForm,
-                                  faseSel: tpl.name,
-                                  color: tpl.default_color || PHASE_DEFAULT_COLORS[tpl.name] || taskForm.color,
-                                  duration_days: newDays,
-                                  planned_hours: newHours,
-                                  end_date: newEnd,
-                                });
-                                setShowPhaseDropdown(false);
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <span style={{ width: 12, height: 12, borderRadius: '50%', background: tpl.default_color || PHASE_DEFAULT_COLORS[tpl.name] || '#3b82f6', border: '1px solid var(--border-default)' }} />
-                                <span style={{ fontWeight: taskForm.faseSel === tpl.name ? 600 : 400, color: 'var(--text-primary)' }}>{tpl.name}</span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteTemplateFromDropdown(tpl);
-                                }}
-                                className="btn-ghost btn-icon"
-                                style={{ padding: '2px 6px', color: 'var(--danger)', fontSize: '0.9rem' }}
-                                title="Elimina dall'elenco a tendina"
-                              >
-                                <AppIcon name="trash" size={14} />
-                              </button>
-                            </div>
-                          ));
-                        }
-                      })()}
-                    </div>
-                  )}
-                </div>
-
-                {taskForm.faseSel === '__custom__' && (
-                  <div className="input-group" style={{ marginTop: 12 }}>
-                    <label>Nome Lavorazione Personalizzata *</label>
-                    <input
-                      className="input"
-                      value={taskForm.customText}
-                      onChange={(e) => setTaskForm({ ...taskForm, customText: e.target.value })}
-                      required
-                      placeholder="es. Verifica requisiti speciali con fornitore"
-                    />
-                    <span className="inline-detail-row" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                    )}
+                  />
+                  {taskForm.faseSel === '__custom__' && taskForm.customText && (
+                    <span className="inline-detail-row" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 8 }}>
                       <AppIcon name="alert" size={13} />Questa nuova fase verrà automaticamente aggiunta all'elenco suggerito per il reparto {user?.role === 'admin' ? 'di competenza' : (user?.department ? user.department.replace('_', ' ') : 'ufficio tecnico')}.
                     </span>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {/* Colore personalizzato della fase */}
                 <div className="input-group" style={{ marginTop: 14 }}>

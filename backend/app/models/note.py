@@ -13,6 +13,8 @@ class Note(Base, TimestampMixin):
     content = Column(Text, nullable=True)
     attachments = Column(Text, nullable=True, default="[]")
     is_shared = Column(Boolean, default=False, nullable=False)
+    visibility = Column(String(50), nullable=False, default="private")
+    shared_with = Column(Text, nullable=False, default="[]")
     owner_id = Column(uuid_fk(), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
     owner = relationship("User", foreign_keys=[owner_id])

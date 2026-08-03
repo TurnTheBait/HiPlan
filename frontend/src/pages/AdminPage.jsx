@@ -54,7 +54,8 @@ export default function AdminPage() {
     users: true,
     templates: true,
     ticketPhases: true,
-    emails: true
+    emails: true,
+    backup: true
   });
 
   const toggleSection = (section) => {
@@ -109,9 +110,21 @@ export default function AdminPage() {
       setEmailLogs(Array.isArray(logs) ? logs : []);
       setScheduledEmails(Array.isArray(sched) ? sched : []);
     } catch (e) {
-      console.error('Errore caricamento log email:', e);
+      console.error(e);
     }
   }
+
+  async function handleTriggerBackup() {
+    try {
+      toast.info('Avvio backup in corso...');
+      const { data } = await api.post('/settings/backup/trigger');
+      toast.success(data.message || 'Backup completato');
+      if (data.last_backup) setLastBackup(data.last_backup);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Errore durante il backup');
+    }
+  }
+
 
   async function deleteScheduledEmail(todoId) {
     if (!window.confirm("Sei sicuro di voler annullare questa notifica programmata?")) return;
@@ -346,13 +359,6 @@ export default function AdminPage() {
 
   return (
     <div className="admin-page animate-fadeIn">
-      {lastBackup && (
-        <div className="page-action-bar admin-backup-status">
-          <div className="page-context-note">
-            <span><AppIcon name="save" size={15} /> Ultimo backup: {new Date(lastBackup.date).toLocaleString()} · {lastBackup.size_mb} MB</span>
-          </div>
-        </div>
-      )}
 
       {/* SEZIONE BACHECA AZIENDALE */}
       <div className={`admin-section-card ${collapsedSections.annunci ? 'is-collapsed' : ''}`} style={{ marginBottom: 30 }}>
@@ -869,6 +875,43 @@ export default function AdminPage() {
                   )}
                 </tbody>
               </table>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* SEZIONE BACKUP */}
+      <div className={`admin-section-card ${collapsedSections.backup ? 'is-collapsed' : ''}`} style={{ marginTop: 32, marginBottom: 30 }}>
+        <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+          <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('backup')}>
+            <h2><AppIcon name="save" /> Backup di Sistema</h2>
+            <p className="admin-section-desc">Stato del salvataggio dati e archivi ZIP generati.</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
+            {!collapsedSections.backup && (
+              <button className="btn btn-primary btn-sm" onClick={handleTriggerBackup}>
+                <AppIcon name="refresh" size={14} /> Esegui Ora
+              </button>
+            )}
+            <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => toggleSection('backup')}>
+              <AppIcon name={collapsedSections.backup ? 'chevronDown' : 'chevronUp'} size={18} />
+            </div>
+          </div>
+        </div>
+
+        {!collapsedSections.backup && (
+          <div style={{ padding: '16px 20px', background: 'var(--bg-tertiary)', borderRadius: 8, marginTop: 16 }}>
+            {lastBackup ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div><strong>Ultimo backup completato:</strong> {new Date(lastBackup.date).toLocaleString()}</div>
+                <div><strong>Dimensione archivio:</strong> {lastBackup.size_mb} MB</div>
+                <div><strong>File:</strong> <code>{lastBackup.filename}</code></div>
+                <div style={{ marginTop: 8, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  Il backup settimanale viene eseguito automaticamente ogni domenica notte. Include il database completo e tutti gli allegati.
+                </div>
+              </div>
+            ) : (
+              <div style={{ color: 'var(--text-muted)' }}>Nessun backup trovato nel sistema.</div>
             )}
           </div>
         )}
