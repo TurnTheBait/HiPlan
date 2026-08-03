@@ -90,6 +90,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.config.open_tree_initially = true;
     gantt.config.order_branch = true;
     gantt.config.show_progress = true;
+    gantt.config.sort = true;
 
     const baseColumns = [
       {
@@ -254,11 +255,15 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     // Classe CSS per colorare di verde lo sfondo dell'intera riga della fase completata sia in griglia che in timeline
     gantt.templates.grid_row_class = function (start, end, task) {
       const isCompleted = isTaskCompleted(task);
-      return isCompleted ? 'gantt-row-completed' : '';
+      if (isCompleted) return 'gantt-row-completed';
+      if (task.type === 'milestone' || Number(task.duration) === 0) return 'gantt-row-milestone-pending';
+      return '';
     };
     gantt.templates.task_row_class = function (start, end, task) {
       const isCompleted = isTaskCompleted(task);
-      return isCompleted ? 'gantt-row-completed' : '';
+      if (isCompleted) return 'gantt-row-completed';
+      if (task.type === 'milestone' || Number(task.duration) === 0) return 'gantt-row-milestone-pending';
+      return '';
     };
 
     // Abilita l'ereditarietà della classe CSS su tutte le sottoscale dell'header

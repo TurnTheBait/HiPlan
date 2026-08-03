@@ -87,6 +87,10 @@ export default function ProjectDetailPage() {
   });
   const [showColumnsMenu, setShowColumnsMenu] = useState(false);
 
+  // STATO PER FILTRO TIPO FASE
+  const [phaseFilter, setPhaseFilter] = useState('all'); // 'all', 'task', 'milestone'
+  const [showPhaseFilterMenu, setShowPhaseFilterMenu] = useState(false);
+
   // STATO PER COLONNE TABELLA FASI
   const [tableVisibleColumns, setTableVisibleColumns] = useState(() => {
     const saved = localStorage.getItem('tableVisibleColumns');
@@ -772,8 +776,8 @@ export default function ProjectDetailPage() {
       end_date: isMilestone ? taskForm.start_date : taskForm.end_date,
       duration: isMilestone ? 0 : finalDays,
       planned_hours: isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDays * 8.0)),
-      workers: isMilestone ? [] : taskForm.workers,
-      worker_hours: isMilestone ? {} : taskForm.worker_hours,
+      workers: taskForm.workers,
+      worker_hours: taskForm.worker_hours,
       type: isMilestone ? 'milestone' : 'task',
       color: taskForm.color || (isMilestone ? '#f59e0b' : null),
       department: taskForm.department || null,
@@ -978,14 +982,14 @@ export default function ProjectDetailPage() {
       case 'week':
         gantt.config.scales = [
           { unit: "month", step: 1, format: function (date) { return `${mesiItaliani[date.getMonth()]} ${date.getFullYear()}`; } },
-          { 
-            unit: "week", 
-            step: 1, 
-            format: function(date) {
+          {
+            unit: "week",
+            step: 1,
+            format: function (date) {
               const weekNum = gantt.date.date_to_str("%W")(date);
               const endDate = gantt.date.add(date, 6, "day");
-              return `<div style="line-height: 1.2; padding-top: 4px;">Sett. ${weekNum}<br/><span style="font-size: 11px; font-weight: normal; color: var(--text-secondary);">${date.getDate()} - ${endDate.getDate()} ${mesiItaliani[endDate.getMonth()].substring(0,3).toLowerCase()}</span></div>`;
-            } 
+              return `<div style="line-height: 1.2; padding-top: 4px;">Sett. ${weekNum}<br/><span style="font-size: 11px; font-weight: normal; color: var(--text-secondary);">${date.getDate()} - ${endDate.getDate()} ${mesiItaliani[endDate.getMonth()].substring(0, 3).toLowerCase()}</span></div>`;
+            }
           },
         ];
         gantt.config.min_column_width = 80;
@@ -1385,7 +1389,51 @@ export default function ProjectDetailPage() {
             <div style={{ position: 'relative' }}>
               <button
                 className="btn btn-secondary"
-                onClick={() => { setShowDeptMenu(!showDeptMenu); setShowColumnsMenu(false); }}
+                onClick={() => { setShowPhaseFilterMenu(!showPhaseFilterMenu); setShowColumnsMenu(false); setShowDeptMenu(false); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
+              >
+                <AppIcon name="filter" />
+                Tipo Fase
+                {phaseFilter !== 'all' && (
+                  <span style={{ background: '#6366f1', color: '#fff', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px' }}>
+                    1
+                  </span>
+                )}
+              </button>
+              {showPhaseFilterMenu && (
+                <div className="action-popover" style={{
+                  position: 'absolute', top: '100%', left: 0, marginTop: 4,
+                  background: 'var(--bg-card)', border: '1px solid var(--border-default)',
+                  borderRadius: 10, padding: 12, zIndex: 200, minWidth: 200,
+                  boxShadow: 'var(--shadow-md)'
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MOSTRA:</div>
+                  {[
+                    { value: 'all', label: 'Tutte le fasi' },
+                    { value: 'task', label: 'Solo Lavorazioni' },
+                    { value: 'milestone', label: 'Solo Eventi (Milestone)' }
+                  ].map(opt => (
+                    <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+                      <input
+                        type="radio"
+                        name="phaseFilter"
+                        checked={phaseFilter === opt.value}
+                        onChange={() => setPhaseFilter(opt.value)}
+                      />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+
+          {activeTab === 'gantt' && (
+            <div style={{ position: 'relative' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => { setShowDeptMenu(!showDeptMenu); setShowColumnsMenu(false); setShowPhaseFilterMenu(false); }}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
               >
                 <AppIcon name="building" />
@@ -1453,7 +1501,12 @@ export default function ProjectDetailPage() {
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, width: '100%', maxWidth: '100%' }}>
           <div className="gantt-wrapper">
             <GanttChart
-              tasks={ganttData.tasks.filter(t => !t.department || activeDepartments.includes(t.department))}
+              tasks={ganttData.tasks.filter(t => {
+                if (t.department && !activeDepartments.includes(t.department)) return false;
+                if (phaseFilter === 'task' && t.type === 'milestone') return false;
+                if (phaseFilter === 'milestone' && t.type !== 'milestone') return false;
+                return true;
+              })}
               links={ganttData.links}
               visibleColumns={visibleColumns}
               readOnly={!canManageProject}
@@ -1884,7 +1937,7 @@ export default function ProjectDetailPage() {
           <div className="modal task-editor-modal" style={{ maxWidth: 900 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{editingTask ? 'Dettagli Fase Lavorazione' : 'Nuova Fase Lavorazione (Ufficio Tecnico)'}</h2>
-              <button className="btn-ghost btn-icon" onClick={() => setShowTaskModal(false)} aria-label="Chiudi">
+              <button className="btn-ghost btn-icon" onClick={() => setShowTaskModal(false)} aria-label="Chiudi" style={{ marginRight: '-45px' }}>
                 <AppIcon name="close" />
               </button>
             </div>
@@ -2005,6 +2058,17 @@ export default function ProjectDetailPage() {
                         boxShadow: 'var(--shadow-xl)',
                       }}
                     >
+                      <div
+                        onClick={() => {
+                          setTaskForm({ ...taskForm, faseSel: '__custom__' });
+                          setShowPhaseDropdown(false);
+                        }}
+                        style={{ padding: '10px 12px', cursor: 'pointer', fontWeight: 600, color: 'var(--primary)', borderBottom: '2px solid var(--border-default)', display: 'flex', alignItems: 'center', gap: 8, background: taskForm.faseSel === '__custom__' ? 'var(--primary-subtle, rgba(59,130,246,0.15))' : 'transparent' }}
+                      >
+                        <AppIcon name="edit" size={15} />
+                        <span>Altra lavorazione personalizzata...</span>
+                      </div>
+
                       {(() => {
                         const available = getAvailableTemplates();
                         if (user?.role === 'admin') {
@@ -2105,17 +2169,6 @@ export default function ProjectDetailPage() {
                           ));
                         }
                       })()}
-
-                      <div
-                        onClick={() => {
-                          setTaskForm({ ...taskForm, faseSel: '__custom__' });
-                          setShowPhaseDropdown(false);
-                        }}
-                        style={{ padding: '10px 12px', cursor: 'pointer', fontWeight: 600, color: 'var(--primary)', borderTop: '2px solid var(--border-default)', display: 'flex', alignItems: 'center', gap: 8, background: taskForm.faseSel === '__custom__' ? 'var(--primary-subtle, rgba(59,130,246,0.15))' : 'transparent' }}
-                      >
-                        <AppIcon name="edit" size={15} />
-                        <span>Altra lavorazione personalizzata...</span>
-                      </div>
                     </div>
                   )}
                 </div>
@@ -2322,105 +2375,106 @@ export default function ProjectDetailPage() {
                         )}
                       </div>
                     </div>
-
-                    <div className="input-group" style={{ marginTop: 16 }}>
-                      <label>Addetti Assegnati (Multi-selezione)</label>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                        {predefinedWorkers.map(w => {
-                          const sel = taskForm.workers.includes(w);
-                          return (
-                            <button
-                              type="button"
-                              key={w}
-                              onClick={() => toggleWorkerSelection(w)}
-                              style={{
-                                background: sel ? 'var(--accent-600)' : 'var(--bg-primary)',
-                                color: sel ? '#fff' : 'var(--text-secondary)',
-                                border: `1px solid ${sel ? 'var(--accent-500)' : 'var(--border-default)'}`,
-                                padding: '6px 12px',
-                                borderRadius: '16px',
-                                cursor: 'pointer',
-                                fontSize: '0.85rem',
-                                fontWeight: sel ? 600 : 400
-                              }}
-                            >
-                              {sel ? '✓ ' : '+ '}{w}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-
-                      {/* Sezione addetti attualmente assegnati (sotto al campo aggiungi altro addetto) */}
-                      <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed var(--border-default)' }}>
-                        {(() => {
-                          const currentAssignedTotal = taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0);
-                          const sDateForBudget = taskForm.start_date;
-                          const eDateForBudget = taskForm.end_date;
-                          const diffDaysForBudget = sDateForBudget && eDateForBudget ? countWorkingDays(sDateForBudget, eDateForBudget) : 1;
-                          const finalDaysForBudget = Math.max(1, Number(taskForm.duration_days) || diffDaysForBudget);
-                          const currentBudgetTotal = Number(taskForm.planned_hours) || (finalDaysForBudget * 8.0);
-                          const overBudget = currentAssignedTotal > currentBudgetTotal;
-
-                          return (
-                            <>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: overBudget ? '#ef4444' : 'var(--accent-500)', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                                <span className="inline-heading">
-                                  <AppIcon name={overBudget ? 'alert' : 'check'} size={14} />
-                                  Addetti assegnati ({taskForm.workers.length})
-                                </span>
-                                <span>Totale assegnato: {currentAssignedTotal}h / {currentBudgetTotal}h</span>
-                              </div>
-                              {taskForm.workers.length === 0 ? (
-                                <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Nessun addetto ancora selezionato. Scegline uno qui sopra.</span>
-                              ) : (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                                  {taskForm.workers.map(w => (
-                                    <div key={w} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)', padding: '6px 12px', borderRadius: 8 }}>
-                                      <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-500)' }}>{w}</span>
-                                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 4 }}>Ore:</span>
-                                      <input
-                                        type="number"
-                                        min="0.5"
-                                        step="0.5"
-                                        style={{
-                                          width: 60,
-                                          height: 24,
-                                          background: 'var(--bg-secondary)',
-                                          border: '1px solid var(--border-color)',
-                                          borderRadius: 4,
-                                          color: 'var(--text-primary)',
-                                          padding: '0 4px',
-                                          fontSize: '0.8rem',
-                                          textAlign: 'center'
-                                        }}
-                                        value={taskForm.worker_hours?.[w] || ''}
-                                        onChange={(e) => {
-                                          const val = parseFloat(e.target.value) || 0;
-                                          setTaskForm({
-                                            ...taskForm,
-                                            worker_hours: { ...taskForm.worker_hours, [w]: val }
-                                          });
-                                        }}
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => toggleWorkerSelection(w, true)}
-                                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.9rem', marginLeft: 4 }}
-                                      >
-                                        ×
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </div>
                   </>
                 )}
+
+                <div className="input-group" style={{ marginTop: 16 }}>
+                  <label>Addetti Assegnati (Multi-selezione)</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                    {predefinedWorkers.map(w => {
+                      const sel = taskForm.workers.includes(w);
+                      return (
+                        <button
+                          type="button"
+                          key={w}
+                          onClick={() => toggleWorkerSelection(w)}
+                          style={{
+                            background: sel ? 'var(--accent-600)' : 'var(--bg-primary)',
+                            color: sel ? '#fff' : 'var(--text-secondary)',
+                            border: `1px solid ${sel ? 'var(--accent-500)' : 'var(--border-default)'}`,
+                            padding: '6px 12px',
+                            borderRadius: '16px',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            fontWeight: sel ? 600 : 400
+                          }}
+                        >
+                          {sel ? '✓ ' : '+ '}{w}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+
+                  {/* Sezione addetti attualmente assegnati (sotto al campo aggiungi altro addetto) */}
+                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed var(--border-default)' }}>
+                    {(() => {
+                      const isMilestone = taskForm.taskType === 'milestone';
+                      const currentAssignedTotal = taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0);
+                      const sDateForBudget = taskForm.start_date;
+                      const eDateForBudget = taskForm.end_date;
+                      const diffDaysForBudget = sDateForBudget && eDateForBudget ? countWorkingDays(sDateForBudget, eDateForBudget) : 1;
+                      const finalDaysForBudget = Math.max(1, Number(taskForm.duration_days) || diffDaysForBudget);
+                      const currentBudgetTotal = isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDaysForBudget * 8.0));
+                      const overBudget = !isMilestone && (currentAssignedTotal > currentBudgetTotal);
+
+                      return (
+                        <>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: overBudget ? '#ef4444' : 'var(--accent-500)', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                            <span className="inline-heading">
+                              <AppIcon name={overBudget ? 'alert' : 'check'} size={14} />
+                              Addetti assegnati ({taskForm.workers.length})
+                            </span>
+                            {!isMilestone && <span>Totale assegnato: {currentAssignedTotal}h / {currentBudgetTotal}h</span>}
+                          </div>
+                          {taskForm.workers.length === 0 ? (
+                            <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Nessun addetto ancora selezionato. Scegline uno qui sopra.</span>
+                          ) : (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                              {taskForm.workers.map(w => (
+                                <div key={w} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)', padding: '6px 12px', borderRadius: 8 }}>
+                                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-500)' }}>{w}</span>
+                                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 4 }}>Ore:</span>
+                                  <input
+                                    type="number"
+                                    min="0.5"
+                                    step="0.5"
+                                    style={{
+                                      width: 60,
+                                      height: 24,
+                                      background: 'var(--bg-secondary)',
+                                      border: '1px solid var(--border-color)',
+                                      borderRadius: 4,
+                                      color: 'var(--text-primary)',
+                                      padding: '0 4px',
+                                      fontSize: '0.8rem',
+                                      textAlign: 'center'
+                                    }}
+                                    value={taskForm.worker_hours?.[w] || ''}
+                                    onChange={(e) => {
+                                      const val = parseFloat(e.target.value) || 0;
+                                      setTaskForm({
+                                        ...taskForm,
+                                        worker_hours: { ...taskForm.worker_hours, [w]: val }
+                                      });
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleWorkerSelection(w, true)}
+                                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.9rem', marginLeft: 4 }}
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
 
                 <div className="modal-footer" style={{ marginTop: 24 }}>
                   <button type="button" className="btn btn-secondary" onClick={() => setShowTaskModal(false)}>

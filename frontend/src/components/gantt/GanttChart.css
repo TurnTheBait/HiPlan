@@ -454,16 +454,46 @@
 
 /* Sfondo verde smeraldo leggero per l'intera riga della fase nella griglia a sinistra e nella timeline temporale a destra */
 .gantt_grid_data .gantt_row.gantt-row-completed,
+.gantt_grid_data .gantt_row.gantt-row-completed .gantt_cell,
+.gantt_grid_data .gantt_row.odd.gantt-row-completed,
+.gantt_grid_data .gantt_row.odd.gantt-row-completed .gantt_cell,
 .gantt_task_bg .gantt_task_row.gantt-row-completed,
+.gantt_task_bg .gantt_task_row.odd.gantt-row-completed,
 .gantt_row.gantt-row-completed {
   background-color: var(--timeline-completed-row) !important;
   transition: background-color 0.2s ease;
 }
 
 .gantt_grid_data .gantt_row.gantt_selected.gantt-row-completed,
+.gantt_grid_data .gantt_row.gantt_selected.gantt-row-completed .gantt_cell,
+.gantt_grid_data .gantt_row.odd.gantt_selected.gantt-row-completed,
+.gantt_grid_data .gantt_row.odd.gantt_selected.gantt-row-completed .gantt_cell,
 .gantt_task_bg .gantt_task_row.gantt_selected.gantt-row-completed,
+.gantt_task_bg .gantt_task_row.odd.gantt_selected.gantt-row-completed,
 .gantt_row.gantt_selected.gantt-row-completed {
   background-color: rgba(16, 185, 129, 0.28) !important;
+}
+
+/* Sfondo arancione chiaro per la riga della milestone (quando non completata) */
+.gantt_grid_data .gantt_row.gantt-row-milestone-pending,
+.gantt_grid_data .gantt_row.gantt-row-milestone-pending .gantt_cell,
+.gantt_grid_data .gantt_row.odd.gantt-row-milestone-pending,
+.gantt_grid_data .gantt_row.odd.gantt-row-milestone-pending .gantt_cell,
+.gantt_task_bg .gantt_task_row.gantt-row-milestone-pending,
+.gantt_task_bg .gantt_task_row.odd.gantt-row-milestone-pending,
+.gantt_row.gantt-row-milestone-pending {
+  background-color: rgba(245, 158, 11, 0.12) !important;
+  transition: background-color 0.2s ease;
+}
+
+.gantt_grid_data .gantt_row.gantt_selected.gantt-row-milestone-pending,
+.gantt_grid_data .gantt_row.gantt_selected.gantt-row-milestone-pending .gantt_cell,
+.gantt_grid_data .gantt_row.odd.gantt_selected.gantt-row-milestone-pending,
+.gantt_grid_data .gantt_row.odd.gantt_selected.gantt-row-milestone-pending .gantt_cell,
+.gantt_task_bg .gantt_task_row.gantt_selected.gantt-row-milestone-pending,
+.gantt_task_bg .gantt_task_row.odd.gantt_selected.gantt-row-milestone-pending,
+.gantt_row.gantt_selected.gantt-row-milestone-pending {
+  background-color: rgba(245, 158, 11, 0.22) !important;
 }
 
 
