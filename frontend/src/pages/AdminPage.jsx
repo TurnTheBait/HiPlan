@@ -40,6 +40,9 @@ export default function AdminPage() {
   const [scheduledEmails, setScheduledEmails] = useState([]);
   const [emailLogTab, setEmailLogTab] = useState('sent'); // 'sent' | 'scheduled'
   const [loading, setLoading] = useState(true);
+  const [todoEmailSettings, setTodoEmailSettings] = useState({ todo_notification_email: '' });
+  const [smtpSettings, setSmtpSettings] = useState(null);
+  const [savingEmailSettings, setSavingEmailSettings] = useState(false);
   // STATO PER COLONNE TABELLA ADMIN
   const [adminVisibleColumns, setAdminVisibleColumns] = useState(() => {
     const saved = localStorage.getItem('adminVisibleColumns');
@@ -54,6 +57,7 @@ export default function AdminPage() {
     users: true,
     templates: true,
     ticketPhases: true,
+    todoEmail: true,
     emails: true,
     backup: true
   });
@@ -77,9 +81,36 @@ export default function AdminPage() {
   async function loadData() {
     setLoading(true);
     try {
-      await Promise.all([loadUsers(), loadPhaseTemplates(), loadGlobalBanners(), loadTicketPhases(), loadLastBackup(), loadEmailLogs()]);
+      await Promise.all([loadUsers(), loadPhaseTemplates(), loadGlobalBanners(), loadTicketPhases(), loadLastBackup(), loadEmailLogs(), loadTodoEmailSettings()]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadTodoEmailSettings() {
+    try {
+      const [{ data: emailSettings }, { data: smtp }] = await Promise.all([
+        api.get('/settings/todo-email-settings'),
+        api.get('/settings/smtp-settings'),
+      ]);
+      setTodoEmailSettings(emailSettings);
+      setSmtpSettings(smtp);
+    } catch (e) {
+      console.error('Errore caricamento impostazioni email TODO:', e);
+    }
+  }
+
+  async function saveTodoEmailSettings(e) {
+    e.preventDefault();
+    setSavingEmailSettings(true);
+    try {
+      const { data } = await api.put('/settings/todo-email-settings', todoEmailSettings);
+      setTodoEmailSettings(data);
+      toast.success('Impostazioni email TODO salvate');
+    } catch {
+      toast.error('Errore nel salvataggio delle impostazioni email');
+    } finally {
+      setSavingEmailSettings(false);
     }
   }
 
@@ -762,6 +793,7 @@ export default function AdminPage() {
       </div>
 
       {/* SEZIONE LOG EMAIL */}
+
       <div className={`admin-section-card ${collapsedSections.emails ? 'is-collapsed' : ''}`} style={{ marginTop: 32, marginBottom: 30 }}>
         <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
           <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('emails')}>

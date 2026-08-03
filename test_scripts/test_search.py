@@ -1,7 +1,10 @@
 import asyncio
 import logging
+# pyrefly: ignore [missing-import]
 from app.api.search import global_search
+# pyrefly: ignore [missing-import]
 from app.models.base import AsyncSessionLocal
+# pyrefly: ignore [missing-import]
 from app.models.user import User
 
 logging.basicConfig(level=logging.DEBUG)
