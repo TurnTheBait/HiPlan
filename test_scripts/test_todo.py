@@ -5,6 +5,7 @@ import sys
 
 token_query = os.popen("sqlite3 backend/ganttflow.db 'SELECT id FROM users LIMIT 1;'").read().strip()
 sys.path.insert(0, "backend")
+# pyrefly: ignore [missing-import]
 from app.core.security import create_access_token
 import json
 

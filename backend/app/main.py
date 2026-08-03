@@ -134,6 +134,14 @@ async def lifespan(app: FastAPI):
         tomorrow_now = now + timedelta(days=1)
 
         async with AsyncSessionLocal() as session:
+            # Leggi l'email di notifica default configurata dall'admin
+            from app.models.setting import Setting as AppSetting
+            default_email_res = await session.execute(
+                select(AppSetting).where(AppSetting.key == "todo_notification_email")
+            )
+            default_email_setting = default_email_res.scalar_one_or_none()
+            default_notification_email = (default_email_setting.value or "").strip() if default_email_setting else ""
+
             # 1) Invia notifica se notify_date è passato e non ancora inviato
             todos_notify = await session.execute(
                 select(Todo).where(
@@ -159,13 +167,16 @@ async def lifespan(app: FastAPI):
                     )
                     session.add(notif)
 
-                # Email
+                # Email: invia sempre se c'è notify_date (notify_email=True impostato dal frontend)
                 if todo.notify_email:
                     users_res = await session.execute(
                         select(User).where(User.id.in_(assignees), User.is_active == True)
                     )
                     users_list = users_res.scalars().all()
                     emails = [u.email for u in users_list if u.email]
+                    # Aggiungi email default admin se configurata e non già presente
+                    if default_notification_email and default_notification_email not in emails:
+                        emails.append(default_notification_email)
                     creator_res = await session.execute(select(User).where(User.id == todo.creator_id))
                     creator = creator_res.scalar_one_or_none()
                     if emails:
@@ -206,13 +217,16 @@ async def lifespan(app: FastAPI):
                     )
                     session.add(notif)
 
-                # Email
+                # Email scadenza (invia se notify_email=True, ovvero se ha una due_date)
                 if todo.notify_email:
                     users_res = await session.execute(
                         select(User).where(User.id.in_(assignees), User.is_active == True)
                     )
                     users_list = users_res.scalars().all()
                     emails = [u.email for u in users_list if u.email]
+                    # Aggiungi email default admin se configurata e non già presente
+                    if default_notification_email and default_notification_email not in emails:
+                        emails.append(default_notification_email)
                     creator_res = await session.execute(select(User).where(User.id == todo.creator_id))
                     creator = creator_res.scalar_one_or_none()
                     if emails:

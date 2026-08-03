@@ -227,3 +227,63 @@ async def update_ticket_observers(
         
     await db.commit()
     return data.usernames
+
+
+# ---- TODO Email notification settings ----
+
+class TodoEmailSettingsUpdate(BaseModel):
+    todo_notification_email: str = ""  # indirizzo email di default per notifiche TODO
+
+@router.get("/todo-email-settings")
+async def get_todo_email_settings(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin")
+    res = await db.execute(select(Setting).where(Setting.key == "todo_notification_email"))
+    setting = res.scalar_one_or_none()
+    return {"todo_notification_email": setting.value if setting else ""}
+
+@router.put("/todo-email-settings")
+async def update_todo_email_settings(
+    data: TodoEmailSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin")
+    res = await db.execute(select(Setting).where(Setting.key == "todo_notification_email"))
+    setting = res.scalar_one_or_none()
+    if setting:
+        setting.value = data.todo_notification_email
+    else:
+        setting = Setting(key="todo_notification_email", value=data.todo_notification_email)
+        db.add(setting)
+    await db.commit()
+    return {"todo_notification_email": data.todo_notification_email}
+
+
+# ---- SMTP settings (stored in DB for runtime display, real config is in .env) ----
+
+class SmtpSettingsRead(BaseModel):
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_from: str = ""
+    smtp_use_tls: bool = True
+
+@router.get("/smtp-settings", response_model=SmtpSettingsRead)
+async def get_smtp_settings(
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin")
+    from app.core.config import settings as app_settings
+    return SmtpSettingsRead(
+        smtp_host=app_settings.SMTP_HOST,
+        smtp_port=app_settings.SMTP_PORT,
+        smtp_user=app_settings.SMTP_USER,
+        smtp_from=app_settings.SMTP_FROM,
+        smtp_use_tls=app_settings.SMTP_USE_TLS,
+    )

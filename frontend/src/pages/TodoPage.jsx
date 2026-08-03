@@ -177,7 +177,7 @@ export default function TodoPage() {
         ...form,
         notify_date: form.notify_date || null,
         due_date: form.due_date || null,
-        notify_email: !!(form.notify_date && form.due_date),
+        notify_email: !!(form.notify_date || form.due_date),
       };
 
       if (editMode && selected) {
