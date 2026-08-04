@@ -225,7 +225,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
 
     // Colori barre per priorità e fasi / nascondi bar per milestone / classe verde se completata
     gantt.templates.task_class = function (start, end, task) {
-      if (task.type === 'milestone' || Number(task.duration) === 0) {
+      if (task.type === 'milestone') {
         return 'gantt-hidden-milestone';
       }
       const isCompleted = isTaskCompleted(task);
@@ -256,13 +256,13 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.templates.grid_row_class = function (start, end, task) {
       const isCompleted = isTaskCompleted(task);
       if (isCompleted) return 'gantt-row-completed';
-      if (task.type === 'milestone' || Number(task.duration) === 0) return 'gantt-row-milestone-pending';
+      if (task.type === 'milestone') return 'gantt-row-milestone-pending';
       return '';
     };
     gantt.templates.task_row_class = function (start, end, task) {
       const isCompleted = isTaskCompleted(task);
       if (isCompleted) return 'gantt-row-completed';
-      if (task.type === 'milestone' || Number(task.duration) === 0) return 'gantt-row-milestone-pending';
+      if (task.type === 'milestone') return 'gantt-row-milestone-pending';
       return '';
     };
 
@@ -608,7 +608,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       // Linee verticali per Eventi/Milestone (fase senza durata ma solo data)
       const taskList = Array.isArray(tasksRef.current) ? tasksRef.current : [];
       taskList.forEach(t => {
-        if (t && (t.type === 'milestone' || Number(t.duration) === 0)) {
+        if (t && t.type === 'milestone') {
           const mDate = parseDateSafe(t.start_date);
           if (mDate) {
             try {
@@ -719,7 +719,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         const totEff = calculateTaskEffHours(t);
         const plannedH = Number(t.planned_hours || 8.0);
         const isOverrun = plannedH > 0 && totEff > plannedH;
-        return {
+        const taskPayload = {
           ...t,
           id: String(t.id),
           text: t.text,
@@ -728,10 +728,12 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
           progress: isCompleted ? 1 : Math.min(1, t.progress || (plannedH > 0 ? totEff / plannedH : 0)),
           parent: t.parent === '0' || !t.parent ? 0 : String(t.parent),
           open: Boolean(t.open),
-          type: (t.type === 'milestone' || Number(t.duration) === 0) ? gantt.config.types.milestone : gantt.config.types.task,
+          type: t.type === 'milestone' ? gantt.config.types.milestone : gantt.config.types.task,
           color: isCompleted ? '#10b981' : (isOverrun ? '#ef4444' : getTaskColor(t)),
           is_overrun: isOverrun,
         };
+        delete taskPayload.end_date;
+        return taskPayload;
       }),
       links: validLinks.map(l => ({
         id: String(l.id),

@@ -158,6 +158,7 @@ export default function ProjectDetailPage() {
   const [selectedTaskForHours, setSelectedTaskForHours] = useState(null);
   const [actualHoursMap, setActualHoursMap] = useState({});
   const [modalExtraDates, setModalExtraDates] = useState([]);
+  const [specificExtraDate, setSpecificExtraDate] = useState('');
   const [allVacations, setAllVacations] = useState([]);
   const [openTicketsCount, setOpenTicketsCount] = useState(0);
 
@@ -551,8 +552,8 @@ export default function ProjectDetailPage() {
       faseSel: initialFase,
       customText: '',
       color: initialColor,
-      start_date: project?.start_date || new Date().toISOString().split('T')[0],
-      end_date: project?.end_date || new Date().toISOString().split('T')[0],
+      start_date: new Date().toISOString().split('T')[0],
+      end_date: new Date().toISOString().split('T')[0],
       duration_days: 1,
       planned_hours: 8.0,
       budgetMode: 'start_days',
@@ -861,8 +862,26 @@ export default function ProjectDetailPage() {
     setShowOreModal(true);
   }
 
+  function handleSpecificDateChange(dateStr) {
+    if (!dateStr || !selectedTaskForHours) return;
+    const plannedDates = getWorkDatesBetween(
+      selectedTaskForHours.start_date ? selectedTaskForHours.start_date.split(' ')[0] : '',
+      selectedTaskForHours.end_date ? selectedTaskForHours.end_date.split(' ')[0] : ''
+    );
+    const allCurrentDates = Array.from(new Set([...plannedDates, ...modalExtraDates]));
+    if (allCurrentDates.includes(dateStr)) {
+      toast.error('La data selezionata è già presente nella tabella.');
+      setSpecificExtraDate('');
+      return;
+    }
+    setModalExtraDates(prev => [...prev, dateStr].sort());
+    toast.success(`Aggiunta colonna: ${dateStr.split('-').reverse().join('/')}`);
+    setSpecificExtraDate('');
+  }
+
   function handleAddExtraDayToModal() {
     if (!selectedTaskForHours) return;
+    // Aggiunge sempre il prossimo giorno lavorativo dopo l'ultimo presente
     const plannedDates = getWorkDatesBetween(
       selectedTaskForHours.start_date ? selectedTaskForHours.start_date.split(' ')[0] : '',
       selectedTaskForHours.end_date ? selectedTaskForHours.end_date.split(' ')[0] : ''
@@ -892,7 +911,7 @@ export default function ProjectDetailPage() {
     }
     const lastDate = modalExtraDates[modalExtraDates.length - 1];
     setModalExtraDates(prev => prev.slice(0, -1));
-    toast.success(`Rimosso ultimo giorno extra: ${lastDate.split('-').reverse().join('/')}`);
+    toast.success(`Rimosso giorno: ${lastDate.split('-').reverse().join('/')}`);
   }
 
   async function handleSaveOreModal() {
@@ -950,7 +969,7 @@ export default function ProjectDetailPage() {
   function toggleWorkerSelection(w, requireConfirm = false) {
     const isSelected = taskForm.workers.includes(w);
     if (isSelected && requireConfirm && !window.confirm(`Confermi la rimozione dell'addetto "${w}" da questa fase?`)) return;
-    
+
     let newWorkers;
     if (isSelected) {
       newWorkers = taskForm.workers.filter(x => x !== w);
@@ -960,7 +979,7 @@ export default function ProjectDetailPage() {
 
     const totalHours = Number(taskForm.planned_hours) || (Number(taskForm.duration_days) * 8.0) || 8.0;
     const hoursPerWorker = newWorkers.length > 0 ? (totalHours / newWorkers.length) : 0;
-    
+
     let newWorkerHours = {};
     newWorkers.forEach(worker => {
       newWorkerHours[worker] = parseFloat(hoursPerWorker.toFixed(1));
@@ -2412,16 +2431,55 @@ export default function ProjectDetailPage() {
       {/* MODALE CONSUNTIVO ORE EFFETTIVE (ORE MODAL) */}
       {showOreModal && selectedTaskForHours && (
         <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: 840 }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div>
+          <div className="modal" style={{ maxWidth: 1200, width: '95vw' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header" style={{ flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 240 }}>
                 <h2 className="inline-heading"><AppIcon name="clock" size={18} />Giornale ore consuntivate</h2>
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
                   Fase: <strong style={{ color: 'var(--accent-500)' }}>{selectedTaskForHours.text}</strong> |{' '}
                   Ore previste: <strong>{selectedTaskForHours.planned_hours || 8}h</strong>
+                  {user?.role !== 'admin' && (
+                    <span style={{ marginLeft: 10, fontSize: 11, color: 'var(--text-tertiary)', background: 'var(--bg-tertiary)', padding: '2px 8px', borderRadius: 6 }}>
+                      Puoi modificare solo le tue ore
+                    </span>
+                  )}
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {/* Date picker per data specifica — auto-aggiunge al cambio data */}
+                <div
+                  title="Clicca per scegliere una data specifica da aggiungere"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: specificExtraDate ? 'var(--bg-tertiary)' : 'transparent',
+                    border: `1px solid ${specificExtraDate ? 'var(--border-default)' : 'transparent'}`,
+                    borderRadius: 8, padding: '4px 10px',
+                    opacity: specificExtraDate ? 1 : 0.45,
+                    transition: 'opacity 0.2s, background 0.2s, border-color 0.2s',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={e => { if (!specificExtraDate) e.currentTarget.style.opacity = '0.8'; }}
+                  onMouseLeave={e => { if (!specificExtraDate) e.currentTarget.style.opacity = '0.45'; }}
+                >
+                  <AppIcon name="calendar" size={14} style={{ color: specificExtraDate ? 'var(--accent-500)' : 'var(--text-muted)', flexShrink: 0 }} />
+                  <input
+                    type="date"
+                    value={specificExtraDate}
+                    onChange={e => handleSpecificDateChange(e.target.value)}
+                    style={{ border: 'none', background: 'transparent', fontSize: '0.82rem', color: 'var(--text-primary)', outline: 'none', cursor: 'pointer', width: specificExtraDate ? 'auto' : 100 }}
+                    title="Scegli una data specifica da aggiungere — si inserisce subito"
+                  />
+                  {!specificExtraDate && <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Aggiungi giorno con data specifica</span>}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleAddExtraDayToModal}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 600 }}
+                  title="Aggiungi il prossimo giorno lavorativo dopo l'ultimo presente"
+                >
+                  <AppIcon name="plus" size={14} />Aggiungi giorno extra in coda
+                </button>
                 {modalExtraDates.length > 0 && (
                   <button
                     type="button"
@@ -2430,18 +2488,9 @@ export default function ProjectDetailPage() {
                     style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 600, color: '#ef4444' }}
                     title="Rimuovi l'ultimo giorno extra aggiunto"
                   >
-                    <AppIcon name="trash" size={14} />Rimuovi ultimo giorno
+                    <AppIcon name="trash" size={14} />Rimuovi giorno
                   </button>
                 )}
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={handleAddExtraDayToModal}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 600 }}
-                  title="Aggiungi una colonna giorno extra al giornale ore (senza modificare la data fine fase)"
-                >
-                  <AppIcon name="plus" size={14} />Aggiungi giorno extra
-                </button>
                 <button className="btn-ghost btn-icon" onClick={() => setShowOreModal(false)} aria-label="Chiudi">
                   <AppIcon name="close" />
                 </button>
@@ -2469,7 +2518,7 @@ export default function ProjectDetailPage() {
 
               return (
                 <div style={{ marginTop: 16 }}>
-                  <div style={{ overflowX: 'auto', maxHeight: 380 }}>
+                  <div style={{ overflowX: 'auto', maxHeight: 520 }}>
                     <table className="ore-grid-table">
                       <thead>
                         <tr>

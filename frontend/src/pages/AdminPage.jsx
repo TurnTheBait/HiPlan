@@ -793,7 +793,6 @@ export default function AdminPage() {
       </div>
 
       {/* SEZIONE LOG EMAIL */}
-
       <div className={`admin-section-card ${collapsedSections.emails ? 'is-collapsed' : ''}`} style={{ marginTop: 32, marginBottom: 30 }}>
         <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
           <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('emails')}>

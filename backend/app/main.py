@@ -16,33 +16,13 @@ from app.api import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Crea le tabelle all'avvio (in sviluppo; in prod usa Alembic)
+    from app.services.db_migration_service import run_auto_migration
     async with engine.begin() as conn:
+        # 1) Crea le tabelle nuove (non tocca quelle esistenti)
         await conn.run_sync(Base.metadata.create_all)
-        try:
-            await conn.exec_driver_sql("ALTER TABLE tasks ADD COLUMN color VARCHAR(50);")
-        except Exception:
-            pass  # Colonna già esistente
-        try:
-            await conn.exec_driver_sql("ALTER TABLE tasks ADD COLUMN department VARCHAR(50);")
-        except Exception:
-            pass
-        try:
-            await conn.exec_driver_sql("ALTER TABLE tasks ADD COLUMN completed INTEGER DEFAULT 0;")
-        except Exception:
-            pass
-        try:
-            await conn.exec_driver_sql("ALTER TABLE tasks ADD COLUMN budget_mode VARCHAR(50);")
-        except Exception:
-            pass
-        try:
-            await conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN responsible_id VARCHAR(36);")
-        except Exception:
-            pass
-        try:
-            await conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN assigned_workers TEXT DEFAULT '[]';")
-        except Exception:
-            pass
+        # 2) Aggiunge automaticamente le colonne mancanti al DB esistente
+        #    Garantisce che un DB vecchio venga aggiornato senza perdere dati
+        await run_auto_migration(conn)
 
     from app.models.base import AsyncSessionLocal
     # pyrefly: ignore [missing-import]
