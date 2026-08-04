@@ -2,7 +2,7 @@ import json
 import logging
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Iterable
+from typing import Any, Iterable, Optional
 
 # pyrefly: ignore [missing-import]
 from fastapi import HTTPException
@@ -45,7 +45,7 @@ def _json(value: Any, default: Any) -> Any:
         return default
 
 
-def _date(value: Any) -> date | None:
+def _date(value: Any) -> Optional[date]:
     if value is None or isinstance(value, date):
         return value
     try:
@@ -89,7 +89,7 @@ def _state_matches(task: Task, expected: dict[str, Any]) -> bool:
     return _task_state(task) == expected
 
 
-def _actual_hours(task: Task, worker: str | None = None) -> float:
+def _actual_hours(task: Task, worker: Optional[str] = None) -> float:
     payload = _json(task.actual_hours, {})
     if not isinstance(payload, dict):
         return 0.0
@@ -322,7 +322,7 @@ def _valid_shifted_range(
     raise HTTPException(status_code=409, detail=f"Impossibile trovare un periodo libero per la fase '{task.text}'")
 
 
-def _dependency_required_start(source: Task, target: Task, link: Link) -> date | None:
+def _dependency_required_start(source: Task, target: Task, link: Link) -> Optional[date]:
     if not source.start_date or not target.start_date:
         return None
     source_end = source.end_date or source.start_date
@@ -426,8 +426,8 @@ async def list_runs(db: AsyncSession, project_id: str) -> list[dict[str, Any]]:
 async def apply_rescheduling(
     db: AsyncSession,
     project_id: str,
-    actor: User | None,
-    selected_task_ids: list[str] | None = None,
+    actor: Optional[User],
+    selected_task_ids: Optional[list[str]] = None,
     allow_when_paused: bool = False,
 ) -> dict[str, Any]:
     project, tasks, links, users, aliases, vacations = await _load_context(db, project_id)
