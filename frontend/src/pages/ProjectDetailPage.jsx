@@ -1989,115 +1989,115 @@ export default function ProjectDetailPage() {
       {activeTab === 'alert' && (
         <div className="animate-fadeIn">
           <section className={`planning-agent-panel ${agentPanelExpanded ? 'expanded' : 'compact'}`}>
-              <div className="planning-agent-header">
-                <div>
-                  <span className={`planning-agent-kicker ${rescheduling.paused ? 'paused' : ''}`}>
-                    <span className="planning-agent-live-dot" />
-                    {rescheduling.paused ? 'Agente in pausa' : 'Agente attivo · analisi giornaliera alle 01:15'}
-                  </span>
-                  <h3>Recupero intelligente di ritardi e ferie</h3>
-                  <p>Ogni giorno analizza le ore saltate, cerca capacità libera sugli stessi addetti e aggiorna le fasi dipendenti senza cambiarne assegnatari o monte ore.</p>
-                </div>
-                <div className="planning-agent-controls">
-                  {(user?.role === 'admin' || user?.role === 'editor') ? (
-                    <div className="planning-agent-actions">
-                      <button
-                        className="btn btn-primary"
-                        onClick={handleApplyReschedulingNow}
-                        disabled={agentBusy || reschedulingLoading || !rescheduling.scenarios.some(scenario => scenario.actionable)}
-                        title={rescheduling.scenarios.some(scenario => scenario.actionable) ? 'Applica subito le soluzioni disponibili' : 'Nessuna soluzione disponibile'}
-                      >
-                        <AppIcon name="timeline" />
-                        {applyingNow ? 'Elaborazione…' : 'Applica ora'}
-                      </button>
-                      <button
-                        className={`btn ${rescheduling.paused ? 'btn-primary' : 'btn-secondary'}`}
-                        onClick={handleTogglePlanningAgent}
-                        disabled={agentBusy || reschedulingLoading}
-                      >
-                        <AppIcon name={rescheduling.paused ? 'timeline' : 'pause'} />
-                        {rescheduling.paused ? 'Riattiva agente' : 'Metti in pausa'}
-                      </button>
-                    </div>
-                  ) : (
-                    <span className="planning-agent-readonly"><AppIcon name="lock" size={14} /> Sola lettura</span>
-                  )}
-                  <button
-                    type="button"
-                    className="btn btn-secondary planning-agent-expand"
-                    onClick={() => setAgentPanelExpanded(value => !value)}
-                    aria-expanded={agentPanelExpanded}
-                    title={agentPanelExpanded ? 'Comprimi agente' : 'Mostra dettagli agente'}
-                  >
-                    <AppIcon name={agentPanelExpanded ? 'chevronUp' : 'chevronDown'} />
-                  </button>
-                </div>
+            <div className="planning-agent-header">
+              <div>
+                <span className={`planning-agent-kicker ${rescheduling.paused ? 'paused' : ''}`}>
+                  <span className="planning-agent-live-dot" />
+                  {rescheduling.paused ? 'Agente in pausa' : 'Agente attivo · analisi giornaliera alle 01:15'}
+                </span>
+                <h3>Recupero intelligente di ritardi e ferie</h3>
+                <p>Ogni giorno analizza le ore saltate, cerca capacità libera sugli stessi addetti e aggiorna le fasi dipendenti senza cambiarne assegnatari o monte ore.</p>
               </div>
-
-              {agentPanelExpanded && (
-                reschedulingLoading ? (
-                  <div className="planning-agent-empty">Analisi degli scenari in corso…</div>
-                ) : rescheduling.scenarios.length > 0 ? (
-                  <div className="planning-scenario-grid">
-                    {rescheduling.scenarios.map(scenario => (
-                      <article className="planning-scenario-card" key={scenario.task_id}>
-                        <div className="planning-scenario-title">
-                          <AppIcon name="alert" size={16} />
-                          <strong>{scenario.task_name}</strong>
-                          <span>{scenario.missing_hours}h da recuperare</span>
-                        </div>
-                        <p>{scenario.reason}</p>
-                        <small><AppIcon name="users" size={13} /> {scenario.workers.join(', ') || 'Nessun addetto assegnato'}</small>
-                        <small className="planning-scenario-schedule">
-                          {rescheduling.paused ? 'In attesa: agente in pausa' : 'Verrà gestito automaticamente alla prossima analisi'}
-                        </small>
-                      </article>
-                    ))}
+              <div className="planning-agent-controls">
+                {(user?.role === 'admin' || user?.role === 'editor') ? (
+                  <div className="planning-agent-actions">
+                    <button
+                      className="btn btn-primary"
+                      onClick={handleApplyReschedulingNow}
+                      disabled={agentBusy || reschedulingLoading || !rescheduling.scenarios.some(scenario => scenario.actionable)}
+                      title={rescheduling.scenarios.some(scenario => scenario.actionable) ? 'Applica subito le soluzioni disponibili' : 'Nessuna soluzione disponibile'}
+                    >
+                      <AppIcon name="timeline" />
+                      {applyingNow ? 'Elaborazione…' : 'Applica ora'}
+                    </button>
+                    <button
+                      className={`btn ${rescheduling.paused ? 'btn-primary' : 'btn-secondary'}`}
+                      onClick={handleTogglePlanningAgent}
+                      disabled={agentBusy || reschedulingLoading}
+                    >
+                      <AppIcon name={rescheduling.paused ? 'timeline' : 'pause'} />
+                      {rescheduling.paused ? 'Riattiva agente' : 'Metti in pausa'}
+                    </button>
                   </div>
                 ) : (
-                  <div className="planning-agent-empty"><AppIcon name="check" size={15} /> Nessuno scenario da ripianificare.</div>
-                )
-              )}
+                  <span className="planning-agent-readonly"><AppIcon name="lock" size={14} /> Sola lettura</span>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-secondary planning-agent-expand"
+                  onClick={() => setAgentPanelExpanded(value => !value)}
+                  aria-expanded={agentPanelExpanded}
+                  title={agentPanelExpanded ? 'Comprimi agente' : 'Mostra dettagli agente'}
+                >
+                  <AppIcon name={agentPanelExpanded ? 'chevronUp' : 'chevronDown'} />
+                </button>
+              </div>
+            </div>
 
-              {agentPanelExpanded && rescheduling.runs.length > 0 && (
-                <div className="planning-runs">
-                  <div className="planning-runs-title">
-                    <h4>Soluzioni applicate</h4>
-                  </div>
-                  {rescheduling.runs.map(run => (
-                    <article className="planning-run-card" key={run.id}>
-                      <div className="planning-run-heading">
-                        <div>
-                          <span className={`planning-run-status ${run.status}`}>{run.status === 'applied' ? 'Applicata' : 'Annullata'}</span>
-                          <strong>{run.solution_summary}</strong>
-                          <small>{run.created_at ? new Date(run.created_at).toLocaleString('it-IT') : ''} · {run.created_by}</small>
-                        </div>
-                        {run.status === 'applied' && (user?.role === 'admin' || user?.role === 'editor') && (
-                          <button className="btn btn-secondary" onClick={() => handleUndoRescheduling(run.id)} disabled={agentBusy}>
-                            <AppIcon name="undo" /> Annulla modifiche
-                          </button>
-                        )}
+            {agentPanelExpanded && (
+              reschedulingLoading ? (
+                <div className="planning-agent-empty">Analisi degli scenari in corso…</div>
+              ) : rescheduling.scenarios.length > 0 ? (
+                <div className="planning-scenario-grid">
+                  {rescheduling.scenarios.map(scenario => (
+                    <article className="planning-scenario-card" key={scenario.task_id}>
+                      <div className="planning-scenario-title">
+                        <AppIcon name="alert" size={16} />
+                        <strong>{scenario.task_name}</strong>
+                        <span>{scenario.missing_hours}h da recuperare</span>
                       </div>
-                      <p className="planning-run-reason"><strong>Motivazione:</strong> {run.trigger_summary}</p>
-                      <div className="planning-change-list">
-                        {run.changes.map(change => (
-                          <div key={change.task_id}>
-                            <strong>{change.task_name}</strong>
-                            <span>{change.before.start_date} → {change.before.end_date}</span>
-                            <AppIcon name="arrowRight" size={13} />
-                            <span>{change.after.start_date} → {change.after.end_date}</span>
-                            <small>{change.reason}</small>
-                          </div>
-                        ))}
-                      </div>
+                      <p>{scenario.reason}</p>
+                      <small><AppIcon name="users" size={13} /> {scenario.workers.join(', ') || 'Nessun addetto assegnato'}</small>
+                      <small className="planning-scenario-schedule">
+                        {rescheduling.paused ? 'In attesa: agente in pausa' : 'Verrà gestito automaticamente alla prossima analisi'}
+                      </small>
                     </article>
                   ))}
                 </div>
-              )}
-            </section>
+              ) : (
+                <div className="planning-agent-empty"><AppIcon name="check" size={15} /> Nessuno scenario da ripianificare.</div>
+              )
+            )}
+
+            {agentPanelExpanded && rescheduling.runs.length > 0 && (
+              <div className="planning-runs">
+                <div className="planning-runs-title">
+                  <h4>Soluzioni applicate</h4>
+                </div>
+                {rescheduling.runs.map(run => (
+                  <article className="planning-run-card" key={run.id}>
+                    <div className="planning-run-heading">
+                      <div>
+                        <span className={`planning-run-status ${run.status}`}>{run.status === 'applied' ? 'Applicata' : 'Annullata'}</span>
+                        <strong>{run.solution_summary}</strong>
+                        <small>{run.created_at ? new Date(run.created_at).toLocaleString('it-IT') : ''} · {run.created_by}</small>
+                      </div>
+                      {run.status === 'applied' && (user?.role === 'admin' || user?.role === 'editor') && (
+                        <button className="btn btn-secondary" onClick={() => handleUndoRescheduling(run.id)} disabled={agentBusy}>
+                          <AppIcon name="undo" /> Annulla modifiche
+                        </button>
+                      )}
+                    </div>
+                    <p className="planning-run-reason"><strong>Motivazione:</strong> {run.trigger_summary}</p>
+                    <div className="planning-change-list">
+                      {run.changes.map(change => (
+                        <div key={change.task_id}>
+                          <strong>{change.task_name}</strong>
+                          <span>{change.before.start_date} → {change.before.end_date}</span>
+                          <AppIcon name="arrowRight" size={13} />
+                          <span>{change.after.start_date} → {change.after.end_date}</span>
+                          <small>{change.reason}</small>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
 
           <div className="commessa-summary-card">
-            <div 
+            <div
               style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
               onClick={() => setSemaforiExpanded(!semaforiExpanded)}
             >
@@ -2647,30 +2647,37 @@ export default function ProjectDetailPage() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 {/* Date picker per data specifica — auto-aggiunge al cambio data */}
-                <div
+                <label
+                  className="btn btn-secondary btn-sm"
                   title="Clicca per scegliere una data specifica da aggiungere"
                   style={{
                     display: 'flex', alignItems: 'center', gap: 6,
-                    background: specificExtraDate ? 'var(--bg-tertiary)' : 'transparent',
-                    border: `1px solid ${specificExtraDate ? 'var(--border-default)' : 'transparent'}`,
-                    borderRadius: 8, padding: '4px 10px',
                     opacity: specificExtraDate ? 1 : 0.45,
-                    transition: 'opacity 0.2s, background 0.2s, border-color 0.2s',
+                    transition: 'opacity 0.2s',
                     cursor: 'pointer',
+                    fontWeight: 600,
+                    margin: 0,
+                    position: 'relative'
                   }}
                   onMouseEnter={e => { if (!specificExtraDate) e.currentTarget.style.opacity = '0.8'; }}
                   onMouseLeave={e => { if (!specificExtraDate) e.currentTarget.style.opacity = '0.45'; }}
                 >
                   <AppIcon name="calendar" size={14} style={{ color: specificExtraDate ? 'var(--accent-500)' : 'var(--text-muted)', flexShrink: 0 }} />
+                  {!specificExtraDate && <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Aggiungi giorno con data specifica</span>}
                   <input
                     type="date"
                     value={specificExtraDate}
                     onChange={e => handleSpecificDateChange(e.target.value)}
-                    style={{ border: 'none', background: 'transparent', fontSize: '0.82rem', color: 'var(--text-primary)', outline: 'none', cursor: 'pointer', width: specificExtraDate ? 'auto' : 100 }}
+                    style={{
+                      border: 'none', background: 'transparent', fontSize: '0.82rem', color: 'var(--text-primary)', outline: 'none', cursor: 'pointer',
+                      ...(specificExtraDate
+                        ? { width: 'auto' }
+                        : { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0 }
+                      )
+                    }}
                     title="Scegli una data specifica da aggiungere — si inserisce subito"
                   />
-                  {!specificExtraDate && <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Aggiungi giorno con data specifica</span>}
-                </div>
+                </label>
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
