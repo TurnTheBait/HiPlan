@@ -165,6 +165,8 @@ I campi `workers`, `worker_hours` e `actual_hours` sono memorizzati come JSON in
 
 `has_vacation_conflict` mantiene il flag di sovrapposizione con periodi di ferie.
 
+In creazione e modifica, una sovrapposizione con le ferie non produce un errore di validazione. `schedule_assignment_at_earliest_capacity` costruisce la capacità giornaliera già occupata sulle commesse operative, distribuisce `worker_hours` nei primi slot da massimo 8 ore disponibili e salta ferie e giorni non lavorativi. Le date della fase vengono ampliate o traslate in base alla prima e all'ultima allocazione; l'eventuale slittamento viene propagato alle dipendenze come delta temporale.
+
 ### `links`
 
 Collega una task sorgente a una task target nello stesso progetto. Supporta:
@@ -232,13 +234,15 @@ Tutte le rotte applicative usano il prefisso `/api`. La specifica completa e agg
 | `POST` | `/api/projects/{id}/links` | crea dipendenza |
 | `DELETE` | `/api/projects/{id}/links/{link_id}` | elimina dipendenza |
 | `GET` | `/api/projects/{id}/activity_logs` | registro attività |
-| `GET` | `/api/projects/{id}/rescheduling` | scenari e storico ripianificazioni |
-| `POST` | `/api/projects/{id}/rescheduling/apply` | applica subito una ripianificazione, anche se l'automazione è in pausa |
+| `GET` | `/api/projects/{id}/rescheduling` | criticità della commessa, dry-run globale con modifiche proposte e storico ripianificazioni |
+| `POST` | `/api/projects/{id}/rescheduling/apply` | rianalizza lo scenario globale e applica subito il batch, includendo manualmente la commessa corrente anche se in pausa |
 | `POST` | `/api/projects/{id}/rescheduling/pause` | sospende o riattiva l'agente sulla commessa |
 | `POST` | `/api/projects/{id}/rescheduling/{run_id}/undo` | rollback controllato |
 | `GET` | `/api/workload/heatmap` | carichi di lavoro |
 
-L'`AsyncIOScheduler`, configurato sul fuso `Europe/Rome`, avvia l'agente poco dopo l'avvio del backend e ogni giorno alle 01:15. Sono elaborate soltanto le commesse `planning` o `active` che non hanno `planning_agent_paused`; l'analisi dei ritardi considera esclusivamente giornate già concluse.
+L'`AsyncIOScheduler`, configurato sul fuso `Europe/Rome`, avvia l'agente poco dopo l'avvio del backend e ogni giorno alle 01:15. `analyze_all_projects` raccoglie gli scenari di tutte le commesse operative non in pausa e `run_daily_rescheduling` li applica in un'unica transazione globale. L'analisi considera esclusivamente giornate concluse e filtra le ore consuntivate per data, impedendo a registrazioni odierne o future di coprire deficit precedenti. Ogni deficit incrementale viene aggregato per addetto e convertito in giorni di capacità da 8 ore; una seconda esecuzione senza nuovi deficit non crea un altro batch. Le fasi correnti e future dell'addetto vengono spostate su tutte le commesse `planning` o `active`. Le dipendenze propagano il delta temporale effettivo della sorgente, inclusi gli ulteriori giorni saltati per ferie, preservando offset e sovrapposizioni. Le commesse con `planning_agent_paused` sono escluse e protette. Le righe `planning_runs` prodotte sulle diverse commesse condividono un `batch_id`, usato per audit e rollback atomico dell'intervento completo.
+
+`preview_rescheduling` richiama lo stesso motore con `dry_run=True`: costruisce modifiche, allocazioni e riepilogo multi-commessa, quindi esegue il rollback della sessione prima di restituire l'anteprima. L'endpoint `GET` può quindi essere richiamato ogni volta che il box viene visualizzato senza produrre effetti persistenti. L'applicazione manuale esegue comunque una nuova analisi globale immediatamente prima del commit.
 
 ### Collaborazione e operatività
 

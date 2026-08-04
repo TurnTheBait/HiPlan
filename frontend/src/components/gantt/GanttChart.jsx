@@ -3,7 +3,7 @@ import { gantt } from 'dhtmlx-gantt';
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css';
 import { getTaskColor } from '../../utils/phaseColors';
 import { isTaskCompleted, calculateTaskEffHours } from '../../utils/taskCompletion';
-import { isWeekendOrHoliday } from '../../utils/workingDays';
+import { isWeekendOrHoliday, getPasquettaDate } from '../../utils/workingDays';
 import './GanttChart.css';
 
 const parseDateSafe = (d) => {
@@ -24,7 +24,7 @@ const parseDateSafe = (d) => {
 
 export { isWeekendOrHoliday };
 
-export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onNewTask, visibleColumns, readOnly, projectStartDate, projectEndDate }) {
+export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onOpenTaskHours, onNewTask, visibleColumns, readOnly, projectStartDate, projectEndDate }) {
 
   const containerRef = useRef(null);
   const initialized = useRef(false);
@@ -38,7 +38,9 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
   const onLinkCreateRef = useRef(onLinkCreate);
   const onLinkDeleteRef = useRef(onLinkDelete);
   const onEditTaskRef = useRef(onEditTask);
+  const onOpenTaskHoursRef = useRef(onOpenTaskHours);
   const onNewTaskRef = useRef(onNewTask);
+  const readOnlyRef = useRef(readOnly);
 
   useEffect(() => {
     projectStartDateRef.current = projectStartDate;
@@ -52,9 +54,10 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
     onLinkCreateRef.current = onLinkCreate;
     onLinkDeleteRef.current = onLinkDelete;
     onEditTaskRef.current = onEditTask;
+    onOpenTaskHoursRef.current = onOpenTaskHours;
     onNewTaskRef.current = onNewTask;
-  });
-
+    readOnlyRef.current = readOnly;
+  }, [tasks, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onOpenTaskHours, onNewTask, readOnly, projectStartDate, projectEndDate]);
   useEffect(() => {
     if (!containerRef.current || initialized.current) return;
     initialized.current = true;
@@ -214,9 +217,13 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
       }
       let durationText = `<b>${task.duration || 1} giorni</b>`;
       durationText += ` (${task.planned_hours || (task.duration ? task.duration * 8 : 8)} ore previste)`;
+      const displayEnd = new Date(end);
+      if (displayEnd.getHours() === 0 && displayEnd.getMinutes() === 0) {
+        displayEnd.setDate(displayEnd.getDate() - 1);
+      }
       return `<b>${task.text}</b><br/>
         Inizio: ${gantt.templates.tooltip_date_format(start)}<br/>
-        Fine: ${gantt.templates.tooltip_date_format(end)}<br/>
+        Fine: ${gantt.templates.tooltip_date_format(displayEnd)}<br/>
         Durata: ${durationText}<br/>
         Progresso: ${Math.round((task.progress || 0) * 100)}%`;
     };
@@ -270,9 +277,25 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
     // Configurazione orari e giorni lavorativi (esclude sabati, domeniche e festivi)
     gantt.config.work_time = true;
     gantt.config.correct_work_time = true;
-    gantt.config.is_work_time = function (date) {
-      return !isWeekendOrHoliday(date);
-    };
+
+    // Registra i weekend come non lavorativi per DHTMLX
+    gantt.setWorkTime({ day: 0, hours: false }); // Domenica
+    gantt.setWorkTime({ day: 6, hours: false }); // Sabato
+
+    // Registra le festività italiane fisse e mobili per DHTMLX dal 2020 al 2040
+    for (let y = 2020; y <= 2040; y++) {
+      gantt.setWorkTime({ date: new Date(y, 0, 1), hours: false });
+      gantt.setWorkTime({ date: new Date(y, 0, 6), hours: false });
+      gantt.setWorkTime({ date: new Date(y, 3, 25), hours: false });
+      gantt.setWorkTime({ date: new Date(y, 4, 1), hours: false });
+      gantt.setWorkTime({ date: new Date(y, 5, 2), hours: false });
+      gantt.setWorkTime({ date: new Date(y, 7, 15), hours: false });
+      gantt.setWorkTime({ date: new Date(y, 10, 1), hours: false });
+      gantt.setWorkTime({ date: new Date(y, 11, 8), hours: false });
+      gantt.setWorkTime({ date: new Date(y, 11, 25), hours: false });
+      gantt.setWorkTime({ date: new Date(y, 11, 26), hours: false });
+      gantt.setWorkTime({ date: getPasquettaDate(y), hours: false });
+    }
 
     // Funzione helper per calcolare la fine esatta di una cella temporale (giorno, settimana, mese, trimestre, anno)
     function getCellEndDate(date, unit, step = 1) {
@@ -314,56 +337,65 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
 
     gantt.init(containerRef.current);
 
-    gantt.attachEvent("onGanttRender", () => {
+    const ganttEvents = [];
+
+    ganttEvents.push(gantt.attachEvent("onGanttRender", () => {
       if (drawCustomMarkersRef.current) drawCustomMarkersRef.current();
-    });
-    gantt.attachEvent("onGanttScroll", () => {
+    }));
+    ganttEvents.push(gantt.attachEvent("onGanttScroll", () => {
       if (drawCustomMarkersRef.current) drawCustomMarkersRef.current();
-    });
-    gantt.attachEvent("onTaskOpened", () => {
+    }));
+    ganttEvents.push(gantt.attachEvent("onTaskOpened", () => {
       if (drawCustomMarkersRef.current) drawCustomMarkersRef.current();
-    });
-    gantt.attachEvent("onTaskClosed", () => {
+    }));
+    ganttEvents.push(gantt.attachEvent("onTaskClosed", () => {
       if (drawCustomMarkersRef.current) drawCustomMarkersRef.current();
-    });
-    gantt.attachEvent("onDataRender", () => {
+    }));
+    ganttEvents.push(gantt.attachEvent("onDataRender", () => {
       if (drawCustomMarkersRef.current) drawCustomMarkersRef.current();
-    });
-    gantt.attachEvent("onAfterTaskAdd", () => {
+    }));
+    ganttEvents.push(gantt.attachEvent("onAfterTaskAdd", () => {
       if (drawCustomMarkersRef.current) drawCustomMarkersRef.current();
-    });
-    gantt.attachEvent("onAfterTaskDelete", () => {
+    }));
+    ganttEvents.push(gantt.attachEvent("onAfterTaskDelete", () => {
       if (drawCustomMarkersRef.current) drawCustomMarkersRef.current();
-    });
+    }));
 
     // Intercettazione doppio click e tasto "+" per aprire il modal React in italiano (con giorni, ore e addetti)
-    gantt.attachEvent("onTaskDblClick", (id, e) => {
+    ganttEvents.push(gantt.attachEvent("onTaskDblClick", (id, e) => {
       const task = gantt.getTask(id);
-      if (task && onEditTaskRef.current) {
-        onEditTaskRef.current(task);
-        return false;
+      if (task) {
+        if (!readOnlyRef.current && onEditTaskRef.current) {
+          onEditTaskRef.current(task);
+        } else if (readOnlyRef.current && onOpenTaskHoursRef.current) {
+          onOpenTaskHoursRef.current(task);
+        }
       }
-      return true;
-    });
+      return false; // Blocca 100% l'apertura del lightbox nativo DHTMLX
+    }));
 
-    gantt.attachEvent("onBeforeLightbox", (id) => {
+    ganttEvents.push(gantt.attachEvent("onBeforeLightbox", (id) => {
       const task = gantt.getTask(id);
       if (task && task.$new) {
         gantt.deleteTask(id);
         if (onNewTaskRef.current) {
           onNewTaskRef.current(task.parent && task.parent !== 0 ? String(task.parent) : null);
         }
-      } else if (task && onEditTaskRef.current) {
-        onEditTaskRef.current(task);
+      } else if (task) {
+        if (!readOnlyRef.current && onEditTaskRef.current) {
+          onEditTaskRef.current(task);
+        } else if (readOnlyRef.current && onOpenTaskHoursRef.current) {
+          onOpenTaskHoursRef.current(task);
+        }
       }
       return false; // Blocca 100% la lightbox inglese di DHTMLX
-    });
+    }));
 
     // Le fasi si modificano esclusivamente dal relativo menu/modal.
     // I collegamenti tra fasi restano invece trascinabili.
-    gantt.attachEvent("onBeforeTaskDrag", () => false);
+    ganttEvents.push(gantt.attachEvent("onBeforeTaskDrag", () => false));
 
-    gantt.attachEvent("onAfterTaskAdd", (id, item) => {
+    ganttEvents.push(gantt.attachEvent("onAfterTaskAdd", (id, item) => {
       if (onTaskCreateRef.current) {
         onTaskCreateRef.current({
           text: item.text,
@@ -372,29 +404,29 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
           parent_id: item.parent && item.parent !== 0 ? String(item.parent) : null,
         }, id);
       }
-    });
+    }));
 
-    gantt.attachEvent("onBeforeTaskDelete", (id, item) => {
+    ganttEvents.push(gantt.attachEvent("onBeforeTaskDelete", (id, item) => {
       if (!window.confirm(`Confermi l'eliminazione della fase di lavorazione "${item.text || 'selezionata'}"?`)) {
         return false;
       }
       return true;
-    });
+    }));
 
-    gantt.attachEvent("onAfterTaskDelete", (id) => {
+    ganttEvents.push(gantt.attachEvent("onAfterTaskDelete", (id) => {
       if (onTaskDeleteRef.current) onTaskDeleteRef.current(id, true);
-    });
+    }));
 
-    gantt.attachEvent("onBeforeLinkAdd", (id, link) => {
+    ganttEvents.push(gantt.attachEvent("onBeforeLinkAdd", (id, link) => {
       if (!link.source || !link.target || String(link.source) === String(link.target)) return false;
       const existing = gantt.getLinks().find(l =>
         String(l.source) === String(link.source) && String(l.target) === String(link.target) && String(l.id) !== String(id)
       );
       if (existing) return false;
       return true;
-    });
+    }));
 
-    gantt.attachEvent("onAfterLinkAdd", (id, item) => {
+    ganttEvents.push(gantt.attachEvent("onAfterLinkAdd", (id, item) => {
       if (onLinkCreateRef.current) {
         onLinkCreateRef.current({
           source: String(item.source),
@@ -402,14 +434,14 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
           type: String(item.type || '0'),
         }, id);
       }
-    });
+    }));
 
-    gantt.attachEvent("onLinkDblClick", (id) => {
+    ganttEvents.push(gantt.attachEvent("onLinkDblClick", (id) => {
       if (onLinkDeleteRef.current) {
         onLinkDeleteRef.current(id, false);
       }
       return false; // blocks native DHTMLX popup
-    });
+    }));
 
     const handleResize = () => {
       if (initialized.current) gantt.setSizes();
@@ -417,6 +449,7 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
     window.addEventListener('resize', handleResize);
 
     return () => {
+      ganttEvents.forEach(eventId => gantt.detachEvent(eventId));
       window.removeEventListener('resize', handleResize);
       if (gantt.ext && gantt.ext.tooltips && gantt.ext.tooltips.tooltip) {
         gantt.ext.tooltips.tooltip.hide();
@@ -714,7 +747,6 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
           id: String(t.id),
           text: t.text,
           start_date: t.start_date,
-          duration: t.duration,
           progress: isCompleted ? 1 : Math.min(1, t.progress || (plannedH > 0 ? totEff / plannedH : 0)),
           parent: t.parent === '0' || !t.parent ? 0 : String(t.parent),
           open: Boolean(t.open),
@@ -722,7 +754,18 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
           color: isCompleted ? '#10b981' : (isOverrun ? '#ef4444' : getTaskColor(t)),
           is_overrun: isOverrun,
         };
-        delete taskPayload.end_date;
+
+        if (t.end_date) {
+          const exclusiveEnd = new Date(t.end_date);
+          exclusiveEnd.setDate(exclusiveEnd.getDate() + 1);
+          taskPayload.end_date = exclusiveEnd;
+          // Impostiamo la durata originale in modo da preservarla per la UI,
+          // anche se dhtmlx calcolerà internamente i giorni lavorativi.
+          taskPayload.duration = t.duration;
+        } else if (t.duration && t.start_date) {
+          taskPayload.duration = t.duration;
+        }
+
         return taskPayload;
       }),
       links: validLinks.map(l => ({

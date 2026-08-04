@@ -144,7 +144,8 @@ export default function WorkloadHeatmap() {
     if (!loading && columns.length > 0) {
       scrollToToday();
     }
-  }, [loading, columns, viewMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, columns.length, viewMode]);
 
   const capacityMap = { day: 8, week: 40, month: 160 };
   const currentCapacity = capacityMap[viewMode];

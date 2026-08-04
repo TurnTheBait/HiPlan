@@ -13,9 +13,11 @@ from app.models.project import Project
 from app.models.activity_log import ActivityCategory, ActivityLog
 from app.core.websocket_manager import manager
 from app.services.rescheduling_service import (
+    analyze_all_projects,
     analyze_project,
     apply_rescheduling,
     list_runs,
+    preview_rescheduling,
     undo_rescheduling,
 )
 
@@ -43,9 +45,12 @@ async def get_rescheduling_overview(
     project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Commessa non trovata")
+    paused = bool(project.planning_agent_paused)
+    preview = await preview_rescheduling(db, project_id)
     return {
-        "paused": bool(project.planning_agent_paused),
+        "paused": paused,
         "scenarios": await analyze_project(db, project_id),
+        "preview": preview,
         "runs": await list_runs(db, project_id),
     }
 
@@ -86,12 +91,17 @@ async def run_rescheduling(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.EDITOR)),
 ):
+    # Ogni esecuzione manuale riparte dallo stato globale attuale. La commessa
+    # aperta viene inclusa anche se il suo agente è in pausa, perché il comando
+    # esplicito "Applica ora" deve continuare a essere disponibile.
+    current_scenarios = await analyze_all_projects(db, include_paused_project_id=project_id)
     return await apply_rescheduling(
         db,
         project_id,
         current_user,
         payload.task_ids,
         allow_when_paused=True,
+        precomputed_scenarios=current_scenarios,
     )
 
 

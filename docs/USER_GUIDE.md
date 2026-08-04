@@ -102,6 +102,8 @@ Una fase può includere:
 
 Le modalità di calcolo permettono di partire da date, giorni oppure ore. I calcoli operativi escludono i giorni non lavorativi previsti dall'applicazione.
 
+Se uno degli addetti selezionati è in ferie nel periodo richiesto, l'assegnazione non viene bloccata. HiPlan considera il carico già pianificato dell'addetto su tutte le commesse operative e distribuisce le sue ore nei primi slot lavorativi disponibili, saltando ferie e giorni non lavorativi. Se necessario, le date della fase vengono adeguate automaticamente e l'interfaccia mostra il nuovo intervallo.
+
 ### Template di fase
 
 Quando si crea una fase è possibile usare un modello predefinito per reparto. Gli editor autorizzati possono salvare una nuova denominazione come template personalizzato; gli amministratori gestiscono l'elenco completo dal pannello Admin.
@@ -123,11 +125,11 @@ Il collegamento può includere un ritardo (`lag`). Nel Gantt le barre non posson
 
 ### Ripianificazione automatica
 
-L'agente di pianificazione esegue automaticamente l'analisi all'avvio di HiPlan e ogni giorno alle 01:15 sulle commesse in pianificazione o attive. Individua ore non consuntivate nelle giornate concluse e ferie sovrapposte, cerca capacità disponibile sugli stessi addetti e posticipa le fasi collegate rispettando dipendenze e giorni lavorativi. Le ore di recupero già pianificate vengono sottratte dalle analisi successive, evitando duplicazioni.
+L'agente di pianificazione esegue automaticamente l'analisi all'avvio di HiPlan e ogni giorno alle 01:15 sulle commesse in pianificazione o attive. Tutte le commesse vengono analizzate insieme in un unico batch: ritardi, ferie sovrapposte e ore non consuntivate nelle giornate concluse sono aggregati per addetto prima di modificare il Gantt. Le ore registrate su oggi o su date future non compensano un deficit già maturato nei giorni precedenti. La capacità persa appartiene all'addetto e non alla singola commessa: tutte le sue fasi correnti e future vengono quindi riallineate su tutte le commesse operative, rispettando giorni lavorativi e ferie. Per esempio, 8 ore previste ma non consuntivate producono uno slittamento di un giorno lavorativo; 16 ore producono due giorni. Il medesimo scostamento effettivo, inclusi eventuali giorni di ferie incontrati durante il recupero, viene propagato a cascata alle fasi dipendenti, conservando gli offset e le eventuali sovrapposizioni esistenti. Le ore di recupero già pianificate vengono sottratte dalle analisi successive, evitando duplicazioni.
 
-Nella sezione **Ritardi**, editor e amministratori possono vedere se l'agente è attivo, applicare immediatamente le soluzioni disponibili oppure metterlo in pausa per la sola commessa corrente. Una commessa in pausa viene esclusa dalle esecuzioni giornaliere fino alla riattivazione; il comando manuale **Applica ora** rimane comunque disponibile.
+Nella sezione **Ritardi**, ogni apertura o espansione del box dell'agente avvia una simulazione aggiornata. L'anteprima mostra, per ciascuna commessa coinvolta, le date attuali e proposte di tutte le fasi che cambierebbero, comprese le dipendenze a cascata; la simulazione non salva date, log o notifiche. Editor e amministratori possono applicare le modifiche mostrate oppure mettere l'agente in pausa per la sola commessa corrente. **Applica ora** rilegge nuovamente lo stato corrente di tutte le commesse operative prima di salvare, evitando di applicare un'anteprima diventata obsoleta. Una commessa in pausa resta protetta dagli slittamenti automatici; quando il comando viene avviato dalla commessa in pausa, questa viene inclusa esplicitamente nell'analisi manuale.
 
-Per ogni esecuzione restano visibili motivazione, soluzione, date precedenti e nuove date. Le persone coinvolte ricevono una notifica HiPlan. Una soluzione applicata può essere annullata; il rollback viene bloccato se nel frattempo una delle date interessate è stata modificata manualmente, così da non sovrascrivere lavoro successivo.
+Per ogni esecuzione restano visibili motivazione, soluzione, date precedenti e nuove date. Le persone coinvolte ricevono una notifica HiPlan. Le modifiche sulle diverse commesse condividono lo stesso intervento: l'annullamento ripristina atomicamente tutte le commesse coinvolte. Il rollback viene bloccato per l'intero intervento se nel frattempo una delle date interessate è stata modificata manualmente, così da non sovrascrivere lavoro successivo.
 
 Gli utenti viewer possono consultare in sola lettura lo stato dell'agente e tutte le modifiche applicate, incluse motivazioni e date prima/dopo. Non possono applicare soluzioni, sospendere l'agente o annullare una ripianificazione.
 
@@ -181,7 +183,7 @@ Questa sezione identifica le giornate nelle quali la stessa persona risulta impe
 
 Dal profilo personale è possibile inserire un intervallo di ferie con una motivazione facoltativa e rimuovere periodi non più validi.
 
-Quando una fase assegnata si sovrappone alle ferie:
+Quando una fase già assegnata si sovrappone a ferie inserite successivamente:
 
 - la fase può essere segnalata come in conflitto;
 - l'utente visualizza il periodo e le attività coinvolte;

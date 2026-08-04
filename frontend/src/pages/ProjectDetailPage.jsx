@@ -162,8 +162,9 @@ export default function ProjectDetailPage() {
   const [specificExtraDate, setSpecificExtraDate] = useState('');
   const [allVacations, setAllVacations] = useState([]);
   const [openTicketsCount, setOpenTicketsCount] = useState(0);
-  const [rescheduling, setRescheduling] = useState({ paused: false, scenarios: [], runs: [] });
+  const [rescheduling, setRescheduling] = useState({ paused: false, scenarios: [], preview: null, runs: [] });
   const [reschedulingLoading, setReschedulingLoading] = useState(false);
+  const [visibleRunsCount, setVisibleRunsCount] = useState(3);
   const [agentBusy, setAgentBusy] = useState(false);
   const [applyingNow, setApplyingNow] = useState(false);
   const [agentPanelExpanded, setAgentPanelExpanded] = useState(false);
@@ -187,12 +188,16 @@ export default function ProjectDetailPage() {
 
   useEffect(() => {
     if (user) loadRescheduling();
-    else setRescheduling({ paused: false, scenarios: [], runs: [] });
+    else setRescheduling({ paused: false, scenarios: [], preview: null, runs: [] });
   }, [id, user?.id]);
 
   useEffect(() => {
     if (user?.role === 'viewer') setAgentPanelExpanded(true);
   }, [user?.role]);
+
+  useEffect(() => {
+    if (activeTab === 'alert' && user) loadRescheduling();
+  }, [activeTab, agentPanelExpanded, id, user?.id]);
 
   const location = useLocation();
 
@@ -305,6 +310,7 @@ export default function ProjectDetailPage() {
       setRescheduling({
         paused: Boolean(data?.paused),
         scenarios: Array.isArray(data?.scenarios) ? data.scenarios : [],
+        preview: data?.preview || null,
         runs: Array.isArray(data?.runs) ? data.runs : [],
       });
     } catch (err) {
@@ -324,6 +330,7 @@ export default function ProjectDetailPage() {
       setAgentBusy(true);
       const { data } = await api.post(`/projects/${id}/rescheduling/pause`, { paused: nextPaused });
       setRescheduling(prev => ({ ...prev, paused: Boolean(data.paused) }));
+      await loadRescheduling();
       toast.success(nextPaused ? 'Agente in pausa per questa commessa' : 'Agente riattivato');
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Impossibile aggiornare lo stato dell’agente');
@@ -333,7 +340,7 @@ export default function ProjectDetailPage() {
   }
 
   async function handleApplyReschedulingNow() {
-    if (!window.confirm('Applicare immediatamente tutte le soluzioni rilevate? Le date verranno aggiornate mantenendo gli stessi addetti e rispettando le dipendenze.')) return;
+    if (!window.confirm('Rianalizzare ora lo scenario globale? Ritardi, ferie e deficit consuntivi di tutte le commesse operative verranno aggregati per addetto e ripianificati rispettando le dipendenze.')) return;
     try {
       setAgentBusy(true);
       setApplyingNow(true);
@@ -425,6 +432,13 @@ export default function ProjectDetailPage() {
     } catch {
       return '';
     }
+  }
+
+  function formatAgentReason(reason = '') {
+    return reason
+      .replace(/ferie sovrapposte in (\d+) giorni lavorativi/gi, 'Ferie: $1 giorni')
+      .replace(/([\d.]+)h già pianificate in recuperi precedenti/gi, '$1h già recuperate')
+      .replace(/([\d.]+)h non consuntivate rispetto all'avanzamento atteso/gi, '$1h non consuntivate');
   }
 
   // Calcolo stato semaforo e ore giornaliere previste (algoritmo prototipo Ufficio Tecnico)
@@ -865,14 +879,24 @@ export default function ProjectDetailPage() {
     try {
       if (editingTask) {
         const res = await api.put(`/projects/${id}/tasks/${editingTask.id}`, payload);
-        toast.success('Fase modificata con successo!');
+        const returnedStart = res.data?.start_date?.slice(0, 10);
+        const returnedEnd = res.data?.end_date?.slice(0, 10);
+        const automaticallyRescheduled = returnedStart !== payload.start_date || returnedEnd !== payload.end_date;
+        toast.success(automaticallyRescheduled
+          ? `Fase modificata e ore ripianificate automaticamente: ${returnedStart} → ${returnedEnd}`
+          : 'Fase modificata con successo!');
         if (res.data && ganttData && Array.isArray(ganttData.tasks)) {
           const updatedTasks = ganttData.tasks.map(t => String(t.id) === String(editingTask.id) ? res.data : t);
           setGanttData({ ...ganttData, tasks: updatedTasks });
         }
       } else {
         const res = await api.post(`/projects/${id}/tasks`, payload);
-        toast.success('Nuova fase aggiunta!');
+        const returnedStart = res.data?.start_date?.slice(0, 10);
+        const returnedEnd = res.data?.end_date?.slice(0, 10);
+        const automaticallyRescheduled = returnedStart !== payload.start_date || returnedEnd !== payload.end_date;
+        toast.success(automaticallyRescheduled
+          ? `Fase aggiunta e ore ripianificate automaticamente: ${returnedStart} → ${returnedEnd}`
+          : 'Nuova fase aggiunta!');
         if (res.data && ganttData && Array.isArray(ganttData.tasks)) {
           setGanttData({ ...ganttData, tasks: [...ganttData.tasks, res.data] });
         }
@@ -1281,15 +1305,15 @@ export default function ProjectDetailPage() {
           <AppIcon name="notes" />
           Note
         </button>
-        {(delaysList.length > 0 || rescheduling.scenarios.length > 0 || rescheduling.runs.length > 0 || user?.role === 'admin' || user?.role === 'editor') && (
+        {(delaysList.length > 0 || rescheduling.scenarios.length > 0 || rescheduling.preview?.has_changes || rescheduling.runs.length > 0 || user?.role === 'admin' || user?.role === 'editor') && (
           <button
             className={`ut-tab-btn ${activeTab === 'alert' ? 'active' : ''}`}
             onClick={() => setActiveTab('alert')}
           >
             <AppIcon name="alert" />
             Ritardi
-            {Math.max(delaysList.length, rescheduling.scenarios.length) > 0 && (
-              <span className="tab-badge tab-badge-danger">{Math.max(delaysList.length, rescheduling.scenarios.length)}</span>
+            {Math.max(delaysList.length, rescheduling.preview?.scenarios?.length || rescheduling.scenarios.length) > 0 && (
+              <span className="tab-badge tab-badge-danger">{Math.max(delaysList.length, rescheduling.preview?.scenarios?.length || rescheduling.scenarios.length)}</span>
             )}
           </button>
         )}
@@ -1629,6 +1653,7 @@ export default function ProjectDetailPage() {
               onLinkCreate={handleLinkCreate}
               onLinkDelete={handleLinkDelete}
               onEditTask={openEditTaskModal}
+              onOpenTaskHours={openOreModalForTask}
               onNewTask={() => openNewTaskModal()}
             />
           </div>
@@ -1993,10 +2018,10 @@ export default function ProjectDetailPage() {
               <div>
                 <span className={`planning-agent-kicker ${rescheduling.paused ? 'paused' : ''}`}>
                   <span className="planning-agent-live-dot" />
-                  {rescheduling.paused ? 'Agente in pausa' : 'Agente attivo · analisi giornaliera alle 01:15'}
+                  {rescheduling.paused ? 'Agente in pausa' : 'Agente attivo · ogni giorno alle 01:15'}
                 </span>
-                <h3>Recupero intelligente di ritardi e ferie</h3>
-                <p>Ogni giorno analizza le ore saltate, cerca capacità libera sugli stessi addetti e aggiorna le fasi dipendenti senza cambiarne assegnatari o monte ore.</p>
+                <h3>Ripianificazione automatica</h3>
+                <p>Recupera le ore perse e aggiorna le fasi collegate, anche nelle altre commesse.</p>
               </div>
               <div className="planning-agent-controls">
                 {(user?.role === 'admin' || user?.role === 'editor') ? (
@@ -2004,8 +2029,8 @@ export default function ProjectDetailPage() {
                     <button
                       className="btn btn-primary"
                       onClick={handleApplyReschedulingNow}
-                      disabled={agentBusy || reschedulingLoading || !rescheduling.scenarios.some(scenario => scenario.actionable)}
-                      title={rescheduling.scenarios.some(scenario => scenario.actionable) ? 'Applica subito le soluzioni disponibili' : 'Nessuna soluzione disponibile'}
+                      disabled={agentBusy || reschedulingLoading || !rescheduling.preview?.has_changes}
+                      title={rescheduling.preview?.has_changes ? 'Applica le modifiche mostrate nell’anteprima aggiornata' : 'Nessuna soluzione disponibile'}
                     >
                       <AppIcon name="timeline" />
                       {applyingNow ? 'Elaborazione…' : 'Applica ora'}
@@ -2046,17 +2071,59 @@ export default function ProjectDetailPage() {
                         <strong>{scenario.task_name}</strong>
                         <span>{scenario.missing_hours}h da recuperare</span>
                       </div>
-                      <p>{scenario.reason}</p>
+                      <p>{formatAgentReason(scenario.reason)}</p>
                       <small><AppIcon name="users" size={13} /> {scenario.workers.join(', ') || 'Nessun addetto assegnato'}</small>
                       <small className="planning-scenario-schedule">
-                        {rescheduling.paused ? 'In attesa: agente in pausa' : 'Verrà gestito automaticamente alla prossima analisi'}
+                        {rescheduling.paused ? 'Agente in pausa' : 'Gestione automatica alla prossima analisi'}
                       </small>
                     </article>
                   ))}
                 </div>
-              ) : (
-                <div className="planning-agent-empty"><AppIcon name="check" size={15} /> Nessuno scenario da ripianificare.</div>
-              )
+              ) : rescheduling.preview?.has_changes ? (
+                <div className="planning-agent-empty"><AppIcon name="check" size={15} /> Nessuna criticità rilevata nella commessa attuale.</div>
+              ) : null
+            )}
+
+            {agentPanelExpanded && !reschedulingLoading && rescheduling.preview?.has_changes && (
+              <div className="planning-preview">
+                <div className="planning-preview-heading">
+                  <div>
+                    <span className="planning-run-status preview">Anteprima</span>
+                    <h4>Modifiche proposte</h4>
+                  </div>
+                  <strong>
+                    {rescheduling.preview.recovered_hours}h · {rescheduling.preview.changes.length} fasi · {rescheduling.preview.affected_project_count} {rescheduling.preview.affected_project_count === 1 ? 'commessa' : 'commesse'}
+                  </strong>
+                </div>
+                <div className="planning-preview-projects">
+                  {rescheduling.preview.projects.map(projectPreview => (
+                    <article className="planning-preview-project" key={projectPreview.project_id}>
+                      <h5>
+                        {projectPreview.project_code && <span>{projectPreview.project_code}</span>}
+                        {projectPreview.project_name}
+                      </h5>
+                      <div className="planning-change-list">
+                        {projectPreview.changes.map(change => (
+                          <div key={change.task_id}>
+                            <strong>{change.task_name}</strong>
+                            <span>{change.before.start_date} → {change.before.end_date}</span>
+                            <AppIcon name="arrowRight" size={13} />
+                            <span>{change.after.start_date} → {change.after.end_date}</span>
+                            <small>{formatAgentReason(change.reason)}</small>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {agentPanelExpanded && !reschedulingLoading && !rescheduling.preview?.has_changes && (
+              <div className={`planning-agent-empty ${rescheduling.preview?.error ? 'preview-error' : ''}`}>
+                <AppIcon name={rescheduling.preview?.error ? 'alert' : 'check'} size={15} />
+                {rescheduling.preview?.error || 'Lo scenario globale attuale non richiede modifiche.'}
+              </div>
             )}
 
             {agentPanelExpanded && rescheduling.runs.length > 0 && (
@@ -2064,7 +2131,7 @@ export default function ProjectDetailPage() {
                 <div className="planning-runs-title">
                   <h4>Soluzioni applicate</h4>
                 </div>
-                {rescheduling.runs.map(run => (
+                {rescheduling.runs.slice(0, visibleRunsCount).map(run => (
                   <article className="planning-run-card" key={run.id}>
                     <div className="planning-run-heading">
                       <div>
@@ -2078,7 +2145,6 @@ export default function ProjectDetailPage() {
                         </button>
                       )}
                     </div>
-                    <p className="planning-run-reason"><strong>Motivazione:</strong> {run.trigger_summary}</p>
                     <div className="planning-change-list">
                       {run.changes.map(change => (
                         <div key={change.task_id}>
@@ -2086,12 +2152,22 @@ export default function ProjectDetailPage() {
                           <span>{change.before.start_date} → {change.before.end_date}</span>
                           <AppIcon name="arrowRight" size={13} />
                           <span>{change.after.start_date} → {change.after.end_date}</span>
-                          <small>{change.reason}</small>
+                          <small>{formatAgentReason(change.reason)}</small>
                         </div>
                       ))}
                     </div>
                   </article>
                 ))}
+                {rescheduling.runs.length > visibleRunsCount && (
+                  <div style={{ textAlign: 'center', marginTop: '16px' }}>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setVisibleRunsCount(prev => prev + 3)}
+                    >
+                      <AppIcon name="chevronDown" size={15} /> Carica altro
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </section>
@@ -2553,8 +2629,8 @@ export default function ProjectDetailPage() {
                                     style={{
                                       width: 46, height: 20,
                                       background: '#fff', border: 'none', borderRadius: 4,
-                                      color: 'var(--text-primary)', padding: '0 4px',
-                                      fontSize: '0.8rem', textAlign: 'center'
+                                      color: '#111827', padding: '0 4px',
+                                      fontSize: '0.8rem', textAlign: 'center', fontWeight: 700
                                     }}
                                     value={taskForm.worker_hours?.[w] || ''}
                                     onChange={(e) => {

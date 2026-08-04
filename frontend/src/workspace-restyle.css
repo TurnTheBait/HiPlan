@@ -685,11 +685,11 @@
 }
 
 .activity-log-entry-body span {
-  overflow: hidden;
   color: var(--text-secondary);
   font-size: 0.7rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .activity-log-entry time {

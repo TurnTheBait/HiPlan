@@ -14,6 +14,7 @@ from app.schemas.task import TaskCreate, TaskUpdate, TaskOut, LinkCreate, LinkOu
 # pyrefly: ignore [missing-import]
 from fastapi import HTTPException, status
 from app.core.websocket_manager import manager
+from app.utils.working_days import count_working_days_in_range, is_working_day
 
 
 def find_vacation_conflicts(task_start, task_end, vacations):
@@ -22,7 +23,7 @@ def find_vacation_conflicts(task_start, task_end, vacations):
     conflict_days = 0
     current = task_start
     while current <= task_end:
-        if current.weekday() < 5:
+        if is_working_day(current):
             for vacation in vacations:
                 if vacation.get("start_date") and vacation.get("end_date"):
                     start = vacation["start_date"]
@@ -32,6 +33,23 @@ def find_vacation_conflicts(task_start, task_end, vacations):
                         break
         current = current + timedelta(days=1)
     return [{"date": task_start, "workdays": conflict_days}] if conflict_days else []
+
+
+def _shift_working_days(value: date, amount: int) -> date:
+    current = value
+    direction = 1 if amount >= 0 else -1
+    remaining = abs(amount)
+    while remaining:
+        current += timedelta(days=direction)
+        if is_working_day(current):
+            remaining -= 1
+    return current
+
+
+def _forward_working_day_distance(start: date, end: date) -> int:
+    if not start or not end or end <= start:
+        return 0
+    return count_working_days_in_range(start + timedelta(days=1), end)
 
 
 def _parse_json(val, default):
@@ -244,14 +262,27 @@ async def create_task(db: AsyncSession, project_id: str, data: TaskCreate, user=
         conflicts = find_vacation_conflicts(task.start_date, task.end_date or task.start_date, vacation_payloads)
         total_shift_days = max(total_shift_days, conflicts[0]["workdays"] if conflicts else 0)
 
+    vacation_plan = None
+    rescheduled_days = 0
     if total_shift_days > 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assegnazione bloccata: esistono ferie nel periodo della fase")
+        from app.services.rescheduling_service import schedule_assignment_at_earliest_capacity
+
+        original_duration = max(1, int(task.duration or 1))
+        original_end = task.end_date or _shift_working_days(task.start_date, original_duration - 1)
+        vacation_plan = await schedule_assignment_at_earliest_capacity(db, task)
+        task.start_date = vacation_plan["start_date"]
+        task.end_date = vacation_plan["end_date"]
+        task.duration = max(1, count_working_days_in_range(task.start_date, task.end_date or task.start_date))
+        task.has_vacation_conflict = 0
+        rescheduled_days = _forward_working_day_distance(original_end, task.end_date)
 
     db.add(task)
     
     from app.models.activity_log import ActivityLog, ActivityCategory
     details = _format_task_details(task)
     action_text = f"Fase creata: '{task.text}'" + (f" ({details})" if details else "")
+    if vacation_plan:
+        action_text += " · ore assegnate automaticamente nei primi slot disponibili evitando le ferie"
     log = ActivityLog(
         project_id=project_id,
         user_id=user.id if user else None,
@@ -278,8 +309,11 @@ async def create_task(db: AsyncSession, project_id: str, data: TaskCreate, user=
                 continue
             note = Notification(
                 user_id=worker_user.id,
-                title="Ferie rilevate - fase spostata",
-                message=f"La fase '{task.text}' è stata spostata di {total_shift_days} giorni a causa di ferie sovrapposte.",
+                title="Ore ripianificate per ferie",
+                message=(
+                    f"Le ore della fase '{task.text}' sono state assegnate nei primi slot disponibili "
+                    f"evitando le ferie{f'; fine fase posticipata di {rescheduled_days} giorni lavorativi' if rescheduled_days else ''}."
+                ),
                 type=NotificationType.ASSIGNMENT,
                 project_id=project.id if project else None,
             )
@@ -289,8 +323,11 @@ async def create_task(db: AsyncSession, project_id: str, data: TaskCreate, user=
             if resp_id:
                 note = Notification(
                     user_id=resp_id,
-                    title="Fase spostata per ferie",
-                    message=f"La fase '{task.text}' nel progetto '{project.name}' è stata spostata di {total_shift_days} giorni.",
+                    title="Assegnazione ripianificata per ferie",
+                    message=(
+                        f"Le ore della fase '{task.text}' nel progetto '{project.name}' sono state "
+                        f"ripianificate automaticamente{f' con uno slittamento di {rescheduled_days} giorni lavorativi' if rescheduled_days else ''}."
+                    ),
                     type=NotificationType.UPDATE,
                     project_id=project.id,
                 )
@@ -396,12 +433,23 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
     # (non stiamo cambiando date o addetti, solo registrando ore effettive)
     _consuntivo_only_keys = {"actual_hours", "completed", "progress"}
     _changed_keys = set(update_data.keys())
+    vacation_plan = None
+    rescheduled_days = 0
     if not _changed_keys.issubset(_consuntivo_only_keys) and total_shift_days > 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assegnazione bloccata: esistono ferie nel periodo della fase")
+        from app.services.rescheduling_service import schedule_assignment_at_earliest_capacity
+
+        duration_before_rescheduling = max(1, int(task.duration or 1))
+        requested_end = task.end_date or _shift_working_days(task.start_date, duration_before_rescheduling - 1)
+        vacation_plan = await schedule_assignment_at_earliest_capacity(db, task, str(task.id))
+        task.start_date = vacation_plan["start_date"]
+        task.end_date = vacation_plan["end_date"]
+        task.duration = max(1, count_working_days_in_range(task.start_date, task.end_date or task.start_date))
+        task.has_vacation_conflict = 0
+        rescheduled_days = _forward_working_day_distance(requested_end, task.end_date)
 
     # Propagazione a catena quando la data della fase viene modificata esplicitamente
-    if "start_date" in update_data or "end_date" in update_data:
-        async def propagate_shift(current_task, shift_days, visited=None):
+    if "start_date" in update_data or "end_date" in update_data or vacation_plan:
+        async def propagate_shift(current_task, shift_days, visited=None, shift_current=False):
             if shift_days <= 0:
                 return
             if visited is None:
@@ -409,23 +457,22 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
             if current_task.id in visited:
                 return
             visited.add(current_task.id)
-            current_task.start_date = current_task.start_date + timedelta(days=shift_days) if current_task.start_date else current_task.start_date
-            if current_task.end_date:
-                current_task.end_date = current_task.end_date + timedelta(days=shift_days)
-            if getattr(current_task, "duration", None) is not None:
-                current_task.duration = (current_task.duration or 0) + shift_days
+            if shift_current:
+                current_task.start_date = _shift_working_days(current_task.start_date, shift_days) if current_task.start_date else current_task.start_date
+                if current_task.end_date:
+                    current_task.end_date = _shift_working_days(current_task.end_date, shift_days)
             await db.flush()
             links_result = await db.execute(select(Link).where(Link.source == current_task.id))
             for link in links_result.scalars().all():
                 child_res = await db.execute(select(Task).where(Task.id == link.target))
                 child = child_res.scalar_one_or_none()
                 if child and child.id not in visited:
-                    await propagate_shift(child, shift_days, visited)
+                    await propagate_shift(child, shift_days, visited, True)
 
-        delta_days = 0
-        if "start_date" in update_data and old_start and task.start_date:
+        delta_days = rescheduled_days
+        if not vacation_plan and "start_date" in update_data and old_start and task.start_date:
             delta_days = (task.start_date - old_start).days
-        elif "end_date" in update_data and old_end and task.end_date:
+        elif not vacation_plan and "end_date" in update_data and old_end and task.end_date:
             delta_days = (task.end_date - old_end).days
         if delta_days != 0:
             await propagate_shift(task, delta_days)
@@ -460,19 +507,23 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
         from app.models.project import Project
         proj_res = await db.execute(select(Project).where(Project.id == task.project_id))
         project = proj_res.scalar_one_or_none()
-        for worker_name in workers_list:
-            u_res = await db.execute(select(User).where(User.username == worker_name))
-            worker_user = u_res.scalar_one_or_none()
-            if not worker_user:
-                continue
-            note = Notification(
-                user_id=worker_user.id,
-                title="Ferie rilevate - fase spostata",
-                message=f"La fase '{task.text}' è stata spostata di {total_shift_days} giorni a causa di ferie sovrapposte.",
-                type=NotificationType.ASSIGNMENT,
-                project_id=project.id if project else None,
-            )
-            db.add(note)
+        if vacation_plan:
+            for worker_name in workers_list:
+                u_res = await db.execute(select(User).where(User.username == worker_name))
+                worker_user = u_res.scalar_one_or_none()
+                if not worker_user:
+                    continue
+                note = Notification(
+                    user_id=worker_user.id,
+                    title="Ore ripianificate per ferie",
+                    message=(
+                        f"Le ore della fase '{task.text}' sono state assegnate nei primi slot disponibili "
+                        f"evitando le ferie{f'; fine fase posticipata di {rescheduled_days} giorni lavorativi' if rescheduled_days else ''}."
+                    ),
+                    type=NotificationType.ASSIGNMENT,
+                    project_id=project.id if project else None,
+                )
+                db.add(note)
 
         if had_hours_in_vac and project:
             resp_id = project.responsible_id or project.owner_id
@@ -521,6 +572,8 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
         cat = ActivityCategory.PHASE_PROJECT_EDIT
         details = _format_task_details(task)
         action_text = f"Fase modificata: '{task.text}'" + (f" ({details})" if details else "")
+        if vacation_plan:
+            action_text += " · ore assegnate automaticamente nei primi slot disponibili evitando le ferie"
         
     log = ActivityLog(
         project_id=task.project_id,

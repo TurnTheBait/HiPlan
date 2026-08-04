@@ -523,6 +523,11 @@
   color: var(--text-secondary);
 }
 
+.planning-agent-empty.preview-error {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
 .planning-runs {
   margin-top: 18px;
   padding-top: 14px;
@@ -559,6 +564,66 @@
   color: var(--text-tertiary);
 }
 
+.planning-run-status.preview {
+  background: color-mix(in srgb, var(--accent-500) 12%, transparent);
+  color: var(--accent-600);
+}
+
+.planning-preview {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.planning-preview-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.planning-preview-heading h4 {
+  margin: 7px 0 0;
+  color: var(--text-primary);
+}
+
+.planning-preview-heading > strong {
+  max-width: 55%;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  text-align: right;
+}
+
+.planning-preview-projects {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.planning-preview-project {
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+}
+
+.planning-preview-project h5 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.86rem;
+}
+
+.planning-preview-project h5 span {
+  padding: 3px 7px;
+  border-radius: 7px;
+  background: var(--bg-tertiary);
+  color: var(--accent-600);
+  font-size: 0.72rem;
+}
+
 .planning-run-reason { margin-top: 12px; }
 .planning-change-list { margin-top: 10px; display: grid; gap: 6px; }
 
@@ -583,4 +648,6 @@
   .planning-agent-actions { width: 100%; flex-direction: column; }
   .planning-agent-controls { width: 100%; align-items: stretch; }
   .planning-agent-expand { height: auto; }
+  .planning-preview-heading { align-items: flex-start; flex-direction: column; }
+  .planning-preview-heading > strong { max-width: none; text-align: left; }
 }

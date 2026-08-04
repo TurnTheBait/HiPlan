@@ -12,6 +12,7 @@ class PlanningRun(Base, TimestampMixin):
     __tablename__ = "planning_runs"
 
     id = uuid_pk()
+    batch_id = Column(String(36), nullable=True, index=True)
     project_id = Column(uuid_fk(), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     created_by_id = Column(uuid_fk(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     undone_by_id = Column(uuid_fk(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
