@@ -7,7 +7,7 @@ export default function ActivityLogPanel({ projectId }) {
   const toast = useToast();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('fasi'); // 'fasi' or 'ore'
+  const [activeTab, setActiveTab] = useState('fasi');
 
   useEffect(() => {
     fetchLogs();
@@ -26,7 +26,8 @@ export default function ActivityLogPanel({ projectId }) {
     }
   };
 
-  const fasiLogs = logs.filter(l => l.category === 'phase_project_edit');
+  const agentLogs = logs.filter(l => l.action_text?.startsWith('[Agente pianificazione]'));
+  const fasiLogs = logs.filter(l => l.category === 'phase_project_edit' && !l.action_text?.startsWith('[Agente pianificazione]'));
   const oreLogs = logs.filter(l => l.category === 'hours_log');
 
   const renderLogList = (logList) => {
@@ -43,7 +44,7 @@ export default function ActivityLogPanel({ projectId }) {
         {logList.map(log => (
           <div key={log.id} className="activity-log-entry">
             <span className="activity-log-entry-icon">
-              <AppIcon name={activeTab === 'ore' ? 'clock' : 'list'} size={15} />
+              <AppIcon name={activeTab === 'ore' ? 'clock' : activeTab === 'agent' ? 'timeline' : 'list'} size={15} />
             </span>
             <div className="activity-log-entry-body">
               <strong>{log.user_name}</strong>
@@ -57,15 +58,16 @@ export default function ActivityLogPanel({ projectId }) {
   };
 
   return (
-    <div className="activity-log-panel">
-      <div className="activity-log-header">
-        <h2>Cronologia modifiche</h2>
+    <div className="activity-log-panel commessa-summary-card">
+      <div className="activity-log-header" style={{ marginBottom: 16 }}>
+        <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Cronologia modifiche</h3>
       </div>
       
-      <div className="activity-log-tabs">
+      <div className="activity-log-tabs" style={{ display: 'flex', flexDirection: 'row', flexWrap: 'nowrap', gap: 8 }}>
         <button
           className={`activity-log-tab ${activeTab === 'fasi' ? 'active' : ''}`}
           onClick={() => setActiveTab('fasi')}
+          style={{ flex: 1, whiteSpace: 'nowrap', justifyContent: 'center' }}
         >
           <AppIcon name="list" size={15} />
           Fasi e commessa
@@ -73,9 +75,18 @@ export default function ActivityLogPanel({ projectId }) {
         <button
           className={`activity-log-tab ${activeTab === 'ore' ? 'active' : ''}`}
           onClick={() => setActiveTab('ore')}
+          style={{ flex: 1, whiteSpace: 'nowrap', justifyContent: 'center' }}
         >
           <AppIcon name="clock" size={15} />
           Inserimento consuntivo ore
+        </button>
+        <button
+          className={`activity-log-tab ${activeTab === 'agent' ? 'active' : ''}`}
+          onClick={() => setActiveTab('agent')}
+          style={{ flex: 1, whiteSpace: 'nowrap', justifyContent: 'center' }}
+        >
+          <AppIcon name="timeline" size={15} />
+          Agente di pianificazione
         </button>
       </div>
 
@@ -86,6 +97,7 @@ export default function ActivityLogPanel({ projectId }) {
           <>
             {activeTab === 'fasi' && renderLogList(fasiLogs)}
             {activeTab === 'ore' && renderLogList(oreLogs)}
+            {activeTab === 'agent' && renderLogList(agentLogs)}
           </>
         )}
       </div>

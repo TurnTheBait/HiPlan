@@ -13,6 +13,7 @@ from app.models.ticket import Ticket, TicketReply, TicketStatus, TicketPriority
 from app.models.activity_log import ActivityLog, ActivityCategory
 from app.models.todo import Todo
 from app.models.email_log import EmailLog
+from app.models.planning_run import PlanningRun
 
 __all__ = [
     "Base", "engine", "AsyncSessionLocal",
@@ -28,5 +29,5 @@ __all__ = [
     "Setting",
     "Ticket", "TicketReply", "TicketStatus", "TicketPriority",
     "ActivityLog", "ActivityCategory",
-    "Todo"
+    "Todo", "PlanningRun"
 ]

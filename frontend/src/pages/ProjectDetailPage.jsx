@@ -50,8 +50,9 @@ export default function ProjectDetailPage() {
   const wsUrl = `${protocol}//${wsHost}/api/ws/projects/${id}`;
 
   const { isConnected: wsConnected } = useWebSocket(wsUrl, (msg) => {
-    if (['task_created', 'task_updated', 'task_deleted', 'link_created', 'link_deleted', 'project_updated'].includes(msg.action)) {
+    if (['task_created', 'task_updated', 'task_deleted', 'link_created', 'link_deleted', 'project_updated', 'auto_reschedule_applied', 'auto_reschedule_undone', 'planning_agent_pause_changed'].includes(msg.action)) {
       loadGanttDataOnly();
+      if (msg.action.startsWith('auto_reschedule_') || msg.action === 'planning_agent_pause_changed') loadRescheduling();
     }
   });
 
@@ -161,6 +162,12 @@ export default function ProjectDetailPage() {
   const [specificExtraDate, setSpecificExtraDate] = useState('');
   const [allVacations, setAllVacations] = useState([]);
   const [openTicketsCount, setOpenTicketsCount] = useState(0);
+  const [rescheduling, setRescheduling] = useState({ paused: false, scenarios: [], runs: [] });
+  const [reschedulingLoading, setReschedulingLoading] = useState(false);
+  const [agentBusy, setAgentBusy] = useState(false);
+  const [applyingNow, setApplyingNow] = useState(false);
+  const [agentPanelExpanded, setAgentPanelExpanded] = useState(false);
+  const [semaforiExpanded, setSemaforiExpanded] = useState(true);
 
   // Stato Modale Modifica Dati Commessa
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
@@ -177,6 +184,15 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     loadProject();
   }, [id]);
+
+  useEffect(() => {
+    if (user) loadRescheduling();
+    else setRescheduling({ paused: false, scenarios: [], runs: [] });
+  }, [id, user?.id]);
+
+  useEffect(() => {
+    if (user?.role === 'viewer') setAgentPanelExpanded(true);
+  }, [user?.role]);
 
   const location = useLocation();
 
@@ -278,6 +294,71 @@ export default function ProjectDetailPage() {
       navigate('/projects');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadRescheduling() {
+    if (!user) return;
+    try {
+      setReschedulingLoading(true);
+      const { data } = await api.get(`/projects/${id}/rescheduling`);
+      setRescheduling({
+        paused: Boolean(data?.paused),
+        scenarios: Array.isArray(data?.scenarios) ? data.scenarios : [],
+        runs: Array.isArray(data?.runs) ? data.runs : [],
+      });
+    } catch (err) {
+      console.error('Errore analisi ripianificazione:', err);
+    } finally {
+      setReschedulingLoading(false);
+    }
+  }
+
+  async function handleTogglePlanningAgent() {
+    const nextPaused = !rescheduling.paused;
+    const message = nextPaused
+      ? 'Mettere in pausa l’agente per questa commessa? Il Gantt non verrà più ripianificato automaticamente.'
+      : 'Riattivare l’agente per questa commessa? Dalla prossima analisi giornaliera potrà aggiornare automaticamente il Gantt.';
+    if (!window.confirm(message)) return;
+    try {
+      setAgentBusy(true);
+      const { data } = await api.post(`/projects/${id}/rescheduling/pause`, { paused: nextPaused });
+      setRescheduling(prev => ({ ...prev, paused: Boolean(data.paused) }));
+      toast.success(nextPaused ? 'Agente in pausa per questa commessa' : 'Agente riattivato');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Impossibile aggiornare lo stato dell’agente');
+    } finally {
+      setAgentBusy(false);
+    }
+  }
+
+  async function handleApplyReschedulingNow() {
+    if (!window.confirm('Applicare immediatamente tutte le soluzioni rilevate? Le date verranno aggiornate mantenendo gli stessi addetti e rispettando le dipendenze.')) return;
+    try {
+      setAgentBusy(true);
+      setApplyingNow(true);
+      const { data } = await api.post(`/projects/${id}/rescheduling/apply`, { task_ids: [] });
+      toast.success(data?.solution_summary || 'Soluzioni applicate immediatamente');
+      await Promise.all([loadProject(), loadRescheduling()]);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Impossibile applicare le soluzioni');
+    } finally {
+      setApplyingNow(false);
+      setAgentBusy(false);
+    }
+  }
+
+  async function handleUndoRescheduling(runId) {
+    if (!window.confirm('Annullare questa ripianificazione automatica e ripristinare le date precedenti?')) return;
+    try {
+      setAgentBusy(true);
+      await api.post(`/projects/${id}/rescheduling/${runId}/undo`);
+      toast.success('Ripianificazione annullata e date ripristinate');
+      await Promise.all([loadProject(), loadRescheduling()]);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Impossibile annullare la ripianificazione');
+    } finally {
+      setAgentBusy(false);
     }
   }
 
@@ -462,13 +543,6 @@ export default function ProjectDetailPage() {
   }, [ganttData.tasks]);
 
   // Gestione Task da Gantt e Form
-  async function handleTaskUpdate(taskId, data) {
-    try {
-      await api.put(`/projects/${id}/tasks/${taskId}`, data);
-      loadProject();
-    } catch { toast.error('Errore aggiornamento fase'); }
-  }
-
   async function handleSaveNotes() {
     try {
       await api.put(`/projects/${id}`, { notes: notesText });
@@ -765,7 +839,7 @@ export default function ProjectDetailPage() {
     const plannedHours = isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDays * 8.0));
 
     if (!isMilestone && taskForm.workers && taskForm.workers.length > 0) {
-      const sumWorkerHours = taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0);
+      const sumWorkerHours = Number(taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0).toFixed(2));
       if (sumWorkerHours > plannedHours) {
         toast.error(`Le ore assegnate agli addetti (${sumWorkerHours}h) superano il budget totale della fase (${plannedHours}h).`);
         return;
@@ -978,12 +1052,20 @@ export default function ProjectDetailPage() {
     }
 
     const totalHours = Number(taskForm.planned_hours) || (Number(taskForm.duration_days) * 8.0) || 8.0;
-    const hoursPerWorker = newWorkers.length > 0 ? (totalHours / newWorkers.length) : 0;
 
     let newWorkerHours = {};
-    newWorkers.forEach(worker => {
-      newWorkerHours[worker] = parseFloat(hoursPerWorker.toFixed(1));
-    });
+    if (newWorkers.length > 0) {
+      const baseHours = parseFloat((totalHours / newWorkers.length).toFixed(1));
+      let sumSoFar = 0;
+      for (let i = 0; i < newWorkers.length; i++) {
+        if (i === newWorkers.length - 1) {
+          newWorkerHours[newWorkers[i]] = parseFloat((totalHours - sumSoFar).toFixed(1));
+        } else {
+          newWorkerHours[newWorkers[i]] = baseHours;
+          sumSoFar += baseHours;
+        }
+      }
+    }
 
     setTaskForm({ ...taskForm, workers: newWorkers, worker_hours: newWorkerHours });
   }
@@ -1199,14 +1281,16 @@ export default function ProjectDetailPage() {
           <AppIcon name="notes" />
           Note
         </button>
-        {delaysList.length > 0 && (
+        {(delaysList.length > 0 || rescheduling.scenarios.length > 0 || rescheduling.runs.length > 0 || user?.role === 'admin' || user?.role === 'editor') && (
           <button
             className={`ut-tab-btn ${activeTab === 'alert' ? 'active' : ''}`}
             onClick={() => setActiveTab('alert')}
           >
             <AppIcon name="alert" />
             Ritardi
-            <span className="tab-badge tab-badge-danger">{delaysList.length}</span>
+            {Math.max(delaysList.length, rescheduling.scenarios.length) > 0 && (
+              <span className="tab-badge tab-badge-danger">{Math.max(delaysList.length, rescheduling.scenarios.length)}</span>
+            )}
           </button>
         )}
 
@@ -1540,7 +1624,6 @@ export default function ProjectDetailPage() {
               readOnly={!canManageProject}
               projectStartDate={project?.start_date}
               projectEndDate={project?.end_date}
-              onTaskUpdate={handleTaskUpdate}
               onTaskCreate={handleTaskCreate}
               onTaskDelete={handleTaskDelete}
               onLinkCreate={handleLinkCreate}
@@ -1905,57 +1988,179 @@ export default function ProjectDetailPage() {
       {/* TAB 4: RITARDI & ALLARMI */}
       {activeTab === 'alert' && (
         <div className="animate-fadeIn">
-          <div className="commessa-summary-card">
-            <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Motore Semafori ed Allarmi Lavorazioni</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
-              Questo pannello identifica automaticamente tutte le lavorazioni e commesse che non stanno rispettando la consuntivazione oraria attesa (meno del 50% delle ore previste o giorni lavorativi trascorsi con 0 ore registrate).
-            </p>
-          </div>
-
-          {delaysList.length === 0 ? (
-            <div className="commessa-summary-card" style={{ textAlign: 'center', padding: 48, borderColor: 'rgba(16, 185, 129, 0.4)' }}>
-              <div className="empty-state-icon"><AppIcon name="check" size={26} /></div>
-              <h3 style={{ color: 'var(--success)', margin: 0 }}>Nessuna Allerta di Ritardo!</h3>
-              <p style={{ color: 'var(--text-secondary)', marginTop: 8 }}>
-                Tutte le {ganttData.tasks.length} fasi di lavorazione della commessa sono regolarmente coperte dalla consuntivazione oraria degli addetti.
-              </p>
-            </div>
-          ) : (
-            delaysList.map(item => (
-              <div key={item.task.id} className={`alert-card ${item.stato}`}>
+          <section className={`planning-agent-panel ${agentPanelExpanded ? 'expanded' : 'compact'}`}>
+              <div className="planning-agent-header">
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                    <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
-                      {item.task.text}
-                    </span>
-                    {item.stato === 'ritardo' ? (
-                      <span className="semaforo-ritardo"><span className="status-dot danger" />Ritardo critico</span>
-                    ) : item.stato === 'ritardo_ferie' ? (
-                      <span className="semaforo-ritardo"><span className="status-dot danger" />Rischio ritardo ferie</span>
-                    ) : item.stato === 'sforamento' ? (
-                      <span className="semaforo-ritardo"><span className="status-dot danger" />Sforamento ore</span>
-                    ) : (
-                      <span className="semaforo-attenzione"><span className="status-dot open" />Attenzione</span>
-                    )}
-                  </div>
-                  <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                    <AppIcon name="calendar" size={14} /> Inizio/Fine: <strong>{formatDateOnly(item.task.start_date)} → {formatDateOnly(item.task.end_date)}</strong> |{' '}
-                    Addetti: <strong>{Array.isArray(item.task.workers) ? item.task.workers.join(', ') : 'Nessuno'}</strong>
-                  </div>
-                  <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                    <AppIcon name="clock" size={13} />Ore previste: <strong>{item.task.planned_hours || 8}h</strong> | Consuntivate finora: <strong>{item.tEff}h</strong>
-                  </div>
+                  <span className={`planning-agent-kicker ${rescheduling.paused ? 'paused' : ''}`}>
+                    <span className="planning-agent-live-dot" />
+                    {rescheduling.paused ? 'Agente in pausa' : 'Agente attivo · analisi giornaliera alle 01:15'}
+                  </span>
+                  <h3>Recupero intelligente di ritardi e ferie</h3>
+                  <p>Ogni giorno analizza le ore saltate, cerca capacità libera sugli stessi addetti e aggiorna le fasi dipendenti senza cambiarne assegnatari o monte ore.</p>
                 </div>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => openOreModalForTask(item.task)}
-                >
-                  <AppIcon name="clock" />
-                  Registra ore
-                </button>
+                <div className="planning-agent-controls">
+                  {(user?.role === 'admin' || user?.role === 'editor') ? (
+                    <div className="planning-agent-actions">
+                      <button
+                        className="btn btn-primary"
+                        onClick={handleApplyReschedulingNow}
+                        disabled={agentBusy || reschedulingLoading || !rescheduling.scenarios.some(scenario => scenario.actionable)}
+                        title={rescheduling.scenarios.some(scenario => scenario.actionable) ? 'Applica subito le soluzioni disponibili' : 'Nessuna soluzione disponibile'}
+                      >
+                        <AppIcon name="timeline" />
+                        {applyingNow ? 'Elaborazione…' : 'Applica ora'}
+                      </button>
+                      <button
+                        className={`btn ${rescheduling.paused ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={handleTogglePlanningAgent}
+                        disabled={agentBusy || reschedulingLoading}
+                      >
+                        <AppIcon name={rescheduling.paused ? 'timeline' : 'pause'} />
+                        {rescheduling.paused ? 'Riattiva agente' : 'Metti in pausa'}
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="planning-agent-readonly"><AppIcon name="lock" size={14} /> Sola lettura</span>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-secondary planning-agent-expand"
+                    onClick={() => setAgentPanelExpanded(value => !value)}
+                    aria-expanded={agentPanelExpanded}
+                    title={agentPanelExpanded ? 'Comprimi agente' : 'Mostra dettagli agente'}
+                  >
+                    <AppIcon name={agentPanelExpanded ? 'chevronUp' : 'chevronDown'} />
+                  </button>
+                </div>
               </div>
-            ))
-          )}
+
+              {agentPanelExpanded && (
+                reschedulingLoading ? (
+                  <div className="planning-agent-empty">Analisi degli scenari in corso…</div>
+                ) : rescheduling.scenarios.length > 0 ? (
+                  <div className="planning-scenario-grid">
+                    {rescheduling.scenarios.map(scenario => (
+                      <article className="planning-scenario-card" key={scenario.task_id}>
+                        <div className="planning-scenario-title">
+                          <AppIcon name="alert" size={16} />
+                          <strong>{scenario.task_name}</strong>
+                          <span>{scenario.missing_hours}h da recuperare</span>
+                        </div>
+                        <p>{scenario.reason}</p>
+                        <small><AppIcon name="users" size={13} /> {scenario.workers.join(', ') || 'Nessun addetto assegnato'}</small>
+                        <small className="planning-scenario-schedule">
+                          {rescheduling.paused ? 'In attesa: agente in pausa' : 'Verrà gestito automaticamente alla prossima analisi'}
+                        </small>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="planning-agent-empty"><AppIcon name="check" size={15} /> Nessuno scenario da ripianificare.</div>
+                )
+              )}
+
+              {agentPanelExpanded && rescheduling.runs.length > 0 && (
+                <div className="planning-runs">
+                  <div className="planning-runs-title">
+                    <h4>Soluzioni applicate</h4>
+                  </div>
+                  {rescheduling.runs.map(run => (
+                    <article className="planning-run-card" key={run.id}>
+                      <div className="planning-run-heading">
+                        <div>
+                          <span className={`planning-run-status ${run.status}`}>{run.status === 'applied' ? 'Applicata' : 'Annullata'}</span>
+                          <strong>{run.solution_summary}</strong>
+                          <small>{run.created_at ? new Date(run.created_at).toLocaleString('it-IT') : ''} · {run.created_by}</small>
+                        </div>
+                        {run.status === 'applied' && (user?.role === 'admin' || user?.role === 'editor') && (
+                          <button className="btn btn-secondary" onClick={() => handleUndoRescheduling(run.id)} disabled={agentBusy}>
+                            <AppIcon name="undo" /> Annulla modifiche
+                          </button>
+                        )}
+                      </div>
+                      <p className="planning-run-reason"><strong>Motivazione:</strong> {run.trigger_summary}</p>
+                      <div className="planning-change-list">
+                        {run.changes.map(change => (
+                          <div key={change.task_id}>
+                            <strong>{change.task_name}</strong>
+                            <span>{change.before.start_date} → {change.before.end_date}</span>
+                            <AppIcon name="arrowRight" size={13} />
+                            <span>{change.after.start_date} → {change.after.end_date}</span>
+                            <small>{change.reason}</small>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
+          <div className="commessa-summary-card">
+            <div 
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+              onClick={() => setSemaforiExpanded(!semaforiExpanded)}
+            >
+              <div>
+                <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Semafori e allarmi lavorazioni</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
+                  Le allerte evidenziano ferie sovrapposte o una consuntivazione inferiore all'avanzamento atteso.
+                </p>
+              </div>
+              <AppIcon name={semaforiExpanded ? 'chevronUp' : 'chevronDown'} />
+            </div>
+
+            {semaforiExpanded && (
+              <div style={{ marginTop: delaysList.length > 0 ? 20 : 0 }}>
+                {delaysList.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 20px', marginTop: 24, border: '1px solid rgba(16, 185, 129, 0.4)', borderRadius: 12, background: 'rgba(16,185,129,0.05)' }}>
+                    <div className="empty-state-icon" style={{ margin: '0 auto 12px auto' }}><AppIcon name="check" size={26} /></div>
+                    <h3 style={{ color: 'var(--success)', margin: 0 }}>Nessuna Allerta di Ritardo!</h3>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: 8 }}>
+                      Tutte le {ganttData.tasks.length} fasi di lavorazione della commessa sono regolarmente coperte dalla consuntivazione oraria degli addetti.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {delaysList.map(item => (
+                      <div key={item.task.id} className={`alert-card ${item.stato}`} style={{ border: '1px solid var(--border-default)', boxShadow: 'none' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                            <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
+                              {item.task.text}
+                            </span>
+                            {item.stato === 'ritardo' ? (
+                              <span className="semaforo-ritardo"><span className="status-dot danger" />Ritardo critico</span>
+                            ) : item.stato === 'ritardo_ferie' ? (
+                              <span className="semaforo-ritardo"><span className="status-dot danger" />Rischio ritardo ferie</span>
+                            ) : item.stato === 'sforamento' ? (
+                              <span className="semaforo-ritardo"><span className="status-dot danger" />Sforamento ore</span>
+                            ) : (
+                              <span className="semaforo-attenzione"><span className="status-dot open" />Attenzione</span>
+                            )}
+                          </div>
+                          <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                            <AppIcon name="calendar" size={14} /> Inizio/Fine: <strong>{formatDateOnly(item.task.start_date)} → {formatDateOnly(item.task.end_date)}</strong> |{' '}
+                            Addetti: <strong>{Array.isArray(item.task.workers) ? item.task.workers.join(', ') : 'Nessuno'}</strong>
+                          </div>
+                          <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                            <AppIcon name="clock" size={13} />Ore previste: <strong>{item.task.planned_hours || 8}h</strong> | Consuntivate finora: <strong>{item.tEff}h</strong>
+                          </div>
+                        </div>
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => openOreModalForTask(item.task)}
+                        >
+                          <AppIcon name="clock" />
+                          Registra ore
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -2304,77 +2509,52 @@ export default function ProjectDetailPage() {
                   )}
                 </div>
 
-                <div className="input-group" style={{ marginTop: 16 }}>
-                  <label>Addetti Assegnati (Multi-selezione)</label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                    {predefinedWorkers.map(w => {
-                      const sel = taskForm.workers.includes(w);
-                      return (
-                        <button
-                          type="button"
-                          key={w}
-                          onClick={() => toggleWorkerSelection(w)}
-                          style={{
-                            background: sel ? 'var(--accent-600)' : 'var(--bg-primary)',
-                            color: sel ? '#fff' : 'var(--text-secondary)',
-                            border: `1px solid ${sel ? 'var(--accent-500)' : 'var(--border-default)'}`,
-                            padding: '6px 12px',
-                            borderRadius: '16px',
-                            cursor: 'pointer',
-                            fontSize: '0.85rem',
-                            fontWeight: sel ? 600 : 400
-                          }}
-                        >
-                          {sel ? '✓ ' : '+ '}{w}
-                        </button>
-                      );
-                    })}
-                  </div>
+                {(() => {
+                  const isMilestone = taskForm.taskType === 'milestone';
+                  const currentAssignedTotal = Number(taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0).toFixed(2));
+                  const sDateForBudget = taskForm.start_date;
+                  const eDateForBudget = taskForm.end_date;
+                  const diffDaysForBudget = sDateForBudget && eDateForBudget ? countWorkingDays(sDateForBudget, eDateForBudget) : 1;
+                  const finalDaysForBudget = Math.max(1, Number(taskForm.duration_days) || diffDaysForBudget);
+                  const currentBudgetTotal = isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDaysForBudget * 8.0));
+                  const overBudget = !isMilestone && (currentAssignedTotal > currentBudgetTotal);
 
-
-                  {/* Sezione addetti attualmente assegnati (sotto al campo aggiungi altro addetto) */}
-                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed var(--border-default)' }}>
-                    {(() => {
-                      const isMilestone = taskForm.taskType === 'milestone';
-                      const currentAssignedTotal = taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0);
-                      const sDateForBudget = taskForm.start_date;
-                      const eDateForBudget = taskForm.end_date;
-                      const diffDaysForBudget = sDateForBudget && eDateForBudget ? countWorkingDays(sDateForBudget, eDateForBudget) : 1;
-                      const finalDaysForBudget = Math.max(1, Number(taskForm.duration_days) || diffDaysForBudget);
-                      const currentBudgetTotal = isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDaysForBudget * 8.0));
-                      const overBudget = !isMilestone && (currentAssignedTotal > currentBudgetTotal);
-
-                      return (
-                        <>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: overBudget ? '#ef4444' : 'var(--accent-500)', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                            <span className="inline-heading">
-                              <AppIcon name={overBudget ? 'alert' : 'check'} size={14} />
-                              Addetti assegnati ({taskForm.workers.length})
-                            </span>
-                            {!isMilestone && <span>Totale assegnato: {currentAssignedTotal}h / {currentBudgetTotal}h</span>}
-                          </div>
-                          {taskForm.workers.length === 0 ? (
-                            <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Nessun addetto ancora selezionato. Scegline uno qui sopra.</span>
-                          ) : (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                              {taskForm.workers.map(w => (
-                                <div key={w} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)', padding: '6px 12px', borderRadius: 8 }}>
-                                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-500)' }}>{w}</span>
-                                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 4 }}>Ore:</span>
+                  return (
+                    <div className="input-group" style={{ marginTop: 16 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                        <span>Addetti Assegnati (Multi-selezione)</span>
+                        {!isMilestone && taskForm.workers.length > 0 && (
+                          <span style={{ fontSize: 12, fontWeight: 700, color: overBudget ? '#ef4444' : 'var(--accent-500)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <AppIcon name={overBudget ? 'alert' : 'check'} size={13} />
+                            {taskForm.workers.length} {taskForm.workers.length === 1 ? 'addetto' : 'addetti'} · {currentAssignedTotal}h / {currentBudgetTotal}h
+                          </span>
+                        )}
+                      </label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                        {predefinedWorkers.map(w => {
+                          const sel = taskForm.workers.includes(w);
+                          if (sel && !isMilestone) {
+                            return (
+                              <div
+                                key={w}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: 6,
+                                  background: 'var(--accent-600)', color: '#fff',
+                                  border: '1px solid var(--accent-500)',
+                                  padding: '4px 8px 4px 12px', borderRadius: '16px',
+                                  fontSize: '0.85rem', fontWeight: 600
+                                }}
+                              >
+                                <span style={{ cursor: 'pointer' }} onClick={() => toggleWorkerSelection(w)}>✓ {w}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.2)', borderRadius: 12, padding: '2px 6px', marginLeft: 4 }}>
+                                  <span style={{ fontSize: '0.75rem', marginRight: 4, opacity: 0.9 }}>Ore:</span>
                                   <input
-                                    type="number"
-                                    min="0.5"
-                                    step="0.5"
+                                    type="number" min="0.5" step="0.5"
                                     style={{
-                                      width: 60,
-                                      height: 24,
-                                      background: 'var(--bg-secondary)',
-                                      border: '1px solid var(--border-color)',
-                                      borderRadius: 4,
-                                      color: 'var(--text-primary)',
-                                      padding: '0 4px',
-                                      fontSize: '0.8rem',
-                                      textAlign: 'center'
+                                      width: 46, height: 20,
+                                      background: '#fff', border: 'none', borderRadius: 4,
+                                      color: 'var(--text-primary)', padding: '0 4px',
+                                      fontSize: '0.8rem', textAlign: 'center'
                                     }}
                                     value={taskForm.worker_hours?.[w] || ''}
                                     onChange={(e) => {
@@ -2385,22 +2565,42 @@ export default function ProjectDetailPage() {
                                       });
                                     }}
                                   />
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleWorkerSelection(w, true)}
-                                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.9rem', marginLeft: 4 }}
-                                  >
-                                    ×
-                                  </button>
                                 </div>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
-                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleWorkerSelection(w, true)}
+                                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.8)', cursor: 'pointer', fontSize: '1rem', marginLeft: 2, padding: '0 4px' }}
+                                  title="Rimuovi addetto"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            );
+                          }
+                          return (
+                            <button
+                              type="button"
+                              key={w}
+                              onClick={() => toggleWorkerSelection(w)}
+                              style={{
+                                background: sel ? 'var(--accent-600)' : 'var(--bg-primary)',
+                                color: sel ? '#fff' : 'var(--text-secondary)',
+                                border: `1px solid ${sel ? 'var(--accent-500)' : 'var(--border-default)'}`,
+                                padding: '6px 12px',
+                                borderRadius: '16px',
+                                cursor: 'pointer',
+                                fontSize: '0.85rem',
+                                fontWeight: sel ? 600 : 400
+                              }}
+                            >
+                              {sel ? '✓ ' : '+ '}{w}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="modal-footer" style={{ marginTop: 24 }}>
                   <button type="button" className="btn btn-secondary" onClick={() => setShowTaskModal(false)}>

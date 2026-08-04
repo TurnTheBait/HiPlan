@@ -24,7 +24,7 @@ const parseDateSafe = (d) => {
 
 export { isWeekendOrHoliday };
 
-export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onNewTask, visibleColumns, readOnly, projectStartDate, projectEndDate }) {
+export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onNewTask, visibleColumns, readOnly, projectStartDate, projectEndDate }) {
 
   const containerRef = useRef(null);
   const initialized = useRef(false);
@@ -33,7 +33,6 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
   const projectEndDateRef = useRef(projectEndDate);
   const drawCustomMarkersRef = useRef(null);
   const tasksRef = useRef(tasks);
-  const onTaskUpdateRef = useRef(onTaskUpdate);
   const onTaskCreateRef = useRef(onTaskCreate);
   const onTaskDeleteRef = useRef(onTaskDelete);
   const onLinkCreateRef = useRef(onLinkCreate);
@@ -48,7 +47,6 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
   }, [projectStartDate, projectEndDate, tasks]);
 
   useEffect(() => {
-    onTaskUpdateRef.current = onTaskUpdate;
     onTaskCreateRef.current = onTaskCreate;
     onTaskDeleteRef.current = onTaskDelete;
     onLinkCreateRef.current = onLinkCreate;
@@ -88,7 +86,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.config.auto_scheduling = false;
     gantt.config.drag_progress = false;
     gantt.config.open_tree_initially = true;
-    gantt.config.order_branch = true;
+    gantt.config.order_branch = false;
     gantt.config.show_progress = true;
     gantt.config.sort = true;
 
@@ -361,17 +359,9 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       return false; // Blocca 100% la lightbox inglese di DHTMLX
     });
 
-    // Event handlers
-    gantt.attachEvent("onAfterTaskDrag", (id, mode) => {
-      const task = gantt.getTask(id);
-      if (onTaskUpdateRef.current) {
-        onTaskUpdateRef.current(id, {
-          start_date: gantt.date.date_to_str("%Y-%m-%d")(task.start_date),
-          duration: task.duration,
-          progress: task.progress,
-        });
-      }
-    });
+    // Le fasi si modificano esclusivamente dal relativo menu/modal.
+    // I collegamenti tra fasi restano invece trascinabili.
+    gantt.attachEvent("onBeforeTaskDrag", () => false);
 
     gantt.attachEvent("onAfterTaskAdd", (id, item) => {
       if (onTaskCreateRef.current) {

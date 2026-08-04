@@ -11,7 +11,8 @@ from fastapi.staticfiles import StaticFiles
 from app.api import (
     auth, users, projects, tasks, notes, export, 
     notifications, phase_templates, workload, vacations, 
-    tickets, task_collaboration, websockets, settings as api_settings, activity_logs, todos, email_logs, search
+    tickets, task_collaboration, websockets, settings as api_settings, activity_logs, todos, email_logs, search,
+    rescheduling
 )
 
 @asynccontextmanager
@@ -95,7 +96,7 @@ async def lifespan(app: FastAPI):
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from app.services.backup_service import run_backup
 
-    scheduler = AsyncIOScheduler()
+    scheduler = AsyncIOScheduler(timezone="Europe/Rome")
     scheduler.add_job(run_backup, 'cron', day_of_week='sun', hour=3, minute=0)
 
     # Scheduler: invia notifiche TODO regolarmente controllando la data e ora esatta
@@ -221,8 +222,25 @@ async def lifespan(app: FastAPI):
             await session.commit()
 
     scheduler.add_job(run_todo_notifications, 'interval', minutes=5)
+    from app.services.rescheduling_service import run_daily_rescheduling
+    scheduler.add_job(
+        run_daily_rescheduling,
+        'cron',
+        hour=1,
+        minute=15,
+        id='daily_planning_agent',
+        max_instances=1,
+        coalesce=True,
+    )
+    from datetime import datetime as scheduler_datetime, timedelta as scheduler_timedelta
+    scheduler.add_job(
+        run_daily_rescheduling,
+        'date',
+        run_date=scheduler_datetime.now() + scheduler_timedelta(seconds=10),
+        id='startup_planning_agent',
+    )
     scheduler.start()
-    print("[INIT] Scheduler avviato (controllo TODO ogni 5 minuti)")
+    print("[INIT] Scheduler avviato (TODO ogni 5 minuti, agente pianificazione ogni giorno alle 01:15)")
 
     yield
     await engine.dispose()
@@ -273,6 +291,7 @@ app.include_router(websockets.router)
 app.include_router(todos.router)
 app.include_router(email_logs.router, prefix="/api/admin/email-logs", tags=["Admin"])
 app.include_router(search.router)
+app.include_router(rescheduling.router)
 
 @app.get("/api/health")
 async def health_check():

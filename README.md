@@ -12,11 +12,12 @@ Il progetto usa un backend asincrono **FastAPI + SQLAlchemy** e una SPA **React 
 - Fasi e milestone organizzabili in gerarchia, con reparto, priorità, date e colore.
 - Diagramma di Gantt interattivo basato su DHTMLX Gantt.
 - Dipendenze tra fasi `FS`, `SS`, `FF` e `SF`, con eventuale ritardo (`lag`).
+- Agente di ripianificazione giornaliero per ritardi e ferie: recupera le ore sugli stessi addetti, propaga le dipendenze, notifica gli interessati e consente il rollback. Admin ed editor possono sospenderlo per singola commessa.
 - Modalità di calcolo basate su date, giorni lavorativi e budget ore.
 - Template di fase predefiniti per Ufficio Tecnico, Produzione e Acquisti.
 - Checklist, commenti, menzioni e notifiche contestuali alla singola fase.
 - Allegati e note di commessa.
-- Registro attività delle modifiche rilevanti.
+- Registro attività delle modifiche rilevanti, incluse le ripianificazioni automatiche visibili agli amministratori.
 
 ### Risorse e avanzamento
 

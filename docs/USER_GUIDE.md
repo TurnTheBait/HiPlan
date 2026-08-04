@@ -119,7 +119,19 @@ Nel Gantt è possibile collegare le fasi con quattro tipi di dipendenza:
 - `FF`: le due fasi terminano in relazione;
 - `SF`: la fine della fase target dipende dall'inizio della sorgente.
 
-Il collegamento può includere un ritardo (`lag`). Le dipendenze sono visualizzate e modificabili nel Gantt; la ripianificazione automatica dell'intera catena è indicata come sviluppo futuro nella roadmap.
+Il collegamento può includere un ritardo (`lag`). Nel Gantt le barre non possono essere spostate o ridimensionate tramite trascinamento: date e durata si modificano dal menu della fase. Il trascinamento rimane disponibile esclusivamente per creare le dipendenze.
+
+### Ripianificazione automatica
+
+L'agente di pianificazione esegue automaticamente l'analisi all'avvio di HiPlan e ogni giorno alle 01:15 sulle commesse in pianificazione o attive. Individua ore non consuntivate nelle giornate concluse e ferie sovrapposte, cerca capacità disponibile sugli stessi addetti e posticipa le fasi collegate rispettando dipendenze e giorni lavorativi. Le ore di recupero già pianificate vengono sottratte dalle analisi successive, evitando duplicazioni.
+
+Nella sezione **Ritardi**, editor e amministratori possono vedere se l'agente è attivo, applicare immediatamente le soluzioni disponibili oppure metterlo in pausa per la sola commessa corrente. Una commessa in pausa viene esclusa dalle esecuzioni giornaliere fino alla riattivazione; il comando manuale **Applica ora** rimane comunque disponibile.
+
+Per ogni esecuzione restano visibili motivazione, soluzione, date precedenti e nuove date. Le persone coinvolte ricevono una notifica HiPlan. Una soluzione applicata può essere annullata; il rollback viene bloccato se nel frattempo una delle date interessate è stata modificata manualmente, così da non sovrascrivere lavoro successivo.
+
+Gli utenti viewer possono consultare in sola lettura lo stato dell'agente e tutte le modifiche applicate, incluse motivazioni e date prima/dopo. Non possono applicare soluzioni, sospendere l'agente o annullare una ripianificazione.
+
+Le esecuzioni e gli annullamenti sono registrati nella scheda **Cronologia → Agente di pianificazione**, disponibile solo agli amministratori.
 
 ### Stato e avanzamento
 
@@ -175,7 +187,7 @@ Quando una fase assegnata si sovrappone alle ferie:
 - l'utente visualizza il periodo e le attività coinvolte;
 - al rientro può comparire un promemoria delle attività da recuperare.
 
-La registrazione delle ferie non sposta automaticamente le fasi.
+La registrazione delle ferie segnala il conflitto; durante l'analisi giornaliera l'agente applica automaticamente la soluzione, salvo che sia stato messo in pausa per quella commessa.
 
 ## 9. TODO
 

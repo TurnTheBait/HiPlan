@@ -232,7 +232,13 @@ Tutte le rotte applicative usano il prefisso `/api`. La specifica completa e agg
 | `POST` | `/api/projects/{id}/links` | crea dipendenza |
 | `DELETE` | `/api/projects/{id}/links/{link_id}` | elimina dipendenza |
 | `GET` | `/api/projects/{id}/activity_logs` | registro attività |
+| `GET` | `/api/projects/{id}/rescheduling` | scenari e storico ripianificazioni |
+| `POST` | `/api/projects/{id}/rescheduling/apply` | applica subito una ripianificazione, anche se l'automazione è in pausa |
+| `POST` | `/api/projects/{id}/rescheduling/pause` | sospende o riattiva l'agente sulla commessa |
+| `POST` | `/api/projects/{id}/rescheduling/{run_id}/undo` | rollback controllato |
 | `GET` | `/api/workload/heatmap` | carichi di lavoro |
+
+L'`AsyncIOScheduler`, configurato sul fuso `Europe/Rome`, avvia l'agente poco dopo l'avvio del backend e ogni giorno alle 01:15. Sono elaborate soltanto le commesse `planning` o `active` che non hanno `planning_agent_paused`; l'analisi dei ritardi considera esclusivamente giornate già concluse.
 
 ### Collaborazione e operatività
 

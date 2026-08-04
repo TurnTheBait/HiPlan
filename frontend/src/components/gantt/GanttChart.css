@@ -209,12 +209,15 @@
    HANDLE DI RESIZE
    ========================================== */
 .gantt_task_drag {
-  opacity: 0;
-  transition: opacity 0.2s ease;
+  display: none !important;
 }
 
 .gantt_task_line:hover .gantt_task_drag {
-  opacity: 0.6;
+  display: none !important;
+}
+
+.gantt_task_line {
+  cursor: pointer !important;
 }
 
 /* ==========================================
