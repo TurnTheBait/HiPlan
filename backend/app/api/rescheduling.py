@@ -15,7 +15,9 @@ from app.core.websocket_manager import manager
 from app.services.rescheduling_service import (
     analyze_all_projects,
     analyze_project,
+    apply_advancement_rescheduling,
     apply_rescheduling,
+    detect_advancement_scenarios,
     list_runs,
     preview_rescheduling,
     undo_rescheduling,
@@ -95,14 +97,27 @@ async def run_rescheduling(
     # aperta viene inclusa anche se il suo agente è in pausa, perché il comando
     # esplicito "Applica ora" deve continuare a essere disponibile.
     current_scenarios = await analyze_all_projects(db, include_paused_project_id=project_id)
-    return await apply_rescheduling(
-        db,
-        project_id,
-        current_user,
-        payload.task_ids,
-        allow_when_paused=True,
-        precomputed_scenarios=current_scenarios,
-    )
+    actionable = [s for s in current_scenarios if s.get("actionable") and s.get("missing_hours", 0) >= 0.5]
+    if actionable:
+        return await apply_rescheduling(
+            db,
+            project_id,
+            current_user,
+            payload.task_ids,
+            allow_when_paused=True,
+            precomputed_scenarios=current_scenarios,
+        )
+    # Nessun ritardo: prova ad applicare eventuali anticipi
+    advancement_scenarios = await detect_advancement_scenarios(db, include_paused_project_id=project_id)
+    if advancement_scenarios:
+        return await apply_advancement_rescheduling(
+            db,
+            project_id,
+            current_user,
+            advancement_scenarios=advancement_scenarios,
+        )
+    from fastapi import HTTPException as _HTTPException
+    raise _HTTPException(status_code=400, detail="Nessuna modifica necessaria nello scenario attuale")
 
 
 @router.post("/{run_id}/undo")

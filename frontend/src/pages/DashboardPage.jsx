@@ -138,7 +138,7 @@ export default function DashboardPage() {
   const todayLabel = today.toLocaleDateString('it-IT', {
     weekday: 'long',
     day: 'numeric',
-    month: 'long',
+    month: '2-digit',
   });
   const timeLabel = today.toLocaleTimeString('it-IT', {
     hour: '2-digit',
@@ -414,7 +414,7 @@ export default function DashboardPage() {
                         {due && (
                           <span className="todo-due-date">
                             {isOverdue ? 'Scaduto · ' : ''}
-                            {due.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}
+                            {due.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
                           </span>
                         )}
                       </div>

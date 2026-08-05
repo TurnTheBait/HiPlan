@@ -574,7 +574,7 @@ export default function CalendarPage() {
               <div className="calendar-modal-row">
                 <span className="calendar-modal-label">Periodo e Durata</span>
                 <span className="calendar-modal-val">
-                  {selectedProject.start_date || 'N/D'} ➔ {selectedProject.end_date || 'N/D'} ({getDurationDays(selectedProject.start_date, selectedProject.end_date)})
+                  {selectedProject.start_date ? selectedProject.start_date.substring(0,10).split("-").reverse().join("/") : 'N/D'} ➔ {selectedProject.end_date ? selectedProject.end_date.substring(0,10).split("-").reverse().join("/") : 'N/D'} ({getDurationDays(selectedProject.start_date, selectedProject.end_date)})
                 </span>
               </div>
 
@@ -611,7 +611,7 @@ export default function CalendarPage() {
                       </div>
                       <div className="inline-detail-row" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 4 }}>
                         <AppIcon name="calendar" size={12} />
-                        <strong>{t.start_date?.slice(0, 10)}</strong> → <strong>{t.end_date?.slice(0, 10) || 'N/D'}</strong>
+                        <strong>{t.start_date ? t.start_date.slice(0, 10).split("-").reverse().join("/") : ""}</strong> → <strong>{t.end_date ? t.end_date.slice(0, 10).split("-").reverse().join("/") : 'N/D'}</strong>
                         <AppIcon name="users" size={12} />
                         Addetti: <strong>{Array.isArray(t.workers) && t.workers.length > 0 ? t.workers.join(', ') : 'Nessuno'}</strong>
                       </div>

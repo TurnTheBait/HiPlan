@@ -243,9 +243,11 @@ export default function ConflictMonitoringPage() {
   }
 
   function formatDate(isoString) {
-    const d = new Date(isoString);
-    return d.toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: 'long', year: 'numeric' });
-  }
+  if (!isoString) return "";
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return isoString;
+  return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+}
   if (loading) return <div className="loading-screen"><div className="spinner" /></div>;
 
   return (
@@ -614,7 +616,7 @@ export default function ConflictMonitoringPage() {
                 <button type="button" className="btn btn-secondary" onClick={() => setDeletingVacation(null)}>
                   Annulla
                 </button>
-                <button type="button" className="btn btn-primary" style={{ background: 'var(--error-500)', borderColor: 'var(--error-500)' }} onClick={handleDeleteVacation}>
+                <button type="button" className="btn btn-danger" onClick={handleDeleteVacation}>
                   Conferma Eliminazione
                 </button>
               </div>

@@ -458,7 +458,7 @@ export default function NotesPage() {
     const diffHours = Math.round((now - date) / (1000 * 60 * 60));
     if (diffHours < 1) return 'Adesso';
     if (diffHours < 24) return `${diffHours}h fa`;
-    return date.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' });
+    return date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
   }
 
   if (loading) return <div className="loading-screen"><div className="spinner" /></div>;

@@ -234,7 +234,7 @@ export default function ProfilePage() {
                 return (
                   <div key={v.id} className="vacation-item">
                     <div className="vacation-info">
-                      <div className="vacation-dates">{v.start_date} → {v.end_date}</div>
+                      <div className="vacation-dates">{v.start_date ? v.start_date.split("-").reverse().join("/") : ""} → {v.end_date ? v.end_date.split("-").reverse().join("/") : ""}</div>
                       <div className="vacation-duration">{workdays} giorni</div>
                       <div className="vacation-reason">{v.reason || 'Nessun motivo specificato'}</div>
                     </div>

@@ -58,7 +58,7 @@ export default function ProjectDetailPage() {
 
   async function loadGanttDataOnly() {
     try {
-      const ganttRes = await api.get(`/projects/${id}/gantt`);
+      const ganttRes = await api.get(`/projects/${id}/gantt?_t=${Date.now()}`);
       const sortedTasks = Array.isArray(ganttRes.data?.tasks)
         ? [...ganttRes.data.tasks].sort((a, b) => {
           const da = new Date(a.start_date ? String(a.start_date).split(' ')[0] : '1970-01-01');
@@ -265,7 +265,7 @@ export default function ProjectDetailPage() {
     try {
       const [projRes, ganttRes, usersRes, vacRes, ticketsRes] = await Promise.all([
         api.get(`/projects/${id}`),
-        api.get(`/projects/${id}/gantt`),
+        api.get(`/projects/${id}/gantt?_t=${Date.now()}`),
         api.get('/users').catch(() => ({ data: [] })),
         api.get('/vacations/all').catch(() => ({ data: [] })),
         api.get('/tickets', { params: { project_id: id } }).catch(() => ({ data: [] }))
@@ -424,14 +424,10 @@ export default function ProjectDetailPage() {
   }
 
   function formatDateOnly(d) {
-    if (!d) return '';
-    if (typeof d === 'string') return d.split(' ')[0].split('T')[0];
-    if (d instanceof Date && !isNaN(d)) return d.toISOString().split('T')[0];
-    try {
-      return String(d).split(' ')[0].split('T')[0];
-    } catch {
-      return '';
-    }
+  if (!d) return "N/D";
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return d;
+  return `${String(date.getDate()).padStart(2,"0")}/${String(date.getMonth()+1).padStart(2,"0")}/${date.getFullYear()}`;
   }
 
   function formatAgentReason(reason = '') {
@@ -606,7 +602,15 @@ export default function ProjectDetailPage() {
       if (tempId && gantt.isLinkExists && gantt.isLinkExists(tempId)) {
         gantt.changeLinkId(tempId, created.id);
       }
-      loadProject();
+      // Aggiornamento ottimistico: aggiunge il nuovo link allo state locale
+      // senza fare un refetch completo che potrebbe competere con l'evento WebSocket
+      setGanttData(prev => ({
+        ...prev,
+        links: [
+          ...(prev.links || []).filter(l => String(l.id) !== String(tempId)),
+          { id: created.id, source: String(data.source), target: String(data.target), type: String(data.type || '0') }
+        ]
+      }));
     } catch {
       toast.error('Errore creazione dipendenza');
       if (tempId && gantt.isLinkExists && gantt.isLinkExists(tempId)) {
@@ -619,7 +623,12 @@ export default function ProjectDetailPage() {
     if (!skipConfirm && !window.confirm("Confermi l'eliminazione di questa dipendenza tra fasi?")) return;
     try {
       await api.delete(`/projects/${id}/links/${linkId}`);
-      loadProject();
+      // Aggiornamento ottimistico: rimuove il link dallo state locale
+      // senza fare un refetch completo che potrebbe competere con l'evento WebSocket
+      setGanttData(prev => ({
+        ...prev,
+        links: (prev.links || []).filter(l => String(l.id) !== String(linkId))
+      }));
     } catch (e) {
       toast.error('Errore eliminazione dipendenza');
       console.error(e);
@@ -745,6 +754,9 @@ export default function ProjectDetailPage() {
         updates.duration_days = days;
         updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days);
       }
+      if (updates.planned_hours !== undefined && prev.workers && prev.workers.length > 0) {
+        updates.worker_hours = distributeHoursAmongWorkers(prev.workers, updates.planned_hours);
+      }
       return { ...prev, ...updates };
     });
   }
@@ -765,6 +777,9 @@ export default function ProjectDetailPage() {
       } else if (budgetMode === 'start_hours' || budgetMode === 'start_days' || budgetMode === 'start_days_hours') {
         const days = Math.max(1, Number(prev.duration_days) || 1);
         updates.end_date = addWorkingDays(newStart, days);
+      }
+      if (updates.planned_hours !== undefined && prev.workers && prev.workers.length > 0) {
+        updates.worker_hours = distributeHoursAmongWorkers(prev.workers, updates.planned_hours);
       }
       return { ...prev, ...updates };
     });
@@ -787,6 +802,9 @@ export default function ProjectDetailPage() {
         const days = Math.max(1, Number(prev.duration_days) || 1);
         updates.start_date = subtractWorkingDays(newEnd, days);
       }
+      if (updates.planned_hours !== undefined && prev.workers && prev.workers.length > 0) {
+        updates.worker_hours = distributeHoursAmongWorkers(prev.workers, updates.planned_hours);
+      }
       return { ...prev, ...updates };
     });
   }
@@ -806,6 +824,9 @@ export default function ProjectDetailPage() {
       } else if (budgetMode === 'start_days_hours') {
         updates.end_date = addWorkingDays(prev.start_date || new Date(), days);
       }
+      if (updates.planned_hours !== undefined && prev.workers && prev.workers.length > 0) {
+        updates.worker_hours = distributeHoursAmongWorkers(prev.workers, updates.planned_hours);
+      }
       return { ...prev, ...updates };
     });
   }
@@ -823,6 +844,9 @@ export default function ProjectDetailPage() {
         updates.duration_days = days;
         updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days);
       }
+      if (updates.planned_hours !== undefined && prev.workers && prev.workers.length > 0) {
+        updates.worker_hours = distributeHoursAmongWorkers(prev.workers, updates.planned_hours);
+      }
       return { ...prev, ...updates };
     });
   }
@@ -830,11 +854,18 @@ export default function ProjectDetailPage() {
   function applyDurationPreset(days, hours) {
     const sDate = taskForm.start_date || new Date().toISOString().split('T')[0];
     const newEnd = addWorkingDays(sDate, days);
+    
+    let newWorkerHours = taskForm.worker_hours;
+    if (taskForm.workers && taskForm.workers.length > 0) {
+      newWorkerHours = distributeHoursAmongWorkers(taskForm.workers, hours);
+    }
+
     setTaskForm({
       ...taskForm,
       duration_days: days,
       planned_hours: hours,
       end_date: newEnd,
+      worker_hours: newWorkerHours,
     });
   }
 
@@ -1064,6 +1095,23 @@ export default function ProjectDetailPage() {
     }
   }
 
+  function distributeHoursAmongWorkers(workers, totalHours) {
+    let newWorkerHours = {};
+    if (workers.length > 0) {
+      const baseHours = parseFloat((totalHours / workers.length).toFixed(1));
+      let sumSoFar = 0;
+      for (let i = 0; i < workers.length; i++) {
+        if (i === workers.length - 1) {
+          newWorkerHours[workers[i]] = parseFloat((totalHours - sumSoFar).toFixed(1));
+        } else {
+          newWorkerHours[workers[i]] = baseHours;
+          sumSoFar += baseHours;
+        }
+      }
+    }
+    return newWorkerHours;
+  }
+
   function toggleWorkerSelection(w, requireConfirm = false) {
     const isSelected = taskForm.workers.includes(w);
     if (isSelected && requireConfirm && !window.confirm(`Confermi la rimozione dell'addetto "${w}" da questa fase?`)) return;
@@ -1076,20 +1124,7 @@ export default function ProjectDetailPage() {
     }
 
     const totalHours = Number(taskForm.planned_hours) || (Number(taskForm.duration_days) * 8.0) || 8.0;
-
-    let newWorkerHours = {};
-    if (newWorkers.length > 0) {
-      const baseHours = parseFloat((totalHours / newWorkers.length).toFixed(1));
-      let sumSoFar = 0;
-      for (let i = 0; i < newWorkers.length; i++) {
-        if (i === newWorkers.length - 1) {
-          newWorkerHours[newWorkers[i]] = parseFloat((totalHours - sumSoFar).toFixed(1));
-        } else {
-          newWorkerHours[newWorkers[i]] = baseHours;
-          sumSoFar += baseHours;
-        }
-      }
-    }
+    const newWorkerHours = distributeHoursAmongWorkers(newWorkers, totalHours);
 
     setTaskForm({ ...taskForm, workers: newWorkers, worker_hours: newWorkerHours });
   }
@@ -1162,8 +1197,8 @@ export default function ProjectDetailPage() {
       "",
       `COMMESSA: ${project.name} (Codice: ${project.code || 'N/A'})`,
       `Descrizione: ${project.description || 'Nessuna descrizione'}`,
-      `Inizio: ${new Date(project.start_date).toLocaleDateString()}`,
-      `Fine: ${new Date(project.end_date).toLocaleDateString()}`,
+      `Inizio: ${formatDateOnly(project.start_date)}`,
+      `Fine: ${formatDateOnly(project.end_date)}`,
       `Stato: ${project.status}`,
       "",
       "FASI DELLA COMMESSA:"
@@ -1173,8 +1208,8 @@ export default function ProjectDetailPage() {
     sortedTasks.forEach(t => {
       const dept = t.department ? t.department.toUpperCase() : 'N/A';
       const taskName = t.text || 'Fase senza nome';
-      const startDate = new Date(t.start_date).toLocaleDateString();
-      const endDate = new Date(t.end_date).toLocaleDateString();
+      const startDate = formatDateOnly(t.start_date);
+      const endDate = formatDateOnly(t.end_date);
       const progress = t.completed || 0;
 
       const workers = Array.isArray(t.workers) ? t.workers : [];
@@ -1680,7 +1715,7 @@ export default function ProjectDetailPage() {
               <div className="stat-box">
                 <div className="stat-box-label">Data Avvio / Fine</div>
                 <div className="stat-box-value" style={{ fontSize: '0.95rem' }}>
-                  {project?.start_date || 'N/D'} → {project?.end_date || 'N/D'}
+                  {formatDateOnly(project?.start_date)} → {formatDateOnly(project?.end_date)}
                 </div>
               </div>
               <div className="stat-box">
@@ -2088,13 +2123,26 @@ export default function ProjectDetailPage() {
               <div className="planning-preview">
                 <div className="planning-preview-heading">
                   <div>
-                    <span className="planning-run-status preview">Anteprima</span>
-                    <h4>Modifiche proposte</h4>
+                    <span className={`planning-run-status ${rescheduling.preview.type === 'advancement' ? 'advancement' : 'preview'}`}>
+                      {rescheduling.preview.type === 'advancement' ? '↑ Anticipo' : 'Anteprima'}
+                    </span>
+                    <h4>
+                      {rescheduling.preview.type === 'advancement'
+                        ? 'Rientro anticipato disponibile'
+                        : 'Modifiche proposte'}
+                    </h4>
                   </div>
                   <strong>
-                    {rescheduling.preview.recovered_hours}h · {rescheduling.preview.changes.length} fasi · {rescheduling.preview.affected_project_count} {rescheduling.preview.affected_project_count === 1 ? 'commessa' : 'commesse'}
+                    {rescheduling.preview.type === 'advancement'
+                      ? `${rescheduling.preview.changes.length} fasi · ${rescheduling.preview.affected_project_count} ${rescheduling.preview.affected_project_count === 1 ? 'commessa' : 'commesse'}`
+                      : `${rescheduling.preview.recovered_hours}h · ${rescheduling.preview.changes.length} fasi · ${rescheduling.preview.affected_project_count} ${rescheduling.preview.affected_project_count === 1 ? 'commessa' : 'commesse'}`}
                   </strong>
                 </div>
+                {rescheduling.preview.type === 'advancement' && (
+                  <p style={{ margin: '0 0 12px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    Il ritardo che aveva causato uno slittamento delle fasi è rientrato (ferie cancellate o consuntivi registrati). L'agente può anticipare le fasi verso le date originarie.
+                  </p>
+                )}
                 <div className="planning-preview-projects">
                   {rescheduling.preview.projects.map(projectPreview => (
                     <article className="planning-preview-project" key={projectPreview.project_id}>
@@ -2106,9 +2154,9 @@ export default function ProjectDetailPage() {
                         {projectPreview.changes.map(change => (
                           <div key={change.task_id}>
                             <strong>{change.task_name}</strong>
-                            <span>{change.before.start_date} → {change.before.end_date}</span>
-                            <AppIcon name="arrowRight" size={13} />
-                            <span>{change.after.start_date} → {change.after.end_date}</span>
+                            <span>{formatDateOnly(change.before.start_date)} → {formatDateOnly(change.before.end_date)}</span>
+                            <AppIcon name={rescheduling.preview.type === 'advancement' ? 'arrowLeft' : 'arrowRight'} size={13} />
+                            <span>{formatDateOnly(change.after.start_date)} → {formatDateOnly(change.after.end_date)}</span>
                             <small>{formatAgentReason(change.reason)}</small>
                           </div>
                         ))}
@@ -2149,9 +2197,9 @@ export default function ProjectDetailPage() {
                       {run.changes.map(change => (
                         <div key={change.task_id}>
                           <strong>{change.task_name}</strong>
-                          <span>{change.before.start_date} → {change.before.end_date}</span>
+                          <span>{formatDateOnly(change.before.start_date)} → {formatDateOnly(change.before.end_date)}</span>
                           <AppIcon name="arrowRight" size={13} />
-                          <span>{change.after.start_date} → {change.after.end_date}</span>
+                          <span>{formatDateOnly(change.after.start_date)} → {formatDateOnly(change.after.end_date)}</span>
                           <small>{formatAgentReason(change.reason)}</small>
                         </div>
                       ))}
@@ -2535,8 +2583,8 @@ export default function ProjectDetailPage() {
                           <div style={{ position: 'relative' }}>
                             <input
                               type="number"
-                              min="0.5"
-                              step="0.5"
+                              min="0.1"
+                              step="0.1"
                               className="input"
                               style={{ fontWeight: 600, color: 'var(--success)', paddingRight: '60px', opacity: (budgetMode === 'start_days' || budgetMode === 'end_days') ? 0.6 : 1 }}
                               value={taskForm.planned_hours}
@@ -2625,7 +2673,7 @@ export default function ProjectDetailPage() {
                                 <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.2)', borderRadius: 12, padding: '2px 6px', marginLeft: 4 }}>
                                   <span style={{ fontSize: '0.75rem', marginRight: 4, opacity: 0.9 }}>Ore:</span>
                                   <input
-                                    type="number" min="0.5" step="0.5"
+                                    type="number" min="0.1" step="0.1"
                                     style={{
                                       width: 46, height: 20,
                                       background: '#fff', border: 'none', borderRadius: 4,
@@ -2846,7 +2894,7 @@ export default function ProjectDetailPage() {
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                                       <input
                                         type="number"
-                                        step="0.5"
+                                        step="0.1"
                                         min="0"
                                         max="24"
                                         className="ore-input"
@@ -2874,7 +2922,7 @@ export default function ProjectDetailPage() {
                               <td style={{ background: 'rgba(245, 158, 11, 0.05)' }}>
                                 <input
                                   type="number"
-                                  step="0.5"
+                                  step="0.1"
                                   min="0"
                                   max="24"
                                   className="ore-input"

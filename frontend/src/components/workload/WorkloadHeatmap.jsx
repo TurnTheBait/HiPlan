@@ -166,10 +166,7 @@ export default function WorkloadHeatmap() {
     });
   };
 
-  const formatDateStr = (key) => {
-    const [y, m, d] = key.split('-');
-    return d + '/' + m + '/' + y;
-  };
+  const formatDateStr = (key) => { const [y,m,d] = key.split("-"); return `${d}/${m}/${y}`; };
 
   if (loading) return <div>Caricamento heatmap...</div>;
 

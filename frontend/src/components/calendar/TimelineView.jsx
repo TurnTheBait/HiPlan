@@ -321,7 +321,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                         width: `${spanDays * TIMELINE_DAY_WIDTH - 6}px`,
                       }}
                       onClick={() => onSelectProject(proj)}
-                      title={`${proj.name} (${pStart} -> ${pEnd})`}
+                      title={`${proj.name} (${pStart.split("-").reverse().join("/")} -> ${pEnd.split("-").reverse().join("/")})`}
                     >
                       {proj.code ? `[${proj.code}] ` : ''}{proj.name}
                     </div>

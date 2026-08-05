@@ -21,12 +21,12 @@ const STATUS_CLASS = {
 
 function fmtDate(dt) {
   if (!dt) return '';
-  return new Date(dt).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' });
+  return new Date(dt).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 function fmtDateTime(dt) {
   if (!dt) return '';
-  return new Date(dt).toLocaleString('it-IT', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return new Date(dt).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function cleanActionLabel(value) {

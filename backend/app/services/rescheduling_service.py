@@ -353,9 +353,9 @@ def _serialize_run(run: PlanningRun) -> dict[str, Any]:
         "solution_summary": run.solution_summary,
         "changes": snapshot.get("tasks", []),
         "allocations": _json(run.allocations_json, []),
-        "created_at": run.created_at.isoformat() if run.created_at else None,
+        "created_at": run.created_at.isoformat() + 'Z' if run.created_at else None,
         "created_by": (run.created_by.full_name or run.created_by.username) if run.created_by else "Agente HiPlan",
-        "undone_at": run.undone_at.isoformat() if run.undone_at else None,
+        "undone_at": run.undone_at.isoformat() + 'Z' if run.undone_at else None,
         "undone_by": (run.undone_by.full_name or run.undone_by.username) if run.undone_by else None,
     }
 
@@ -870,48 +870,444 @@ async def apply_rescheduling(
     return _serialize_run(saved_run)
 
 
-async def preview_rescheduling(db: AsyncSession, project_id: str) -> dict[str, Any]:
-    """Simula il batch globale corrente senza persistere date, log o notifiche."""
-    scenarios = await analyze_all_projects(db, include_paused_project_id=project_id)
-    actionable = [scenario for scenario in scenarios if scenario["actionable"]]
+async def detect_advancement_scenarios(
+    db: AsyncSession,
+    include_paused_project_id: Optional[str] = None,
+) -> list[dict[str, Any]]:
+    """Individua le fasi che erano state posticipate dall'agente e che ora possono essere anticipate.
+
+    Il rientro anticipato scatta quando:
+    - Le ferie che avevano generato il conflitto sono state cancellate, oppure
+    - Ore a consuntivo sono state inserite retroattivamente riducendo le ore mancanti a zero.
+    In entrambi i casi il ritardo residuo sul task è diventato < 0.5h e il task risulta
+    ancora posticipato rispetto alla sua data originale (before_state nel snapshot).
+    """
+    # Carica tutti i run applied
+    run_result = await db.execute(
+        select(PlanningRun).where(PlanningRun.status == "applied")
+    )
+    applied_runs = list(run_result.scalars().all())
+    if not applied_runs:
+        return []
+
+    # Mappa task_id -> data originale (before) nei run applied
+    original_dates: dict[str, dict[str, Any]] = {}
+    for run in applied_runs:
+        snapshot = _json(run.snapshot_json, {})
+        for task_entry in snapshot.get("tasks", []):
+            task_id = task_entry.get("task_id")
+            if not task_id:
+                continue
+            before = task_entry.get("before", {})
+            if task_id not in original_dates:
+                original_dates[task_id] = {
+                    "start_date": before.get("start_date"),
+                    "end_date": before.get("end_date"),
+                    "duration": before.get("duration"),
+                    "project_id": str(run.project_id),
+                }
+
+    if not original_dates:
+        return []
+
+    # Analisi scenari attuali per sapere quali task hanno ancora ritardi reali
+    current_scenarios_raw = await analyze_all_projects(db, include_paused_project_id=include_paused_project_id)
+    tasks_with_real_delay: set[str] = {
+        s["task_id"] for s in current_scenarios_raw if s.get("actionable") and s.get("missing_hours", 0) >= 0.5
+    }
+
+    # Carica i task posticipati
+    task_ids_to_check = list(original_dates.keys())
+    task_result = await db.execute(select(Task).where(Task.id.in_(task_ids_to_check)))
+    tasks_map = {str(t.id): t for t in task_result.scalars().all()}
+
+    # Carica progetto per filtrare pausa agente
+    all_project_ids = list({od["project_id"] for od in original_dates.values()})
+    proj_result = await db.execute(select(Project).where(Project.id.in_(all_project_ids)))
+    projects_map = {str(p.id): p for p in proj_result.scalars().all()}
+
+    advancement_scenarios: list[dict[str, Any]] = []
+    for task_id, original in original_dates.items():
+        task = tasks_map.get(task_id)
+        if not task or not task.start_date:
+            continue
+        project_id = original["project_id"]
+        project = projects_map.get(project_id)
+        if not project:
+            continue
+        # Rispetta pausa agente
+        if project.planning_agent_paused and str(project_id) != str(include_paused_project_id or ""):
+            continue
+        # Nessun ritardo reale residuo
+        if task_id in tasks_with_real_delay:
+            continue
+        # Il task deve essere ancora posticipato rispetto all'originale
+        original_start = _date(original["start_date"])
+        original_end = _date(original["end_date"])
+        if not original_start or not original_end:
+            continue
+        current_start = task.start_date
+        current_end = task.end_date or task.start_date
+        # Controlla se la data corrente è posteriore a quella originale
+        days_ahead = _forward_working_day_distance(original_start, current_start)
+        if days_ahead <= 0:
+            continue
+        workers = [str(w) for w in _json(task.workers, []) if w]
+        advancement_scenarios.append({
+            "task_id": task_id,
+            "project_id": project_id,
+            "task_name": task.text,
+            "reason": f"fase anticipabile di {days_ahead} {'giorno lavorativo' if days_ahead == 1 else 'giorni lavorativi'}: ritardo originale rientrato",
+            "missing_hours": 0.0,
+            "workers": workers,
+            "worker_missing": {},
+            "start_date": current_start.isoformat(),
+            "end_date": current_end.isoformat(),
+            "original_start": original_start.isoformat(),
+            "original_end": original_end.isoformat(),
+            "days_ahead": days_ahead,
+            "actionable": True,
+            "type": "advancement",
+        })
+    return advancement_scenarios
+
+
+async def apply_advancement_rescheduling(
+    db: AsyncSession,
+    project_id: str,
+    actor: Optional[User],
+    advancement_scenarios: Optional[list[dict[str, Any]]] = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Riporta indietro (anticipa) le fasi che erano state posticipate e ora non hanno più ritardi reali."""
+    if advancement_scenarios is None:
+        advancement_scenarios = await detect_advancement_scenarios(db, include_paused_project_id=project_id)
+
+    actionable = [s for s in advancement_scenarios if s.get("actionable") and s.get("days_ahead", 0) > 0]
     if not actionable:
-        return {
-            "has_changes": False,
-            "trigger_summary": "",
-            "solution_summary": "Nessuna modifica necessaria nello scenario attuale.",
-            "recovered_hours": 0,
-            "affected_project_count": 0,
-            "scenarios": [],
-            "allocations": [],
-            "changes": [],
-            "projects": [],
-            "error": None,
-        }
-    try:
-        preview = await apply_rescheduling(
-            db,
-            project_id,
-            None,
-            allow_when_paused=True,
-            precomputed_scenarios=actionable,
-            dry_run=True,
-        )
-        preview["error"] = None
-        return preview
-    except HTTPException as exc:
-        await db.rollback()
-        return {
-            "has_changes": False,
-            "trigger_summary": " | ".join(dict.fromkeys(item["reason"] for item in actionable)),
-            "solution_summary": "Impossibile generare una proposta applicabile.",
-            "recovered_hours": round(sum(float(item["missing_hours"]) for item in actionable), 1),
-            "affected_project_count": 0,
+        raise HTTPException(status_code=400, detail="Nessuna fase anticipabile nella situazione attuale")
+
+    # Carica tutti i task e le vacanze per il calcolo
+    all_project_ids = list({s["project_id"] for s in actionable})
+    task_result = await db.execute(select(Task).where(Task.project_id.in_(all_project_ids)))
+    all_tasks = list(task_result.scalars().all())
+    tasks_by_id = {str(t.id): t for t in all_tasks}
+    link_result = await db.execute(select(Link).where(Link.project_id.in_(all_project_ids)))
+    links = list(link_result.scalars().all())
+
+    user_result = await db.execute(select(User).where(User.is_active == True))
+    users = list(user_result.scalars().all())
+    aliases: dict[str, str] = {}
+    users_by_id: dict[str, User] = {}
+    for user in users:
+        users_by_id[str(user.id)] = user
+        aliases[user.username] = user.username
+        if user.full_name:
+            aliases[user.full_name] = user.username
+
+    vacation_result = await db.execute(select(Vacation))
+    vacations: dict[str, list[tuple[date, date]]] = defaultdict(list)
+    for vacation in vacation_result.scalars().all():
+        vac_user = users_by_id.get(str(vacation.user_id))
+        if vac_user:
+            vacations[vac_user.username].append((vacation.start_date, vacation.end_date))
+
+    proj_result = await db.execute(
+        select(Project).where(Project.id.in_(all_project_ids))
+    )
+    eligible_projects = {str(p.id): p for p in proj_result.scalars().all()}
+
+    before_states: dict[str, dict[str, Any]] = {}
+    reasons_by_task: dict[str, list[str]] = defaultdict(list)
+    task_shift_days: dict[str, int] = {}
+    project_before_ends = {
+        pid: p.end_date.isoformat() if p.end_date else None
+        for pid, p in eligible_projects.items()
+    }
+
+    for scenario in actionable:
+        task = tasks_by_id.get(scenario["task_id"])
+        if not task or not task.start_date:
+            continue
+        original_start = _date(scenario["original_start"])
+        original_end = _date(scenario["original_end"])
+        if not original_start or not original_end:
+            continue
+        before_states.setdefault(str(task.id), _task_state(task))
+        # Sposta la fase al primo giorno lavorativo valido partendo dall'originale
+        shifted_start, shifted_end = _valid_shifted_range(task, original_start, aliases, vacations)
+        # Il rientro massimo è la data originale; non possiamo andare prima
+        # Assicura che non si vada oltre la data corrente (non ha senso anticipare in futuro lontano)
+        if shifted_start >= task.start_date:
+            # La data originale è già oltre la corrente o uguale: nessun anticipo possibile
+            continue
+        task.start_date = shifted_start
+        task.end_date = shifted_end
+        task.duration = max(1, count_working_days_in_range(shifted_start, shifted_end))
+        task.has_vacation_conflict = 0
+        original_current_start = _date(before_states[str(task.id)]["start_date"])
+        advance_days = _forward_working_day_distance(shifted_start, original_current_start)
+        task_shift_days[str(task.id)] = -advance_days  # negativo = anticipo
+        reasons_by_task[str(task.id)].append(scenario["reason"])
+
+    # Propaga il delta di anticipo lungo le dipendenze (solo per task che dipendono dai task anticipati)
+    impacted_task_ids = set(before_states)
+    max_dependency_passes = max(1, len(all_tasks) * 2)
+    for dependency_pass in range(max_dependency_passes):
+        changed = False
+        for link in links:
+            source = tasks_by_id.get(str(link.source))
+            target = tasks_by_id.get(str(link.target))
+            if (
+                not source
+                or not target
+                or str(source.id) not in impacted_task_ids
+                or not target.start_date
+            ):
+                continue
+            source_shift = task_shift_days.get(str(source.id), 0)
+            if source_shift >= 0:
+                continue  # non è un anticipo, saltiamo
+            target_shift = task_shift_days.get(str(target.id), 0)
+            # Il target ha già subito un anticipo maggiore o uguale: skip
+            if target_shift <= source_shift:
+                continue
+            # Anticipa il target dello stesso delta del source
+            before_states.setdefault(str(target.id), _task_state(target))
+            advance_days = abs(source_shift)
+            requested_start = _add_working_days(target.start_date, -advance_days)
+            # Non andiamo prima di oggi
+            if requested_start < date.today():
+                requested_start = _add_working_days(date.today(), 0)
+            if requested_start >= target.start_date:
+                continue
+            if target.type == TaskType.MILESTONE:
+                target.start_date = requested_start
+                target.end_date = requested_start
+                target.duration = 0
+            else:
+                shifted_start, shifted_end = _valid_shifted_range(target, requested_start, aliases, vacations)
+                if shifted_start >= target.start_date:
+                    continue
+                target.start_date = shifted_start
+                target.end_date = shifted_end
+                target.duration = max(1, count_working_days_in_range(shifted_start, shifted_end))
+            task_shift_days[str(target.id)] = source_shift
+            reasons_by_task[str(target.id)].append(
+                f"anticipata di {advance_days} {'giorno lavorativo' if advance_days == 1 else 'giorni lavorativi'} "
+                f"per la dipendenza dalla fase '{source.text}'"
+            )
+            impacted_task_ids.add(str(target.id))
+            changed = True
+        if not changed:
+            break
+
+    changed_tasks = [
+        task for task in all_tasks
+        if str(task.id) in before_states and _task_state(task) != before_states[str(task.id)]
+    ]
+    if not changed_tasks:
+        raise HTTPException(status_code=400, detail="L'analisi non richiede anticipi di date")
+
+    # Aggiorna date fine commessa se necessario
+    changed_by_project: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for task in changed_tasks:
+        changed_by_project[str(task.project_id)].append({
+            "task_id": str(task.id),
+            "task_name": task.text,
+            "before": before_states[str(task.id)],
+            "after": _task_state(task),
+            "reason": "; ".join(dict.fromkeys(reasons_by_task[str(task.id)])),
+        })
+
+    for affected_project_id in changed_by_project:
+        affected_project = eligible_projects[affected_project_id]
+        project_tasks = [t for t in all_tasks if str(t.project_id) == affected_project_id and t.start_date]
+        if project_tasks:
+            new_project_end = max(t.end_date or t.start_date for t in project_tasks)
+            affected_project.end_date = new_project_end
+
+    advanced_count = len(changed_tasks)
+    affected_project_count = len(changed_by_project)
+    trigger_summary = "Rientro automatico: ritardo originale non più rilevato"
+    solution_summary = (
+        f"Anticipate {advanced_count} {'fase' if advanced_count == 1 else 'fasi'} su "
+        f"{affected_project_count} {'commessa' if affected_project_count == 1 else 'commesse'} "
+        f"a seguito di cancellazione ferie o rettifica consuntivi."
+    )
+
+    if dry_run:
+        preview_projects = []
+        preview_changes: list[dict[str, Any]] = []
+        for affected_project_id, changes in changed_by_project.items():
+            affected_project = eligible_projects[affected_project_id]
+            enriched_changes = [
+                {
+                    **change,
+                    "project_id": affected_project_id,
+                    "project_name": affected_project.name,
+                    "project_code": affected_project.code,
+                }
+                for change in changes
+            ]
+            preview_changes.extend(enriched_changes)
+            preview_projects.append({
+                "project_id": affected_project_id,
+                "project_name": affected_project.name,
+                "project_code": affected_project.code,
+                "before_end": project_before_ends[affected_project_id],
+                "after_end": affected_project.end_date.isoformat() if affected_project.end_date else None,
+                "changes": enriched_changes,
+            })
+        preview = {
+            "has_changes": True,
+            "type": "advancement",
+            "trigger_summary": trigger_summary,
+            "solution_summary": solution_summary,
+            "recovered_hours": 0.0,
+            "affected_project_count": affected_project_count,
             "scenarios": actionable,
             "allocations": [],
-            "changes": [],
-            "projects": [],
-            "error": str(exc.detail),
+            "changes": preview_changes,
+            "projects": preview_projects,
         }
+        await db.rollback()
+        return preview
+
+    batch_id = str(uuid.uuid4())
+    runs: dict[str, PlanningRun] = {}
+    for affected_project_id, changes in changed_by_project.items():
+        affected_project = eligible_projects[affected_project_id]
+        snapshot = {
+            "project": {
+                "before_end": project_before_ends[affected_project_id],
+                "after_end": affected_project.end_date.isoformat() if affected_project.end_date else None,
+            },
+            "tasks": changes,
+        }
+        run = PlanningRun(
+            batch_id=batch_id,
+            project_id=affected_project_id,
+            created_by_id=actor.id if actor else None,
+            status="applied",
+            trigger_summary=trigger_summary,
+            solution_summary=solution_summary,
+            snapshot_json=json.dumps(snapshot, ensure_ascii=False),
+            allocations_json=json.dumps([], ensure_ascii=False),
+        )
+        runs[affected_project_id] = run
+        db.add(run)
+        db.add(ActivityLog(
+            project_id=affected_project_id,
+            user_id=actor.id if actor else None,
+            category=ActivityCategory.PHASE_PROJECT_EDIT,
+            action_text=f"[Agente pianificazione] {trigger_summary}. {solution_summary}",
+        ))
+
+    affected_usernames = {aliases.get(w, w) for s in actionable for w in s.get("workers", [])}
+    for affected_project_id in changed_by_project:
+        affected_project = eligible_projects[affected_project_id]
+        notification_ids = {str(affected_project.owner_id), str(affected_project.responsible_id or "")}
+        if actor:
+            notification_ids.add(str(actor.id))
+        for user in users:
+            if user.username in affected_usernames or user.role in (UserRole.ADMIN, UserRole.EDITOR):
+                notification_ids.add(str(user.id))
+        for user_id in notification_ids:
+            if not user_id:
+                continue
+            db.add(Notification(
+                user_id=user_id,
+                title="Pianificazione aggiornata: fasi anticipate",
+                message=f"{affected_project.name}: {solution_summary}",
+                type=NotificationType.UPDATE,
+                project_id=affected_project_id,
+            ))
+
+    await db.commit()
+    primary_run = runs.get(str(project_id)) or next(iter(runs.values()))
+    result = await db.execute(
+        select(PlanningRun)
+        .where(PlanningRun.id == primary_run.id)
+        .options(selectinload(PlanningRun.created_by), selectinload(PlanningRun.undone_by))
+    )
+    saved_run = result.scalar_one()
+    for affected_project_id, run in runs.items():
+        await manager.broadcast(
+            affected_project_id,
+            {"action": "auto_reschedule_applied", "run_id": str(run.id), "batch_id": batch_id},
+        )
+    return _serialize_run(saved_run)
+
+
+async def preview_rescheduling(db: AsyncSession, project_id: str) -> dict[str, Any]:
+    """Simula il batch globale corrente senza persistere date, log o notifiche.
+
+    Prima controlla se ci sono ritardi da ripianificare (scenari di posticipio);
+    se non ce ne sono, controlla se ci sono fasi che possono essere anticipate
+    (rientro a seguito di cancellazione ferie o rettifica consuntivi).
+    """
+    scenarios = await analyze_all_projects(db, include_paused_project_id=project_id)
+    actionable = [scenario for scenario in scenarios if scenario["actionable"]]
+    if actionable:
+        # Ci sono ritardi: proponi il posticipio classico
+        try:
+            preview = await apply_rescheduling(
+                db,
+                project_id,
+                None,
+                allow_when_paused=True,
+                precomputed_scenarios=actionable,
+                dry_run=True,
+            )
+            preview["error"] = None
+            preview["type"] = "delay"
+            return preview
+        except HTTPException as exc:
+            await db.rollback()
+            return {
+                "has_changes": False,
+                "type": "delay",
+                "trigger_summary": " | ".join(dict.fromkeys(item["reason"] for item in actionable)),
+                "solution_summary": "Impossibile generare una proposta applicabile.",
+                "recovered_hours": round(sum(float(item["missing_hours"]) for item in actionable), 1),
+                "affected_project_count": 0,
+                "scenarios": actionable,
+                "allocations": [],
+                "changes": [],
+                "projects": [],
+                "error": str(exc.detail),
+            }
+
+    # Nessun ritardo: controlla se ci sono fasi da anticipare
+    advancement_scenarios = await detect_advancement_scenarios(db, include_paused_project_id=project_id)
+    if advancement_scenarios:
+        try:
+            preview = await apply_advancement_rescheduling(
+                db,
+                project_id,
+                None,
+                advancement_scenarios=advancement_scenarios,
+                dry_run=True,
+            )
+            preview["error"] = None
+            return preview
+        except HTTPException as exc:
+            await db.rollback()
+
+    return {
+        "has_changes": False,
+        "type": "none",
+        "trigger_summary": "",
+        "solution_summary": "Nessuna modifica necessaria nello scenario attuale.",
+        "recovered_hours": 0,
+        "affected_project_count": 0,
+        "scenarios": [],
+        "allocations": [],
+        "changes": [],
+        "projects": [],
+        "error": None,
+    }
 
 
 async def undo_rescheduling(db: AsyncSession, project_id: str, run_id: str, actor: User) -> dict[str, Any]:
@@ -1019,32 +1415,66 @@ async def undo_rescheduling(db: AsyncSession, project_id: str, run_id: str, acto
 
 
 async def run_daily_rescheduling(session_factory=None) -> None:
-    """Esegue un unico batch globale sulle commesse operative non in pausa."""
+    """Esegue un unico batch globale sulle commesse operative non in pausa.
+
+    Prima risolve i ritardi attivi (posticipio), poi – se non ci sono ritardi –
+    controlla se ci sono fasi anticipabili (rientro a seguito di cancellazione
+    ferie o rettifica consuntivi) e le riporta alle date più vicine all'originale.
+    """
     if session_factory is None:
         from app.models.base import AsyncSessionLocal
         session_factory = AsyncSessionLocal
 
     async with session_factory() as db:
+        # --- Fase 1: posticipi per ritardi attivi ---
         try:
             scenarios = await analyze_all_projects(db)
             actionable = [scenario for scenario in scenarios if scenario["actionable"]]
-            if not actionable:
+            if actionable:
+                trigger_project_id = actionable[0]["project_id"]
+                result = await apply_rescheduling(
+                    db,
+                    trigger_project_id,
+                    None,
+                    precomputed_scenarios=actionable,
+                )
+                logger.info(
+                    "[PLANNING AGENT] Batch posticipio %s applicato a %s scenari",
+                    result.get("batch_id"),
+                    len(actionable),
+                )
+                # Dopo aver applicato i posticipi, non eseguiamo anticipi nello stesso ciclo
                 return
-            trigger_project_id = actionable[0]["project_id"]
-            result = await apply_rescheduling(
+        except HTTPException as exc:
+            await db.rollback()
+            logger.warning("[PLANNING AGENT] Batch posticipio non applicato: %s", exc.detail)
+        except Exception:
+            await db.rollback()
+            logger.exception("[PLANNING AGENT] Errore durante il posticipio globale")
+            return
+
+    # --- Fase 2: anticipi per rientro ferie / consuntivi (sessione separata) ---
+    async with session_factory() as db:
+        try:
+            advancement_scenarios = await detect_advancement_scenarios(db)
+            if not advancement_scenarios:
+                logger.info("[PLANNING AGENT] Nessun anticipo necessario")
+                return
+            trigger_project_id = advancement_scenarios[0]["project_id"]
+            result = await apply_advancement_rescheduling(
                 db,
                 trigger_project_id,
                 None,
-                precomputed_scenarios=actionable,
+                advancement_scenarios=advancement_scenarios,
             )
             logger.info(
-                "[PLANNING AGENT] Batch globale %s applicato a %s scenari",
+                "[PLANNING AGENT] Batch anticipo %s applicato a %s fasi",
                 result.get("batch_id"),
-                len(actionable),
+                len(advancement_scenarios),
             )
         except HTTPException as exc:
             await db.rollback()
-            logger.warning("[PLANNING AGENT] Batch globale non applicato: %s", exc.detail)
+            logger.warning("[PLANNING AGENT] Batch anticipo non applicato: %s", exc.detail)
         except Exception:
             await db.rollback()
-            logger.exception("[PLANNING AGENT] Errore durante la ripianificazione globale")
+            logger.exception("[PLANNING AGENT] Errore durante l'anticipo globale")

@@ -30,6 +30,20 @@ PROJECTS: List[Dict[str, Any]] = [
         "client": "AgriNord",
         "description": "N. 4 Silos da 5000t con sistema di estrazione",
         "color": "#10b981",
+    },
+    {
+        "name": "Linea Confezionamento",
+        "code": "COMM-2026-003",
+        "client": "FoodPack Srl",
+        "description": "Nuova linea per confezionamento farina da 1kg",
+        "color": "#f59e0b",
+    },
+    {
+        "name": "Revamping Mulino",
+        "code": "COMM-2026-004",
+        "client": "Antico Mulino SpA",
+        "description": "Sostituzione vecchi laminatoi e aggiornamento quadri",
+        "color": "#8b5cf6",
     }
 ]
 

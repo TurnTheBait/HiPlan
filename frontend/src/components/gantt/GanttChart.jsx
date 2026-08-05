@@ -28,6 +28,7 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
 
   const containerRef = useRef(null);
   const initialized = useRef(false);
+  const isParsing = useRef(false);
   const markerIdsRef = useRef([]);
   const projectStartDateRef = useRef(projectStartDate);
   const projectEndDateRef = useRef(projectEndDate);
@@ -81,6 +82,7 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
     gantt.config.drag_links = true;
     gantt.config.drag_resize = false;
     gantt.config.drag_move = false;
+    gantt.config.details_on_dblclick = false;
     
     // Disabilita i popup nativi di conferma per l'eliminazione dei link
     if (gantt.locale && gantt.locale.labels) {
@@ -367,8 +369,6 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
       if (task) {
         if (!readOnlyRef.current && onEditTaskRef.current) {
           onEditTaskRef.current(task);
-        } else if (readOnlyRef.current && onOpenTaskHoursRef.current) {
-          onOpenTaskHoursRef.current(task);
         }
       }
       return false; // Blocca 100% l'apertura del lightbox nativo DHTMLX
@@ -384,8 +384,6 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
       } else if (task) {
         if (!readOnlyRef.current && onEditTaskRef.current) {
           onEditTaskRef.current(task);
-        } else if (readOnlyRef.current && onOpenTaskHoursRef.current) {
-          onOpenTaskHoursRef.current(task);
         }
       }
       return false; // Blocca 100% la lightbox inglese di DHTMLX
@@ -396,6 +394,7 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
     ganttEvents.push(gantt.attachEvent("onBeforeTaskDrag", () => false));
 
     ganttEvents.push(gantt.attachEvent("onAfterTaskAdd", (id, item) => {
+      if (isParsing.current) return;
       if (onTaskCreateRef.current) {
         onTaskCreateRef.current({
           text: item.text,
@@ -407,6 +406,7 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
     }));
 
     ganttEvents.push(gantt.attachEvent("onBeforeTaskDelete", (id, item) => {
+      if (isParsing.current) return true;
       if (!window.confirm(`Confermi l'eliminazione della fase di lavorazione "${item.text || 'selezionata'}"?`)) {
         return false;
       }
@@ -414,10 +414,12 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
     }));
 
     ganttEvents.push(gantt.attachEvent("onAfterTaskDelete", (id) => {
+      if (isParsing.current) return;
       if (onTaskDeleteRef.current) onTaskDeleteRef.current(id, true);
     }));
 
     ganttEvents.push(gantt.attachEvent("onBeforeLinkAdd", (id, link) => {
+      if (isParsing.current) return true;
       if (!link.source || !link.target || String(link.source) === String(link.target)) return false;
       const existing = gantt.getLinks().find(l =>
         String(l.source) === String(link.source) && String(l.target) === String(link.target) && String(l.id) !== String(id)
@@ -427,6 +429,7 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
     }));
 
     ganttEvents.push(gantt.attachEvent("onAfterLinkAdd", (id, item) => {
+      if (isParsing.current) return;
       if (onLinkCreateRef.current) {
         onLinkCreateRef.current({
           source: String(item.source),
@@ -437,10 +440,26 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
     }));
 
     ganttEvents.push(gantt.attachEvent("onLinkDblClick", (id) => {
+      if (isParsing.current) return false;
       if (onLinkDeleteRef.current) {
         onLinkDeleteRef.current(id, false);
       }
       return false; // blocks native DHTMLX popup
+    }));
+
+    ganttEvents.push(gantt.attachEvent("onBeforeLinkDelete", (id, item) => {
+      if (isParsing.current) return true;
+      if (!window.confirm(`Confermi l'eliminazione di questa dipendenza?`)) {
+        return false;
+      }
+      return true;
+    }));
+
+    ganttEvents.push(gantt.attachEvent("onAfterLinkDelete", (id, item) => {
+      if (isParsing.current) return;
+      if (onLinkDeleteRef.current) {
+        onLinkDeleteRef.current(id, true);
+      }
     }));
 
     const handleResize = () => {
@@ -735,9 +754,11 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
     gantt.config.start_date = scaleStart;
     gantt.config.end_date = scaleEnd;
 
-    gantt.clearAll();
-    gantt.parse({
-      data: sortedTaskList.map(t => {
+    isParsing.current = true;
+    try {
+      gantt.clearAll();
+      gantt.parse({
+        data: sortedTaskList.map(t => {
         const isCompleted = isTaskCompleted(t);
         const totEff = calculateTaskEffHours(t);
         const plannedH = Number(t.planned_hours || 8.0);
@@ -775,6 +796,9 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
         type: String(l.type || '0'),
       })),
     });
+    } finally {
+      isParsing.current = false;
+    }
 
     gantt.sort("start_date", false);
     drawCustomMarkers();

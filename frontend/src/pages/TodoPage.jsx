@@ -12,9 +12,10 @@ const BACKEND_URL = import.meta.env.VITE_API_URL
   : `http://${window.location.hostname}:8000`;
 
 function formatDate(dateStr) {
-  if (!dateStr) return null;
-  const d = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T00:00:00');
-  return d.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
 }
 
 function getDueDaysLeft(dateStr) {

@@ -569,6 +569,11 @@
   color: var(--accent-600);
 }
 
+.planning-run-status.advancement {
+  background: color-mix(in srgb, #10b981 14%, transparent);
+  color: #059669;
+}
+
 .planning-preview {
   margin-top: 18px;
   padding-top: 14px;
