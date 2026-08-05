@@ -157,8 +157,8 @@ async def set_agent_enabled(session: AsyncSession, enabled: bool) -> None:
         select(Setting).where(Setting.key == "agent_last_toggled")
     )
     s2 = res2.scalar_one_or_none()
-    from datetime import datetime
-    now_str = datetime.utcnow().isoformat()
+    from datetime import datetime, timezone
+    now_str = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     if s2:
         s2.value = now_str
     else:
@@ -181,8 +181,8 @@ async def get_agent_status(session: AsyncSession) -> dict:
 
 
 async def _update_last_run(session: AsyncSession) -> None:
-    from datetime import datetime
-    now_str = datetime.utcnow().isoformat()
+    from datetime import datetime, timezone
+    now_str = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     res = await session.execute(
         select(Setting).where(Setting.key == "agent_last_run")
     )
@@ -345,6 +345,7 @@ async def run_rescheduling_agent(dry_run: bool = False) -> dict:
                         project_map=project_map,
                         session=session,
                         already_shifted=already_shifted,
+                        user_map_by_name=user_map_by_name,
                         stats=stats,
                         dry_run=dry_run,
                     )
@@ -431,6 +432,7 @@ async def run_rescheduling_agent(dry_run: bool = False) -> dict:
                         project_map=project_map,
                         session=session,
                         already_shifted=already_shifted,
+                        user_map_by_name=user_map_by_name,
                         stats=stats,
                         dry_run=dry_run,
                     )
@@ -538,6 +540,7 @@ async def run_rescheduling_agent(dry_run: bool = False) -> dict:
                                 project_map=project_map,
                                 session=session,
                                 already_shifted=already_shifted,
+                                user_map_by_name=user_map_by_name,
                                 stats=stats,
                                 dry_run=dry_run,
                             )
@@ -757,7 +760,8 @@ async def revert_agent_log(log_id: str, admin_username: str) -> dict:
 
         # Aggiorna il log
         log.reverted = 1
-        log.reverted_at = datetime.utcnow().isoformat()
+        from datetime import datetime, timezone
+        log.reverted_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         log.reverted_by = admin_username
 
         await session.commit()

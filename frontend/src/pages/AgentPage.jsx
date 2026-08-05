@@ -30,7 +30,8 @@ function formatDate(d) {
 
 function formatDateTime(iso) {
   if (!iso) return '—';
-  const d = new Date(iso);
+  const isoZ = iso.endsWith('Z') ? iso : iso + 'Z';
+  const d = new Date(isoZ);
   return d.toLocaleString('it-IT', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
@@ -316,17 +317,6 @@ export default function AgentPage() {
               {!analyzing && <AppIcon name="search" size={16} style={{ marginRight: '4px' }} />}
               {analyzing ? 'Analisi in corso…' : 'Analizza situazione'}
             </button>
-
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={handleRunNow}
-              disabled={running || analyzing}
-              title="Esegui il ciclo di ripianificazione subito"
-            >
-              {running && <span className="agent-running-spinner" style={{ marginRight: '6px' }} />}
-              {!running && <AppIcon name="check" size={16} style={{ marginRight: '4px' }} />}
-              {running ? 'In esecuzione…' : 'Esegui ora'}
-            </button>
           </div>
         )}
       </div>
@@ -384,10 +374,17 @@ export default function AgentPage() {
           {analysisResult.errors?.length > 0 && (
             <span style={{ color: 'var(--danger)' }}>⚠️ {analysisResult.errors.length} errori</span>
           )}
-          <button
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.5, fontSize: '1rem' }}
-            onClick={() => setAnalysisResult(null)}
-          >✕</button>
+
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <button className="btn btn-primary btn-sm" onClick={handleRunNow} disabled={running}>
+              {running ? 'Applicazione in corso…' : 'Applica ora'}
+            </button>
+            <button
+              style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.5, fontSize: '1rem', padding: '4px' }}
+              onClick={() => setAnalysisResult(null)}
+              title="Chiudi"
+            >✕</button>
+          </div>
         </div>
       )}
 
@@ -427,14 +424,14 @@ export default function AgentPage() {
             style={{ width: '180px' }}
           />
 
-          <label className="input" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', width: 'auto', marginBottom: 0 }}>
+          <label className="input" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', width: 'auto', marginBottom: 0, maxHeight: '40px' }}>
             <input
               type="checkbox"
               checked={showReverted}
               onChange={e => setShowReverted(e.target.checked)}
               style={{ margin: 0, cursor: 'pointer' }}
             />
-            <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Mostra revocate</span>
+            <span style={{ color: 'var(--text-secondary)' }}>Mostra revocate</span>
           </label>
         </div>
 

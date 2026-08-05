@@ -139,9 +139,11 @@ function AppIcon({ name, size = 19 }) {
     ),
     agent: (
       <>
-        <circle cx="12" cy="8" r="4" />
-        <path d="M6 20v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" />
-        <path d="M12 2v2M12 18v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+        <rect x="4" y="7" width="16" height="12" rx="3" />
+        <path d="M12 3v4M9 3h6" />
+        <circle cx="9" cy="13" r="1" />
+        <circle cx="15" cy="13" r="1" />
+        <path d="M8 17h8M2 11h2M20 11h2" />
       </>
     ),
   };
