@@ -137,6 +137,13 @@ function AppIcon({ name, size = 19 }) {
         <line x1="10" y1="14" x2="21" y2="3" />
       </>
     ),
+    agent: (
+      <>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M6 20v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" />
+        <path d="M12 2v2M12 18v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+      </>
+    ),
   };
 
   return <svg {...commonProps}>{icons[name]}</svg>;
@@ -239,6 +246,7 @@ export default function MainLayout() {
       '/notes': { title: 'Blocchi Note', subtitle: 'Appunti e documenti condivisi' },
       '/todo': { title: 'TODO', subtitle: 'Priorità personali e di team' },
       '/conflicts': { title: 'Panoramica addetti', subtitle: 'Carichi e sovrapposizioni' },
+      '/agent': { title: 'Agente', subtitle: 'Ripianificazione automatica commesse' },
       '/tickets': { title: 'Ticket', subtitle: 'Richieste e supporto operativo' },
       '/admin': { title: 'Amministrazione', subtitle: 'Utenti e configurazione' },
       '/me': { title: 'Il mio profilo', subtitle: 'Profilo, reparto e ferie' },
@@ -319,6 +327,10 @@ export default function MainLayout() {
           <NavLink to="/conflicts" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon"><AppIcon name="users" /></span>
             {showSidebarText && <span>Panoramica addetti</span>}
+          </NavLink>
+          <NavLink to="/agent" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon"><AppIcon name="agent" /></span>
+            {showSidebarText && <span>Agente</span>}
           </NavLink>
           {user?.role === 'admin' && (
             <NavLink to="/admin" end className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
@@ -505,9 +517,9 @@ export default function MainLayout() {
         </div>
       )}
 
-      <GlobalSearch 
-        isOpen={showGlobalSearch} 
-        onClose={() => setShowGlobalSearch(false)} 
+      <GlobalSearch
+        isOpen={showGlobalSearch}
+        onClose={() => setShowGlobalSearch(false)}
       />
     </div>
   );

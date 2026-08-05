@@ -203,6 +203,26 @@ const paths = {
       <path d="M4 11H2v4h4M7 14l2 7h4l-2-8" />
     </>
   ),
+  agent: (
+    <>
+      <rect x="4" y="7" width="16" height="12" rx="3" />
+      <path d="M12 3v4M9 3h6" />
+      <circle cx="9" cy="13" r="1" />
+      <circle cx="15" cy="13" r="1" />
+      <path d="M8 17h8M2 11h2M20 11h2" />
+    </>
+  ),
+  play: (
+    <>
+      <path d="M8 5v14l11-7Z" />
+    </>
+  ),
+  pause: (
+    <>
+      <rect x="6" y="5" width="4" height="14" rx="1" />
+      <rect x="14" y="5" width="4" height="14" rx="1" />
+    </>
+  )
 };
 
 export default function AppIcon({ name, size = 18, className = '', strokeWidth = 1.9 }) {

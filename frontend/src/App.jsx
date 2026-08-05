@@ -14,6 +14,7 @@ import ConflictMonitoringPage from './pages/ConflictMonitoringPage';
 import ProfilePage from './pages/ProfilePage';
 import TicketsPage from './pages/TicketsPage';
 import TodoPage from './pages/TodoPage';
+import AgentPage from './pages/AgentPage';
 import './index.css';
 import './workspace-restyle.css';
 
@@ -66,6 +67,7 @@ function AppRoutes() {
         <Route path="/tickets" element={<TicketsPage />} />
         <Route path="/conflicts" element={<ConflictMonitoringPage />} />
         <Route path="/admin/conflicts" element={<ConflictMonitoringPage />} />
+        <Route path="/agent" element={<AgentPage />} />
         <Route
           path="/admin"
           element={

@@ -11,7 +11,8 @@ from fastapi.staticfiles import StaticFiles
 from app.api import (
     auth, users, projects, tasks, notes, export, 
     notifications, phase_templates, workload, vacations, 
-    tickets, task_collaboration, websockets, settings as api_settings, activity_logs, todos, email_logs, search
+    tickets, task_collaboration, websockets, settings as api_settings, activity_logs, todos, email_logs, search,
+    agent as api_agent
 )
 
 @asynccontextmanager
@@ -221,8 +222,18 @@ async def lifespan(app: FastAPI):
             await session.commit()
 
     scheduler.add_job(run_todo_notifications, 'interval', minutes=5)
+
+    # Scheduler: agente di ripianificazione automatica (ogni 15 minuti)
+    async def run_agent_job():
+        from app.services.rescheduling_agent import run_rescheduling_agent
+        try:
+            await run_rescheduling_agent()
+        except Exception as e:
+            print(f"[Agent] Errore nel job: {e}")
+
+    scheduler.add_job(run_agent_job, 'interval', minutes=15)
     scheduler.start()
-    print("[INIT] Scheduler avviato (controllo TODO ogni 5 minuti)")
+    print("[INIT] Scheduler avviato (TODO ogni 5 min, Agente ripianificazione ogni 15 min)")
 
     yield
     await engine.dispose()
@@ -273,6 +284,7 @@ app.include_router(websockets.router)
 app.include_router(todos.router)
 app.include_router(email_logs.router, prefix="/api/admin/email-logs", tags=["Admin"])
 app.include_router(search.router)
+app.include_router(api_agent.router)
 
 @app.get("/api/health")
 async def health_check():

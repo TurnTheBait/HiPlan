@@ -95,7 +95,8 @@
 
 .projects-page,
 .admin-page,
-.conflicts-page {
+.conflicts-page,
+.agent-page {
   width: min(100%, 1560px);
   margin: 0 auto;
 }
