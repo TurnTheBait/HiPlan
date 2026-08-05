@@ -69,6 +69,7 @@ class AgentRunResult(BaseModel):
     conflicts_detected: int
     vacation_conflicts: int
     lag_detected: int
+    overbooking_resolved: int
     errors: List[str]
 
 

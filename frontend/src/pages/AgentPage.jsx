@@ -12,6 +12,7 @@ const ACTION_LABELS = {
   vacation_conflict: 'Conflitto ferie',
   lag_detected: 'Ritardo rilevato',
   conflict_detected: 'Conflitto addetto',
+  overbooking_resolved: 'Overbooking risolto',
 };
 
 const ACTION_ICONS = {
@@ -20,6 +21,7 @@ const ACTION_ICONS = {
   vacation_conflict: 'vacations',
   lag_detected: 'clock',
   conflict_detected: 'alert',
+  overbooking_resolved: 'alert',
 };
 
 function formatDate(d) {

@@ -12,6 +12,7 @@ class AgentActionType(str, enum.Enum):
     CONFLICT_DETECTED = "conflict_detected"      # Conflitto rilevato ma non auto-risolto
     VACATION_CONFLICT = "vacation_conflict"      # Conflitto con ferie dell'addetto
     LAG_DETECTED = "lag_detected"               # Fase in ritardo senza attività
+    OVERBOOKING_RESOLVED = "overbooking_resolved" # Risolto sovrassegnamento ore (overbooking)
 
 
 class AgentLog(Base, TimestampMixin):

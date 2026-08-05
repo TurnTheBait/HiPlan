@@ -253,6 +253,7 @@
 .agent-log-dot.vacation_conflict  { background: rgba(245,158,11,0.13); box-shadow: 0 0 0 1px rgba(245,158,11,0.3); }
 .agent-log-dot.lag_detected       { background: rgba(239,68,68,0.12);  box-shadow: 0 0 0 1px rgba(239,68,68,0.3); }
 .agent-log-dot.conflict_detected  { background: rgba(234,179,8,0.12);  box-shadow: 0 0 0 1px rgba(234,179,8,0.3); }
+.agent-log-dot.overbooking_resolved{ background: rgba(20,184,166,0.12); box-shadow: 0 0 0 1px rgba(20,184,166,0.3); }
 
 .agent-log-body {
   flex: 1;
@@ -291,6 +292,7 @@
 .badge-vacation_conflict   { background: rgba(245,158,11,0.12); color: #d97706; border: 1px solid rgba(245,158,11,0.3); }
 .badge-lag_detected        { background: rgba(239,68,68,0.1);  color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
 .badge-conflict_detected   { background: rgba(234,179,8,0.12); color: #ca8a04; border: 1px solid rgba(234,179,8,0.3); }
+.badge-overbooking_resolved{ background: rgba(20,184,166,0.12); color: #0d9488; border: 1px solid rgba(20,184,166,0.3); }
 
 .agent-log-task {
   font-size: 0.9rem;

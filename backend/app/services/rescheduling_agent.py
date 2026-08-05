@@ -210,6 +210,7 @@ async def run_rescheduling_agent(dry_run: bool = False) -> dict:
         "conflicts_detected": 0,
         "vacation_conflicts": 0,
         "lag_detected": 0,
+        "overbooking_resolved": 0,
         "errors": [],
     }
 
@@ -441,72 +442,74 @@ async def run_rescheduling_agent(dry_run: bool = False) -> dict:
             await session.flush()
 
             # ---------------------------------------------------------------
-            # 3. Rilevamento conflitti di sovrapposizione (stesso addetto)
+            # 3. Rilevamento conflitti di sovrapposizione (Overbooking > 8h)
             # ---------------------------------------------------------------
-            # Raggruppa task per addetto
-            tasks_by_worker: dict[str, list[Task]] = defaultdict(list)
-            for task in all_tasks:
-                if task.completed == 1:
-                    continue
-                if not task.start_date:
-                    continue
-                workers = _parse_list(task.workers)
-                for w in workers:
-                    tasks_by_worker[w.strip().lower()].append(task)
+            for _ in range(5):  # Max 5 passate per risolvere overbooking a cascata
+                overbooking_resolved_in_pass = False
+                daily_hours = defaultdict(lambda: defaultdict(list))
 
-            for worker_key, worker_tasks in tasks_by_worker.items():
-                # Ordina per start_date, poi sort_order
-                worker_tasks_sorted = sorted(
-                    worker_tasks,
-                    key=lambda t: (t.start_date or date.min, t.sort_order or 0)
-                )
+                # Calcolo ore giornaliere per addetto
+                for task in all_tasks:
+                    if task.completed == 1:
+                        continue
+                    if not task.start_date or not task.end_date:
+                        continue
 
-                for i in range(len(worker_tasks_sorted)):
-                    for j in range(i + 1, len(worker_tasks_sorted)):
-                        t1 = worker_tasks_sorted[i]
-                        t2 = worker_tasks_sorted[j]
+                    duration = max(1, task.duration or 1)
+                    workers = _parse_list(task.workers)
+                    if not workers:
+                        continue
 
-                        if not t1.start_date or not t2.start_date:
-                            continue
-                        if not t1.end_date:
-                            t1_end = t1.start_date
-                        else:
-                            t1_end = t1.end_date
+                    planned_hours = float(task.planned_hours or 8.0)
+                    hours_per_worker_per_day = (planned_hours / len(workers)) / duration
 
-                        # Sovrapposizione: t2 inizia prima che t1 finisca
-                        if t2.start_date <= t1_end:
-                            # t2 deve iniziare il giorno lavorativo dopo t1_end
-                            new_start = next_working_day(t1_end + timedelta(days=1))
-                            if new_start <= t2.start_date:
-                                continue
+                    current_date = task.start_date
+                    days_counted = 0
+                    while days_counted < duration and current_date <= task.end_date:
+                        if is_working_day(current_date):
+                            for worker in workers:
+                                worker_key = worker.strip().lower()
+                                daily_hours[worker_key][current_date].append({
+                                    "task": task,
+                                    "hours": hours_per_worker_per_day
+                                })
+                            days_counted += 1
+                        current_date += timedelta(days=1)
 
-                            old_start = t2.start_date
-                            old_end = t2.end_date
-                            old_dur = t2.duration
+                # Individua giorni con overbooking e risolvi
+                for worker_key, dates_map in daily_hours.items():
+                    for d in sorted(dates_map.keys()):
+                        tasks_on_day = dates_map[d]
+                        total_hours = sum(t["hours"] for t in tasks_on_day)
 
-                            duration = t2.duration or 1
+                        if total_hours > 8.01:
+                            # Overbooking! Spostiamo la task che inizia più tardi
+                            tasks_on_day.sort(key=lambda t: (t["task"].start_date or date.min, t["task"].sort_order or 0), reverse=True)
+                            task_to_shift = tasks_on_day[0]["task"]
+
+                            old_start = task_to_shift.start_date
+                            old_end = task_to_shift.end_date
+                            old_dur = task_to_shift.duration
+
+                            new_start = next_working_day(old_start + timedelta(days=1))
+                            duration = task_to_shift.duration or 1
                             new_end = add_working_days(new_start, max(0, duration - 1))
 
-                            t2.start_date = new_start
-                            t2.end_date = new_end
-                            already_shifted.add(t2.id)
+                            task_to_shift.start_date = new_start
+                            task_to_shift.end_date = new_end
+                            already_shifted.add(task_to_shift.id)
 
-                            project = project_map.get(t2.project_id)
+                            project = project_map.get(task_to_shift.project_id)
                             project_name = project.name if project else "N/A"
                             project_code = project.code if project else None
 
-                            # Nome dell'addetto leggibile
-                            worker_display = next(
-                                (w for w in _parse_list(t2.workers)
-                                 if w.strip().lower() == worker_key),
-                                worker_key
-                            )
+                            worker_display = next((w for w in _parse_list(task_to_shift.workers) if w.strip().lower() == worker_key), worker_key)
 
                             log = AgentLog(
-                                action_type=AgentActionType.PHASE_RESCHEDULED.value,
-                                task_id=t2.id,
-                                task_name=t2.text,
-                                project_id=t2.project_id,
+                                action_type=AgentActionType.OVERBOOKING_RESOLVED.value,
+                                task_id=task_to_shift.id,
+                                task_name=task_to_shift.text,
+                                project_id=task_to_shift.project_id,
                                 project_name=project_name,
                                 project_code=project_code,
                                 worker=worker_display,
@@ -515,25 +518,27 @@ async def run_rescheduling_agent(dry_run: bool = False) -> dict:
                                 old_duration=old_dur,
                                 new_start_date=new_start,
                                 new_end_date=new_end,
-                                new_duration=t2.duration,
+                                new_duration=task_to_shift.duration,
                                 reason=(
-                                    f"Conflitto con '{t1.text}' (commessa: {project_map.get(t1.project_id, Project()).name if t1.project_id in project_map else 'N/A'}) "
-                                    f"assegnata allo stesso addetto {worker_display}. "
+                                    f"Sovraccarico di lavoro ({total_hours:.1f}h previste) per {worker_display} in data {d.strftime('%d/%m/%Y')}. "
                                     f"Fase spostata al {new_start.strftime('%d/%m/%Y')}."
                                 ),
                             )
                             session.add(log)
+                            stats["overbooking_resolved"] += 1
                             stats["conflicts_detected"] += 1
                             stats["phases_rescheduled"] += 1
 
                             if not dry_run:
-                                await _notify_workers(session, t2, _parse_list(t2.workers),
-                                                      user_map_by_name,
-                                                      f"⚠️ La fase '{t2.text}' è stata spostata al {new_start.strftime('%d/%m/%Y')} per sovrapposizione con '{t1.text}'.")
+                                await _notify_workers(
+                                    session, task_to_shift, _parse_list(task_to_shift.workers),
+                                    user_map_by_name,
+                                    f"⚠️ La fase '{task_to_shift.text}' è stata riprogrammata al {new_start.strftime('%d/%m/%Y')} per evitare un sovraccarico di ore."
+                                )
 
                             delta = (new_start - old_start).days
                             cascade = await _cascade_shift(
-                                task_id=t2.id,
+                                task_id=task_to_shift.id,
                                 delta_days=delta,
                                 deps=deps,
                                 task_map=task_map,
@@ -545,9 +550,13 @@ async def run_rescheduling_agent(dry_run: bool = False) -> dict:
                                 dry_run=dry_run,
                             )
                             stats["cascade_rescheduled"] += cascade
+                            overbooking_resolved_in_pass = True
+                            break
+                    if overbooking_resolved_in_pass:
+                        break
 
-                            # Aggiorna la data nella lista ordinata per le iterazioni successive
-                            worker_tasks_sorted[j] = t2
+                if not overbooking_resolved_in_pass:
+                    break
 
             await session.flush()
             if dry_run:

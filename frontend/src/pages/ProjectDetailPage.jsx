@@ -796,6 +796,34 @@ export default function ProjectDetailPage() {
       }
     }
 
+    const mode = taskForm.budgetMode || budgetMode || 'start_days';
+    if (!isMilestone && ['start_days_hours', 'end_days_hours'].includes(mode)) {
+      const maxHoursPerWorker = finalDays * 8.0;
+      if (!taskForm.workers || taskForm.workers.length === 0) {
+         if (plannedHours > maxHoursPerWorker) {
+           toast.error(`Le ore previste (${plannedHours}h) superano la capacità di un singolo addetto per i giorni indicati (${maxHoursPerWorker}h). Assegna più addetti o aumenta i giorni.`);
+           return;
+         }
+      } else {
+         const hasExplicitHours = taskForm.workers.some(w => Number(taskForm.worker_hours?.[w]) > 0);
+         if (hasExplicitHours) {
+            for (const w of taskForm.workers) {
+               const h = Number(taskForm.worker_hours?.[w]) || 0;
+               if (h > maxHoursPerWorker) {
+                  toast.error(`L'addetto ${w} ha troppe ore assegnate (${h}h > max ${maxHoursPerWorker}h per i giorni scelti).`);
+                  return;
+               }
+            }
+         } else {
+            const hoursPerWorker = plannedHours / taskForm.workers.length;
+            if (hoursPerWorker > maxHoursPerWorker) {
+               toast.error(`Le ore previste (${plannedHours}h diviso ${taskForm.workers.length} addetti = ${hoursPerWorker.toFixed(1)}h/cad) superano la capacità massima per i giorni indicati (${maxHoursPerWorker}h). Assegna più addetti o aumenta i giorni.`);
+               return;
+            }
+         }
+      }
+    }
+
     const payload = {
       text: taskName.trim(),
       start_date: taskForm.start_date,
