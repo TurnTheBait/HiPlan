@@ -144,7 +144,7 @@ export default function WorkloadHeatmap() {
     if (!loading && columns.length > 0) {
       scrollToToday();
     }
-  }, [loading, columns, viewMode]);
+  }, [loading, columns.length, viewMode]);
 
   const capacityMap = { day: 8, week: 40, month: 160 };
   const currentCapacity = capacityMap[viewMode];
@@ -717,11 +717,11 @@ export default function WorkloadHeatmap() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {dayDetails.tasks.map((t, idx) => (
                   <div key={idx} style={{ padding: '12px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-default)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                    <div style={{ color: 'var(--accent-500)', fontWeight: 700, marginBottom: 4 }}>
-                      📁 {t.project_name || 'Progetto non specificato'}
+                    <div style={{ color: 'var(--accent-500)', fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <AppIcon name="folder" size={16} /> {t.project_name || 'Progetto non specificato'}
                     </div>
-                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '1rem' }}>
-                      📌 {t.name}
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ color: 'var(--text-secondary)', display: 'flex' }}><AppIcon name="todo" size={16} /></span> {t.name}
                     </div>
                     <div style={{ marginTop: 8, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                       Assegnate: <strong style={{ color: 'var(--text-primary)' }}>{t.hours?.toFixed(1) || 0}h</strong> oggi su <strong style={{ color: 'var(--text-primary)' }}>{t.total_assigned_hours ? t.total_assigned_hours.toFixed(1) + 'h' : '-'}</strong> totali per questo addetto.

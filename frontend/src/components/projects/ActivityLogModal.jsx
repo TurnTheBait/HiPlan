@@ -58,10 +58,13 @@ export default function ActivityLogPanel({ projectId }) {
 
   return (
     <div className="activity-log-panel">
-      <div className="activity-log-header">
-        <h2>Cronologia modifiche</h2>
+      <div className="commessa-summary-card" style={{ marginBottom: 16, padding: '16px 20px' }}>
+        <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Cronologia modifiche</h3>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
+          Questo pannello mostra l'elenco delle modifiche apportate alla commessa e la consuntivazione orariaall.
+        </p>
       </div>
-      
+
       <div className="activity-log-tabs">
         <button
           className={`activity-log-tab ${activeTab === 'fasi' ? 'active' : ''}`}

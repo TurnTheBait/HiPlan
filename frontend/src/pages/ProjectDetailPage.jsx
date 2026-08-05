@@ -161,6 +161,7 @@ export default function ProjectDetailPage() {
   const [specificExtraDate, setSpecificExtraDate] = useState('');
   const [allVacations, setAllVacations] = useState([]);
   const [openTicketsCount, setOpenTicketsCount] = useState(0);
+  const [isAlertsExpanded, setIsAlertsExpanded] = useState(false);
 
   // Stato Modale Modifica Dati Commessa
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
@@ -344,6 +345,14 @@ export default function ProjectDetailPage() {
     } catch {
       return '';
     }
+  }
+
+  function formatDateItalian(d) {
+    const str = formatDateOnly(d);
+    if (!str) return '';
+    const parts = str.split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return str;
   }
 
   // Calcolo stato semaforo e ore giornaliere previste (algoritmo prototipo Ufficio Tecnico)
@@ -766,8 +775,10 @@ export default function ProjectDetailPage() {
 
     if (!isMilestone && taskForm.workers && taskForm.workers.length > 0) {
       const sumWorkerHours = taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0);
-      if (sumWorkerHours > plannedHours) {
-        toast.error(`Le ore assegnate agli addetti (${sumWorkerHours}h) superano il budget totale della fase (${plannedHours}h).`);
+      const roundedSum = Math.round(sumWorkerHours * 10) / 10;
+      const roundedPlanned = Math.round(plannedHours * 10) / 10;
+      if (roundedSum > roundedPlanned) {
+        toast.error(`Le ore assegnate agli addetti (${roundedSum}h) superano il budget totale della fase (${roundedPlanned}h).`);
         return;
       }
     }
@@ -978,12 +989,33 @@ export default function ProjectDetailPage() {
     }
 
     const totalHours = Number(taskForm.planned_hours) || (Number(taskForm.duration_days) * 8.0) || 8.0;
-    const hoursPerWorker = newWorkers.length > 0 ? (totalHours / newWorkers.length) : 0;
 
     let newWorkerHours = {};
-    newWorkers.forEach(worker => {
-      newWorkerHours[worker] = parseFloat(hoursPerWorker.toFixed(1));
-    });
+    if (newWorkers.length > 0) {
+      const baseHours = Math.floor((totalHours / newWorkers.length) * 10) / 10;
+      newWorkers.forEach(worker => {
+        newWorkerHours[worker] = baseHours;
+      });
+
+      let currentSum = baseHours * newWorkers.length;
+      let diff = Math.round((totalHours - currentSum) * 10) / 10;
+
+      let i = 0;
+      while (diff >= 0.1 || diff <= -0.1) {
+        if (diff > 0) {
+          newWorkerHours[newWorkers[i % newWorkers.length]] += 0.1;
+          diff = Math.round((diff - 0.1) * 10) / 10;
+        } else {
+          newWorkerHours[newWorkers[i % newWorkers.length]] -= 0.1;
+          diff = Math.round((diff + 0.1) * 10) / 10;
+        }
+        i++;
+      }
+
+      newWorkers.forEach(worker => {
+        newWorkerHours[worker] = Math.round(newWorkerHours[worker] * 10) / 10;
+      });
+    }
 
     setTaskForm({ ...taskForm, workers: newWorkers, worker_hours: newWorkerHours });
   }
@@ -1572,7 +1604,7 @@ export default function ProjectDetailPage() {
               <div className="stat-box">
                 <div className="stat-box-label">Data Avvio / Fine</div>
                 <div className="stat-box-value" style={{ fontSize: '0.95rem' }}>
-                  {project?.start_date || 'N/D'} → {project?.end_date || 'N/D'}
+                  {project?.start_date ? formatDateItalian(project.start_date) : 'N/D'} → {project?.end_date ? formatDateItalian(project.end_date) : 'N/D'}
                 </div>
               </div>
               <div className="stat-box">
@@ -1718,7 +1750,7 @@ export default function ProjectDetailPage() {
                         )}
                         {tableVisibleColumns.includes('date') && (
                           <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                            <div>{formatDateOnly(task.start_date)} → {formatDateOnly(task.end_date)}</div>
+                            <div>{formatDateItalian(task.start_date)} → {formatDateItalian(task.end_date)}</div>
                             <div style={{ fontSize: 11, color: 'var(--accent-500)', fontWeight: 600, marginTop: 2 }}>
                               <AppIcon name="calendar" size={12} />Durata: {task.duration || 1} {task.duration === 1 ? 'giorno' : 'giorni'}
                             </div>
@@ -1905,57 +1937,89 @@ export default function ProjectDetailPage() {
       {/* TAB 4: RITARDI & ALLARMI */}
       {activeTab === 'alert' && (
         <div className="animate-fadeIn">
-          <div className="commessa-summary-card">
-            <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Motore Semafori ed Allarmi Lavorazioni</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
-              Questo pannello identifica automaticamente tutte le lavorazioni e commesse che non stanno rispettando la consuntivazione oraria attesa (meno del 50% delle ore previste o giorni lavorativi trascorsi con 0 ore registrate).
-            </p>
-          </div>
-
-          {delaysList.length === 0 ? (
-            <div className="commessa-summary-card" style={{ textAlign: 'center', padding: 48, borderColor: 'rgba(16, 185, 129, 0.4)' }}>
-              <div className="empty-state-icon"><AppIcon name="check" size={26} /></div>
-              <h3 style={{ color: 'var(--success)', margin: 0 }}>Nessuna Allerta di Ritardo!</h3>
-              <p style={{ color: 'var(--text-secondary)', marginTop: 8 }}>
-                Tutte le {ganttData.tasks.length} fasi di lavorazione della commessa sono regolarmente coperte dalla consuntivazione oraria degli addetti.
-              </p>
-            </div>
-          ) : (
-            delaysList.map(item => (
-              <div key={item.task.id} className={`alert-card ${item.stato}`}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                    <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
-                      {item.task.text}
-                    </span>
-                    {item.stato === 'ritardo' ? (
-                      <span className="semaforo-ritardo"><span className="status-dot danger" />Ritardo critico</span>
-                    ) : item.stato === 'ritardo_ferie' ? (
-                      <span className="semaforo-ritardo"><span className="status-dot danger" />Rischio ritardo ferie</span>
-                    ) : item.stato === 'sforamento' ? (
-                      <span className="semaforo-ritardo"><span className="status-dot danger" />Sforamento ore</span>
-                    ) : (
-                      <span className="semaforo-attenzione"><span className="status-dot open" />Attenzione</span>
-                    )}
-                  </div>
-                  <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                    <AppIcon name="calendar" size={14} /> Inizio/Fine: <strong>{formatDateOnly(item.task.start_date)} → {formatDateOnly(item.task.end_date)}</strong> |{' '}
-                    Addetti: <strong>{Array.isArray(item.task.workers) ? item.task.workers.join(', ') : 'Nessuno'}</strong>
-                  </div>
-                  <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                    <AppIcon name="clock" size={13} />Ore previste: <strong>{item.task.planned_hours || 8}h</strong> | Consuntivate finora: <strong>{item.tEff}h</strong>
-                  </div>
-                </div>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => openOreModalForTask(item.task)}
-                >
-                  <AppIcon name="clock" />
-                  Registra ore
-                </button>
+          <div
+            className="commessa-summary-card"
+            style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column' }}
+            onClick={() => setIsAlertsExpanded(!isAlertsExpanded)}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Motore Semafori ed Allarmi Lavorazioni</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
+                  Questo pannello identifica automaticamente tutte le lavorazioni e commesse che non stanno rispettando la consuntivazione oraria attesa (meno del 50% delle ore previste o giorni lavorativi trascorsi con 0 ore registrate).
+                </p>
               </div>
-            ))
-          )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 16 }}>
+                {delaysList.length > 0 && (
+                  <span style={{
+                    background: '#dd3333', color: '#fff',
+                    padding: '4px 10px', borderRadius: 12, fontSize: 13, fontWeight: 600,
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {delaysList.length} {delaysList.length === 1 ? 'allerta' : 'allerte'}
+                  </span>
+                )}
+                <AppIcon name={isAlertsExpanded ? "chevron-up" : "chevron-down"} size={20} color="var(--text-secondary)" />
+              </div>
+            </div>
+
+            {isAlertsExpanded && (
+              <div style={{ marginTop: 24, borderTop: '1px solid var(--border-subtle)', paddingTop: 24 }}>
+                {delaysList.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: 24 }}>
+                    <div className="empty-state-icon" style={{ margin: '0 auto 12px' }}><AppIcon name="check" size={26} /></div>
+                    <h4 style={{ color: 'var(--success)', margin: 0 }}>Nessuna Allerta di Ritardo!</h4>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: 8, fontSize: 14 }}>
+                      Tutte le {ganttData.tasks.length} fasi di lavorazione della commessa sono regolarmente coperte dalla consuntivazione oraria degli addetti.
+                    </p>
+                  </div>
+                ) : (
+                  delaysList.map(item => (
+                    <div
+                      key={item.task.id}
+                      className={`alert-card ${item.stato}`}
+                      style={{ marginBottom: 12, cursor: 'default' }}
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                          <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
+                            {item.task.text}
+                          </span>
+                          {item.stato === 'ritardo' ? (
+                            <span className="semaforo-ritardo"><span className="status-dot danger" />Ritardo critico</span>
+                          ) : item.stato === 'ritardo_ferie' ? (
+                            <span className="semaforo-ritardo"><span className="status-dot danger" />Rischio ritardo ferie</span>
+                          ) : item.stato === 'sforamento' ? (
+                            <span className="semaforo-ritardo"><span className="status-dot danger" />Sforamento ore</span>
+                          ) : (
+                            <span className="semaforo-attenzione"><span className="status-dot open" />Attenzione</span>
+                          )}
+                        </div>
+                        <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                          <AppIcon name="calendar" size={14} /> Inizio/Fine: <strong>{formatDateItalian(item.task.start_date)} → {formatDateItalian(item.task.end_date)}</strong> |{' '}
+                          Addetti: <strong>{Array.isArray(item.task.workers) ? item.task.workers.join(', ') : 'Nessuno'}</strong>
+                        </div>
+                        <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                          <AppIcon name="clock" size={13} />Ore previste: <strong>{item.task.planned_hours || 8}h</strong> | Consuntivate finora: <strong>{item.tEff}h</strong>
+                        </div>
+                      </div>
+                      <button
+                        className="btn btn-primary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openOreModalForTask(item.task);
+                        }}
+                      >
+                        <AppIcon name="clock" />
+                        Registra ore
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -2304,112 +2368,108 @@ export default function ProjectDetailPage() {
                   )}
                 </div>
 
-                <div className="input-group" style={{ marginTop: 16 }}>
-                  <label>Addetti Assegnati (Multi-selezione)</label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                    {predefinedWorkers.map(w => {
-                      const sel = taskForm.workers.includes(w);
-                      return (
-                        <button
-                          type="button"
-                          key={w}
-                          onClick={() => toggleWorkerSelection(w)}
-                          style={{
-                            background: sel ? 'var(--accent-600)' : 'var(--bg-primary)',
-                            color: sel ? '#fff' : 'var(--text-secondary)',
-                            border: `1px solid ${sel ? 'var(--accent-500)' : 'var(--border-default)'}`,
-                            padding: '6px 12px',
-                            borderRadius: '16px',
-                            cursor: 'pointer',
-                            fontSize: '0.85rem',
-                            fontWeight: sel ? 600 : 400
-                          }}
-                        >
-                          {sel ? '✓ ' : '+ '}{w}
-                        </button>
-                      );
-                    })}
-                  </div>
+                {(() => {
+                  const isMilestone = taskForm.taskType === 'milestone';
+                  const currentAssignedTotal = taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0);
+                  const sDateForBudget = taskForm.start_date;
+                  const eDateForBudget = taskForm.end_date;
+                  const diffDaysForBudget = sDateForBudget && eDateForBudget ? countWorkingDays(sDateForBudget, eDateForBudget) : 1;
+                  const finalDaysForBudget = Math.max(1, Number(taskForm.duration_days) || diffDaysForBudget);
+                  const currentBudgetTotal = isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDaysForBudget * 8.0));
 
+                  const roundedAssigned = Math.round(currentAssignedTotal * 10) / 10;
+                  const roundedBudget = Math.round(currentBudgetTotal * 10) / 10;
+                  const isOverBudget = !isMilestone && roundedAssigned > roundedBudget;
 
-                  {/* Sezione addetti attualmente assegnati (sotto al campo aggiungi altro addetto) */}
-                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed var(--border-default)' }}>
-                    {(() => {
-                      const isMilestone = taskForm.taskType === 'milestone';
-                      const currentAssignedTotal = taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0);
-                      const sDateForBudget = taskForm.start_date;
-                      const eDateForBudget = taskForm.end_date;
-                      const diffDaysForBudget = sDateForBudget && eDateForBudget ? countWorkingDays(sDateForBudget, eDateForBudget) : 1;
-                      const finalDaysForBudget = Math.max(1, Number(taskForm.duration_days) || diffDaysForBudget);
-                      const currentBudgetTotal = isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDaysForBudget * 8.0));
-                      const overBudget = !isMilestone && (currentAssignedTotal > currentBudgetTotal);
+                  let totalColor = 'var(--text-secondary)';
+                  if (!isMilestone) {
+                    if (roundedAssigned < roundedBudget) totalColor = '#f59e0b';
+                    else if (roundedAssigned === roundedBudget) totalColor = '#10b981';
+                    else totalColor = '#ef4444';
+                  }
 
-                      return (
-                        <>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: overBudget ? '#ef4444' : 'var(--accent-500)', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                            <span className="inline-heading">
-                              <AppIcon name={overBudget ? 'alert' : 'check'} size={14} />
-                              Addetti assegnati ({taskForm.workers.length})
+                  return (
+                    <>
+                      <div className="input-group" style={{ marginTop: 16 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <label style={{ margin: 0 }}>Addetti Assegnati (Multi-selezione)</label>
+                          {!isMilestone && (
+                            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: totalColor }}>
+                              Totale assegnato: {roundedAssigned}h / {roundedBudget}h
                             </span>
-                            {!isMilestone && <span>Totale assegnato: {currentAssignedTotal}h / {currentBudgetTotal}h</span>}
-                          </div>
-                          {taskForm.workers.length === 0 ? (
-                            <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Nessun addetto ancora selezionato. Scegline uno qui sopra.</span>
-                          ) : (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                              {taskForm.workers.map(w => (
-                                <div key={w} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)', padding: '6px 12px', borderRadius: 8 }}>
-                                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-500)' }}>{w}</span>
-                                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 4 }}>Ore:</span>
-                                  <input
-                                    type="number"
-                                    min="0.5"
-                                    step="0.5"
-                                    style={{
-                                      width: 60,
-                                      height: 24,
-                                      background: 'var(--bg-secondary)',
-                                      border: '1px solid var(--border-color)',
-                                      borderRadius: 4,
-                                      color: 'var(--text-primary)',
-                                      padding: '0 4px',
-                                      fontSize: '0.8rem',
-                                      textAlign: 'center'
-                                    }}
-                                    value={taskForm.worker_hours?.[w] || ''}
-                                    onChange={(e) => {
-                                      const val = parseFloat(e.target.value) || 0;
-                                      setTaskForm({
-                                        ...taskForm,
-                                        worker_hours: { ...taskForm.worker_hours, [w]: val }
-                                      });
-                                    }}
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleWorkerSelection(w, true)}
-                                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.9rem', marginLeft: 4 }}
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
                           )}
-                        </>
-                      );
-                    })()}
-                  </div>
-                </div>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                          {predefinedWorkers.map(w => {
+                            const sel = taskForm.workers.includes(w);
+                            return (
+                              <div
+                                key={w}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  background: sel ? 'var(--accent-600)' : 'var(--bg-primary)',
+                                  color: sel ? '#fff' : 'var(--text-secondary)',
+                                  border: `1px solid ${sel ? 'var(--accent-500)' : 'var(--border-default)'}`,
+                                  padding: '6px 12px',
+                                  borderRadius: '16px',
+                                  cursor: 'pointer',
+                                  fontSize: '0.85rem',
+                                  fontWeight: sel ? 600 : 400
+                                }}
+                                onClick={() => toggleWorkerSelection(w)}
+                              >
+                                <span>{sel ? '✓ ' : '+ '}{w}</span>
+                                {sel && taskForm.taskType !== 'milestone' && (
+                                  <span style={{ marginLeft: 6, display: 'flex', alignItems: 'center' }}>
+                                    (<input
+                                      type="number"
+                                      min="0.1"
+                                      step="0.1"
+                                      style={{
+                                        width: 46,
+                                        background: '#fff',
+                                        border: '1px solid #ccc',
+                                        borderRadius: 4,
+                                        color: '#000',
+                                        fontSize: '0.8rem',
+                                        textAlign: 'center',
+                                        padding: '2px',
+                                        margin: '0 4px',
+                                        outline: 'none'
+                                      }}
+                                      value={taskForm.worker_hours?.[w] !== undefined ? taskForm.worker_hours[w] : ''}
+                                      onClick={(e) => e.stopPropagation()}
+                                      onChange={(e) => {
+                                        const val = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                        setTaskForm({
+                                          ...taskForm,
+                                          worker_hours: { ...taskForm.worker_hours, [w]: val }
+                                        });
+                                      }}
+                                    />h)
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
 
-                <div className="modal-footer" style={{ marginTop: 24 }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => setShowTaskModal(false)}>
-                    Annulla
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    {editingTask ? 'Salva Modifiche' : 'Aggiungi Fase'}
-                  </button>
-                </div>
+
+                        {/* Sezione addetti rimossa e unificata nel blocco superiore */}
+                      </div>
+
+                      <div className="modal-footer" style={{ marginTop: 24 }}>
+                        <button type="button" className="btn btn-secondary" onClick={() => setShowTaskModal(false)}>
+                          Annulla
+                        </button>
+                        <button type="submit" className="btn btn-primary" disabled={isOverBudget}>
+                          {editingTask ? 'Salva Modifiche' : 'Aggiungi Fase'}
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
               </form>
             )}
 
