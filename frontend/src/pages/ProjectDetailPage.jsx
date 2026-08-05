@@ -57,7 +57,7 @@ export default function ProjectDetailPage() {
 
   async function loadGanttDataOnly() {
     try {
-      const ganttRes = await api.get(`/projects/${id}/gantt`);
+      const ganttRes = await api.get(`/projects/${id}/gantt?_t=${Date.now()}`);
       const sortedTasks = Array.isArray(ganttRes.data?.tasks)
         ? [...ganttRes.data.tasks].sort((a, b) => {
           const da = new Date(a.start_date ? String(a.start_date).split(' ')[0] : '1970-01-01');
@@ -245,7 +245,7 @@ export default function ProjectDetailPage() {
     try {
       const [projRes, ganttRes, usersRes, vacRes, ticketsRes] = await Promise.all([
         api.get(`/projects/${id}`),
-        api.get(`/projects/${id}/gantt`),
+        api.get(`/projects/${id}/gantt?_t=${Date.now()}`),
         api.get('/users').catch(() => ({ data: [] })),
         api.get('/vacations/all').catch(() => ({ data: [] })),
         api.get('/tickets', { params: { project_id: id } }).catch(() => ({ data: [] }))
@@ -524,10 +524,20 @@ export default function ProjectDetailPage() {
   async function handleLinkCreate(data, tempId) {
     try {
       const { data: created } = await api.post(`/projects/${id}/links`, data);
+      const newLinkId = created?.id || tempId;
       if (tempId && gantt.isLinkExists && gantt.isLinkExists(tempId)) {
-        gantt.changeLinkId(tempId, created.id);
+        gantt.changeLinkId(tempId, newLinkId);
       }
-      loadProject();
+      setGanttData(prev => {
+        const newLink = {
+          id: String(newLinkId),
+          source: String(data.source),
+          target: String(data.target),
+          type: String(data.type || '0')
+        };
+        if (prev.links.some(l => String(l.id) === String(newLinkId))) return prev;
+        return { ...prev, links: [...prev.links, newLink] };
+      });
     } catch {
       toast.error('Errore creazione dipendenza');
       if (tempId && gantt.isLinkExists && gantt.isLinkExists(tempId)) {
@@ -540,7 +550,10 @@ export default function ProjectDetailPage() {
     if (!skipConfirm && !window.confirm("Confermi l'eliminazione di questa dipendenza tra fasi?")) return;
     try {
       await api.delete(`/projects/${id}/links/${linkId}`);
-      loadProject();
+      setGanttData(prev => ({
+        ...prev,
+        links: prev.links.filter(l => String(l.id) !== String(linkId))
+      }));
     } catch (e) {
       toast.error('Errore eliminazione dipendenza');
       console.error(e);
@@ -1949,7 +1962,7 @@ export default function ProjectDetailPage() {
                   Questo pannello identifica automaticamente tutte le lavorazioni e commesse che non stanno rispettando la consuntivazione oraria attesa (meno del 50% delle ore previste o giorni lavorativi trascorsi con 0 ore registrate).
                 </p>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 16, marginTop: 25 }}>
                 {delaysList.length > 0 && (
                   <span style={{
                     background: '#dd3333', color: '#fff',
@@ -1959,7 +1972,7 @@ export default function ProjectDetailPage() {
                     {delaysList.length} {delaysList.length === 1 ? 'allerta' : 'allerte'}
                   </span>
                 )}
-                <AppIcon name={isAlertsExpanded ? "chevron-up" : "chevron-down"} size={20} color="var(--text-secondary)" />
+                <AppIcon name={isAlertsExpanded ? "chevronUp" : "chevronDown"} size={20} color="var(--text-secondary)" />
               </div>
             </div>
 

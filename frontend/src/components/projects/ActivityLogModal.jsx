@@ -61,7 +61,7 @@ export default function ActivityLogPanel({ projectId }) {
       <div className="commessa-summary-card" style={{ marginBottom: 16, padding: '16px 20px' }}>
         <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Cronologia modifiche</h3>
         <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
-          Questo pannello mostra l'elenco delle modifiche apportate alla commessa e la consuntivazione orariaall.
+          Questo pannello mostra l'elenco delle modifiche apportate alla commessa e la consuntivazione oraria.
         </p>
       </div>
 
