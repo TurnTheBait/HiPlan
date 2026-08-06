@@ -11,7 +11,6 @@ from app.models.notification import Notification, NotificationType
 from app.models.user import User
 from datetime import timedelta, date
 from app.schemas.task import TaskCreate, TaskUpdate, TaskOut, LinkCreate, LinkOut, GanttData
-# pyrefly: ignore [missing-import]
 from fastapi import HTTPException, status
 from app.core.websocket_manager import manager
 
@@ -297,6 +296,10 @@ async def create_task(db: AsyncSession, project_id: str, data: TaskCreate, user=
                 db.add(note)
         await db.commit()
 
+    # Esegui ripianificazione in background (non blocca se fallisce)
+    import asyncio
+
+
     return _task_to_out(task)
 
 
@@ -533,8 +536,10 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
     await db.commit()
     await db.refresh(task)
 
-    # Broadcast websocket
     await manager.broadcast(task.project_id, {"action": "task_updated", "task": _task_to_out(task).model_dump()})
+
+    import asyncio
+
 
     return _task_to_out(task)
 
@@ -571,6 +576,9 @@ async def delete_task(db: AsyncSession, task_id: str, user=None):
 
     # Broadcast websocket
     await manager.broadcast(task.project_id, {"action": "task_deleted", "task_id": task_id})
+
+    import asyncio
+
 
 
 async def create_link(db: AsyncSession, project_id: str, data: LinkCreate, user=None) -> LinkOut:

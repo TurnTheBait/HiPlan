@@ -203,6 +203,48 @@ const paths = {
       <path d="M4 11H2v4h4M7 14l2 7h4l-2-8" />
     </>
   ),
+  robot: (
+    <>
+      <rect x="3" y="11" width="18" height="10" rx="2" />
+      <circle cx="12" cy="5" r="2" />
+      <path d="M12 7v4" />
+      <line x1="8" y1="16" x2="8" y2="16" />
+      <line x1="16" y1="16" x2="16" y2="16" />
+    </>
+  ),
+  play: (
+    <>
+      <polygon points="5 3 19 12 5 21 5 3" />
+    </>
+  ),
+  pause: (
+    <>
+      <rect x="6" y="4" width="4" height="16" />
+      <rect x="14" y="4" width="4" height="16" />
+    </>
+  ),
+  undo: (
+    <>
+      <path d="M3 7v6h6" />
+      <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+    </>
+  ),
+  filter: <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />,
+  archive: (
+    <>
+      <rect x="3" y="4" width="18" height="5" rx="1" />
+      <path d="M5 9v11h14V9" />
+      <path d="M9 13h6" />
+    </>
+  ),
+  update: (
+    <>
+      <path d="M20 11a8 8 0 0 0-14.85-4" />
+      <path d="M5 7V3h4" />
+      <path d="M4 13a8 8 0 0 0 14.85 4" />
+      <path d="M19 17v4h-4" />
+    </>
+  ),
 };
 
 export default function AppIcon({ name, size = 18, className = '', strokeWidth = 1.9 }) {

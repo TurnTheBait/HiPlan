@@ -91,6 +91,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.config.order_branch = true;
     gantt.config.show_progress = true;
     gantt.config.sort = true;
+    gantt.config.scroll_on_click = false;
 
     const baseColumns = [
       {
@@ -713,8 +714,12 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.config.end_date = scaleEnd;
 
     let currentScrollState = null;
+    let currentVisibleDate = null;
     if (gantt.getTaskCount && gantt.getTaskCount() > 0) {
       currentScrollState = gantt.getScrollState();
+      try {
+        currentVisibleDate = gantt.dateFromPos(currentScrollState.x);
+      } catch (e) { /* ignore */ }
     }
 
     gantt.clearAll();
@@ -752,8 +757,13 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     drawCustomMarkers();
 
     try {
-      if (currentScrollState) {
-        gantt.scrollTo(currentScrollState.x, currentScrollState.y);
+      if (currentScrollState && currentVisibleDate) {
+        const newPos = gantt.posFromDate(currentVisibleDate);
+        if (typeof newPos === 'number' && !isNaN(newPos)) {
+          gantt.scrollTo(newPos, currentScrollState.y);
+        } else {
+          gantt.scrollTo(currentScrollState.x, currentScrollState.y);
+        }
       } else {
         // Centra il gantt sul giorno di oggi (meno 3 giorni per avere un po' di margine a sinistra)
         const pos = gantt.posFromDate(new Date(Date.now() - 3 * 86400000));

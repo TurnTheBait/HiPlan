@@ -193,6 +193,7 @@ async def get_worker_conflicts(
     result = await db.execute(
         select(Task).options(selectinload(Task.project))
         .where(Task.type != TaskType.PROJECT)
+        .where(Task.type != TaskType.MILESTONE)
         .where(Task.start_date.isnot(None))
         .where(Task.end_date.isnot(None))
     )

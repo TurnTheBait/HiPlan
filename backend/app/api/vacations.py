@@ -11,6 +11,7 @@ from app.models.vacation import Vacation
 from app.models.task import Task
 from app.models.project import Project
 from app.models.notification import Notification, NotificationType
+
 # pyrefly: ignore [missing-import]
 from pydantic import BaseModel
 from datetime import date
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/api/vacations", tags=["vacations"])
 
 
 from typing import Optional
+import asyncio
 
 class VacationCreate(BaseModel):
     start_date: date

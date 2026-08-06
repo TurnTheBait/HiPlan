@@ -137,6 +137,15 @@ function AppIcon({ name, size = 19 }) {
         <line x1="10" y1="14" x2="21" y2="3" />
       </>
     ),
+    robot: (
+      <>
+        <rect x="3" y="11" width="18" height="10" rx="2" />
+        <circle cx="12" cy="5" r="2" />
+        <path d="M12 7v4" />
+        <line x1="8" y1="16" x2="8.01" y2="16" />
+        <line x1="16" y1="16" x2="16.01" y2="16" />
+      </>
+    ),
   };
 
   return <svg {...commonProps}>{icons[name]}</svg>;
@@ -150,6 +159,7 @@ export default function MainLayout() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('hiplan-sidebar-collapsed') === 'true');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [agentSuggestionsCount, setAgentSuggestionsCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -167,13 +177,34 @@ export default function MainLayout() {
 
   useEffect(() => {
     fetchUnread();
-    const interval = setInterval(fetchUnread, 30000);
+    fetchAgentCount();
+    const interval = setInterval(() => {
+      fetchUnread();
+      fetchAgentCount();
+    }, 60000);
     window.addEventListener('notifications-changed', fetchUnread);
+    window.addEventListener('agent-suggestions-changed', fetchAgentCount);
+    window.addEventListener('agent-data-modified', fetchAgentCount);
     return () => {
       clearInterval(interval);
       window.removeEventListener('notifications-changed', fetchUnread);
+      window.removeEventListener('agent-suggestions-changed', fetchAgentCount);
+      window.removeEventListener('agent-data-modified', fetchAgentCount);
     };
-  }, []);
+  }, [user]);
+
+  async function fetchAgentCount() {
+    if (user?.role === 'viewer') return;
+    try {
+      const { data } = await api.get('/replanning/suggestions');
+      const archived = JSON.parse(localStorage.getItem('hiplan-archived-suggestions') || '[]');
+      const active = data.filter(s => {
+        const key = `${s.project_id}_${s.task_id}_${s.action_type}`;
+        return !archived.includes(key);
+      });
+      setAgentSuggestionsCount(active.length);
+    } catch { /* ignore */ }
+  }
 
   async function fetchUnread() {
     try {
@@ -239,6 +270,7 @@ export default function MainLayout() {
       '/notes': { title: 'Blocchi Note', subtitle: 'Appunti e documenti condivisi' },
       '/todo': { title: 'TODO', subtitle: 'Priorità personali e di team' },
       '/conflicts': { title: 'Panoramica addetti', subtitle: 'Carichi e sovrapposizioni' },
+      '/replanning': { title: 'Agent', subtitle: 'Log e impostazioni agent' },
       '/tickets': { title: 'Ticket', subtitle: 'Richieste e supporto operativo' },
       '/admin': { title: 'Amministrazione', subtitle: 'Utenti e configurazione' },
       '/me': { title: 'Il mio profilo', subtitle: 'Profilo, reparto e ferie' },
@@ -320,6 +352,17 @@ export default function MainLayout() {
             <span className="sidebar-link-icon"><AppIcon name="users" /></span>
             {showSidebarText && <span>Panoramica addetti</span>}
           </NavLink>
+          {user?.role !== 'viewer' && (
+            <NavLink to="/replanning" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+              <span className="sidebar-link-icon"><AppIcon name="robot" /></span>
+              {showSidebarText && <span>Agent</span>}
+              {agentSuggestionsCount > 0 && showSidebarText && (
+                <span style={{ marginLeft: 'auto', background: 'var(--accent-500)', color: 'white', fontSize: 11, padding: '2px 6px', borderRadius: 10, fontWeight: 600 }}>
+                  {agentSuggestionsCount}
+                </span>
+              )}
+            </NavLink>
+          )}
           {user?.role === 'admin' && (
             <NavLink to="/admin" end className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <span className="sidebar-link-icon"><AppIcon name="settings" /></span>
@@ -505,9 +548,9 @@ export default function MainLayout() {
         </div>
       )}
 
-      <GlobalSearch 
-        isOpen={showGlobalSearch} 
-        onClose={() => setShowGlobalSearch(false)} 
+      <GlobalSearch
+        isOpen={showGlobalSearch}
+        onClose={() => setShowGlobalSearch(false)}
       />
     </div>
   );

@@ -342,7 +342,7 @@ export default function WorkloadHeatmap() {
                 } else if (isWeekendCol) {
                   tooltipText = formatDateStr(colKey) + ' (Sabato/Domenica/Festivo)';
                 } else if (data.tasks.length > 0) {
-                  tooltipText = data.tasks.map(t => '📁 ' + (t.project_name || 'Progetto') + '\n   📌 ' + t.name + (t.type === 'milestone' ? '' : (': ' + (t.hours?.toFixed(1) || 0) + 'h (' + columnsMap.get(colKey) + ') | Totale Fase: ' + (t.total_assigned_hours?.toFixed(1) || '-') + 'h'))).join('\n\n');
+                  tooltipText = data.tasks.map(t => '📁 ' + (t.project_name || 'Progetto') + '\n📌 ' + t.name + (t.type === 'milestone' ? '' : (': ' + (t.hours?.toFixed(1) || 0) + 'h (' + columnsMap.get(colKey) + ') | Totale Fase: ' + (t.total_assigned_hours?.toFixed(1) || '-') + 'h'))).join('\n\n');
                 } else {
                   tooltipText = 'Nessuna ora assegnata';
                 }

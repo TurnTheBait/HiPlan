@@ -13,6 +13,7 @@ from app.models.ticket import Ticket, TicketReply, TicketStatus, TicketPriority
 from app.models.activity_log import ActivityLog, ActivityCategory
 from app.models.todo import Todo
 from app.models.email_log import EmailLog
+from app.models.replan_log import ReplanLog, ReplanActionType
 
 __all__ = [
     "Base", "engine", "AsyncSessionLocal",
@@ -28,5 +29,6 @@ __all__ = [
     "Setting",
     "Ticket", "TicketReply", "TicketStatus", "TicketPriority",
     "ActivityLog", "ActivityCategory",
-    "Todo"
+    "Todo",
+    "ReplanLog", "ReplanActionType"
 ]
