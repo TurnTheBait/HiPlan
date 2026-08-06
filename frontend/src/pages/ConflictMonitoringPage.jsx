@@ -44,6 +44,14 @@ export default function ConflictMonitoringPage() {
     loadConflicts();
     loadVacations();
     loadUsers();
+
+    const handleDataModified = () => {
+      loadConflicts();
+      loadVacations();
+    };
+
+    window.addEventListener('agent-data-modified', handleDataModified);
+    return () => window.removeEventListener('agent-data-modified', handleDataModified);
   }, []);
 
   async function loadUsers() {
