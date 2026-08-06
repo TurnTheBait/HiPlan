@@ -342,7 +342,7 @@ export default function WorkloadHeatmap() {
                 } else if (isWeekendCol) {
                   tooltipText = formatDateStr(colKey) + ' (Sabato/Domenica/Festivo)';
                 } else if (data.tasks.length > 0) {
-                  tooltipText = data.tasks.map(t => '📁 ' + (t.project_name || 'Progetto') + '\n   📌 ' + t.name + ': ' + (t.hours?.toFixed(1) || 0) + 'h (' + columnsMap.get(colKey) + ') | Totale Fase: ' + (t.total_assigned_hours?.toFixed(1) || '-') + 'h').join('\n\n');
+                  tooltipText = data.tasks.map(t => '📁 ' + (t.project_name || 'Progetto') + '\n   📌 ' + t.name + (t.type === 'milestone' ? '' : (': ' + (t.hours?.toFixed(1) || 0) + 'h (' + columnsMap.get(colKey) + ') | Totale Fase: ' + (t.total_assigned_hours?.toFixed(1) || '-') + 'h'))).join('\n\n');
                 } else {
                   tooltipText = 'Nessuna ora assegnata';
                 }
@@ -723,9 +723,11 @@ export default function WorkloadHeatmap() {
                     <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ color: 'var(--text-secondary)', display: 'flex' }}><AppIcon name="todo" size={16} /></span> {t.name}
                     </div>
-                    <div style={{ marginTop: 8, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      Assegnate: <strong style={{ color: 'var(--text-primary)' }}>{t.hours?.toFixed(1) || 0}h</strong> oggi su <strong style={{ color: 'var(--text-primary)' }}>{t.total_assigned_hours ? t.total_assigned_hours.toFixed(1) + 'h' : '-'}</strong> totali per questo addetto.
-                    </div>
+                    {t.type !== 'milestone' && (
+                      <div style={{ marginTop: 8, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        Assegnate: <strong style={{ color: 'var(--text-primary)' }}>{t.hours?.toFixed(1) || 0}h</strong> oggi su <strong style={{ color: 'var(--text-primary)' }}>{t.total_assigned_hours ? t.total_assigned_hours.toFixed(1) + 'h' : '-'}</strong> totali per questo addetto.
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

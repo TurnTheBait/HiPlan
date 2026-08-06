@@ -1,8 +1,11 @@
 import json
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
+# pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends
+# pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
+# pyrefly: ignore [missing-import]
 from sqlalchemy.future import select
 from app.core.dependencies import get_db, get_current_user
 from app.models.user import User
@@ -16,6 +19,7 @@ async def get_workload_heatmap(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
+    # pyrefly: ignore [missing-import]
     from sqlalchemy.orm import joinedload
     users_res = await db.execute(select(User).where(User.is_active == True))
     users = users_res.scalars().all()
@@ -110,12 +114,18 @@ async def get_workload_heatmap(
                 
             hours_per_day = assigned_total / len(days)
             
+            task_type_str = task.type.value if hasattr(task.type, 'value') else str(task.type)
+            if task_type_str.lower() == "milestone" or task_type_str == "TaskType.MILESTONE":
+                task_type_str = "milestone"
+
             for day in days:
                 date_str = day.strftime("%Y-%m-%d")
                 if date_str not in heatmap[w_id]["workload"]:
                     heatmap[w_id]["workload"][date_str] = {"hours": 0.0, "tasks": []}
                 
-                heatmap[w_id]["workload"][date_str]["hours"] += hours_per_day
+                daily_hours = 0.0 if task_type_str == "milestone" else hours_per_day
+                
+                heatmap[w_id]["workload"][date_str]["hours"] += daily_hours
                 heatmap[w_id]["workload"][date_str]["tasks"].append({
                     "id": str(task.id),
                     "name": task.text,
@@ -123,9 +133,10 @@ async def get_workload_heatmap(
                     "project_id": str(task.project.id) if task.project else None,
                     "start_date": task.start_date.strftime("%Y-%m-%d"),
                     "end_date": task.end_date.strftime("%Y-%m-%d"),
-                    "hours": hours_per_day,
-                    "total_assigned_hours": assigned_total,
-                    "color": getattr(task, "color", None) or "#3b82f6"
+                    "hours": daily_hours,
+                    "total_assigned_hours": 0.0 if task_type_str == "milestone" else assigned_total,
+                    "color": getattr(task, "color", None) or "#3b82f6",
+                    "type": task_type_str
                 })
                 
     return {"heatmap": heatmap}
