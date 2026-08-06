@@ -21,7 +21,7 @@ export default function ReplanningAgentPage() {
 
   const [filterProject, setFilterProject] = useState('');
   const [filterType, setFilterType] = useState('');
-  const [sortBy, setSortBy] = useState('date_desc');
+  const [sortBy, setSortBy] = useState('date_asc');
   const [archivedKeys, setArchivedKeys] = useState(() => JSON.parse(localStorage.getItem('hiplan-archived-suggestions') || '[]'));
 
   function handleArchive(s) {
@@ -134,14 +134,14 @@ export default function ReplanningAgentPage() {
 
   function getActionBadge(type) {
     switch (type) {
-      case 'shift_conflict': return { label: 'Conflitto / Sovrapposizione', color: '#ef4444' };
-      case 'shift_vacation': return { label: 'Ferie', color: '#f59e0b' };
-      case 'shift_overload': return { label: 'Sovraccarico', color: '#f97316' };
-      case 'shift_cascade': return { label: 'Cascata', color: '#3b82f6' };
-      case 'extend_project': return { label: 'Scadenza Commessa', color: '#8b5cf6' };
-      case 'shift_delay': return { label: 'In Ritardo', color: '#eab308' }; // yellow
-      case 'warning_unaccounted': return { label: 'Ore Mancanti', color: '#ec4899' }; // pink
-      default: return { label: type, color: '#64748b' };
+      case 'shift_conflict': return { label: 'Conflitto / Sovrapposizione', color: '#ef4444', icon: 'alert' };
+      case 'shift_vacation': return { label: 'Ferie', color: '#f59e0b', icon: 'vacations' };
+      case 'shift_overload': return { label: 'Sovraccarico', color: '#f97316', icon: 'user' };
+      case 'shift_cascade': return { label: 'Cascata', color: '#3b82f6', icon: 'timeline' };
+      case 'extend_project': return { label: 'Scadenza Commessa', color: '#8b5cf6', icon: 'projects' };
+      case 'shift_delay': return { label: 'In Ritardo', color: '#eab308', icon: 'clock' };
+      case 'warning_unaccounted': return { label: 'Ore Mancanti', color: '#ec4899', icon: 'alert' };
+      default: return { label: type, color: '#64748b', icon: 'notes' };
     }
   }
 
@@ -181,7 +181,6 @@ export default function ReplanningAgentPage() {
               <AppIcon name="robot" size={28} />
             </div>
             <div>
-              <h2>Agent Suggerimenti</h2>
               <p>Il sistema analizza in tempo reale le tue commesse per suggerirti come risolvere conflitti o incongruenze.</p>
             </div>
           </div>
@@ -247,8 +246,8 @@ export default function ReplanningAgentPage() {
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Ordina per:</span>
                   <select className="input" value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ padding: '6px 12px', fontSize: 13, borderRadius: 6, width: "auto" }}>
-                    <option value="date_desc">Data (più recenti)</option>
-                    <option value="date_asc">Data (meno recenti)</option>
+                    <option value="date_asc">Data (più vicine a oggi)</option>
+                    <option value="date_desc">Data (più lontane da oggi)</option>
                     <option value="project">Commessa (A-Z)</option>
                     <option value="type">Tipologia</option>
                   </select>
@@ -266,7 +265,7 @@ export default function ReplanningAgentPage() {
                     return (
                       <div key={s.id} className="suggestion-card" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 8, padding: 20, display: 'flex', gap: 20, alignItems: 'flex-start' }}>
                         <div className="suggestion-icon" style={{ background: `${badge.color}15`, color: badge.color, padding: 12, borderRadius: '50%' }}>
-                          <AppIcon name="alertCircle" size={24} />
+                          <AppIcon name={badge.icon || 'alert'} size={24} />
                         </div>
                         <div className="suggestion-content" style={{ flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>

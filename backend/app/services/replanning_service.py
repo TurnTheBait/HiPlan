@@ -1,6 +1,7 @@
 import json
 from datetime import date, timedelta, datetime, timezone
 import logging
+import math
 from uuid import uuid4
 from typing import Any, Dict, List
 # pyrefly: ignore [missing-import]
@@ -119,11 +120,26 @@ async def get_replanning_suggestions(db: AsyncSession):
                 "action_label": f"Estendi commessa al {task.end_date.strftime('%d/%m/%Y')}"
             })
 
-        # Ritardo (Delay): scaduta e non completata
-        if task.end_date < today:
-            target_start = today
-            shift_days = get_working_days_count(task.start_date, target_start) - 1
-            if shift_days <= 0: shift_days = 1
+        # Ritardo Critico (Motore Semafori)
+        # Parse actual_hours
+        try:
+            actual_h_map = json.loads(task.actual_hours) if task.actual_hours else {}
+        except:
+            actual_h_map = {}
+            
+        tot_eff = 0
+        for day_map in actual_h_map.values():
+            if isinstance(day_map, dict):
+                for h in day_map.values():
+                    try:
+                        tot_eff += float(h)
+                    except:
+                        pass
+                        
+        planned_h = float(task.planned_hours or 8.0)
+        
+        # 1. Sforamento
+        if planned_h > 0 and tot_eff > planned_h:
             sugg_id = str(uuid4())
             suggestions.append({
                 "id": sugg_id,
@@ -134,38 +150,102 @@ async def get_replanning_suggestions(db: AsyncSession):
                 "project_name": task.project.name if task.project else "-",
                 "worker": None,
                 "date": str(task.end_date),
-                "reason": f"La fase è scaduta il {task.end_date.strftime('%d/%m/%Y')} ma non risulta completata.",
+                "reason": f"La fase ha superato le ore previste ({round(tot_eff, 1)}h consuntivate su {planned_h}h previste).",
                 "action_type": ReplanActionType.SHIFT_DELAY.value,
                 "action_payload": {
                     "task_id": str(task.id),
-                    "shift_days": shift_days
+                    "shift_days": 1,
+                    "add_hours": round(tot_eff - planned_h, 1)
                 },
-                "action_label": f"Sposta '{task.text}' a partire da oggi"
+                "action_label": f"Estendi '{task.text}' di 1 giorno e adegua ore"
             })
+        else:
+            # 2. Ritardo Giornaliero
+            working_days = get_working_days_count(task.start_date, task.end_date)
+            ore_gg = planned_h / working_days
             
-        # Ore non consuntivate: iniziata in passato, e nessuna ora consuntivata
-        if task.start_date < today and (not task.actual_hours or task.actual_hours in ("{}", "[]", "", "null")):
-            target_start = today
-            shift_days = get_working_days_count(task.start_date, target_start) - 1
-            if shift_days <= 0: shift_days = 1
-            sugg_id = str(uuid4())
-            suggestions.append({
-                "id": sugg_id,
-                "type": "unaccounted_conflict",
-                "task_id": str(task.id),
-                "task_name": task.text,
-                "project_id": str(task.project_id),
-                "project_name": task.project.name if task.project else "-",
-                "worker": None,
-                "date": str(task.start_date),
-                "reason": f"La fase è iniziata il {task.start_date.strftime('%d/%m/%Y')} ma non ha ore consuntivate.",
-                "action_type": ReplanActionType.WARNING_UNACCOUNTED.value,
-                "action_payload": {
+            cur_d = task.start_date
+            has_critical_delay = False
+            first_delayed_date = None
+            
+            while cur_d <= task.end_date and cur_d <= today:
+                if not is_weekend_or_holiday(cur_d):
+                    date_str = cur_d.strftime("%Y-%m-%d")
+                    tot_day_eff = 0
+                    for day_map in actual_h_map.values():
+                        if isinstance(day_map, dict) and date_str in day_map:
+                            try:
+                                tot_day_eff += float(day_map[date_str])
+                            except:
+                                pass
+                                
+                    if tot_day_eff < (ore_gg * 0.5) or (tot_day_eff == 0 and ore_gg > 0):
+                        has_critical_delay = True
+                        first_delayed_date = cur_d
+                        break
+                cur_d += timedelta(days=1)
+                
+            if has_critical_delay:
+                tot_expected_so_far = 0
+                tot_actual_so_far = 0
+                c_d = task.start_date
+                while c_d <= today and c_d <= task.end_date:
+                    if not is_weekend_or_holiday(c_d):
+                        tot_expected_so_far += ore_gg
+                        date_str = c_d.strftime("%Y-%m-%d")
+                        for day_map in actual_h_map.values():
+                            if isinstance(day_map, dict) and date_str in day_map:
+                                try:
+                                    tot_actual_so_far += float(day_map[date_str])
+                                except:
+                                    pass
+                    c_d += timedelta(days=1)
+                lost_hours = tot_expected_so_far - tot_actual_so_far
+                days_to_add = math.ceil(lost_hours / ore_gg) if (ore_gg > 0 and lost_hours > 0) else 1
+                if days_to_add <= 0: days_to_add = 1
+
+                sugg_id = str(uuid4())
+                suggestions.append({
+                    "id": sugg_id,
+                    "type": "delay_conflict",
                     "task_id": str(task.id),
-                    "shift_days": shift_days
-                },
-                "action_label": f"Sposta '{task.text}' a partire da oggi"
-            })
+                    "task_name": task.text,
+                    "project_id": str(task.project_id),
+                    "project_name": task.project.name if task.project else "-",
+                    "worker": None,
+                    "date": str(first_delayed_date),
+                    "reason": f"Ritardo critico: mancano all'appello circa {round(lost_hours, 1)}h rispetto al piano.",
+                    "action_type": ReplanActionType.SHIFT_DELAY.value,
+                    "action_payload": {
+                        "task_id": str(task.id),
+                        "shift_days": days_to_add,
+                        "add_hours": round(lost_hours, 1)
+                    },
+                    "action_label": f"Estendi '{task.text}' di {days_to_add} { 'giorno' if days_to_add == 1 else 'giorni' } per recuperare"
+                })
+            elif task.end_date < today:
+                # Fallback: scaduta e non in sforamento / ritardo critico specifico
+                days_to_add = get_working_days_count(task.end_date, today)
+                if days_to_add <= 0: days_to_add = 1
+                sugg_id = str(uuid4())
+                suggestions.append({
+                    "id": sugg_id,
+                    "type": "delay_conflict",
+                    "task_id": str(task.id),
+                    "task_name": task.text,
+                    "project_id": str(task.project_id),
+                    "project_name": task.project.name if task.project else "-",
+                    "worker": None,
+                    "date": str(task.end_date),
+                    "reason": f"La fase è scaduta il {task.end_date.strftime('%d/%m/%Y')} ma non risulta completata.",
+                    "action_type": ReplanActionType.SHIFT_DELAY.value,
+                    "action_payload": {
+                        "task_id": str(task.id),
+                        "shift_days": days_to_add,
+                        "add_hours": 0
+                    },
+                    "action_label": f"Estendi '{task.text}' di {days_to_add} { 'giorno' if days_to_add == 1 else 'giorni' } fino ad oggi"
+                })
 
         try:
             workers = json.loads(task.workers) if task.workers else []
@@ -192,7 +272,14 @@ async def get_replanning_suggestions(db: AsyncSession):
                     if w not in timeline[cur]:
                         timeline[cur][w] = []
                         
-                    total_h = float(worker_hours.get(w, task.planned_hours or 0))
+                    if w in worker_hours and worker_hours[w] is not None:
+                        try:
+                            total_h = float(worker_hours[w])
+                        except Exception:
+                            total_h = float(task.planned_hours or 0) / len(workers)
+                    else:
+                        total_h = float(task.planned_hours or 0) / len(workers)
+                        
                     daily_h = total_h / duration_days
                     
                     timeline[cur][w].append((task, daily_h))
@@ -262,7 +349,7 @@ async def get_replanning_suggestions(db: AsyncSession):
                     "worker": w,
                     "date": str(d),
                     "reason": f"L'addetto {w} ha un carico di {round(total_h, 1)}h (limite {max_daily_hours}h) il {d.strftime('%d/%m/%Y')}.",
-                    "action_type": ReplanActionType.SHIFT_CONFLICT.value,
+                    "action_type": ReplanActionType.SHIFT_OVERLOAD.value,
                     "action_payload": {
                         "task_id": str(t_to_shift.id),
                         "shift_days": shift_days
@@ -302,7 +389,7 @@ async def execute_suggestion(db: AsyncSession, action_type: str, payload: dict, 
         await manager.broadcast(str(project.id), {"action": "project_updated"})
         return True
 
-    if action_type in (ReplanActionType.SHIFT_VACATION.value, ReplanActionType.SHIFT_CONFLICT.value, ReplanActionType.SHIFT_DELAY.value, ReplanActionType.WARNING_UNACCOUNTED.value):
+    if action_type in (ReplanActionType.SHIFT_VACATION.value, ReplanActionType.SHIFT_OVERLOAD.value, ReplanActionType.SHIFT_DELAY.value, ReplanActionType.WARNING_UNACCOUNTED.value):
         task_id = payload.get("task_id")
         shift_days = payload.get("shift_days", 1)
         if not task_id:
@@ -316,15 +403,22 @@ async def execute_suggestion(db: AsyncSession, action_type: str, payload: dict, 
         old_start = t_to_shift.start_date
         old_end = t_to_shift.end_date
         
-        new_start = add_working_days(old_start, shift_days)
-        dur_working = get_working_days_count(old_start, old_end)
-        
-        new_end = new_start
-        count = 1
-        while count < dur_working:
-            new_end += timedelta(days=1)
-            if not is_weekend_or_holiday(new_end):
-                count += 1
+        if action_type == ReplanActionType.SHIFT_DELAY.value:
+            new_start = old_start
+            new_end = add_working_days(old_end, shift_days)
+            add_hours = payload.get("add_hours", 0)
+            if add_hours > 0:
+                t_to_shift.planned_hours = (t_to_shift.planned_hours or 0) + add_hours
+        else:
+            new_start = add_working_days(old_start, shift_days)
+            dur_working = get_working_days_count(old_start, old_end)
+            
+            new_end = new_start
+            count = 1
+            while count < dur_working:
+                new_end += timedelta(days=1)
+                if not is_weekend_or_holiday(new_end):
+                    count += 1
                 
         t_to_shift.start_date = new_start
         t_to_shift.end_date = new_end
@@ -332,7 +426,7 @@ async def execute_suggestion(db: AsyncSession, action_type: str, payload: dict, 
         if action_type == ReplanActionType.SHIFT_VACATION.value:
             reason_text = "Esecuzione manuale da Bacheca: Spostamento per ferie."
         elif action_type == ReplanActionType.SHIFT_DELAY.value:
-            reason_text = "Esecuzione manuale da Bacheca: Spostamento per fase in ritardo."
+            reason_text = "Esecuzione manuale da Bacheca: Estensione per fase in ritardo."
         elif action_type == ReplanActionType.WARNING_UNACCOUNTED.value:
             reason_text = "Esecuzione manuale da Bacheca: Spostamento per ore non consuntivate."
         else:
