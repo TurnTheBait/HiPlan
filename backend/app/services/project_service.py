@@ -98,7 +98,7 @@ async def create_project(db: AsyncSession, data: ProjectCreate, owner: User) -> 
         description=data.description,
         start_date=data.start_date, end_date=data.end_date,
         status=data.status, owner_id=owner.id,
-        responsible_id=data.responsible_id or owner.id,
+        responsible_id=data.responsible_id if data.responsible_id else None,
         assigned_workers=json.dumps(data.assigned_workers) if data.assigned_workers else "[]",
     )
     db.add(project)
@@ -114,7 +114,7 @@ async def create_project(db: AsyncSession, data: ProjectCreate, owner: User) -> 
     db.add(log)
     
     await db.commit()
-    await db.refresh(project)
+    await db.refresh(project, ["responsible"])
     return project
 
 

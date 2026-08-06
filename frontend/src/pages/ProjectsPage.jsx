@@ -63,7 +63,7 @@ export default function ProjectsPage() {
         ...form,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
-        responsible_id: form.responsible_id || user?.id || null,
+        responsible_id: form.responsible_id || null,
       });
       toast.success('Commessa creata con successo!');
       setShowModal(false);
@@ -105,7 +105,12 @@ export default function ProjectsPage() {
     e.preventDefault();
     if (!editingProject) return;
     try {
-      await api.put(`/projects/${editingProject.id}`, editForm);
+      const payload = { ...editForm };
+      if (payload.start_date === '') payload.start_date = null;
+      if (payload.end_date === '') payload.end_date = null;
+      if (payload.responsible_id === '') payload.responsible_id = null;
+      
+      await api.put(`/projects/${editingProject.id}`, payload);
       toast.success('Commessa modificata con successo!');
       setShowEditModal(false);
       loadProjects();
@@ -452,7 +457,7 @@ export default function ProjectsPage() {
                     value={form.responsible_id || ''}
                     onChange={(e) => setForm({ ...form, responsible_id: e.target.value })}
                   >
-                    <option value="">-- Seleziona (Default: Tu) --</option>
+                    <option value="">-- Seleziona --</option>
                     {usersList.map(u => (
                       <option key={u.id} value={u.id}>{u.full_name || u.username} ({u.username})</option>
                     ))}
