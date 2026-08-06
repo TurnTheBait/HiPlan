@@ -17,6 +17,7 @@ export default function WorkloadHeatmap() {
   const [leftColWidth, setLeftColWidth] = useState(200);
   const [expandedUsers, setExpandedUsers] = useState({});
   const [viewMode, setViewMode] = useState('day');
+  const [dataMode, setDataMode] = useState('planned');
   const [dayDetails, setDayDetails] = useState(null);
   const toast = useToast();
   const gridRef = React.useRef(null);
@@ -43,7 +44,8 @@ export default function WorkloadHeatmap() {
   // Build full date range including weekends
   const allWorkDates = new Set();
   Object.values(heatmapData).forEach(u => {
-    Object.keys(u.workload).forEach(d => allWorkDates.add(d));
+    Object.keys(u.workload || {}).forEach(d => allWorkDates.add(d));
+    Object.keys(u.actual_workload || {}).forEach(d => allWorkDates.add(d));
   });
 
   let minDateStr = null;
@@ -178,7 +180,7 @@ export default function WorkloadHeatmap() {
         <div>
           <h3 style={{ margin: 0 }}>Saturazione Carichi di Lavoro</h3>
           <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-            Panoramica ore assegnate nelle fasi dei vari progetti (ore previste, non a consuntivo)
+            {dataMode === 'planned' ? 'Panoramica ore assegnate nelle fasi dei vari progetti (ore previste, non a consuntivo)' : 'Panoramica ore effettivamente registrate (consuntivate) dagli addetti'}
           </span>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -191,6 +193,15 @@ export default function WorkloadHeatmap() {
             <AppIcon name="calendar" size={15} />
             Oggi
           </button>
+          <select
+            className="input"
+            value={dataMode}
+            onChange={(e) => setDataMode(e.target.value)}
+            style={{ width: 170 }}
+          >
+            <option value="planned">Ore Pianificate</option>
+            <option value="actual">Ore Consuntivate</option>
+          </select>
           <select
             className="input"
             value={viewMode}
@@ -268,7 +279,8 @@ export default function WorkloadHeatmap() {
           const aggregatedWorkload = {};
           columns.forEach(c => aggregatedWorkload[c] = { hours: 0, tasks: [] });
 
-          Object.entries(userData.workload).forEach(([dStr, dayData]) => {
+          const currentWorkload = dataMode === 'actual' ? (userData.actual_workload || {}) : (userData.workload || {});
+          Object.entries(currentWorkload).forEach(([dStr, dayData]) => {
             const d = new Date(dStr);
             let key;
             if (viewMode === 'month') key = dStr.substring(0, 7);
@@ -382,7 +394,8 @@ export default function WorkloadHeatmap() {
               {/* Dettagli tasks se espanso (Timeline Nidificata) */}
               {expandedUsers[userId] && (() => {
                 const uniqueTasks = {};
-                Object.values(userData.workload).forEach(day => {
+                const currentWorkload = dataMode === 'actual' ? (userData.actual_workload || {}) : (userData.workload || {});
+                Object.values(currentWorkload).forEach(day => {
                   if (day.tasks) {
                     day.tasks.forEach(t => {
                       if (!uniqueTasks[t.id]) uniqueTasks[t.id] = t;
@@ -712,7 +725,7 @@ export default function WorkloadHeatmap() {
             </div>
             <div className="modal-content">
               <p style={{ color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                Ore previste per questo giorno: <strong>{dayDetails.hours.toFixed(1)}h</strong>
+                {dataMode === 'planned' ? 'Ore previste per questo giorno: ' : 'Ore consuntivate per questo giorno: '}<strong>{dayDetails.hours.toFixed(1)}h</strong>
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {dayDetails.tasks.map((t, idx) => (

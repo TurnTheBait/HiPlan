@@ -51,6 +51,7 @@ async def get_workload_heatmap(
             "username": u.username,
             "department": u.department,
             "workload": {},
+            "actual_workload": {},
             "vacations": vac_by_user.get(uid, [])
         }
         
@@ -138,5 +139,55 @@ async def get_workload_heatmap(
                     "color": getattr(task, "color", None) or "#3b82f6",
                     "type": task_type_str
                 })
+
+        # Process actual hours
+        actual_hours_map = {}
+        try:
+            actual_hours_map = json.loads(getattr(task, 'actual_hours', '{}')) or {}
+        except:
+            pass
+            
+        for w_username, date_hrs in actual_hours_map.items():
+            if not isinstance(date_hrs, dict):
+                continue
+                
+            w_id = None
+            for u in users:
+                if (u.username and u.username.lower() == w_username.lower()) or (u.full_name and w_username.lower() in u.full_name.lower()):
+                    w_id = str(u.id)
+                    break
+                    
+            if w_id:
+                # Calculate total actual for this user on this task
+                total_actual = 0.0
+                for v in date_hrs.values():
+                    try:
+                        total_actual += float(v)
+                    except:
+                        pass
+                        
+                for date_str, hrs in date_hrs.items():
+                    try:
+                        h_val = float(hrs)
+                    except:
+                        continue
+                        
+                    if h_val > 0:
+                        if date_str not in heatmap[w_id]["actual_workload"]:
+                            heatmap[w_id]["actual_workload"][date_str] = {"hours": 0.0, "tasks": []}
+                            
+                        heatmap[w_id]["actual_workload"][date_str]["hours"] += h_val
+                        heatmap[w_id]["actual_workload"][date_str]["tasks"].append({
+                            "id": str(task.id),
+                            "name": task.text,
+                            "project_name": task.project.name if task.project else "Progetto non specificato",
+                            "project_id": str(task.project.id) if task.project else None,
+                            "start_date": task.start_date.strftime("%Y-%m-%d") if task.start_date else None,
+                            "end_date": task.end_date.strftime("%Y-%m-%d") if task.end_date else None,
+                            "hours": h_val,
+                            "total_assigned_hours": total_actual,
+                            "color": getattr(task, "color", None) or "#3b82f6",
+                            "type": task_type_str
+                        })
                 
     return {"heatmap": heatmap}
