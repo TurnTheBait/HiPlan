@@ -18,6 +18,7 @@ from app.models.user import User
 from app.models.setting import Setting
 from app.models.replan_log import ReplanLog, ReplanActionType
 from app.core.websocket_manager import manager
+from app.utils.working_days import is_working_day
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ async def check_replanning_enabled(db: AsyncSession) -> bool:
 
 
 def is_weekend_or_holiday(d: date) -> bool:
-    return d.weekday() >= 5
+    return not is_working_day(d)
 
 
 def add_working_days(start: date, days: int) -> date:
@@ -101,7 +102,7 @@ async def get_replanning_suggestions(db: AsyncSession):
         # Controllo: fine fase oltre fine commessa
         if task.project and task.project.end_date and task.end_date > task.project.end_date:
             diff = (task.end_date - task.project.end_date).days
-            sugg_id = str(uuid4())
+            sugg_id = f"ext_proj_{task.id}_{task.end_date.strftime('%Y%m%d')}"
             suggestions.append({
                 "id": sugg_id,
                 "type": "project_end_exceeded",
@@ -140,7 +141,7 @@ async def get_replanning_suggestions(db: AsyncSession):
         
         # 1. Sforamento
         if planned_h > 0 and tot_eff > planned_h:
-            sugg_id = str(uuid4())
+            sugg_id = f"delay_{task.id}_{today.strftime('%Y%m%d')}_sforamento"
             suggestions.append({
                 "id": sugg_id,
                 "type": "delay_conflict",
@@ -204,7 +205,8 @@ async def get_replanning_suggestions(db: AsyncSession):
                 days_to_add = math.ceil(lost_hours / ore_gg) if (ore_gg > 0 and lost_hours > 0) else 1
                 if days_to_add <= 0: days_to_add = 1
 
-                sugg_id = str(uuid4())
+                date_str_val = first_delayed_date.strftime('%Y%m%d') if first_delayed_date else 'unknown'
+                sugg_id = f"delay_{task.id}_{date_str_val}_critico"
                 suggestions.append({
                     "id": sugg_id,
                     "type": "delay_conflict",
@@ -227,7 +229,7 @@ async def get_replanning_suggestions(db: AsyncSession):
                 # Fallback: scaduta e non in sforamento / ritardo critico specifico
                 days_to_add = get_working_days_count(task.end_date, today)
                 if days_to_add <= 0: days_to_add = 1
-                sugg_id = str(uuid4())
+                sugg_id = f"delay_{task.id}_{task.end_date.strftime('%Y%m%d')}_scaduta"
                 suggestions.append({
                     "id": sugg_id,
                     "type": "delay_conflict",
@@ -295,15 +297,9 @@ async def get_replanning_suggestions(db: AsyncSession):
             if w_id and w_id in vacation_dates_by_uid and d in vacation_dates_by_uid[w_id]:
                 conflict_tasks = [t for t, _ in w_tasks]
                 for t in conflict_tasks:
-                    old_start = t.start_date
-                    if old_start <= d:
-                        target_start = add_working_days(d, 1)
-                        shift_days = get_working_days_count(old_start, target_start) - 1
-                    else:
-                        shift_days = 1
-                    if shift_days <= 0: shift_days = 1
+                    shift_days = 1
                     
-                    sugg_id = str(uuid4())
+                    sugg_id = f"vac_{t.id}_{w_id}_{d.strftime('%Y%m%d')}"
                     suggestions.append({
                         "id": sugg_id,
                         "type": "vacation_conflict",
@@ -319,7 +315,7 @@ async def get_replanning_suggestions(db: AsyncSession):
                             "task_id": str(t.id),
                             "shift_days": shift_days
                         },
-                        "action_label": f"Sposta '{t.text}' in avanti di {shift_days}gg lavorativi"
+                        "action_label": f"Estendi '{t.text}' di {shift_days}gg lavorativi"
                     })
                 continue
                 
@@ -338,7 +334,7 @@ async def get_replanning_suggestions(db: AsyncSession):
                     shift_days = 1
                 if shift_days <= 0: shift_days = 1
                 
-                sugg_id = str(uuid4())
+                sugg_id = f"overload_{t_to_shift.id}_{w_id}_{d.strftime('%Y%m%d')}"
                 suggestions.append({
                     "id": sugg_id,
                     "type": "overload_conflict",
@@ -403,7 +399,7 @@ async def execute_suggestion(db: AsyncSession, action_type: str, payload: dict, 
         old_start = t_to_shift.start_date
         old_end = t_to_shift.end_date
         
-        if action_type == ReplanActionType.SHIFT_DELAY.value:
+        if action_type in (ReplanActionType.SHIFT_DELAY.value, ReplanActionType.SHIFT_VACATION.value):
             new_start = old_start
             new_end = add_working_days(old_end, shift_days)
             add_hours = payload.get("add_hours", 0)
@@ -424,7 +420,7 @@ async def execute_suggestion(db: AsyncSession, action_type: str, payload: dict, 
         t_to_shift.end_date = new_end
         
         if action_type == ReplanActionType.SHIFT_VACATION.value:
-            reason_text = "Esecuzione manuale da Bacheca: Spostamento per ferie."
+            reason_text = "Esecuzione manuale da Bacheca: Estensione per ferie."
         elif action_type == ReplanActionType.SHIFT_DELAY.value:
             reason_text = "Esecuzione manuale da Bacheca: Estensione per fase in ritardo."
         elif action_type == ReplanActionType.WARNING_UNACCOUNTED.value:
