@@ -349,7 +349,7 @@ export default function WorkloadHeatmap() {
 
                 let displayContent;
                 if (isVacation) {
-                  displayContent = '🏖️';
+                  displayContent = <AppIcon name="vacations" size={16} />;
                 } else if (isWeekendCol) {
                   displayContent = data.hours > 0 ? data.hours.toFixed(1) + 'h' : '';
                 } else {

@@ -712,6 +712,11 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.config.start_date = scaleStart;
     gantt.config.end_date = scaleEnd;
 
+    let currentScrollState = null;
+    if (gantt.getTaskCount && gantt.getTaskCount() > 0) {
+      currentScrollState = gantt.getScrollState();
+    }
+
     gantt.clearAll();
     gantt.parse({
       data: sortedTaskList.map(t => {
@@ -747,10 +752,14 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     drawCustomMarkers();
 
     try {
-      // Centra il gantt sul giorno di oggi (meno 3 giorni per avere un po' di margine a sinistra)
-      const pos = gantt.posFromDate(new Date(Date.now() - 3 * 86400000));
-      if (typeof pos === 'number' && !isNaN(pos)) {
-        gantt.scrollTo(Math.max(0, pos), null);
+      if (currentScrollState) {
+        gantt.scrollTo(currentScrollState.x, currentScrollState.y);
+      } else {
+        // Centra il gantt sul giorno di oggi (meno 3 giorni per avere un po' di margine a sinistra)
+        const pos = gantt.posFromDate(new Date(Date.now() - 3 * 86400000));
+        if (typeof pos === 'number' && !isNaN(pos)) {
+          gantt.scrollTo(Math.max(0, pos), null);
+        }
       }
     } catch (e) { /* ignore */ }
   }, [tasks, links, drawCustomMarkers]);
