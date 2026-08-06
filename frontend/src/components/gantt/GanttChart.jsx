@@ -150,7 +150,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         width: 105,
         template: function (task) {
           if (task.type === 'milestone') return '-';
-          return `${task.duration || 1}g (${task.planned_hours || (task.duration ? task.duration * 8 : 8)}h)`;
+          const d = task.orig_duration || task.duration || 1; return `${d}g (${task.planned_hours || (d * 8)}h)`;
         }
       },
       {
@@ -215,8 +215,9 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
           Data Evento: ${gantt.templates.tooltip_date_format(start)}<br/>
           <i>Evento / Scadenza</i>`;
       }
-      let durationText = `<b>${task.duration || 1} giorni</b>`;
-      durationText += ` (${task.planned_hours || (task.duration ? task.duration * 8 : 8)} ore previste)`;
+      const d = task.orig_duration || task.duration || 1;
+      let durationText = `<b>${d} giorni</b>`;
+      durationText += ` (${task.planned_hours || (d * 8)} ore previste)`;
       return `<b>${task.text}</b><br/>
         Inizio: ${gantt.templates.tooltip_date_format(start)}<br/>
         Fine: ${gantt.templates.tooltip_date_format(end)}<br/>
@@ -368,7 +369,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       if (onTaskUpdateRef.current) {
         onTaskUpdateRef.current(id, {
           start_date: gantt.date.date_to_str("%Y-%m-%d")(task.start_date),
-          duration: task.duration,
+          duration: task.orig_duration || task.duration,
           progress: task.progress,
         });
       }
@@ -504,7 +505,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         width: 105,
         template: function (task) {
           if (task.type === 'milestone') return '-';
-          return `${task.duration || 1}g (${task.planned_hours || (task.duration ? task.duration * 8 : 8)}h)`;
+          const d = task.orig_duration || task.duration || 1; return `${d}g (${task.planned_hours || (d * 8)}h)`;
         }
       },
       {
@@ -734,7 +735,8 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
           id: String(t.id),
           text: t.text,
           start_date: t.start_date,
-          duration: t.duration,
+          orig_duration: t.duration,
+          // duration: t.duration,
           progress: isCompleted ? 1 : Math.min(1, t.progress || (plannedH > 0 ? totEff / plannedH : 0)),
           parent: t.parent === '0' || !t.parent ? 0 : String(t.parent),
           open: Boolean(t.open),
@@ -742,7 +744,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
           color: isCompleted ? '#10b981' : (isOverrun ? '#ef4444' : getTaskColor(t)),
           is_overrun: isOverrun,
         };
-        delete taskPayload.end_date;
+        
         return taskPayload;
       }),
       links: validLinks.map(l => ({
