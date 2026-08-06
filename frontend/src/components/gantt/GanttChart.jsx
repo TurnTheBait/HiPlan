@@ -220,7 +220,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       durationText += ` (${task.planned_hours || (d * 8)} ore previste)`;
       return `<b>${task.text}</b><br/>
         Inizio: ${gantt.templates.tooltip_date_format(start)}<br/>
-        Fine: ${gantt.templates.tooltip_date_format(end)}<br/>
+        Fine: ${gantt.templates.tooltip_date_format(new Date(end.getTime() - 86400000))}<br/>
         Durata: ${durationText}<br/>
         Progresso: ${Math.round((task.progress || 0) * 100)}%`;
     };
@@ -730,8 +730,23 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         const totEff = calculateTaskEffHours(t);
         const plannedH = Number(t.planned_hours || 8.0);
         const isOverrun = plannedH > 0 && totEff > plannedH;
+        
+        let parsedEndDate = t.end_date;
+        if (parsedEndDate && t.type !== 'milestone') {
+            const dateParts = String(parsedEndDate).split(' ')[0].split('T')[0].split('-');
+            if (dateParts.length === 3) {
+                const ed = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+                ed.setDate(ed.getDate() + 1);
+                const y = ed.getFullYear();
+                const m = String(ed.getMonth() + 1).padStart(2, '0');
+                const d = String(ed.getDate()).padStart(2, '0');
+                parsedEndDate = `${y}-${m}-${d}`;
+            }
+        }
         const taskPayload = {
           ...t,
+          end_date: parsedEndDate,
+
           id: String(t.id),
           text: t.text,
           start_date: t.start_date,
