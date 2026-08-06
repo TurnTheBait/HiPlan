@@ -125,6 +125,8 @@ export default function ProjectDetailPage() {
 
   const [showDeptMenu, setShowDeptMenu] = useState(false);
   const [activeDepartments, setActiveDepartments] = useState(ALL_DEPTS);
+  const [showWorkerMenu, setShowWorkerMenu] = useState(false);
+  const [activeWorkers, setActiveWorkers] = useState([]); // empty means all
   const [viewMode, setViewMode] = useState('day');
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1462,7 +1464,7 @@ export default function ProjectDetailPage() {
             <div style={{ position: 'relative' }}>
               <button
                 className="btn btn-secondary"
-                onClick={() => { setShowPhaseFilterMenu(!showPhaseFilterMenu); setShowColumnsMenu(false); setShowDeptMenu(false); }}
+                onClick={() => { setShowPhaseFilterMenu(!showPhaseFilterMenu); setShowColumnsMenu(false); setShowDeptMenu(false); setShowWorkerMenu(false); }}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
               >
                 <AppIcon name="filter" />
@@ -1502,11 +1504,61 @@ export default function ProjectDetailPage() {
           )}
 
 
+          
           {activeTab === 'gantt' && (
             <div style={{ position: 'relative' }}>
               <button
                 className="btn btn-secondary"
-                onClick={() => { setShowDeptMenu(!showDeptMenu); setShowColumnsMenu(false); setShowPhaseFilterMenu(false); }}
+                onClick={() => { setShowWorkerMenu(!showWorkerMenu); setShowColumnsMenu(false); setShowPhaseFilterMenu(false); setShowDeptMenu(false); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
+              >
+                <AppIcon name="users" />
+                Addetto
+                {activeWorkers.length > 0 && (
+                  <span style={{ background: '#6366f1', color: '#fff', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px' }}>
+                    {activeWorkers.length}
+                  </span>
+                )}
+              </button>
+              {showWorkerMenu && (
+                <div className="action-popover" style={{
+                  position: 'absolute', top: '100%', left: 0, marginTop: 4,
+                  background: 'var(--bg-card)', border: '1px solid var(--border-default)',
+                  borderRadius: 10, padding: 12, zIndex: 200, minWidth: 200,
+                  boxShadow: 'var(--shadow-md)'
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>FILTRA PER ADDETTO:</div>
+                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                    {[...predefinedWorkers].sort((a, b) => a === user?.username ? -1 : b === user?.username ? 1 : a.localeCompare(b)).map(w => (
+                      <label key={w} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+                        <input
+                          type="checkbox"
+                          checked={activeWorkers.includes(w)}
+                          onChange={(e) => {
+                            setActiveWorkers(e.target.checked
+                              ? [...activeWorkers, w]
+                              : activeWorkers.filter(x => x !== w)
+                            );
+                          }}
+                        />
+                        {w}
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 8, paddingTop: 8, display: 'flex', gap: 8 }}>
+                    <button className="btn btn-sm btn-secondary" onClick={() => setActiveWorkers([])} style={{ flex: 1, fontSize: 11 }}>Tutti</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'gantt' && (
+            <div style={{ position: 'relative' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => { setShowDeptMenu(!showDeptMenu);
+ setShowColumnsMenu(false); setShowPhaseFilterMenu(false); setShowWorkerMenu(false); }}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
               >
                 <AppIcon name="building" />
@@ -1578,6 +1630,9 @@ export default function ProjectDetailPage() {
                 if (t.department && !activeDepartments.includes(t.department)) return false;
                 if (phaseFilter === 'task' && t.type === 'milestone') return false;
                 if (phaseFilter === 'milestone' && t.type !== 'milestone') return false;
+                if (activeWorkers.length > 0) {
+                  if (!t.workers || !t.workers.some(w => activeWorkers.includes(w))) return false;
+                }
                 return true;
               })}
               links={ganttData.links}
@@ -2413,7 +2468,7 @@ export default function ProjectDetailPage() {
                           )}
                         </div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                          {predefinedWorkers.map(w => {
+                          {[...predefinedWorkers].sort((a, b) => a === user?.username ? -1 : b === user?.username ? 1 : a.localeCompare(b)).map(w => {
                             const sel = taskForm.workers.includes(w);
                             return (
                               <div

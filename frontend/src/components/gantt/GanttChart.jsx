@@ -28,6 +28,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
 
   const containerRef = useRef(null);
   const initialized = useRef(false);
+  const initialScrollDone = useRef(false);
   const markerIdsRef = useRef([]);
   const projectStartDateRef = useRef(projectStartDate);
   const projectEndDateRef = useRef(projectEndDate);
@@ -774,7 +775,13 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     drawCustomMarkers();
 
     try {
-      if (currentScrollState && currentVisibleDate) {
+      if (!initialScrollDone.current) {
+        initialScrollDone.current = true;
+        const pos = gantt.posFromDate(new Date(Date.now() - 3 * 86400000));
+        if (typeof pos === 'number' && !isNaN(pos)) {
+          gantt.scrollTo(Math.max(0, pos), null);
+        }
+      } else if (currentScrollState && currentVisibleDate) {
         const newPos = gantt.posFromDate(currentVisibleDate);
         if (typeof newPos === 'number' && !isNaN(newPos)) {
           gantt.scrollTo(newPos, currentScrollState.y);
@@ -782,7 +789,6 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
           gantt.scrollTo(currentScrollState.x, currentScrollState.y);
         }
       } else {
-        // Centra il gantt sul giorno di oggi (meno 3 giorni per avere un po' di margine a sinistra)
         const pos = gantt.posFromDate(new Date(Date.now() - 3 * 86400000));
         if (typeof pos === 'number' && !isNaN(pos)) {
           gantt.scrollTo(Math.max(0, pos), null);
