@@ -315,24 +315,17 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
           <div className="tkt-field-row">
             <div className="tkt-field">
               <label>Commessa</label>
-              <SearchableCombobox
-                options={[
-                  { value: '', label: '\u00A0' },
-                  ...projects.filter(p => p.status !== 'archived').map(p => ({
-                    value: p.id,
-                    label: p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name)
-                  }))
-                ]}
-                value={form.project_id === 'custom' ? form.custom_project_code : form.project_id}
-                onChange={(val, opt) => {
-                  if (opt) {
-                    setForm(f => ({ ...f, project_id: opt.value, custom_project_code: '' }));
-                  } else {
-                    setForm(f => ({ ...f, project_id: 'custom', custom_project_code: val }));
-                  }
-                }}
-                placeholder="Cerca o inserisci manualmente..."
-              />
+              <select
+                value={form.project_id || ''}
+                onChange={e => setForm(f => ({ ...f, project_id: e.target.value, custom_project_code: '' }))}
+              >
+                <option value="">-- Seleziona (opzionale) --</option>
+                {projects.filter(p => p.status !== 'archived').map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name)}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="tkt-field">
               <label>Priorità</label>
@@ -452,24 +445,17 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
           <div className="tkt-field-row">
             <div className="tkt-field">
               <label>Commessa</label>
-              <SearchableCombobox
-                options={[
-                  { value: '', label: '\u00A0' },
-                  ...projects.filter(p => p.status !== 'archived').map(p => ({
-                    value: p.id,
-                    label: p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name)
-                  }))
-                ]}
-                value={form.project_id === 'custom' ? form.custom_project_code : form.project_id}
-                onChange={(val, opt) => {
-                  if (opt) {
-                    setForm(f => ({ ...f, project_id: opt.value, custom_project_code: '' }));
-                  } else {
-                    setForm(f => ({ ...f, project_id: 'custom', custom_project_code: val }));
-                  }
-                }}
-                placeholder="Cerca o inserisci manualmente..."
-              />
+              <select
+                value={form.project_id || ''}
+                onChange={e => setForm(f => ({ ...f, project_id: e.target.value, custom_project_code: '' }))}
+              >
+                <option value="">-- Seleziona (opzionale) --</option>
+                {projects.filter(p => p.status !== 'archived').map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name)}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="tkt-field">
               <label>Priorità</label>
