@@ -457,7 +457,7 @@ export default function ProjectsPage() {
                     value={form.responsible_id || ''}
                     onChange={(e) => setForm({ ...form, responsible_id: e.target.value })}
                   >
-                    <option value="">-- Seleziona --</option>
+                    <option value=""></option>
                     {usersList.map(u => (
                       <option key={u.id} value={u.id}>{u.full_name || u.username} ({u.username})</option>
                     ))}
@@ -638,7 +638,7 @@ export default function ProjectsPage() {
                   value={editForm.responsible_id || ''}
                   onChange={(e) => setEditForm({ ...editForm, responsible_id: e.target.value })}
                 >
-                  <option value="">-- Nessuno / Predefinito --</option>
+                  <option value=""></option>
                   {usersList.map(u => (
                     <option key={u.id} value={u.id}>{u.full_name || u.username} ({u.username})</option>
                   ))}

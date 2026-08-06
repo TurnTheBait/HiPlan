@@ -1202,6 +1202,12 @@ export default function ProjectDetailPage() {
                 <span className="commessa-client" style={{ color: 'var(--text-secondary)' }}><AppIcon name="building" size={15} />{project.client}</span>
               </>
             )}
+            {project?.responsible_name && (
+              <>
+                <span style={{ color: 'var(--border-subtle)', fontSize: '1.2rem' }}>—</span>
+                <span className="commessa-client commessa-responsible" style={{ color: 'var(--text-secondary)' }}><AppIcon name="user" size={15} />{project.responsible_name}</span>
+              </>
+            )}
             {project?.name && project.name !== project.code && (
               <>
                 <span style={{ color: 'var(--border-subtle)', fontSize: '1.2rem' }}>|</span>
@@ -1504,7 +1510,7 @@ export default function ProjectDetailPage() {
           )}
 
 
-          
+
           {activeTab === 'gantt' && (
             <div style={{ position: 'relative' }}>
               <button
@@ -1557,8 +1563,10 @@ export default function ProjectDetailPage() {
             <div style={{ position: 'relative' }}>
               <button
                 className="btn btn-secondary"
-                onClick={() => { setShowDeptMenu(!showDeptMenu);
- setShowColumnsMenu(false); setShowPhaseFilterMenu(false); setShowWorkerMenu(false); }}
+                onClick={() => {
+                  setShowDeptMenu(!showDeptMenu);
+                  setShowColumnsMenu(false); setShowPhaseFilterMenu(false); setShowWorkerMenu(false);
+                }}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
               >
                 <AppIcon name="building" />
@@ -1772,7 +1780,7 @@ export default function ProjectDetailPage() {
                     const isCompleted = isTaskCompleted(task);
                     return (
 
-                      <tr key={task.id} style={{ backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.18)' : undefined }}>
+                      <tr key={task.id} style={{ backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.18)' : (task.type === 'milestone' ? 'rgba(245, 158, 11, 0.15)' : undefined) }}>
                         <td style={{ fontWeight: 600 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <input
@@ -1818,10 +1826,18 @@ export default function ProjectDetailPage() {
                         )}
                         {tableVisibleColumns.includes('date') && (
                           <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                            <div>{formatDateItalian(task.start_date)} → {formatDateItalian(task.end_date)}</div>
-                            <div style={{ fontSize: 11, color: 'var(--accent-500)', fontWeight: 600, marginTop: 2 }}>
-                              <AppIcon name="calendar" size={12} />Durata: {task.duration || 1} {task.duration === 1 ? 'giorno' : 'giorni'}
-                            </div>
+                            {task.type === 'milestone' ? (
+                              <div style={{ fontWeight: 600, color: '#d97706', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <AppIcon name="calendar" size={13} /> {formatDateItalian(task.start_date)}
+                              </div>
+                            ) : (
+                              <>
+                                <div style={{ whiteSpace: 'nowrap' }}>{formatDateItalian(task.start_date)} → {formatDateItalian(task.end_date)}</div>
+                                <div style={{ fontSize: 11, color: 'var(--accent-500)', fontWeight: 600, marginTop: 2, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <AppIcon name="calendar" size={12} />Durata: {task.duration || 1} {task.duration === 1 ? 'giorno' : 'giorni'}
+                                </div>
+                              </>
+                            )}
                           </td>
                         )}
                         {tableVisibleColumns.includes('ore') && (
@@ -2096,7 +2112,7 @@ export default function ProjectDetailPage() {
         <div className="modal-overlay">
           <div className="modal task-editor-modal" style={{ maxWidth: 900 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{editingTask ? 'Dettagli Fase Lavorazione' : 'Nuova Fase Lavorazione (Ufficio Tecnico)'}</h2>
+              <h2>{editingTask ? 'Dettagli Fase Lavorazione' : 'Nuova Fase Lavorazione'}</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowTaskModal(false)} aria-label="Chiudi" style={{ marginRight: '-45px' }}>
                 <AppIcon name="close" />
               </button>
@@ -2240,9 +2256,22 @@ export default function ProjectDetailPage() {
                     )}
                   />
                   {taskForm.faseSel === '__custom__' && taskForm.customText && (
-                    <span className="inline-detail-row" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 8 }}>
-                      <AppIcon name="alert" size={13} />Questa nuova fase verrà automaticamente aggiunta all'elenco suggerito per il reparto {user?.role === 'admin' ? 'di competenza' : (user?.department ? user.department.replace('_', ' ') : 'ufficio tecnico')}.
-                    </span>
+                    <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <AppIcon name="alert" size={14} style={{ color: 'var(--accent-500)' }} /> Questa nuova fase verrà automaticamente aggiunta all'elenco suggerito per il reparto selezionato:
+                      </span>
+                      <select
+                        className="input"
+                        style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+                        value={taskForm.department || user?.department || 'ufficio_tecnico'}
+                        onChange={(e) => setTaskForm({ ...taskForm, department: e.target.value })}
+                      >
+                        <option value="tutti">Condivisa tra tutti i reparti</option>
+                        <option value="ufficio_tecnico">Ufficio Tecnico</option>
+                        <option value="acquisti">Acquisti</option>
+                        <option value="produzione">Produzione</option>
+                      </select>
+                    </div>
                   )}
                 </div>
 
@@ -2290,6 +2319,13 @@ export default function ProjectDetailPage() {
                   </div>
                 </div>
 
+
+                {/* Data di Fine Commessa visibile sopra la pianificazione */}
+                <div style={{ marginTop: 24, marginBottom: 8, padding: '10px 14px', background: 'var(--bg-tertiary)', borderRadius: '6px', borderLeft: '3px solid var(--accent-500)', display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.9rem' }}>
+                  <AppIcon name="calendar" size={16} style={{ color: 'var(--accent-500)' }} />
+                  <strong>Scadenza / Fine Commessa:</strong>
+                  <span style={{ color: 'var(--text-primary)' }}>{project?.end_date ? formatDateItalian(project.end_date) : 'Non impostata'}</span>
+                </div>
 
                 {/* Sezione Pianificazione Temporale e Durate / Data Evento */}
                 {taskForm.taskType === 'milestone' ? (
