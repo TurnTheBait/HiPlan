@@ -57,7 +57,7 @@ def get_working_days_count(start: date, end: date) -> int:
     return max(1, count)
 
 
-async def get_replanning_suggestions(db: AsyncSession):
+async def get_replanning_suggestions(db: AsyncSession, current_user=None):
     today = date.today()
     suggestions: List[Dict[str, Any]] = []
     
@@ -78,6 +78,34 @@ async def get_replanning_suggestions(db: AsyncSession):
     users = users_res.scalars().all()
     username_to_id = {u.username: str(u.id) for u in users}
     fullname_to_id = {u.full_name: str(u.id) for u in users if u.full_name}
+
+    if current_user and getattr(current_user, 'role', None) == "editor" and getattr(current_user, 'department', None):
+        username_to_dept = {u.username: u.department for u in users}
+        fullname_to_dept = {u.full_name: u.department for u in users if u.full_name}
+        
+        filtered_tasks = []
+        for t in all_tasks:
+            if getattr(t, 'department', None) == current_user.department:
+                filtered_tasks.append(t)
+                continue
+            
+            import json
+            try:
+                workers_list = json.loads(t.workers) if t.workers else []
+            except:
+                workers_list = []
+                
+            has_dept_worker = False
+            for w in workers_list:
+                dept = fullname_to_dept.get(w) or username_to_dept.get(w)
+                if dept == current_user.department:
+                    has_dept_worker = True
+                    break
+            
+            if has_dept_worker:
+                filtered_tasks.append(t)
+                
+        all_tasks = filtered_tasks
     
     def get_user_id(name: str):
         return fullname_to_id.get(name) or username_to_id.get(name)

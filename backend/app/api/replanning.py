@@ -26,7 +26,7 @@ async def get_suggestions(
     if current_user.role not in [UserRole.ADMIN, UserRole.EDITOR]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato. Solo admin ed editor possono vedere i suggerimenti.")
         
-    suggestions = await get_replanning_suggestions(db)
+    suggestions = await get_replanning_suggestions(db, current_user)
     return suggestions
 
 
