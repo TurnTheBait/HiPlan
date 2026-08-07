@@ -155,6 +155,29 @@ def _compute_task_progress_and_completed(task: Task, update_data: Optional[dict]
             else:
                 task.progress = 1.0
 
+    if task.completed == 1 and isinstance(actual_map, dict):
+        dates_with_hours = set()
+        for day_map in actual_map.values():
+            if isinstance(day_map, dict):
+                for d, h in day_map.items():
+                    if d != "__extra__":
+                        try:
+                            if float(h or 0) > 0:
+                                dates_with_hours.add(d)
+                        except (ValueError, TypeError):
+                            pass
+        
+        if dates_with_hours:
+            from datetime import datetime
+            first_date_str = min(dates_with_hours)
+            last_date_str = max(dates_with_hours)
+            first_date = datetime.strptime(first_date_str, "%Y-%m-%d").date()
+            last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
+            if getattr(task, "start_date", None) != first_date or getattr(task, "end_date", None) != last_date:
+                task.start_date = first_date
+                task.end_date = last_date
+                task.duration = (last_date - first_date).days + 1
+
 
 def _link_to_out(link: Link) -> LinkOut:
     return LinkOut(

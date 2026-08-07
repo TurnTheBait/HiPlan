@@ -2864,14 +2864,24 @@ export default function ProjectDetailPage() {
                       <thead>
                         <tr>
                           <th style={{ minWidth: 130, textAlign: 'left' }}>Addetto / Giorno</th>
-                          {dates.map(d => (
-                            <th key={d} style={{ minWidth: 85, background: !plannedSet.has(d) ? 'rgba(239, 68, 68, 0.08)' : undefined }}>
-                              {d.split('-')[2]}/{d.split('-')[1]}<br />
-                              <span style={{ fontSize: 11, fontWeight: 400, color: !plannedSet.has(d) ? '#ef4444' : 'var(--text-tertiary)' }}>
-                                {plannedSet.has(d) ? `(${oreGgTotale.toFixed(1)}h prev)` : '(extra)'}
-                              </span>
-                            </th>
-                          ))}
+                          {dates.map(d => {
+                            const dateObj = new Date(d + 'T00:00:00');
+                            const isFestivo = isWeekendOrHoliday(dateObj);
+                            const shortDay = dateObj.toLocaleDateString('it-IT', { weekday: 'short' });
+                            const dayName = shortDay.charAt(0).toUpperCase() + shortDay.slice(1);
+
+                            return (
+                              <th key={d} style={{ minWidth: 85, background: !plannedSet.has(d) ? 'rgba(239, 68, 68, 0.08)' : (isFestivo ? '#fef08a' : undefined) }}>
+                                <span style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: isFestivo ? '#b45309' : 'var(--text-primary)', marginBottom: '2px' }}>
+                                  {dayName}
+                                </span>
+                                {d.split('-')[2]}/{d.split('-')[1]}<br />
+                                <span style={{ fontSize: 11, fontWeight: 400, color: !plannedSet.has(d) ? '#ef4444' : 'var(--text-tertiary)' }}>
+                                  {plannedSet.has(d) ? `(${oreGgTotale.toFixed(1)}h)` : 'Extra'}
+                                </span>
+                              </th>
+                            );
+                          })}
                           <th style={{ minWidth: 135 }}>Totale Addetto</th>
                         </tr>
                       </thead>
@@ -2943,8 +2953,8 @@ export default function ProjectDetailPage() {
                         let totAll = 0;
                         workers.forEach(w => {
                           if (actualHoursMap[w]) {
-                            Object.entries(actualHoursMap[w]).forEach(([key, h]) => { 
-                              if (key !== '__extra__') totAll += Number(h) || 0; 
+                            Object.entries(actualHoursMap[w]).forEach(([key, h]) => {
+                              if (key !== '__extra__') totAll += Number(h) || 0;
                             });
                           }
                         });
