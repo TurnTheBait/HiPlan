@@ -44,8 +44,12 @@ export default function WorkloadHeatmap() {
   // Build full date range including weekends
   const allWorkDates = new Set();
   Object.values(heatmapData).forEach(u => {
-    Object.keys(u.workload || {}).forEach(d => allWorkDates.add(d));
-    Object.keys(u.actual_workload || {}).forEach(d => allWorkDates.add(d));
+    Object.keys(u.workload || {}).forEach(d => {
+      if (d && d !== '__extra__' && !isNaN(new Date(d).getTime())) allWorkDates.add(d);
+    });
+    Object.keys(u.actual_workload || {}).forEach(d => {
+      if (d && d !== '__extra__' && !isNaN(new Date(d).getTime())) allWorkDates.add(d);
+    });
   });
 
   let minDateStr = null;
@@ -73,12 +77,16 @@ export default function WorkloadHeatmap() {
 
   // Riempiamo tutti i giorni nel range in modo che la tabella mostri anche i periodi vuoti
   const fullDatesSet = new Set(allWorkDates);
-  const start = new Date(minDateStr);
-  const end = new Date(maxDateStr);
-  const cur = new Date(start);
-  while (cur <= end) {
-    fullDatesSet.add(cur.toISOString().substring(0, 10));
-    cur.setDate(cur.getDate() + 1);
+  let loopCount = 0;
+  if (minDateStr && maxDateStr) {
+    const start = new Date(minDateStr + 'T12:00:00Z');
+    const end = new Date(maxDateStr + 'T12:00:00Z');
+    const cur = new Date(start.getTime());
+    while (cur <= end) {
+      fullDatesSet.add(cur.toISOString().substring(0, 10));
+      cur.setUTCDate(cur.getUTCDate() + 1);
+      loopCount++;
+    }
   }
 
   const sortedDates = Array.from(fullDatesSet).sort();
@@ -265,9 +273,20 @@ export default function WorkloadHeatmap() {
               className={'heatmap-header-cell' + (isTodayCol ? ' today-header' : '') + (isWeekendCol ? ' weekend-header' : '')}
               title={titleText}
             >
-              {columnsMap.get(colKey)}
-              {isTodayCol && (
-                <div style={{ fontSize: '0.7rem', color: 'var(--accent-500)', fontWeight: 800 }}>Oggi</div>
+              <div>{columnsMap.get(colKey)}</div>
+              {viewMode === 'day' ? (
+                <div style={{ fontSize: '0.75rem', fontWeight: isTodayCol ? 800 : 500, color: isTodayCol ? 'var(--accent-500)' : 'var(--text-secondary)' }}>
+                  {(() => {
+                    const [y, m, d] = colKey.split('-');
+                    const date = new Date(Date.UTC(y, parseInt(m) - 1, d, 12, 0, 0));
+                    const dayName = date.toLocaleDateString('it-IT', { weekday: 'short', timeZone: 'UTC' }).replace(/^\w/, c => c.toUpperCase());
+                    return isTodayCol ? `${dayName} (Oggi)` : dayName;
+                  })()}
+                </div>
+              ) : (
+                isTodayCol && (
+                  <div style={{ fontSize: '0.7rem', color: 'var(--accent-500)', fontWeight: 800 }}>Oggi</div>
+                )
               )}
             </div>
           );

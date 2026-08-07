@@ -41,6 +41,7 @@ export default function ProjectDetailPage() {
   const [predefinedWorkers, setPredefinedWorkers] = useState(PREDEFINED_WORKERS_DEFAULT);
   const [usersList, setUsersList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
   // Calcolo WebSocket URL
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1176,6 +1177,53 @@ export default function ProjectDetailPage() {
 
   if (loading) return <div className="loading-screen"><div className="spinner" /></div>;
 
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  let sortedTasks = [...(ganttData.tasks || [])];
+  if (sortConfig.key !== null) {
+    sortedTasks.sort((a, b) => {
+      let aValue, bValue;
+      switch (sortConfig.key) {
+        case 'fase':
+          aValue = a.text || '';
+          bValue = b.text || '';
+          break;
+        case 'reparto':
+          aValue = a.department || '';
+          bValue = b.department || '';
+          break;
+        case 'addetti':
+          aValue = (a.workers || []).join(', ');
+          bValue = (b.workers || []).join(', ');
+          break;
+        case 'date':
+          aValue = new Date(a.start_date).getTime() || 0;
+          bValue = new Date(b.start_date).getTime() || 0;
+          break;
+        case 'ore':
+          aValue = Number(a.planned_hours) || 0;
+          bValue = Number(b.planned_hours) || 0;
+          break;
+        case 'semaforo':
+          const weight = { 'ritardo': 3, 'attenzione': 2, 'ok': 1 };
+          aValue = weight[computeStato(a)] || 0;
+          bValue = weight[computeStato(b)] || 0;
+          break;
+        default:
+          return 0;
+      }
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+
   return (
     <div className="project-detail animate-fadeIn">
       <div className="project-detail-header">
@@ -1756,24 +1804,46 @@ export default function ProjectDetailPage() {
             <table className="phases-table">
               <thead>
                 <tr>
-                  <th>Fase Lavorazione</th>
-                  {tableVisibleColumns.includes('reparto') && <th>Reparto</th>}
-                  {tableVisibleColumns.includes('addetti') && <th>Addetti Assegnati</th>}
-                  {tableVisibleColumns.includes('date') && <th>Inizio / Fine</th>}
-                  {tableVisibleColumns.includes('ore') && <th>Ore Prev vs Eff</th>}
-                  {tableVisibleColumns.includes('semaforo') && <th>Semaforo Avanzamento</th>}
+                  <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('fase')}>
+                    Fase Lavorazione <span style={{ color: 'var(--accent-500)', marginLeft: 4 }}>{sortConfig.key === 'fase' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</span>
+                  </th>
+                  {tableVisibleColumns.includes('reparto') && (
+                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('reparto')}>
+                      Reparto <span style={{ color: 'var(--accent-500)', marginLeft: 4 }}>{sortConfig.key === 'reparto' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</span>
+                    </th>
+                  )}
+                  {tableVisibleColumns.includes('addetti') && (
+                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('addetti')}>
+                      Addetti Assegnati <span style={{ color: 'var(--accent-500)', marginLeft: 4 }}>{sortConfig.key === 'addetti' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</span>
+                    </th>
+                  )}
+                  {tableVisibleColumns.includes('date') && (
+                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('date')}>
+                      Inizio / Fine <span style={{ color: 'var(--accent-500)', marginLeft: 4 }}>{sortConfig.key === 'date' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</span>
+                    </th>
+                  )}
+                  {tableVisibleColumns.includes('ore') && (
+                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('ore')}>
+                      Ore Prev vs Eff <span style={{ color: 'var(--accent-500)', marginLeft: 4 }}>{sortConfig.key === 'ore' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</span>
+                    </th>
+                  )}
+                  {tableVisibleColumns.includes('semaforo') && (
+                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('semaforo')}>
+                      Semaforo Avanzamento <span style={{ color: 'var(--accent-500)', marginLeft: 4 }}>{sortConfig.key === 'semaforo' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</span>
+                    </th>
+                  )}
                   {tableVisibleColumns.includes('azioni') && <th style={{ textAlign: 'right' }}>Azioni</th>}
                 </tr>
               </thead>
               <tbody>
-                {ganttData.tasks.length === 0 ? (
+                {sortedTasks.length === 0 ? (
                   <tr>
                     <td colSpan={1 + tableVisibleColumns.length} style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 32 }}>
                       Nessuna fase aggiunta. Clicca <strong>+ Nuova Fase Lavorazione</strong> in alto.
                     </td>
                   </tr>
                 ) : (
-                  ganttData.tasks.map((task) => {
+                  sortedTasks.map((task) => {
                     const st = computeStato(task);
                     const tEff = calculateTaskEffHours(task);
                     const tColor = getTaskColor(task);

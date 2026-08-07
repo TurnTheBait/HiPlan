@@ -97,8 +97,9 @@
 
 /* Evidenziazione colonna Sabato/Domenica */
 .weekend-header {
-  background: rgba(239, 68, 68, 0.16) !important;
-  color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: #dc2626 !important;
+  border-bottom: 2px solid #dc2626 !important;
 }
 
 /* Cella Vacanza (Ferie) */
@@ -111,13 +112,16 @@
 
 /* Cella Weekend */
 .heatmap-weekend {
-  background: repeating-linear-gradient(-45deg,
-      rgba(239, 68, 68, 0.03),
-      rgba(239, 68, 68, 0.03) 6px,
-      rgba(239, 68, 68, 0.08) 6px,
-      rgba(239, 68, 68, 0.08) 12px) !important;
-  color: #ef4444 !important;
-  font-weight: 600 !important;
+  background-color: rgba(239, 68, 68, 0.06) !important;
+  background-image: repeating-linear-gradient(-45deg,
+      transparent,
+      transparent 6px,
+      rgba(239, 68, 68, 0.06) 6px,
+      rgba(239, 68, 68, 0.06) 12px) !important;
+  color: #dc2626 !important;
+  font-weight: 700 !important;
+  border-left: 1px solid rgba(239, 68, 68, 0.1) !important;
+  border-right: 1px solid rgba(239, 68, 68, 0.1) !important;
 }
 
 .heatmap-vacation.today-cell,

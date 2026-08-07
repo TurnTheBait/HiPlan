@@ -1713,8 +1713,9 @@
 }
 
 .weekend-header {
-  background: var(--danger-bg) !important;
-  color: var(--danger) !important;
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: #dc2626 !important;
+  border-bottom: 2px solid #dc2626 !important;
 }
 
 .heatmap-cell.under-capacity {
@@ -1741,10 +1742,12 @@
     repeating-linear-gradient(-45deg,
       transparent,
       transparent 6px,
-      rgba(209, 67, 67, 0.05) 6px,
-      rgba(209, 67, 67, 0.05) 12px),
-    var(--bg-tertiary) !important;
-  color: var(--text-muted) !important;
+      rgba(239, 68, 68, 0.06) 6px,
+      rgba(239, 68, 68, 0.06) 12px),
+    rgba(239, 68, 68, 0.06) !important;
+  color: #dc2626 !important;
+  border-left: 1px solid rgba(239, 68, 68, 0.1) !important;
+  border-right: 1px solid rgba(239, 68, 68, 0.1) !important;
 }
 
 .conflict-card {
