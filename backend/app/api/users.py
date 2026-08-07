@@ -198,6 +198,7 @@ async def get_worker_conflicts(
     # We join with project to get project name
     # pyrefly: ignore [missing-import]
     from sqlalchemy.orm import selectinload
+    from app.services.replanning_service import is_weekend_or_holiday, get_working_days_count
     result = await db.execute(
         select(Task).options(selectinload(Task.project))
         .where(Task.type != TaskType.PROJECT)
@@ -225,29 +226,40 @@ async def get_worker_conflicts(
             continue
             
         current_date = task.start_date
-        end_date = task.end_date
+        # DHTMLX Gantt sets exclusive end_date for tasks spanning entire days
+        inclusive_end = task.end_date - timedelta(days=1) if task.end_date > task.start_date else task.end_date
         
         try:
             worker_hours_map = json.loads(getattr(task, 'worker_hours', '{}')) or {}
         except:
             worker_hours_map = {}
             
-        while current_date <= end_date:
-            date_str = current_date.isoformat()
-            duration_days = task.duration if task.duration and task.duration > 0 else 1
+        duration_days = get_working_days_count(task.start_date, inclusive_end)
             
-            for worker_name in workers_list:
-                base_hours = worker_hours_map.get(worker_name, task.planned_hours or 0.0)
-                daily_hours = base_hours / duration_days
+        while current_date <= inclusive_end:
+            if not is_weekend_or_holiday(current_date):
+                date_str = current_date.isoformat()
                 
-                worker_timeline[worker_name][date_str].append({
-                    "task_id": task.id,
-                    "task_name": task.text,
-                    "project_id": task.project_id,
-                    "project_name": task.project.name if task.project else "Sconosciuto",
-                    "project_code": task.project.code if task.project else "—",
-                    "daily_hours": round(daily_hours, 1)
-                })
+                for worker_name in workers_list:
+                    base_hours = worker_hours_map.get(worker_name)
+                    if base_hours is not None:
+                        try:
+                            base_hours = float(base_hours)
+                        except:
+                            base_hours = float(task.planned_hours or 0.0) / len(workers_list)
+                    else:
+                        base_hours = float(task.planned_hours or 0.0) / len(workers_list)
+                        
+                    daily_hours = base_hours / duration_days
+                    
+                    worker_timeline[worker_name][date_str].append({
+                        "task_id": task.id,
+                        "task_name": task.text,
+                        "project_id": task.project_id,
+                        "project_name": task.project.name if task.project else "Sconosciuto",
+                        "project_code": task.project.code if task.project else "—",
+                        "daily_hours": round(daily_hours, 1)
+                    })
             current_date += timedelta(days=1)
             
     # Now find conflicts

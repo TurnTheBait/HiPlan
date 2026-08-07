@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.core.dependencies import get_db, get_current_user
 from app.models.user import User, UserRole
 from app.models.replan_log import ReplanLog
-from app.services.replanning_service import get_replanning_suggestions, execute_suggestion, revert_action
+from app.services.replanning_service import get_replanning_suggestions
 
 router = APIRouter(prefix="/api/replanning", tags=["replanning"])
 
@@ -29,26 +29,6 @@ async def get_suggestions(
     suggestions = await get_replanning_suggestions(db, current_user)
     return suggestions
 
-
-class ExecuteSuggestionPayload(BaseModel):
-    action_type: str
-    action_payload: dict
-
-
-@router.post("/execute")
-async def execute_suggestion_endpoint(
-    payload: ExecuteSuggestionPayload,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    if current_user.role not in [UserRole.ADMIN, UserRole.EDITOR]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo admin ed editor possono eseguire azioni di ripianificazione.")
-        
-    success = await execute_suggestion(db, payload.action_type, payload.action_payload, current_user)
-    if not success:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Impossibile eseguire il suggerimento. Potrebbe essere obsoleto.")
-        
-    return {"message": "Azione eseguita con successo."}
 
 
 @router.get("/logs")
@@ -89,19 +69,3 @@ async def get_replanning_logs(
             "reverted_by_name": log.reverted_by_user.full_name if log.reverted_by_user else None
         })
     return results
-
-
-@router.post("/revert/{log_id}")
-async def revert_replanning_action(
-    log_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    if current_user.role not in [UserRole.ADMIN, UserRole.EDITOR]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo admin ed editor possono revocare azioni.")
-        
-    success = await revert_action(db, log_id, current_user)
-    if not success:
-        raise HTTPException(status_code=400, detail="Impossibile revocare l'azione.")
-        
-    return {"message": "Azione revocata con successo."}

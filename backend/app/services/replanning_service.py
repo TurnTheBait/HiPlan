@@ -146,13 +146,7 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
                 "project_code": task.project.code if task.project.code else "",
                 "worker": None,
                 "date": str(task.end_date),
-                "reason": f"La fase termina il {task.end_date.strftime('%d/%m/%Y')}, superando la scadenza della commessa ({task.project.end_date.strftime('%d/%m/%Y')}).",
-                "action_type": ReplanActionType.EXTEND_PROJECT.value,
-                "action_payload": {
-                    "project_id": str(task.project_id),
-                    "new_end_date": str(task.end_date)
-                },
-                "action_label": f"Estendi commessa al {task.end_date.strftime('%d/%m/%Y')}"
+                "reason": f"La fase termina il {task.end_date.strftime('%d/%m/%Y')}, superando la scadenza della commessa ({task.project.end_date.strftime('%d/%m/%Y')})."
             })
 
         # Ritardo Critico (Motore Semafori)
@@ -186,14 +180,7 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
                 "project_code": (task.project.code if task.project.code else "") if task.project else "",
                 "worker": None,
                 "date": str(task.end_date),
-                "reason": f"La fase ha superato le ore previste ({round(tot_eff, 1)}h consuntivate su {planned_h}h previste).",
-                "action_type": ReplanActionType.SHIFT_DELAY.value,
-                "action_payload": {
-                    "task_id": str(task.id),
-                    "shift_days": 1,
-                    "add_hours": round(tot_eff - planned_h, 1)
-                },
-                "action_label": f"Estendi '{task.text}' di 1 giorno e adegua ore"
+                "reason": f"La fase ha superato le ore previste ({round(tot_eff, 1)}h consuntivate su {planned_h}h previste)."
             })
         else:
             # 2. Ritardo Giornaliero
@@ -252,14 +239,7 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
                     "project_code": (task.project.code if task.project.code else "") if task.project else "",
                     "worker": None,
                     "date": str(first_delayed_date),
-                    "reason": f"Ritardo critico: mancano all'appello circa {round(lost_hours, 1)}h rispetto al piano.",
-                    "action_type": ReplanActionType.SHIFT_DELAY.value,
-                    "action_payload": {
-                        "task_id": str(task.id),
-                        "shift_days": days_to_add,
-                        "add_hours": round(lost_hours, 1)
-                    },
-                    "action_label": f"Estendi '{task.text}' di {days_to_add} { 'giorno' if days_to_add == 1 else 'giorni' } per recuperare"
+                    "reason": f"Ritardo critico: mancano all'appello circa {round(lost_hours, 1)}h rispetto al piano."
                 })
             elif task.end_date < today:
                 # Fallback: scaduta e non in sforamento / ritardo critico specifico
@@ -276,14 +256,7 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
                     "project_code": (task.project.code if task.project.code else "") if task.project else "",
                     "worker": None,
                     "date": str(task.end_date),
-                    "reason": f"La fase è scaduta il {task.end_date.strftime('%d/%m/%Y')} ma non risulta completata.",
-                    "action_type": ReplanActionType.SHIFT_DELAY.value,
-                    "action_payload": {
-                        "task_id": str(task.id),
-                        "shift_days": days_to_add,
-                        "add_hours": 0
-                    },
-                    "action_label": f"Estendi '{task.text}' di {days_to_add} { 'giorno' if days_to_add == 1 else 'giorni' } fino ad oggi"
+                    "reason": f"La fase è scaduta il {task.end_date.strftime('%d/%m/%Y')} ma non risulta completata."
                 })
 
         try:
@@ -299,10 +272,12 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
         except Exception:
             worker_hours = {}
             
-        duration_days = get_working_days_count(task.start_date, task.end_date)
+        # DHTMLX Gantt sets exclusive end_date for tasks spanning entire days
+        inclusive_end = task.end_date - timedelta(days=1) if task.end_date > task.start_date else task.end_date
+        duration_days = get_working_days_count(task.start_date, inclusive_end)
         
         cur = task.start_date
-        while cur <= task.end_date:
+        while cur <= inclusive_end:
             if not is_weekend_or_holiday(cur):
                 if cur not in timeline:
                     timeline[cur] = {}
@@ -347,13 +322,7 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
                         "project_code": (t.project.code if t.project.code else "") if t.project else "",
                         "worker": w,
                         "date": str(d),
-                        "reason": f"L'addetto {w} è in ferie il {d.strftime('%d/%m/%Y')}.",
-                        "action_type": ReplanActionType.SHIFT_VACATION.value,
-                        "action_payload": {
-                            "task_id": str(t.id),
-                            "shift_days": shift_days
-                        },
-                        "action_label": f"Estendi '{t.text}' di {shift_days}gg lavorativi"
+                        "reason": f"L'addetto {w} è in ferie il {d.strftime('%d/%m/%Y')}."
                     })
                 continue
                 
@@ -383,195 +352,8 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
                     "project_code": (t_to_shift.project.code if t_to_shift.project.code else "") if t_to_shift.project else "",
                     "worker": w,
                     "date": str(d),
-                    "reason": f"L'addetto {w} ha un carico di {round(total_h, 1)}h (limite {max_daily_hours}h) il {d.strftime('%d/%m/%Y')}.",
-                    "action_type": ReplanActionType.SHIFT_OVERLOAD.value,
-                    "action_payload": {
-                        "task_id": str(t_to_shift.id),
-                        "shift_days": shift_days
-                    },
-                    "action_label": f"Sposta '{t_to_shift.text}' in avanti di {shift_days}gg lavorativi"
+                    "reason": f"L'addetto {w} ha un carico di {round(total_h, 1)}h (limite {max_daily_hours}h) il {d.strftime('%d/%m/%Y')}."
                 })
 
     return suggestions
 
-
-async def execute_suggestion(db: AsyncSession, action_type: str, payload: dict, current_user: User):
-    if action_type == ReplanActionType.EXTEND_PROJECT.value:
-        from app.models.project import Project
-        project_id = payload.get("project_id")
-        new_end_date_str = payload.get("new_end_date")
-        if not project_id or not new_end_date_str:
-            return False
-            
-        proj_res = await db.execute(select(Project).where(Project.id == project_id))
-        project = proj_res.scalar_one_or_none()
-        if not project:
-            return False
-            
-        old_end = project.end_date
-        new_end = datetime.strptime(new_end_date_str, "%Y-%m-%d").date()
-        project.end_date = new_end
-        
-        log = ReplanLog(
-            action_type=ReplanActionType.EXTEND_PROJECT,
-            project_id=project.id,
-            reason=f"Estesa la data fine commessa dal {old_end.strftime('%d/%m/%Y') if old_end else 'N/D'} al {new_end.strftime('%d/%m/%Y')} per ospitare le fasi prolungate.",
-            old_end_date=old_end,
-            new_end_date=new_end
-        )
-        db.add(log)
-        await db.commit()
-        await manager.broadcast(str(project.id), {"action": "project_updated"})
-        return True
-
-    if action_type in (ReplanActionType.SHIFT_VACATION.value, ReplanActionType.SHIFT_OVERLOAD.value, ReplanActionType.SHIFT_DELAY.value, ReplanActionType.WARNING_UNACCOUNTED.value):
-        task_id = payload.get("task_id")
-        shift_days = payload.get("shift_days", 1)
-        if not task_id:
-            return False
-            
-        task_res = await db.execute(select(Task).where(Task.id == task_id))
-        t_to_shift = task_res.scalar_one_or_none()
-        if not t_to_shift:
-            return False
-            
-        old_start = t_to_shift.start_date
-        old_end = t_to_shift.end_date
-        
-        if action_type in (ReplanActionType.SHIFT_DELAY.value, ReplanActionType.SHIFT_VACATION.value):
-            new_start = old_start
-            new_end = add_working_days(old_end, shift_days)
-            add_hours = payload.get("add_hours", 0)
-            if add_hours > 0:
-                t_to_shift.planned_hours = (t_to_shift.planned_hours or 0) + add_hours
-        else:
-            new_start = add_working_days(old_start, shift_days)
-            dur_working = get_working_days_count(old_start, old_end)
-            
-            new_end = new_start
-            count = 1
-            while count < dur_working:
-                new_end += timedelta(days=1)
-                if not is_weekend_or_holiday(new_end):
-                    count += 1
-                
-        t_to_shift.start_date = new_start
-        t_to_shift.end_date = new_end
-        
-        if action_type == ReplanActionType.SHIFT_VACATION.value:
-            reason_text = "Esecuzione manuale da Bacheca: Estensione per ferie."
-        elif action_type == ReplanActionType.SHIFT_DELAY.value:
-            reason_text = "Esecuzione manuale da Bacheca: Estensione per fase in ritardo."
-        elif action_type == ReplanActionType.WARNING_UNACCOUNTED.value:
-            reason_text = "Esecuzione manuale da Bacheca: Spostamento per ore non consuntivate."
-        else:
-            reason_text = "Esecuzione manuale da Bacheca: Spostamento per sovraccarico/conflitto."
-        
-        log = ReplanLog(
-            action_type=ReplanActionType(action_type),
-            task_id=t_to_shift.id,
-            project_id=t_to_shift.project_id,
-            reason=reason_text,
-            old_start_date=old_start,
-            old_end_date=old_end,
-            new_start_date=new_start,
-            new_end_date=new_end,
-            shift_days=shift_days
-        )
-        db.add(log)
-        
-        # Load links and task map for cascade
-        links_res = await db.execute(select(Link))
-        all_links = links_res.scalars().all()
-        
-        tasks_res = await db.execute(select(Task).where(Task.type != TaskType.PROJECT))
-        all_tasks = tasks_res.scalars().all()
-        task_map = {t.id: t for t in all_tasks}
-        
-        await propagate_cascade(db, t_to_shift, shift_days, all_links, task_map)
-        await db.commit()
-        for project_id in list(manager.active_connections.keys()):
-            await manager.broadcast(project_id, {"action": "replanning_completed"})
-        return True
-        
-    return False
-
-
-async def propagate_cascade(db: AsyncSession, root_task: Task, shift_days: int, all_links: list[Link], task_map: dict):
-    q = [root_task]
-    visited = set([root_task.id])
-    
-    while q:
-        curr = q.pop(0)
-        
-        for link in all_links:
-            if link.source == curr.id and link.type == LinkType.FS:
-                target_id = link.target
-                if target_id not in visited and target_id in task_map:
-                    target_task = task_map[target_id]
-                    if target_task.completed == 1:
-                        continue
-                        
-                    old_start = target_task.start_date
-                    old_end = target_task.end_date
-                    
-                    if old_start:
-                        new_start = add_working_days(old_start, shift_days)
-                        dur_working = get_working_days_count(old_start, old_end) if old_end else 1
-                        
-                        new_end = new_start
-                        count = 1
-                        while count < dur_working:
-                            new_end += timedelta(days=1)
-                            if not is_weekend_or_holiday(new_end):
-                                count += 1
-                                
-                        target_task.start_date = new_start
-                        target_task.end_date = new_end
-                        
-                        log = ReplanLog(
-                            action_type=ReplanActionType.SHIFT_CASCADE,
-                            task_id=target_task.id,
-                            project_id=target_task.project_id,
-                            reason=f"Spostamento a cascata ({shift_days}gg) derivato dallo spostamento della fase precedente '{curr.text}'.",
-                            old_start_date=old_start,
-                            old_end_date=old_end,
-                            new_start_date=new_start,
-                            new_end_date=new_end,
-                            shift_days=shift_days
-                        )
-                        db.add(log)
-                        
-                        visited.add(target_task.id)
-                        q.append(target_task)
-
-
-async def revert_action(db: AsyncSession, log_id: str, current_user: User):
-    log_res = await db.execute(select(ReplanLog).where(ReplanLog.id == log_id))
-    log = log_res.scalar_one_or_none()
-    
-    if not log or log.reverted:
-        return False
-        
-    if log.action_type == ReplanActionType.EXTEND_PROJECT:
-        from app.models.project import Project
-        proj_res = await db.execute(select(Project).where(Project.id == log.project_id))
-        proj = proj_res.scalar_one_or_none()
-        if proj:
-            proj.end_date = log.old_end_date
-    else:
-        task_res = await db.execute(select(Task).where(Task.id == log.task_id))
-        task = task_res.scalar_one_or_none()
-        
-        if task:
-            task.start_date = log.old_start_date
-            task.end_date = log.old_end_date
-        
-    log.reverted = True
-    log.reverted_at = datetime.now(timezone.utc)
-    log.reverted_by = current_user.id
-    
-    await db.commit()
-    for project_id in list(manager.active_connections.keys()):
-        await manager.broadcast(project_id, {"action": "replanning_reverted"})
-    return True

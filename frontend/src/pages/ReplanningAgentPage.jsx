@@ -12,11 +12,7 @@ export default function ReplanningAgentPage() {
   const navigate = useNavigate();
 
   const [suggestions, setSuggestions] = useState([]);
-  const [logs, setLogs] = useState([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
-  const [loadingLogs, setLoadingLogs] = useState(true);
-  const [executingId, setExecutingId] = useState(null);
-  const [revertingId, setRevertingId] = useState(null);
   const [activeTab, setActiveTab] = useState('suggestions');
 
   const [filterProject, setFilterProject] = useState('');
@@ -44,11 +40,9 @@ export default function ReplanningAgentPage() {
       return;
     }
     loadSuggestions();
-    loadLogs();
 
     const handleDataModified = () => {
       loadSuggestions();
-      loadLogs();
     };
 
     window.addEventListener('agent-data-modified', handleDataModified);
@@ -67,87 +61,18 @@ export default function ReplanningAgentPage() {
     }
   }
 
-  async function loadLogs() {
-    try {
-      setLoadingLogs(true);
-      const { data } = await api.get('/replanning/logs');
-      setLogs(data);
-    } catch (err) {
-      toast.error('Errore durante il caricamento dello storico.');
-    } finally {
-      setLoadingLogs(false);
-    }
-  }
-
-  async function handleExecute(suggestion) {
-    if (!window.confirm(`Sei sicuro di voler eseguire: ${suggestion.action_label}?`)) {
-      return;
-    }
-    try {
-      setExecutingId(suggestion.id);
-      await api.post('/replanning/execute', {
-        action_type: suggestion.action_type,
-        action_payload: suggestion.action_payload
-      });
-      toast.success('Suggerimento applicato con successo!');
-
-      // Rimuovi dai suggerimenti in sospeso
-      const newKeys = [...archivedKeys, suggestion.id];
-      setArchivedKeys(newKeys);
-      localStorage.setItem('agentArchivedKeys', JSON.stringify(newKeys));
-
-      loadSuggestions();
-      loadLogs();
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Errore durante l\'esecuzione del suggerimento.');
-    } finally {
-      setExecutingId(null);
-    }
-  }
-
-  async function handleRevert(logId) {
-    if (!window.confirm('Sei sicuro di voler revocare questa azione? Le date torneranno come prima.')) {
-      return;
-    }
-    try {
-      setRevertingId(logId);
-      await api.post(`/replanning/revert/${logId}`);
-      toast.success('Azione revocata con successo.');
-      loadSuggestions();
-      loadLogs();
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Errore durante la revoca dell\'azione');
-    } finally {
-      setRevertingId(null);
-    }
-  }
-
   function formatDate(isoString) {
     if (!isoString) return '—';
     const d = new Date(isoString);
     return d.toLocaleDateString('it-IT');
   }
 
-  function formatDateTime(isoString) {
-    if (!isoString) return '—';
-    let str = isoString;
-    // Forza UTC se la stringa (generata da SQLite) non contiene informazioni sulla timezone
-    if (!str.endsWith('Z') && !str.includes('+') && !str.match(/-\d{2}:\d{2}$/)) {
-      str += 'Z';
-    }
-    const d = new Date(str);
-    return d.toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
-  }
-
   function getActionBadge(type) {
     switch (type) {
-      case 'shift_conflict': return { label: 'Conflitto / Sovrapposizione', color: '#ef4444', icon: 'alert' };
-      case 'shift_vacation': return { label: 'Ferie', color: '#f59e0b', icon: 'vacations' };
-      case 'shift_overload': return { label: 'Sovraccarico', color: '#f97316', icon: 'user' };
-      case 'shift_cascade': return { label: 'Cascata', color: '#3b82f6', icon: 'timeline' };
-      case 'extend_project': return { label: 'Scadenza Commessa', color: '#8b5cf6', icon: 'projects' };
-      case 'shift_delay': return { label: 'In Ritardo', color: '#eab308', icon: 'clock' };
-      case 'warning_unaccounted': return { label: 'Ore Mancanti', color: '#ec4899', icon: 'alert' };
+      case 'project_end_exceeded': return { label: 'Scadenza Commessa', color: '#8b5cf6', icon: 'projects' };
+      case 'delay_conflict': return { label: 'In Ritardo', color: '#eab308', icon: 'clock' };
+      case 'vacation_conflict': return { label: 'Ferie', color: '#f59e0b', icon: 'vacations' };
+      case 'overload_conflict': return { label: 'Sovraccarico', color: '#f97316', icon: 'user' };
       default: return { label: type, color: '#64748b', icon: 'notes' };
     }
   }
@@ -163,17 +88,17 @@ export default function ReplanningAgentPage() {
   const baseListForFilters = activeTab === 'archived' ? archivedSuggestionsList : pendingSuggestions;
 
   const uniqueProjects = [...new Set(baseListForFilters.map(s => s.project_name))].filter(Boolean).sort();
-  const uniqueTypes = [...new Set(baseListForFilters.map(s => s.action_type))].filter(Boolean).sort();
+  const uniqueTypes = [...new Set(baseListForFilters.map(s => s.type))].filter(Boolean).sort();
 
   const filteredSuggestions = baseListForFilters.filter(s => {
     if (filterProject && s.project_name !== filterProject) return false;
-    if (filterType && s.action_type !== filterType) return false;
+    if (filterType && s.type !== filterType) return false;
     return true;
   }).sort((a, b) => {
     if (sortBy === 'date_desc') return new Date(b.date || 0) - new Date(a.date || 0);
     if (sortBy === 'date_asc') return new Date(a.date || 0) - new Date(b.date || 0);
     if (sortBy === 'project') return (a.project_name || '').localeCompare(b.project_name || '');
-    if (sortBy === 'type') return (a.action_type || '').localeCompare(b.action_type || '');
+    if (sortBy === 'type') return (a.type || '').localeCompare(b.type || '');
     return 0;
   });
 
@@ -186,11 +111,11 @@ export default function ReplanningAgentPage() {
               <AppIcon name="robot" size={28} />
             </div>
             <div>
-              <p>Il sistema analizza in tempo reale le tue commesse aiutarti a rilevare conflitti o incongruenze.</p>
+              <p>Il sistema analizza in tempo reale le tue commesse per aiutarti a rilevare anomalie, conflitti, ferie e sovraccarichi.</p>
             </div>
           </div>
           <div className="agent-controls">
-            <button className="btn btn-secondary" onClick={() => { loadSuggestions(); loadLogs(); }}>
+            <button className="btn btn-secondary" onClick={() => loadSuggestions()}>
               <AppIcon name="update" />
             </button>
           </div>
@@ -209,12 +134,6 @@ export default function ReplanningAgentPage() {
           onClick={() => setActiveTab('archived')}
         >
           Archiviati ({archivedSuggestionsList.length})
-        </button>
-        <button
-          className={`filter-chip ${activeTab === 'logs' ? 'active' : ''}`}
-          onClick={() => setActiveTab('logs')}
-        >
-          Storico Esecuzioni
         </button>
       </div>
 
@@ -264,7 +183,7 @@ export default function ReplanningAgentPage() {
                 ) : (
                   <div className="suggestions-list" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     {filteredSuggestions.map(s => {
-                      const badge = getActionBadge(s.action_type);
+                      const badge = getActionBadge(s.type);
                       return (
                         <div key={s.id} className="suggestion-card" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 8, padding: 20, display: 'flex', gap: 20, alignItems: 'flex-start' }}>
                           <div className="suggestion-icon" style={{ background: `${badge.color}15`, color: badge.color, padding: 12, borderRadius: '50%' }}>
@@ -312,90 +231,6 @@ export default function ReplanningAgentPage() {
           </div>
         )
       }
-
-      {
-        activeTab === 'logs' && (
-          <div className="logs-tab">
-            <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Storico Azioni Eseguite</h3>
-              </div>
-              <div className="card-body" style={{ padding: 0 }}>
-                {loadingLogs ? (
-                  <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Caricamento storico...</div>
-                ) : logs.length === 0 ? (
-                  <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Nessuna azione registrata.</div>
-                ) : (
-                  <div className="table-responsive">
-                    <table className="table agent-logs-table">
-                      <thead>
-                        <tr>
-                          <th>Data e Ora</th>
-                          <th>Tipo</th>
-                          <th>Contesto</th>
-                          <th>Modifica</th>
-                          <th className="text-right">Azioni</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {logs.map(log => {
-                          const badge = getActionBadge(log.action_type);
-                          const isReverted = log.reverted;
-                          return (
-                            <tr key={log.id} style={{ opacity: isReverted ? 0.6 : 1 }}>
-                              <td>
-                                <div style={{ fontWeight: 600 }}>{formatDateTime(log.created_at)}</div>
-                                {isReverted && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 4 }}>Revocato il {formatDateTime(log.reverted_at)}</div>}
-                              </td>
-                              <td>
-                                <span className="log-type-badge" style={{ background: `${badge.color}15`, color: badge.color }}>
-                                  {badge.label}
-                                </span>
-                              </td>
-                              <td>
-                                <div style={{ fontWeight: 600 }}>{log.task_name}</div>
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{log.project_name} {log.worker_name ? `• ${log.worker_name}` : ''}</div>
-                                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4, fontStyle: 'italic' }}>{log.reason}</div>
-                              </td>
-                              <td>
-                                {log.action_type === 'extend_project' ? (
-                                  <div style={{ fontSize: 13 }}>
-                                    Fine Commessa: <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)' }}>{formatDate(log.old_end_date)}</span> <AppIcon name="arrowRight" size={12} /> <span style={{ fontWeight: 600, color: 'var(--accent-600)' }}>{formatDate(log.new_end_date)}</span>
-                                  </div>
-                                ) : (log.action_type === 'shift_vacation' || log.action_type === 'shift_delay') ? (
-                                  <div style={{ fontSize: 13 }}>
-                                    Fine Fase: <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)' }}>{formatDate(log.old_end_date)}</span> <AppIcon name="arrowRight" size={12} /> <span style={{ fontWeight: 600, color: 'var(--accent-600)' }}>{formatDate(log.new_end_date)}</span>
-                                  </div>
-                                ) : (
-                                  <div style={{ fontSize: 13 }}>
-                                    Inizio: <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)' }}>{formatDate(log.old_start_date)}</span> <AppIcon name="arrowRight" size={12} /> <span style={{ fontWeight: 600, color: 'var(--accent-600)' }}>{formatDate(log.new_start_date)}</span>
-                                  </div>
-                                )}
-                              </td>
-                              <td className="text-right">
-                                {!isReverted && (
-                                  <button
-                                    className="btn btn-sm btn-secondary"
-                                    onClick={() => handleRevert(log.id)}
-                                    disabled={revertingId === log.id}
-                                    title="Revoca modifica e ripristina le vecchie date"
-                                  >
-                                    {revertingId === log.id ? '...' : <AppIcon name="undo" size={14} />} Revoca
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )
-      }
-    </div >
+    </div>
   );
 }
