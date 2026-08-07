@@ -5,22 +5,32 @@ export default function useWebSocket(url, onMessage) {
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef(null);
   const toast = useToast();
+  const onMessageRef = useRef(onMessage);
+
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
 
   useEffect(() => {
     if (!url) return;
+    
+    let isUnmounted = false;
+    let reconnectTimeout = null;
 
     const connect = () => {
+      if (isUnmounted) return;
+      
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
-        setIsConnected(true);
+        if (!isUnmounted) setIsConnected(true);
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (onMessage) {
-            onMessage(data);
+          if (onMessageRef.current) {
+            onMessageRef.current(data);
           }
         } catch (error) {
           console.error("Errore nel parsing del messaggio WebSocket", error);
@@ -28,13 +38,15 @@ export default function useWebSocket(url, onMessage) {
       };
 
       ws.onerror = (error) => {
-        console.error("WebSocket error", error);
+        if (!isUnmounted) console.error("WebSocket error", error);
       };
 
       ws.onclose = () => {
-        setIsConnected(false);
-        // Ritenta la connessione dopo 3 secondi
-        setTimeout(connect, 3000);
+        if (!isUnmounted) {
+          setIsConnected(false);
+          // Ritenta la connessione dopo 3 secondi
+          reconnectTimeout = setTimeout(connect, 3000);
+        }
       };
 
       wsRef.current = ws;
@@ -43,8 +55,17 @@ export default function useWebSocket(url, onMessage) {
     connect();
 
     return () => {
+      isUnmounted = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (wsRef.current) {
-        wsRef.current.close();
+        const ws = wsRef.current;
+        ws.onclose = null;
+        ws.onerror = null;
+        if (ws.readyState === WebSocket.CONNECTING) {
+           ws.onopen = () => ws.close();
+        } else {
+           ws.close();
+        }
       }
     };
   }, [url]);
