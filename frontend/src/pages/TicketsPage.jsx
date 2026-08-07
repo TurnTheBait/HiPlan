@@ -315,17 +315,34 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
           <div className="tkt-field-row">
             <div className="tkt-field">
               <label>Commessa</label>
-              <select
-                value={form.project_id || ''}
-                onChange={e => setForm(f => ({ ...f, project_id: e.target.value, custom_project_code: '' }))}
-              >
-                <option value="">-- Seleziona (opzionale) --</option>
+              <input
+                list="projects-list"
+                placeholder="Seleziona commessa (opzionale)"
+                value={(() => {
+                  if (form.project_id) {
+                    const p = projects.find(proj => proj.id === form.project_id);
+                    if (p) return p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name);
+                  }
+                  return form.custom_project_code || '';
+                })()}
+                onChange={e => {
+                  const val = e.target.value;
+                  const proj = projects.find(p => {
+                    const label = p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name);
+                    return label === val;
+                  });
+                  if (proj) {
+                    setForm(f => ({ ...f, project_id: proj.id, custom_project_code: '' }));
+                  } else {
+                    setForm(f => ({ ...f, project_id: '', custom_project_code: val }));
+                  }
+                }}
+              />
+              <datalist id="projects-list">
                 {projects.filter(p => p.status !== 'archived').map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name)}
-                  </option>
+                  <option key={p.id} value={p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name)} />
                 ))}
-              </select>
+              </datalist>
             </div>
             <div className="tkt-field">
               <label>Priorità</label>
