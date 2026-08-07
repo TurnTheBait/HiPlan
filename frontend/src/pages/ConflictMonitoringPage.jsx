@@ -534,8 +534,8 @@ export default function ConflictMonitoringPage() {
                           <td style={{ padding: '12px', color: 'var(--text-secondary)' }}>{v.reason || '—'}</td>
                           {(user?.role === 'admin' || user?.role === 'editor') && (
                             <td style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                              <button className="btn btn-secondary btn-sm" style={{ marginRight: '8px' }} onClick={() => setEditingVacation(v)}>✏️ Modifica</button>
-                              <button className="btn btn-secondary btn-sm" style={{ color: 'var(--error-500)', borderColor: 'var(--error-500)' }} onClick={() => setDeletingVacation(v)}>🗑️ Elimina</button>
+                              <button className="btn btn-secondary btn-sm" style={{ marginRight: '8px' }} onClick={() => setEditingVacation(v)}><AppIcon name='edit' /> Modifica</button>
+                              <button className="btn btn-secondary btn-sm" style={{ color: 'var(--error-500)', borderColor: 'var(--error-500)' }} onClick={() => setDeletingVacation(v)}><AppIcon name='trash' /> Elimina</button>
                             </td>
                           )}
                         </tr>
@@ -617,12 +617,11 @@ export default function ConflictMonitoringPage() {
             </div>
             <div className="modal-content">
               <p>Sei sicuro di voler eliminare le ferie di <strong>{deletingVacation.full_name || deletingVacation.username}</strong> dal {formatDate(deletingVacation.start_date)} al {formatDate(deletingVacation.end_date)}?</p>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '10px' }}>Questo ripristinerà eventuali conflitti o ore mancanti sulle fasi precedentemente accavallate.</p>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setDeletingVacation(null)}>
                   Annulla
                 </button>
-                <button type="button" className="btn btn-primary" style={{ background: 'var(--error-500)', borderColor: 'var(--error-500)' }} onClick={handleDeleteVacation}>
+                <button type="button" className="btn btn-primary" style={{ background: 'red', borderColor: 'red' }} onClick={handleDeleteVacation}>
                   Conferma Eliminazione
                 </button>
               </div>

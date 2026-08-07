@@ -69,7 +69,14 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
         .where(Task.type != TaskType.MILESTONE)
         .where(Task.completed == 0)
     )
-    all_tasks = tasks_res.scalars().all()
+    all_tasks_raw = tasks_res.scalars().all()
+    all_tasks = []
+    for t in all_tasks_raw:
+        if t.project:
+            p_status = t.project.status.value if hasattr(t.project.status, 'value') else str(t.project.status)
+            if p_status in ("completed", "archived", "ProjectStatus.COMPLETED", "ProjectStatus.ARCHIVED"):
+                continue
+        all_tasks.append(t)
     
     vacs_res = await db.execute(select(Vacation))
     vacations = vacs_res.scalars().all()
@@ -88,8 +95,6 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
             if getattr(t, 'department', None) == current_user.department:
                 filtered_tasks.append(t)
                 continue
-            
-            import json
             try:
                 workers_list = json.loads(t.workers) if t.workers else []
             except:

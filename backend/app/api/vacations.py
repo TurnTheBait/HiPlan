@@ -49,12 +49,18 @@ async def _compute_recovery_for_user(db: AsyncSession, user: User, vacation: Vac
     vac_start = vacation.start_date
     vac_end = vacation.end_date
 
+    # pyrefly: ignore [missing-import]
+    from sqlalchemy.orm import joinedload
     # All tasks where user is in workers list
-    tasks_res = await db.execute(select(Task))
+    tasks_res = await db.execute(select(Task).options(joinedload(Task.project)))
     all_tasks = tasks_res.scalars().all()
 
     recovery_items = []
     for task in all_tasks:
+        if task.project:
+            p_status = task.project.status.value if hasattr(task.project.status, 'value') else str(task.project.status)
+            if p_status in ("completed", "archived", "ProjectStatus.COMPLETED", "ProjectStatus.ARCHIVED"):
+                continue
         workers = _parse_json(task.workers, [])
         if user.username not in workers:
             continue

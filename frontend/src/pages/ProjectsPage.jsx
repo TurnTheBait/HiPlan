@@ -24,11 +24,17 @@ export default function ProjectsPage() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exportFormat, setExportFormat] = useState('pdf');
   const exportMenuRef = useRef(null);
+  const [sortConfig, setSortConfig] = useState({ key: 'none', direction: 'asc' });
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const sortMenuRef = useRef(null);
 
   useEffect(() => {
     function handleClickOutside(e) {
       if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
         setShowExportMenu(false);
+      }
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target)) {
+        setShowSortMenu(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -138,8 +144,38 @@ export default function ProjectsPage() {
         (p.responsible_username && p.responsible_username.toLowerCase().includes(q))
       );
     }
+    
+    if (sortConfig.key !== 'none') {
+      list = [...list].sort((a, b) => {
+        let valA, valB;
+        switch (sortConfig.key) {
+          case 'end_date':
+            valA = a.end_date ? new Date(a.end_date).getTime() : 0;
+            valB = b.end_date ? new Date(b.end_date).getTime() : 0;
+            break;
+          case 'start_date':
+            valA = a.start_date ? new Date(a.start_date).getTime() : 0;
+            valB = b.start_date ? new Date(b.start_date).getTime() : 0;
+            break;
+          case 'code':
+            valA = (a.code || '').toLowerCase();
+            valB = (b.code || '').toLowerCase();
+            break;
+          case 'name':
+            valA = (a.name || '').toLowerCase();
+            valB = (b.name || '').toLowerCase();
+            break;
+          default:
+            return 0;
+        }
+        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
     return list;
-  }, [projects, filter, searchQuery]);
+  }, [projects, filter, searchQuery, sortConfig]);
 
   const canCreate = user?.role === 'admin' || user?.role === 'editor';
 
@@ -181,6 +217,63 @@ export default function ProjectsPage() {
       <div className="projects-command-stack">
         <span className="page-result-count">{filtered.length} commesse</span>
         <div className="page-action-group">
+          <div style={{ position: 'relative' }} ref={sortMenuRef}>
+            <button
+              className="btn btn-secondary btn-icon"
+              onClick={() => setShowSortMenu(!showSortMenu)}
+              title="Ordina commesse"
+              aria-label="Ordina commesse"
+            >
+              <AppIcon name="filter" />
+            </button>
+            {showSortMenu && (
+              <div className="action-popover" style={{
+                position: 'absolute', top: '100%', right: 0, marginTop: 6,
+                background: 'var(--bg-card)', border: '1px solid var(--border-default)',
+                borderRadius: 10, padding: 16, zIndex: 300, minWidth: 260,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.2)', textAlign: 'left'
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Ordina per:
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {[
+                    { key: 'end_date', label: 'Data Fine' },
+                    { key: 'start_date', label: 'Data Inizio' },
+                    { key: 'code', label: 'Codice' },
+                    { key: 'name', label: 'Titolo' },
+                  ].map(opt => (
+                    <div key={opt.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+                        <input
+                          type="radio"
+                          name="sortKey"
+                          checked={sortConfig.key === opt.key}
+                          onChange={() => setSortConfig({ ...sortConfig, key: opt.key })}
+                        />
+                        {opt.label}
+                      </label>
+                      {sortConfig.key === opt.key && (
+                        <button
+                          type="button"
+                          className="btn-ghost btn-sm"
+                          onClick={() => setSortConfig({ ...sortConfig, direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' })}
+                          style={{ padding: '2px 6px' }}
+                        >
+                          {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 8, borderTop: '1px solid var(--border-default)', paddingTop: 8 }}>
+                    <button type="button" className="btn btn-secondary btn-sm" style={{ width: '100%' }} onClick={() => setSortConfig({ key: 'none', direction: 'asc' })}>
+                      Reimposta
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
           <div style={{ position: 'relative' }} ref={exportMenuRef}>
             <button
               className="btn btn-secondary btn-icon"

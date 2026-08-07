@@ -211,6 +211,11 @@ async def get_worker_conflicts(
     worker_timeline = defaultdict(lambda: defaultdict(list))
     
     for task in tasks:
+        if task.project:
+            p_status = task.project.status.value if hasattr(task.project.status, 'value') else str(task.project.status)
+            if p_status in ("completed", "archived", "ProjectStatus.COMPLETED", "ProjectStatus.ARCHIVED"):
+                continue
+
         try:
             workers_list = json.loads(task.workers) if task.workers else []
         except:
