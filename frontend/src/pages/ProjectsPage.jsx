@@ -109,7 +109,7 @@ export default function ProjectsPage() {
       if (payload.start_date === '') payload.start_date = null;
       if (payload.end_date === '') payload.end_date = null;
       if (payload.responsible_id === '') payload.responsible_id = null;
-      
+
       await api.put(`/projects/${editingProject.id}`, payload);
       toast.success('Commessa modificata con successo!');
       setShowEditModal(false);
@@ -325,6 +325,10 @@ export default function ProjectsPage() {
               <div className="project-card-meta">
                 <AppIcon name="building" size={14} />
                 <strong>Cliente:</strong> {project.client || 'Non specificato'}
+              </div>
+              <div className="project-card-meta">
+                <AppIcon name="calendar" size={14} />
+                <strong>Data Fine:</strong> {project.end_date ? new Date(project.end_date).toISOString().split('T')[0].split('-').reverse().join('/') : 'Non specificato'}
               </div>
               <div className="project-card-meta">
                 <AppIcon name="user" size={14} />
