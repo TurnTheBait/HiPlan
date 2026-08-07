@@ -83,11 +83,22 @@ async def get_workload_heatmap(
         start_date = task.start_date
         end_date = task.end_date
         
+        excluded_dates = []
+        try:
+            ex_dates_raw = getattr(task, 'excluded_dates', '[]')
+            if isinstance(ex_dates_raw, str):
+                excluded_dates = json.loads(ex_dates_raw or '[]')
+            elif isinstance(ex_dates_raw, list):
+                excluded_dates = ex_dates_raw
+        except:
+            excluded_dates = []
+            
         delta = end_date - start_date
         days = []
         for i in range(delta.days + 1):
             day = start_date + timedelta(days=i)
-            if day.weekday() < 5:
+            # Skip weekends and explicitly excluded dates
+            if day.weekday() < 5 and day.strftime("%Y-%m-%d") not in excluded_dates:
                 days.append(day)
                 
         if not days:
@@ -132,6 +143,7 @@ async def get_workload_heatmap(
                     "name": task.text,
                     "project_name": task.project.name if task.project else "Progetto non specificato",
                     "project_id": str(task.project.id) if task.project else None,
+                    "project_code": getattr(task.project, "code", None) if task.project else None,
                     "project_status": getattr(task.project, "status", None) if task.project else None,
                     "start_date": task.start_date.strftime("%Y-%m-%d"),
                     "end_date": task.end_date.strftime("%Y-%m-%d"),
@@ -183,6 +195,7 @@ async def get_workload_heatmap(
                             "name": task.text,
                             "project_name": task.project.name if task.project else "Progetto non specificato",
                             "project_id": str(task.project.id) if task.project else None,
+                            "project_code": getattr(task.project, "code", None) if task.project else None,
                             "project_status": getattr(task.project, "status", None) if task.project else None,
                             "start_date": task.start_date.strftime("%Y-%m-%d") if task.start_date else None,
                             "end_date": task.end_date.strftime("%Y-%m-%d") if task.end_date else None,

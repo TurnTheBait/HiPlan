@@ -240,10 +240,6 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         classes.push('gantt-task-overrun');
       }
 
-      if (task.has_vacation_conflict) {
-        classes.push('gantt-task-conflict');
-      }
-
       return classes.join(' ');
     };
 
@@ -298,7 +294,21 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       const cellEnd = getCellEndDate(date, unit, step);
 
       const classes = [];
-      if (unit === "day" && isWeekendOrHoliday(date)) {
+      let isTaskExcluded = false;
+      if (task && unit === "day") {
+        let exDates = [];
+        if (typeof task.excluded_dates === 'string') {
+          try { exDates = JSON.parse(task.excluded_dates); } catch(e){}
+        } else if (Array.isArray(task.excluded_dates)) {
+          exDates = task.excluded_dates;
+        }
+        const dStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        if (exDates.includes(dStr)) {
+          isTaskExcluded = true;
+        }
+      }
+
+      if (unit === "day" && (isWeekendOrHoliday(date) || isTaskExcluded)) {
         classes.push("gantt_weekend_cell");
       }
       if (date <= today && today < cellEnd) {
@@ -753,7 +763,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
           id: String(t.id),
           text: t.text,
           start_date: t.start_date,
-          orig_duration: t.duration,
+          orig_duration: t.orig_duration || t.duration,
           // duration: t.duration,
           progress: isCompleted ? 1 : Math.min(1, t.progress || (plannedH > 0 ? totEff / plannedH : 0)),
           parent: t.parent === '0' || !t.parent ? 0 : String(t.parent),

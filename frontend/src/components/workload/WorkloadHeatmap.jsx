@@ -180,7 +180,7 @@ export default function WorkloadHeatmap() {
     return d + '/' + m + '/' + y;
   };
 
-  if (loading) return <div>Caricamento heatmap...</div>;
+  if (loading) return <div>Caricamento...</div>;
 
   return (
     <div className="workload-heatmap-container">
@@ -753,7 +753,7 @@ export default function WorkloadHeatmap() {
                 {dayDetails.tasks.map((t, idx) => (
                   <div key={idx} style={{ padding: '12px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-default)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                     <div style={{ color: 'var(--accent-500)', fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <AppIcon name="folder" size={16} /> {t.project_name || 'Progetto non specificato'}
+                      <AppIcon name="folder" size={16} /> {t.project_code && t.project_name && t.project_name !== 'Progetto non specificato' ? `${t.project_code} - ${t.project_name}` : (t.project_code || t.project_name || 'Progetto non specificato')}
                     </div>
                     <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ color: 'var(--text-secondary)', display: 'flex' }}><AppIcon name="todo" size={16} /></span> {t.name}

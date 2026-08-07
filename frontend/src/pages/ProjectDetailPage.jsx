@@ -14,6 +14,7 @@ import TaskComments from '../components/tasks/TaskComments';
 import TaskChecklist from '../components/tasks/TaskChecklist';
 import ActivityLogPanel from '../components/projects/ActivityLogModal';
 import AppIcon from '../components/ui/AppIcon';
+import MultiDatePicker from '../components/ui/MultiDatePicker';
 import SearchableCombobox from '../components/ui/SearchableCombobox';
 import useWebSocket from '../hooks/useWebSocket';
 
@@ -66,6 +67,20 @@ export default function ProjectDetailPage() {
           if (da < db) return -1;
           if (da > db) return 1;
           return (a.id || 0) - (b.id || 0);
+        }).map(t => {
+          if (t.start_date && t.end_date && t.type !== 'milestone') {
+            t.orig_duration = t.duration;
+            const s = new Date(String(t.start_date).split(' ')[0] + 'T00:00:00');
+            const e = new Date(String(t.end_date).split(' ')[0] + 'T00:00:00');
+            let wDays = 0;
+            let cur = new Date(s);
+            while (cur <= e) {
+              if (cur.getDay() !== 0 && cur.getDay() !== 6) wDays++;
+              cur.setDate(cur.getDate() + 1);
+            }
+            t.duration = wDays > 0 ? wDays : 1;
+          }
+          return t;
         })
         : [];
       setGanttData({ ...ganttRes.data, tasks: sortedTasks });
@@ -184,72 +199,6 @@ export default function ProjectDetailPage() {
     loadProject();
   }, [id]);
 
-  const overlappingVacations = useMemo(() => {
-    if (!taskForm.workers || taskForm.workers.length === 0 || !taskForm.start_date) return [];
-    if (taskForm.taskType === 'milestone') return [];
-
-    const overlaps = [];
-    const startDate = new Date(taskForm.start_date);
-    const endDate = new Date(taskForm.end_date || taskForm.start_date);
-
-    taskForm.workers.forEach(w => {
-      const wVacations = allVacations.filter(v => v.username === w);
-      wVacations.forEach(v => {
-        const vStart = new Date(v.start_date);
-        const vEnd = new Date(v.end_date);
-
-        if (startDate <= vEnd && endDate >= vStart) {
-          let current = new Date(Math.max(startDate, vStart));
-          const endOverlap = new Date(Math.min(endDate, vEnd));
-
-          while (current <= endOverlap) {
-            if (current.getDay() !== 0 && current.getDay() !== 6) {
-              const dateStr = current.toISOString().split('T')[0];
-              if (!overlaps.some(o => o.worker === w && o.date === dateStr)) {
-                overlaps.push({ worker: w, date: dateStr });
-              }
-            }
-            current.setDate(current.getDate() + 1);
-          }
-        }
-      });
-    });
-
-    return overlaps.sort((a, b) => a.date.localeCompare(b.date));
-  }, [taskForm.start_date, taskForm.end_date, taskForm.workers, taskForm.taskType, allVacations]);
-
-  const prevOverlapsRef = useRef([]);
-  useEffect(() => {
-    if (!showTaskModal) {
-      prevOverlapsRef.current = [];
-      return;
-    }
-    const newOverlaps = overlappingVacations.filter(ov => !prevOverlapsRef.current.some(p => p.date === ov.date && p.worker === ov.worker));
-
-    if (newOverlaps.length > 0) {
-      setTaskForm(prev => {
-        const currentEx = prev.excluded_dates || [];
-        const toAdd = newOverlaps.map(o => o.date).filter(d => !currentEx.includes(d));
-        if (toAdd.length > 0) {
-          return { ...prev, excluded_dates: [...currentEx, ...toAdd] };
-        }
-        return prev;
-      });
-    }
-    prevOverlapsRef.current = overlappingVacations;
-  }, [overlappingVacations, showTaskModal]);
-
-  const handleToggleExcludedDate = (dateStr) => {
-    setTaskForm(prev => {
-      const current = prev.excluded_dates || [];
-      if (current.includes(dateStr)) {
-        return { ...prev, excluded_dates: current.filter(d => d !== dateStr) };
-      } else {
-        return { ...prev, excluded_dates: [...current, dateStr] };
-      }
-    });
-  };
-
   const location = useLocation();
 
   useEffect(() => {
@@ -330,6 +279,20 @@ export default function ProjectDetailPage() {
           if (da < db) return -1;
           if (da > db) return 1;
           return (a.id || 0) - (b.id || 0);
+        }).map(t => {
+          if (t.start_date && t.end_date && t.type !== 'milestone') {
+            t.orig_duration = t.duration;
+            const s = new Date(String(t.start_date).split(' ')[0] + 'T00:00:00');
+            const e = new Date(String(t.end_date).split(' ')[0] + 'T00:00:00');
+            let wDays = 0;
+            let cur = new Date(s);
+            while (cur <= e) {
+              if (cur.getDay() !== 0 && cur.getDay() !== 6) wDays++;
+              cur.setDate(cur.getDate() + 1);
+            }
+            t.duration = wDays > 0 ? wDays : 1;
+          }
+          return t;
         })
         : [];
       setGanttData({ ...ganttRes.data, tasks: sortedTasks });
@@ -437,7 +400,6 @@ export default function ProjectDetailPage() {
     if (plannedH > 0 && totEff === plannedH) {
       return 'ok';
     }
-    if (task.has_vacation_conflict) return 'ritardo_ferie';
     if (!task.start_date) return 'ok';
     if (isTaskCompleted(task)) return 'ok';
     const startStr = formatDateOnly(task.start_date);
@@ -558,8 +520,8 @@ export default function ProjectDetailPage() {
     try {
       await api.put(`/projects/${id}/tasks/${taskId}`, data);
       loadProject();
-    } catch (err) { 
-      toast.error(err.response?.data?.detail || 'Errore aggiornamento fase'); 
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Errore aggiornamento fase');
       loadProject();
     }
   }
@@ -591,7 +553,7 @@ export default function ProjectDetailPage() {
       const { data: created } = await api.post(`/projects/${id}/tasks`, data);
       if (tempId) gantt.changeTaskId(tempId, created.id);
       loadProject();
-    } catch (err) { 
+    } catch (err) {
       toast.error(err.response?.data?.detail || 'Errore creazione fase');
       loadProject();
     }
@@ -714,8 +676,8 @@ export default function ProjectDetailPage() {
 
     const s = safeDate(realTask.start_date);
     const e = safeDate(realTask.end_date);
-    const diff = countWorkingDays(s, e);
-    const taskDur = Number(realTask.duration) || diff;
+    const diff = countWorkingDays(s, e, realTask.excluded_dates);
+    const taskDur = Number(realTask.orig_duration) || Number(realTask.duration) || diff;
     const taskPlan = Number(realTask.planned_hours) || (taskDur * 8.0);
     const mode = realTask.budget_mode || realTask.budgetMode || (Math.abs(taskPlan - taskDur * 8.0) > 0.1 ? 'start_days_hours' : 'start_days');
     setBudgetMode(mode);
@@ -749,37 +711,37 @@ export default function ProjectDetailPage() {
     setTaskForm(prev => {
       const updates = { budgetMode: newMode };
       if (newMode === 'start_end') {
-        const days = countWorkingDays(prev.start_date, prev.end_date);
+        const days = countWorkingDays(prev.start_date, prev.end_date, prev.excluded_dates);
         updates.duration_days = days;
         updates.planned_hours = days * 8.0;
       } else if (newMode === 'start_hours') {
         const hours = Number(prev.planned_hours) || 8;
         const days = Math.max(1, Math.ceil(hours / 8.0));
         updates.duration_days = days;
-        updates.end_date = addWorkingDays(prev.start_date || new Date(), days);
+        updates.end_date = addWorkingDays(prev.start_date || new Date(), days, prev.excluded_dates);
       } else if (newMode === 'end_hours') {
         const hours = Number(prev.planned_hours) || 8;
         const days = Math.max(1, Math.ceil(hours / 8.0));
         updates.duration_days = days;
-        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days);
+        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days, prev.excluded_dates);
       } else if (newMode === 'start_days') {
         const days = Math.max(1, Number(prev.duration_days) || 1);
         updates.duration_days = days;
-        updates.end_date = addWorkingDays(prev.start_date || new Date(), days);
+        updates.end_date = addWorkingDays(prev.start_date || new Date(), days, prev.excluded_dates);
         updates.planned_hours = days * 8.0;
       } else if (newMode === 'end_days') {
         const days = Math.max(1, Number(prev.duration_days) || 1);
         updates.duration_days = days;
-        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days);
+        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days, prev.excluded_dates);
         updates.planned_hours = days * 8.0;
       } else if (newMode === 'start_days_hours') {
         const days = Math.max(1, Number(prev.duration_days) || 1);
         updates.duration_days = days;
-        updates.end_date = addWorkingDays(prev.start_date || new Date(), days);
+        updates.end_date = addWorkingDays(prev.start_date || new Date(), days, prev.excluded_dates);
       } else if (newMode === 'end_days_hours') {
         const days = Math.max(1, Number(prev.duration_days) || 1);
         updates.duration_days = days;
-        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days);
+        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days, prev.excluded_dates);
       }
       return { ...prev, ...updates };
     });
@@ -789,7 +751,7 @@ export default function ProjectDetailPage() {
     setTaskForm(prev => {
       const updates = { start_date: newStart };
       if (budgetMode === 'start_end') {
-        const days = countWorkingDays(newStart, prev.end_date);
+        const days = countWorkingDays(newStart, prev.end_date, prev.excluded_dates);
         if (new Date(newStart) > new Date(prev.end_date)) {
           updates.end_date = newStart;
           updates.duration_days = 1;
@@ -800,7 +762,7 @@ export default function ProjectDetailPage() {
         }
       } else if (budgetMode === 'start_hours' || budgetMode === 'start_days' || budgetMode === 'start_days_hours') {
         const days = Math.max(1, Number(prev.duration_days) || 1);
-        updates.end_date = addWorkingDays(newStart, days);
+        updates.end_date = addWorkingDays(newStart, days, prev.excluded_dates);
       }
       return { ...prev, ...updates };
     });
@@ -810,7 +772,7 @@ export default function ProjectDetailPage() {
     setTaskForm(prev => {
       const updates = { end_date: newEnd };
       if (budgetMode === 'start_end') {
-        const days = countWorkingDays(prev.start_date, newEnd);
+        const days = countWorkingDays(prev.start_date, newEnd, prev.excluded_dates);
         if (new Date(newEnd) < new Date(prev.start_date)) {
           updates.start_date = newEnd;
           updates.duration_days = 1;
@@ -821,7 +783,7 @@ export default function ProjectDetailPage() {
         }
       } else if (budgetMode === 'end_hours' || budgetMode === 'end_days' || budgetMode === 'end_days_hours') {
         const days = Math.max(1, Number(prev.duration_days) || 1);
-        updates.start_date = subtractWorkingDays(newEnd, days);
+        updates.start_date = subtractWorkingDays(newEnd, days, prev.excluded_dates);
       }
       return { ...prev, ...updates };
     });
@@ -832,15 +794,15 @@ export default function ProjectDetailPage() {
     setTaskForm(prev => {
       const updates = { duration_days: daysVal };
       if (budgetMode === 'start_days') {
-        updates.end_date = addWorkingDays(prev.start_date || new Date(), days);
+        updates.end_date = addWorkingDays(prev.start_date || new Date(), days, prev.excluded_dates);
         updates.planned_hours = days * 8.0;
       } else if (budgetMode === 'end_days' || budgetMode === 'end_days_hours') {
-        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days);
+        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days, prev.excluded_dates);
         if (budgetMode === 'end_days') {
           updates.planned_hours = days * 8.0;
         }
       } else if (budgetMode === 'start_days_hours') {
-        updates.end_date = addWorkingDays(prev.start_date || new Date(), days);
+        updates.end_date = addWorkingDays(prev.start_date || new Date(), days, prev.excluded_dates);
       }
       return { ...prev, ...updates };
     });
@@ -853,11 +815,11 @@ export default function ProjectDetailPage() {
       if (budgetMode === 'start_hours') {
         const days = Math.max(1, Math.ceil(hours / 8.0));
         updates.duration_days = days;
-        updates.end_date = addWorkingDays(prev.start_date || new Date(), days);
+        updates.end_date = addWorkingDays(prev.start_date || new Date(), days, prev.excluded_dates);
       } else if (budgetMode === 'end_hours') {
         const days = Math.max(1, Math.ceil(hours / 8.0));
         updates.duration_days = days;
-        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days);
+        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days, prev.excluded_dates);
       }
       return { ...prev, ...updates };
     });
@@ -865,7 +827,7 @@ export default function ProjectDetailPage() {
 
   function applyDurationPreset(days, hours) {
     const sDate = taskForm.start_date || new Date().toISOString().split('T')[0];
-    const newEnd = addWorkingDays(sDate, days);
+    const newEnd = addWorkingDays(sDate, days, taskForm.excluded_dates);
     setTaskForm({
       ...taskForm,
       duration_days: days,
@@ -884,7 +846,7 @@ export default function ProjectDetailPage() {
     const isMilestone = taskForm.taskType === 'milestone';
     const sDate = taskForm.start_date;
     const eDate = taskForm.end_date;
-    const diffDays = countWorkingDays(sDate, eDate);
+    const diffDays = countWorkingDays(sDate, eDate, taskForm.excluded_dates);
     const finalDays = Math.max(1, Number(taskForm.duration_days) || diffDays);
     const plannedHours = isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDays * 8.0));
 
@@ -909,14 +871,19 @@ export default function ProjectDetailPage() {
       }
     }
 
+    let finalWorkerHours = taskForm.worker_hours;
+    if (taskForm.workers && taskForm.workers.length === 1 && !isMilestone) {
+      finalWorkerHours = { [taskForm.workers[0]]: plannedHours };
+    }
+
     const payload = {
       text: taskName.trim(),
       start_date: taskForm.start_date,
       end_date: isMilestone ? taskForm.start_date : taskForm.end_date,
       duration: isMilestone ? 0 : finalDays,
-      planned_hours: isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDays * 8.0)),
+      planned_hours: plannedHours,
       workers: taskForm.workers,
-      worker_hours: taskForm.worker_hours,
+      worker_hours: finalWorkerHours,
       type: isMilestone ? 'milestone' : 'task',
       color: taskForm.color || (isMilestone ? '#f59e0b' : null),
       department: taskForm.department || null,
@@ -1119,41 +1086,23 @@ export default function ProjectDetailPage() {
 
     let newWorkers;
     if (isSelected) {
-      newWorkers = taskForm.workers.filter(x => x !== w);
+      newWorkers = [];
     } else {
-      newWorkers = [...taskForm.workers, w];
+      newWorkers = [w];
     }
 
     const totalHours = Number(taskForm.planned_hours) || (Number(taskForm.duration_days) * 8.0) || 8.0;
-
     let newWorkerHours = {};
     if (newWorkers.length > 0) {
-      const baseHours = Math.floor((totalHours / newWorkers.length) * 10) / 10;
-      newWorkers.forEach(worker => {
-        newWorkerHours[worker] = baseHours;
-      });
-
-      let currentSum = baseHours * newWorkers.length;
-      let diff = Math.round((totalHours - currentSum) * 10) / 10;
-
-      let i = 0;
-      while (diff >= 0.1 || diff <= -0.1) {
-        if (diff > 0) {
-          newWorkerHours[newWorkers[i % newWorkers.length]] += 0.1;
-          diff = Math.round((diff - 0.1) * 10) / 10;
-        } else {
-          newWorkerHours[newWorkers[i % newWorkers.length]] -= 0.1;
-          diff = Math.round((diff + 0.1) * 10) / 10;
-        }
-        i++;
-      }
-
-      newWorkers.forEach(worker => {
-        newWorkerHours[worker] = Math.round(newWorkerHours[worker] * 10) / 10;
-      });
+      newWorkerHours[w] = totalHours;
     }
 
-    setTaskForm({ ...taskForm, workers: newWorkers, worker_hours: newWorkerHours });
+    setTaskForm({
+      ...taskForm,
+      workers: newWorkers,
+      worker_hours: newWorkerHours,
+      excluded_dates: [] // Reset excluded dates when worker changes
+    });
   }
 
   function handleZoom(mode) {
@@ -2396,7 +2345,7 @@ export default function ProjectDetailPage() {
                         const newDays = opt.default_days != null ? opt.default_days : taskForm.duration_days;
                         const newHours = opt.default_hours != null ? opt.default_hours : taskForm.planned_hours;
                         const sDate = taskForm.start_date || new Date().toISOString().split('T')[0];
-                        const newEnd = addWorkingDays(sDate, newDays);
+                        const newEnd = addWorkingDays(sDate, newDays, taskForm.excluded_dates);
                         setTaskForm({
                           ...taskForm,
                           faseSel: opt.name,
@@ -2667,7 +2616,7 @@ export default function ProjectDetailPage() {
                   const currentAssignedTotal = taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0);
                   const sDateForBudget = taskForm.start_date;
                   const eDateForBudget = taskForm.end_date;
-                  const diffDaysForBudget = sDateForBudget && eDateForBudget ? countWorkingDays(sDateForBudget, eDateForBudget) : 1;
+                  const diffDaysForBudget = sDateForBudget && eDateForBudget ? countWorkingDays(sDateForBudget, eDateForBudget, taskForm.excluded_dates) : 1;
                   const finalDaysForBudget = Math.max(1, Number(taskForm.duration_days) || diffDaysForBudget);
                   const currentBudgetTotal = isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDaysForBudget * 8.0));
 
@@ -2686,7 +2635,7 @@ export default function ProjectDetailPage() {
                     <>
                       <div className="input-group" style={{ marginTop: 16 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <label style={{ margin: 0 }}>Addetti Assegnati (Multi-selezione)</label>
+                          <label style={{ margin: 0 }}>Addetto Assegnato (Singolo)</label>
                           {!isMilestone && (
                             <span style={{ fontSize: '0.85rem', fontWeight: 600, color: totalColor }}>
                               Totale assegnato: {roundedAssigned}h / {roundedBudget}h
@@ -2714,77 +2663,44 @@ export default function ProjectDetailPage() {
                                 onClick={() => toggleWorkerSelection(w)}
                               >
                                 <span>{sel ? '✓ ' : '+ '}{w}</span>
-                                {sel && taskForm.taskType !== 'milestone' && (
-                                  <span style={{ marginLeft: 6, display: 'flex', alignItems: 'center' }}>
-                                    (<input
-                                      type="number"
-                                      min="0.1"
-                                      step="0.1"
-                                      style={{
-                                        width: 46,
-                                        background: '#fff',
-                                        border: '1px solid #ccc',
-                                        borderRadius: 4,
-                                        color: '#000',
-                                        fontSize: '0.8rem',
-                                        textAlign: 'center',
-                                        padding: '2px',
-                                        margin: '0 4px',
-                                        outline: 'none'
-                                      }}
-                                      value={taskForm.worker_hours?.[w] !== undefined ? taskForm.worker_hours[w] : ''}
-                                      onClick={(e) => e.stopPropagation()}
-                                      onChange={(e) => {
-                                        const val = e.target.value === '' ? '' : parseFloat(e.target.value);
-                                        setTaskForm({
-                                          ...taskForm,
-                                          worker_hours: { ...taskForm.worker_hours, [w]: val }
-                                        });
-                                      }}
-                                    />h)
-                                  </span>
-                                )}
                               </div>
                             );
                           })}
                         </div>
                       </div>
 
-                      {overlappingVacations.length > 0 && (
-                        <div style={{ marginTop: 16, padding: 12, borderRadius: 6, backgroundColor: '#fef3c7', border: '1px solid #f59e0b' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#b45309', fontWeight: 600, marginBottom: 8 }}>
-                            <AppIcon name="alertTriangle" size={16} />
-                            <span>Attenzione: Conflitto Ferie</span>
-                          </div>
-                          <div style={{ fontSize: '0.85rem', color: '#92400e', marginBottom: 8 }}>
-                            Gli addetti selezionati hanno delle ferie in questo periodo. Se vuoi pianificare ugualmente la fase, seleziona i giorni di ferie da ignorare per aggirare il blocco:
-                          </div>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                            {overlappingVacations.map(ov => {
-                              const isExcluded = (taskForm.excluded_dates || []).includes(ov.date);
-                              return (
-                                <div
-                                  key={`${ov.worker}-${ov.date}`}
-                                  onClick={() => handleToggleExcludedDate(ov.date)}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 6,
-                                    padding: '4px 8px',
-                                    backgroundColor: isExcluded ? '#fcd694ff' : '#fff',
-                                    border: `1px solid ${isExcluded ? '#d97706' : '#d97706'}`,
-                                    borderRadius: 12,
-                                    cursor: 'pointer',
-                                    fontSize: '0.8rem',
-                                    color: '#92400e'
-                                  }}
-                                >
-                                  <input type="checkbox" checked={isExcluded} readOnly style={{ margin: 0 }} />
-                                  <span>{ov.worker}: {ov.date}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
+                      {taskForm.workers && taskForm.workers.length > 0 && taskForm.start_date && (
+                        <div style={{ marginTop: 16 }}>
+                          <h4 style={{ marginBottom: 8, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Calendario Ferie</h4>
+                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 8, marginBottom: 8 }}>
+                            Seleziona i giorni da saltare (ferie o permessi). La durata della fase si estenderà automaticamente.
+                          </p>
+                          <MultiDatePicker
+                            startDate={taskForm.start_date}
+                            allVacations={allVacations}
+                            workers={taskForm.workers}
+                            excludedDates={taskForm.excluded_dates || []}
+                            onChange={(newExcluded) => {
+                              setTaskForm(prev => {
+                                let updates = { excluded_dates: newExcluded };
+
+                                if (budgetMode === 'start_end') {
+                                  const days = countWorkingDays(prev.start_date, prev.end_date, newExcluded);
+                                  updates.duration_days = days;
+                                  updates.planned_hours = days * 8.0;
+                                } else {
+                                  const newDays = Math.max(1, Number(prev.duration_days) || 1);
+                                  if (budgetMode === 'end_days' || budgetMode === 'end_days_hours' || budgetMode === 'end_hours') {
+                                    updates.start_date = subtractWorkingDays(prev.end_date || new Date(), newDays, newExcluded);
+                                  } else {
+                                    updates.end_date = addWorkingDays(prev.start_date || new Date(), newDays, newExcluded);
+                                  }
+                                }
+
+                                return { ...prev, ...updates };
+                              });
+                            }}
+                          />
                         </div>
                       )}
 
