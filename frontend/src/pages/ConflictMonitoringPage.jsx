@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useToast } from '../context/ToastContext';
@@ -19,6 +19,38 @@ export default function ConflictMonitoringPage() {
   const [isVacationsOpen, setIsVacationsOpen] = useState(false);
   const [editingVacation, setEditingVacation] = useState(null);
   const [deletingVacation, setDeletingVacation] = useState(null);
+
+  const [vacationSortConfig, setVacationSortConfig] = useState({ key: 'created_at', direction: 'desc' });
+
+  function handleVacationSort(key) {
+    if (vacationSortConfig.key === key) {
+      setVacationSortConfig({ key, direction: vacationSortConfig.direction === 'asc' ? 'desc' : 'asc' });
+    } else {
+      setVacationSortConfig({ key, direction: 'asc' });
+    }
+  }
+
+  const sortedVacations = useMemo(() => {
+    return [...vacations].sort((a, b) => {
+      let valA = a[vacationSortConfig.key];
+      let valB = b[vacationSortConfig.key];
+
+      if (vacationSortConfig.key === 'username') {
+        valA = (a.full_name || a.username || '').toLowerCase();
+        valB = (b.full_name || b.username || '').toLowerCase();
+      } else if (vacationSortConfig.key === 'start_date' || vacationSortConfig.key === 'end_date' || vacationSortConfig.key === 'created_at') {
+        valA = valA ? new Date(valA).getTime() : 0;
+        valB = valB ? new Date(valB).getTime() : 0;
+      } else if (vacationSortConfig.key === 'reason') {
+        valA = (valA || '').toLowerCase();
+        valB = (valB || '').toLowerCase();
+      }
+
+      if (valA < valB) return vacationSortConfig.direction === 'asc' ? -1 : 1;
+      if (valA > valB) return vacationSortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [vacations, vacationSortConfig]);
 
   const [usersList, setUsersList] = useState([]);
   const [addingVacation, setAddingVacation] = useState(false);
@@ -518,15 +550,23 @@ export default function ConflictMonitoringPage() {
                   <table className="table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
                     <thead style={{ background: 'var(--bg-tertiary)' }}>
                       <tr>
-                        <th style={{ padding: '12px' }}>Addetto</th>
-                        <th style={{ padding: '12px' }}>Dal</th>
-                        <th style={{ padding: '12px' }}>Al</th>
-                        <th style={{ padding: '12px' }}>Motivo</th>
+                        <th style={{ padding: '12px', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleVacationSort('username')}>
+                          Addetto {vacationSortConfig.key === 'username' && (vacationSortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th style={{ padding: '12px', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleVacationSort('start_date')}>
+                          Dal {vacationSortConfig.key === 'start_date' && (vacationSortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th style={{ padding: '12px', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleVacationSort('end_date')}>
+                          Al {vacationSortConfig.key === 'end_date' && (vacationSortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th style={{ padding: '12px', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleVacationSort('reason')}>
+                          Motivo {vacationSortConfig.key === 'reason' && (vacationSortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
                         {(user?.role === 'admin' || user?.role === 'editor') && <th style={{ padding: '12px', textAlign: 'right' }}>Azioni</th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {vacations.sort((a, b) => b.start_date.localeCompare(a.start_date)).map(v => (
+                      {sortedVacations.map(v => (
                         <tr key={v.id} style={{ borderTop: '1px solid var(--border-default)' }}>
                           <td style={{ padding: '12px', fontWeight: 600 }}>{v.full_name || v.username}</td>
                           <td style={{ padding: '12px' }}>{formatDate(v.start_date)}</td>
