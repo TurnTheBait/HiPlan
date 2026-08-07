@@ -155,59 +155,22 @@ async def create_my_vacation(data: VacationCreate, db: AsyncSession = Depends(ge
     )
     db.add(note)
 
-    # Notifications for ore da recuperare
+    # Flag task as having vacation conflict
     for item in recovery_items:
-        note_recovery = Notification(
-            user_id=current_user.id,
-            title="⚠️ Ore da recuperare per ferie",
-            message=(
-                f"Hai {item['hours_to_recover']}h da recuperare sulla fase \"{item['task_name']}\" "
-                f"(progetto: {item['project_name']}) "
-                f"a causa delle ferie dal {data.start_date} al {data.end_date}."
-            ),
-            type=NotificationType.DEADLINE,
-            project_id=item["project_id"],
-        )
-        db.add(note_recovery)
-
-        # Notify project responsible/owner too
-        proj_res = await db.execute(select(Project).where(Project.id == item["project_id"]))
-        project = proj_res.scalar_one_or_none()
-        if project:
-            resp_id = project.responsible_id or project.owner_id
-            if resp_id and resp_id != current_user.id:
-                note_resp = Notification(
-                    user_id=resp_id,
-                    title=f"⚠️ Ferie: ore scoperte su \"{item['task_name']}\"",
-                    message=(
-                        f"{current_user.username} è in ferie dal {data.start_date} al {data.end_date}. "
-                        f"Sono scoperte {item['hours_to_recover']}h sulla fase \"{item['task_name']}\" "
-                        f"nel progetto \"{item['project_name']}\"."
-                    ),
-                    type=NotificationType.DEADLINE,
-                    project_id=item["project_id"],
-                )
-                db.add(note_resp)
-
-        # Flag task as having vacation conflict
         task_res = await db.execute(select(Task).where(Task.id == item["task_id"]))
         task_obj = task_res.scalar_one_or_none()
         if task_obj:
             task_obj.has_vacation_conflict = 1
 
-        # Notify admins
-        admins_res = await db.execute(select(User).where(User.role == UserRole.ADMIN))
+    # Single notification to admins if there are conflicts
+    if recovery_items:
+        admins_res = await db.execute(select(User).where(User.role.in_([UserRole.ADMIN, UserRole.EDITOR])))
         for admin_user in admins_res.scalars().all():
             note_admin = Notification(
                 user_id=admin_user.id,
-                title=f"⚠️ Rischio ritardo per ferie: \"{item['task_name']}\"",
-                message=(
-                    f"L'addetto {current_user.username} ha inserito ferie dal {data.start_date} al {data.end_date}. "
-                    f"La fase \"{item['task_name']}\" (progetto \"{item['project_name']}\") potrebbe subire ritardi "
-                    f"per {item['hours_to_recover']}h scoperte."
-                ),
+                title=f"⚠️ Conflitti ferie: {current_user.username}",
+                message=f"L'addetto {current_user.username} ha inserito ferie dal {data.start_date} al {data.end_date}. Ci sono {len(recovery_items)} possibili conflitti da controllare nella Panoramica Addetti.",
                 type=NotificationType.UPDATE,
-                project_id=item["project_id"],
             )
             db.add(note_admin)
 
@@ -244,59 +207,22 @@ async def create_admin_vacation(user_id: str, data: VacationCreate, db: AsyncSes
     )
     db.add(note)
 
-    # Notifications for ore da recuperare
+    # Flag task as having vacation conflict
     for item in recovery_items:
-        note_recovery = Notification(
-            user_id=target_user.id,
-            title="⚠️ Ore da recuperare per ferie",
-            message=(
-                f"Hai {item['hours_to_recover']}h da recuperare sulla fase \"{item['task_name']}\" "
-                f"(progetto: {item['project_name']}) "
-                f"a causa delle ferie dal {data.start_date} al {data.end_date}."
-            ),
-            type=NotificationType.DEADLINE,
-            project_id=item["project_id"],
-        )
-        db.add(note_recovery)
-
-        # Notify project responsible/owner too
-        proj_res = await db.execute(select(Project).where(Project.id == item["project_id"]))
-        project = proj_res.scalar_one_or_none()
-        if project:
-            resp_id = project.responsible_id or project.owner_id
-            if resp_id and resp_id != target_user.id:
-                note_resp = Notification(
-                    user_id=resp_id,
-                    title=f"⚠️ Ferie: ore scoperte su \"{item['task_name']}\"",
-                    message=(
-                        f"{target_user.username} è in ferie dal {data.start_date} al {data.end_date}. "
-                        f"Sono scoperte {item['hours_to_recover']}h sulla fase \"{item['task_name']}\" "
-                        f"nel progetto \"{item['project_name']}\"."
-                    ),
-                    type=NotificationType.DEADLINE,
-                    project_id=item["project_id"],
-                )
-                db.add(note_resp)
-
-        # Flag task as having vacation conflict
         task_res = await db.execute(select(Task).where(Task.id == item["task_id"]))
         task_obj = task_res.scalar_one_or_none()
         if task_obj:
             task_obj.has_vacation_conflict = 1
 
-        # Notify admins
-        admins_res = await db.execute(select(User).where(User.role == UserRole.ADMIN))
+    # Single notification to admins if there are conflicts
+    if recovery_items:
+        admins_res = await db.execute(select(User).where(User.role.in_([UserRole.ADMIN, UserRole.EDITOR])))
         for admin_user in admins_res.scalars().all():
             note_admin = Notification(
                 user_id=admin_user.id,
-                title=f"⚠️ Rischio ritardo per ferie: \"{item['task_name']}\"",
-                message=(
-                    f"L'addetto {target_user.username} ha ferie dal {data.start_date} al {data.end_date} (inserite da {current_user.username}). "
-                    f"La fase \"{item['task_name']}\" (progetto \"{item['project_name']}\") potrebbe subire ritardi "
-                    f"per {item['hours_to_recover']}h scoperte."
-                ),
+                title=f"⚠️ Conflitti ferie: {target_user.username}",
+                message=f"L'addetto {target_user.username} ha ferie dal {data.start_date} al {data.end_date} (inserite da {current_user.username}). Ci sono {len(recovery_items)} possibili conflitti da controllare nella Panoramica Addetti.",
                 type=NotificationType.UPDATE,
-                project_id=item["project_id"],
             )
             db.add(note_admin)
 
