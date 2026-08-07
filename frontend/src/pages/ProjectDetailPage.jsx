@@ -100,7 +100,7 @@ export default function ProjectDetailPage() {
   // STATO PER COLONNE GANTT (leggiamo dal localStorage)
   const [visibleColumns, setVisibleColumns] = useState(() => {
     const saved = localStorage.getItem('ganttVisibleColumns');
-    return saved ? JSON.parse(saved) : ['start_date', 'end_date', 'event_date', 'duration'];
+    return saved ? JSON.parse(saved) : ['start_date', 'end_date', 'event_date', 'duration', 'workers'];
   });
   const [showColumnsMenu, setShowColumnsMenu] = useState(false);
 

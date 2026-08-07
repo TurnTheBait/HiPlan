@@ -101,57 +101,55 @@ async def get_workload_heatmap(
             if day.weekday() < 5 and day.strftime("%Y-%m-%d") not in excluded_dates:
                 days.append(day)
                 
-        if not days:
-            continue
-            
-        worker_hours_map = {}
-        try:
-            worker_hours_map = json.loads(getattr(task, 'worker_hours', '{}')) or {}
-        except:
+        task_type_str = task.type.value if hasattr(task.type, 'value') else str(task.type)
+        if task_type_str.lower() == "milestone" or task_type_str == "TaskType.MILESTONE":
+            task_type_str = "milestone"
+
+        if days:
             worker_hours_map = {}
+            try:
+                worker_hours_map = json.loads(getattr(task, 'worker_hours', '{}')) or {}
+            except:
+                worker_hours_map = {}
 
-        planned_hours = task.planned_hours or 0.0
-        
-        for winfo in worker_info:
-            w_id = winfo["id"]
-            w_name = winfo["name"]
+            planned_hours = task.planned_hours or 0.0
             
-            if w_name in worker_hours_map and worker_hours_map[w_name] is not None:
-                try:
-                    assigned_total = float(worker_hours_map[w_name])
-                except:
+            for winfo in worker_info:
+                w_id = winfo["id"]
+                w_name = winfo["name"]
+                
+                if w_name in worker_hours_map and worker_hours_map[w_name] is not None:
+                    try:
+                        assigned_total = float(worker_hours_map[w_name])
+                    except:
+                        assigned_total = planned_hours / len(worker_info)
+                else:
                     assigned_total = planned_hours / len(worker_info)
-            else:
-                assigned_total = planned_hours / len(worker_info)
+                    
+                hours_per_day = assigned_total / len(days)
                 
-            hours_per_day = assigned_total / len(days)
-            
-            task_type_str = task.type.value if hasattr(task.type, 'value') else str(task.type)
-            if task_type_str.lower() == "milestone" or task_type_str == "TaskType.MILESTONE":
-                task_type_str = "milestone"
-
-            for day in days:
-                date_str = day.strftime("%Y-%m-%d")
-                if date_str not in heatmap[w_id]["workload"]:
-                    heatmap[w_id]["workload"][date_str] = {"hours": 0.0, "tasks": []}
-                
-                daily_hours = 0.0 if task_type_str == "milestone" else hours_per_day
-                
-                heatmap[w_id]["workload"][date_str]["hours"] += daily_hours
-                heatmap[w_id]["workload"][date_str]["tasks"].append({
-                    "id": str(task.id),
-                    "name": task.text,
-                    "project_name": task.project.name if task.project else "Progetto non specificato",
-                    "project_id": str(task.project.id) if task.project else None,
-                    "project_code": getattr(task.project, "code", None) if task.project else None,
-                    "project_status": getattr(task.project, "status", None) if task.project else None,
-                    "start_date": task.start_date.strftime("%Y-%m-%d"),
-                    "end_date": task.end_date.strftime("%Y-%m-%d"),
-                    "hours": daily_hours,
-                    "total_assigned_hours": 0.0 if task_type_str == "milestone" else assigned_total,
-                    "color": getattr(task, "color", None) or "#3b82f6",
-                    "type": task_type_str
-                })
+                for day in days:
+                    date_str = day.strftime("%Y-%m-%d")
+                    if date_str not in heatmap[w_id]["workload"]:
+                        heatmap[w_id]["workload"][date_str] = {"hours": 0.0, "tasks": []}
+                    
+                    daily_hours = 0.0 if task_type_str == "milestone" else hours_per_day
+                    
+                    heatmap[w_id]["workload"][date_str]["hours"] += daily_hours
+                    heatmap[w_id]["workload"][date_str]["tasks"].append({
+                        "id": str(task.id),
+                        "name": task.text,
+                        "project_name": task.project.name if task.project else "Progetto non specificato",
+                        "project_id": str(task.project.id) if task.project else None,
+                        "project_code": getattr(task.project, "code", None) if task.project else None,
+                        "project_status": getattr(task.project, "status", None) if task.project else None,
+                        "start_date": task.start_date.strftime("%Y-%m-%d"),
+                        "end_date": task.end_date.strftime("%Y-%m-%d"),
+                        "hours": daily_hours,
+                        "total_assigned_hours": 0.0 if task_type_str == "milestone" else assigned_total,
+                        "color": getattr(task, "color", None) or "#3b82f6",
+                        "type": task_type_str
+                    })
 
         # Process actual hours
         actual_hours_map = {}
