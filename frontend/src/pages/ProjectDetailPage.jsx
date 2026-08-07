@@ -2872,17 +2872,12 @@ export default function ProjectDetailPage() {
                               </span>
                             </th>
                           ))}
-                          <th style={{ minWidth: 90, background: 'rgba(245, 158, 11, 0.1)' }}>
-                            Ore extra<br />
-                            <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-tertiary)' }}>(ritardo/straord.)</span>
-                          </th>
                           <th style={{ minWidth: 135 }}>Totale Addetto</th>
                         </tr>
                       </thead>
                       <tbody>
                         {workers.map(w => {
                           let totW = 0;
-                          let extraW = 0;
                           const assignedH = (selectedTaskForHours.worker_hours && selectedTaskForHours.worker_hours[w] !== undefined && selectedTaskForHours.worker_hours[w] !== '')
                             ? Number(selectedTaskForHours.worker_hours[w])
                             : null;
@@ -2929,37 +2924,11 @@ export default function ProjectDetailPage() {
                                   </td>
                                 );
                               })}
-                              <td style={{ background: 'rgba(245, 158, 11, 0.05)' }}>
-                                <input
-                                  type="number"
-                                  step="0.5"
-                                  min="0"
-                                  max="24"
-                                  className="ore-input"
-                                  disabled={user?.role !== 'admin' && w !== user?.username && w !== (user?.full_name || user?.username)}
-                                  value={(actualHoursMap[w] && actualHoursMap[w]['__extra__']) || ''}
-                                  placeholder="0h"
-                                  onChange={(e) => {
-                                    const newVal = e.target.value;
-                                    setActualHoursMap(prev => {
-                                      const next = { ...prev };
-                                      next[w] = { ...(next[w] || {}), '__extra__': newVal };
-                                      return next;
-                                    });
-                                  }}
-                                />
-                              </td>
                               <td style={{ fontWeight: 700 }}>
-                                {(() => {
-                                  const extraVal = (actualHoursMap[w] && actualHoursMap[w]['__extra__']) ? Number(actualHoursMap[w]['__extra__']) : 0;
-                                  extraW = extraVal;
-                                  return (
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                                      <span style={{ color: 'var(--accent-500)' }}>{totW + extraW} h</span>
-                                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>/ {targetH} h prev</span>
-                                    </div>
-                                  );
-                                })()}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                                  <span style={{ color: 'var(--accent-500)' }}>{totW} h</span>
+                                  <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>/ {targetH} h prev</span>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -2974,7 +2943,9 @@ export default function ProjectDetailPage() {
                         let totAll = 0;
                         workers.forEach(w => {
                           if (actualHoursMap[w]) {
-                            Object.values(actualHoursMap[w]).forEach(h => { totAll += Number(h) || 0; });
+                            Object.entries(actualHoursMap[w]).forEach(([key, h]) => { 
+                              if (key !== '__extra__') totAll += Number(h) || 0; 
+                            });
                           }
                         });
                         const tempTask = {
