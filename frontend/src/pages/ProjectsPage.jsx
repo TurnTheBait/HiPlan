@@ -370,7 +370,7 @@ export default function ProjectsPage() {
             type="text"
             className="input"
             style={{ width: '100%', paddingLeft: 40, paddingRight: 32, borderRadius: 20, background: 'var(--bg-secondary)', border: '1px solid var(--border-default)' }}
-            placeholder="Cerca commessa, cliente o responsabile..."
+            placeholder="Cerca commessa, cliente o referente..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -390,7 +390,7 @@ export default function ProjectsPage() {
         <div className="empty-state">
           <div className="empty-state-icon"><AppIcon name={filter === 'my_projects' ? 'user' : 'folder'} size={26} /></div>
           <h3>{filter === 'my_projects' ? 'Nessuna commessa assegnata a te' : 'Nessuna commessa trovata'}</h3>
-          <p>{filter === 'my_projects' ? 'Non risulti ancora Responsabile o Addetto di alcuna commessa o fase.' : (filter !== 'all' ? 'Prova a cambiare filtro' : 'Aggiungi la tua prima commessa per iniziare')}</p>
+          <p>{filter === 'my_projects' ? 'Non risulti ancora Referente o Addetto di alcuna commessa o fase.' : (filter !== 'all' ? 'Prova a cambiare filtro' : 'Aggiungi la tua prima commessa per iniziare')}</p>
           {filter === 'my_projects' && (
             <button className="btn btn-secondary" style={{ marginTop: 16 }} onClick={() => setFilter('all')}>
               <AppIcon name="list" />
@@ -426,7 +426,7 @@ export default function ProjectsPage() {
               </div>
               <div className="project-card-meta">
                 <AppIcon name="user" size={14} />
-                <strong>Responsabile:</strong> {project.responsible_name || project.responsible_username || (project.owner_id === user?.id ? user?.username : 'Non specificato')}
+                <strong>Referente:</strong> {project.responsible_name || project.responsible_username || (project.owner_id === user?.id ? user?.username : 'Non specificato')}
               </div>
               <div className="project-card-meta">
                 <AppIcon name="users" size={14} />
@@ -452,7 +452,7 @@ export default function ProjectsPage() {
                     <button
                       className="btn-ghost btn-sm"
                       onClick={(e) => openEditProject(project, e)}
-                      title="Modifica commessa (titolo, cliente, codice, responsabile, addetti)"
+                      title="Modifica commessa (titolo, cliente, codice, referente, addetti)"
                       style={{ fontSize: 14 }}
                     >
                       <AppIcon name="edit" size={16} />
@@ -548,7 +548,7 @@ export default function ProjectsPage() {
 
               <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
                 <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="project-responsible">Responsabile di Commessa</label>
+                  <label htmlFor="project-responsible">Referente di Commessa</label>
                   <select
                     id="project-responsible"
                     className="input"
@@ -744,7 +744,7 @@ export default function ProjectsPage() {
               </div>
 
               <div className="input-group">
-                <label htmlFor="card-edit-responsible">Responsabile di Commessa</label>
+                <label htmlFor="card-edit-responsible">Referente di Commessa</label>
                 <select
                   id="card-edit-responsible"
                   className="input"

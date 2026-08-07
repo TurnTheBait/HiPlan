@@ -438,7 +438,7 @@ export default function DashboardPage() {
                 </span>
                 <div>
                   <h2>Ore da recuperare per ferie</h2>
-                  <p>Coordina il recupero con il tuo responsabile.</p>
+                  <p>Coordina il recupero con il tuo referente.</p>
                 </div>
               </div>
             </div>

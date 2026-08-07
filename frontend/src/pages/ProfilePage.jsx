@@ -258,7 +258,7 @@ export default function ProfilePage() {
               <AppIcon name="alert-circle" /> Ore da Recuperare per Ferie
             </h3>
             <p style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
-              Le seguenti fasi hanno ore pianificate che cadono nei tuoi giorni di ferie. Queste ore andrebbero recuperate in accordo con il tuo responsabile.
+              Le seguenti fasi hanno ore pianificate che cadono nei tuoi giorni di ferie. Queste ore andrebbero recuperate in accordo con il tuo referente.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {recoveryItems

@@ -569,7 +569,7 @@ export default function ProjectDetailPage() {
 
   async function handleToggleTaskCompleted(task, currentIsCompleted) {
     if (!canManageProject) {
-      toast.error('Solo proprietario, responsabile o editor possono segnare la fase come completata/in corso');
+      toast.error('Solo proprietario, referente o editor possono segnare la fase come completata/in corso');
       return;
     }
     const newCompleted = currentIsCompleted ? -1 : 1;
@@ -1821,7 +1821,7 @@ export default function ProjectDetailPage() {
                 </div>
               </div>
               <div className="stat-box">
-                <div className="stat-box-label">Responsabile Commessa</div>
+                <div className="stat-box-label">Referente Commessa</div>
                 <div className="stat-box-value" style={{ fontSize: '0.95rem' }}>
                   {project?.responsible?.full_name || project?.responsible?.username || 'N/D'}
                 </div>
@@ -3074,7 +3074,7 @@ export default function ProjectDetailPage() {
               </div>
 
               <div className="input-group">
-                <label htmlFor="edit-proj-responsible">Responsabile di Commessa</label>
+                <label htmlFor="edit-proj-responsible">Referente di Commessa</label>
                 <select
                   id="edit-proj-responsible"
                   className="input"

@@ -90,7 +90,7 @@ export default function ReplanningAgentPage() {
         action_payload: suggestion.action_payload
       });
       toast.success('Suggerimento applicato con successo!');
-      
+
       // Rimuovi dai suggerimenti in sospeso
       const newKeys = [...archivedKeys, suggestion.id];
       setArchivedKeys(newKeys);
@@ -186,7 +186,7 @@ export default function ReplanningAgentPage() {
               <AppIcon name="robot" size={28} />
             </div>
             <div>
-              <p>Il sistema analizza in tempo reale le tue commesse per suggerirti come risolvere conflitti o incongruenze.</p>
+              <p>Il sistema analizza in tempo reale le tue commesse aiutarti a rilevare conflitti o incongruenze.</p>
             </div>
           </div>
           <div className="agent-controls">
@@ -236,12 +236,12 @@ export default function ReplanningAgentPage() {
                 <div className="filters-bar" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', background: 'var(--bg-card)', padding: '12px 16px', borderRadius: 8, border: '1px solid var(--border-default)' }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}><AppIcon name="filter" size={14} style={{ marginRight: 4, verticalAlign: '-2px' }} /></span>
 
-                  <select className="input" value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ padding: '6px 12px', fontSize: 13, borderRadius: 6, width: "auto" }}>
+                  <select className="input" value={filterProject} onChange={e => setFilterProject(e.target.value)} style={{ padding: '6px 12px', fontSize: 13, borderRadius: 6, width: "200px" }}>
                     <option value="">Tutte le commesse</option>
                     {uniqueProjects.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
 
-                  <select className="input" value={filterType} onChange={e => setFilterType(e.target.value)} style={{ padding: '6px 12px', fontSize: 13, borderRadius: 6, width: "auto" }}>
+                  <select className="input" value={filterType} onChange={e => setFilterType(e.target.value)} style={{ padding: '6px 12px', fontSize: 13, borderRadius: 6, width: "200px" }}>
                     <option value="">Tutte le tipologie</option>
                     {uniqueTypes.map(t => <option key={t} value={t}>{getActionBadge(t).label}</option>)}
                   </select>
@@ -276,13 +276,11 @@ export default function ReplanningAgentPage() {
                                 {badge.label}
                               </span>
                               <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                                Commessa: <strong>{s.project_name}</strong>
+                                Commessa: <strong>{s.project_code ? `${s.project_code} - ${s.project_name}` : s.project_name}</strong>
                               </span>
                             </div>
                             <h4 style={{ margin: '0 0 8px', fontSize: '1.1rem' }}>{s.reason}</h4>
-                            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 14 }}>
-                              <strong>Azione consigliata:</strong> {s.action_label}
-                            </p>
+                            {/*<p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 14 }}><strong>Azione consigliata:</strong> {s.action_label}</p>*/}
                           </div>
                           <div className="suggestion-actions" style={{ display: 'flex', gap: 8 }}>
                             {activeTab === 'suggestions' ? (
@@ -302,18 +300,7 @@ export default function ReplanningAgentPage() {
                                 <AppIcon name="undo" size={14} />
                               </button>
                             )}
-                            <button
-                              className="btn btn-primary"
-                              onClick={() => handleExecute(s)}
-                              disabled={executingId === s.id}
-                              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                            >
-                              {executingId === s.id ? 'Esecuzione...' : (
-                                <>
-                                  <AppIcon name="play" size={14} /> Esegui
-                                </>
-                              )}
-                            </button>
+                            {/*<button className="btn btn-primary"onClick={() => handleExecute(s)} disabled={executingId === s.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{executingId === s.id ? 'Esecuzione...' : (<><AppIcon name="play" size={14} /> Esegui</>)}</button>*/}
                           </div>
                         </div>
                       );
