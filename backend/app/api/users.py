@@ -50,6 +50,14 @@ async def update_me(
             from fastapi import HTTPException, status
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username già in uso")
 
+    if "email" in update_data and update_data["email"] and update_data["email"] != current_user.email:
+        # Check if email already exists
+        existing = await db.execute(select(User).where(User.email == update_data["email"]))
+        if existing.scalar_one_or_none():
+            # pyrefly: ignore [missing-import]
+            from fastapi import HTTPException, status
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email già in uso")
+
     for key, value in update_data.items():
         setattr(current_user, key, value)
         
