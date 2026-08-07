@@ -15,13 +15,14 @@ from fastapi import HTTPException, status
 from app.core.websocket_manager import manager
 
 
-def find_vacation_conflicts(task_start, task_end, vacations):
+def find_vacation_conflicts(task_start, task_end, vacations, excluded_dates=None):
     if not vacations:
         return []
+    excluded_dates = excluded_dates or []
     conflict_days = 0
     current = task_start
     while current <= task_end:
-        if current.weekday() < 5:
+        if current.weekday() < 5 and current.strftime("%Y-%m-%d") not in excluded_dates:
             for vacation in vacations:
                 if vacation.get("start_date") and vacation.get("end_date"):
                     start = vacation["start_date"]
@@ -99,6 +100,7 @@ def _task_to_out(task: Task) -> TaskOut:
         budget_mode=task.budget_mode,
         completed=is_comp,
         has_vacation_conflict=task.has_vacation_conflict or 0,
+        excluded_dates=_parse_json(task.excluded_dates, []),
     )
 
 
@@ -218,6 +220,7 @@ async def create_task(db: AsyncSession, project_id: str, data: TaskCreate, user=
         workers=json.dumps(data.workers),
         worker_hours=json.dumps(data.worker_hours),
         actual_hours=json.dumps(data.actual_hours),
+        excluded_dates=json.dumps(data.excluded_dates) if getattr(data, 'excluded_dates', None) else "[]",
         color=data.color,
         department=data.department,
         budget_mode=data.budget_mode,
@@ -240,7 +243,7 @@ async def create_task(db: AsyncSession, project_id: str, data: TaskCreate, user=
         vac_res = await db.execute(select(Vacation).where(Vacation.user_id == worker_user.id))
         vacs = vac_res.scalars().all()
         vacation_payloads = [{"start_date": v.start_date, "end_date": v.end_date} for v in vacs]
-        conflicts = find_vacation_conflicts(task.start_date, task.end_date or task.start_date, vacation_payloads)
+        conflicts = find_vacation_conflicts(task.start_date, task.end_date or task.start_date, vacation_payloads, data.excluded_dates)
         total_shift_days = max(total_shift_days, conflicts[0]["workdays"] if conflicts else 0)
 
     if total_shift_days > 0:
@@ -373,8 +376,8 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
     for key, value in update_data.items():
         if key == "parent_id" and value == "0":
             value = None
-        if key in ("workers", "worker_hours", "actual_hours"):
-            value = json.dumps(value)
+        if key in ("workers", "worker_hours", "actual_hours", "excluded_dates"):
+            value = json.dumps(value) if value is not None else "[]"
         setattr(task, key, value)
     _compute_task_progress_and_completed(task, update_data)
     # Se cambiano workers o date, ricalcoliamo impatti ferie
@@ -392,7 +395,11 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
         vac_res = await db.execute(select(Vacation).where(Vacation.user_id == worker_user.id))
         vacs = vac_res.scalars().all()
         vacation_payloads = [{"start_date": v.start_date, "end_date": v.end_date} for v in vacs]
-        conflicts = find_vacation_conflicts(task.start_date, task.end_date or task.start_date, vacation_payloads)
+        try:
+            excluded_dates_list = json.loads(task.excluded_dates) if getattr(task, 'excluded_dates', None) else []
+        except Exception:
+            excluded_dates_list = []
+        conflicts = find_vacation_conflicts(task.start_date, task.end_date or task.start_date, vacation_payloads, excluded_dates_list)
         total_shift_days = max(total_shift_days, conflicts[0]["workdays"] if conflicts else 0)
 
     # Salta il controllo ferie se si stanno solo aggiornando ore consuntivate o stato completamento

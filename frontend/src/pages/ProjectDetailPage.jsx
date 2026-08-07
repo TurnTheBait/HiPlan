@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api from '../api/client';
 import { useToast } from '../context/ToastContext';
@@ -142,6 +142,7 @@ export default function ProjectDetailPage() {
   const [phaseTemplates, setPhaseTemplates] = useState([]);
   const [showPhaseDropdown, setShowPhaseDropdown] = useState(false);
   const [taskForm, setTaskForm] = useState({
+    id: null,
     faseSel: PREDEFINED_PHASES[0],
     customText: '',
     color: PHASE_DEFAULT_COLORS[PREDEFINED_PHASES[0]] || '#3b82f6',
@@ -151,6 +152,7 @@ export default function ProjectDetailPage() {
     planned_hours: 8.0,
     workers: [],
     worker_hours: {},
+    excluded_dates: [],
     customWorker: '',
     department: null,
   });
@@ -181,6 +183,72 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     loadProject();
   }, [id]);
+
+  const overlappingVacations = useMemo(() => {
+    if (!taskForm.workers || taskForm.workers.length === 0 || !taskForm.start_date) return [];
+    if (taskForm.taskType === 'milestone') return [];
+
+    const overlaps = [];
+    const startDate = new Date(taskForm.start_date);
+    const endDate = new Date(taskForm.end_date || taskForm.start_date);
+
+    taskForm.workers.forEach(w => {
+      const wVacations = allVacations.filter(v => v.username === w);
+      wVacations.forEach(v => {
+        const vStart = new Date(v.start_date);
+        const vEnd = new Date(v.end_date);
+
+        if (startDate <= vEnd && endDate >= vStart) {
+          let current = new Date(Math.max(startDate, vStart));
+          const endOverlap = new Date(Math.min(endDate, vEnd));
+
+          while (current <= endOverlap) {
+            if (current.getDay() !== 0 && current.getDay() !== 6) {
+              const dateStr = current.toISOString().split('T')[0];
+              if (!overlaps.some(o => o.worker === w && o.date === dateStr)) {
+                overlaps.push({ worker: w, date: dateStr });
+              }
+            }
+            current.setDate(current.getDate() + 1);
+          }
+        }
+      });
+    });
+
+    return overlaps.sort((a, b) => a.date.localeCompare(b.date));
+  }, [taskForm.start_date, taskForm.end_date, taskForm.workers, taskForm.taskType, allVacations]);
+
+  const prevOverlapsRef = useRef([]);
+  useEffect(() => {
+    if (!showTaskModal) {
+      prevOverlapsRef.current = [];
+      return;
+    }
+    const newOverlaps = overlappingVacations.filter(ov => !prevOverlapsRef.current.some(p => p.date === ov.date && p.worker === ov.worker));
+
+    if (newOverlaps.length > 0) {
+      setTaskForm(prev => {
+        const currentEx = prev.excluded_dates || [];
+        const toAdd = newOverlaps.map(o => o.date).filter(d => !currentEx.includes(d));
+        if (toAdd.length > 0) {
+          return { ...prev, excluded_dates: [...currentEx, ...toAdd] };
+        }
+        return prev;
+      });
+    }
+    prevOverlapsRef.current = overlappingVacations;
+  }, [overlappingVacations, showTaskModal]);
+
+  const handleToggleExcludedDate = (dateStr) => {
+    setTaskForm(prev => {
+      const current = prev.excluded_dates || [];
+      if (current.includes(dateStr)) {
+        return { ...prev, excluded_dates: current.filter(d => d !== dateStr) };
+      } else {
+        return { ...prev, excluded_dates: [...current, dateStr] };
+      }
+    });
+  };
 
   const location = useLocation();
 
@@ -637,6 +705,7 @@ export default function ProjectDetailPage() {
       budgetMode: mode,
       workers: Array.isArray(realTask.workers) ? realTask.workers : [],
       worker_hours: typeof realTask.worker_hours === 'object' ? realTask.worker_hours : {},
+      excluded_dates: Array.isArray(realTask.excluded_dates) ? realTask.excluded_dates : [],
       customWorker: '',
       department: realTask.department || (user?.department && user.department !== 'admin' ? user.department : 'ufficio_tecnico'),
       completed: compVal,
@@ -812,6 +881,7 @@ export default function ProjectDetailPage() {
       department: taskForm.department || null,
       budget_mode: taskForm.budgetMode || budgetMode || 'start_days',
       completed: isMilestone ? 0 : (taskForm.completed !== undefined && taskForm.completed !== null ? Number(taskForm.completed) : 0),
+      excluded_dates: taskForm.excluded_dates || [],
     };
 
 
@@ -2391,9 +2461,9 @@ export default function ProjectDetailPage() {
 
 
                 {/* Data di Fine Commessa visibile sopra la pianificazione */}
-                <div style={{ marginTop: 24, marginBottom: 8, padding: '10px 14px', background: 'var(--bg-tertiary)', borderRadius: '6px', borderLeft: '3px solid var(--accent-500)', display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.9rem' }}>
+                <div style={{ marginTop: '10px', padding: '10px 14px', background: 'var(--bg-tertiary)', borderRadius: '6px', borderLeft: '3px solid var(--accent-500)', display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.9rem' }}>
                   <AppIcon name="calendar" size={16} style={{ color: 'var(--accent-500)' }} />
-                  <strong>Scadenza / Fine Commessa:</strong>
+                  <strong>Fine Commessa:</strong>
                   <span style={{ color: 'var(--text-primary)' }}>{project?.end_date ? formatDateItalian(project.end_date) : 'Non impostata'}</span>
                 </div>
 
@@ -2628,10 +2698,47 @@ export default function ProjectDetailPage() {
                             );
                           })}
                         </div>
-
-
-                        {/* Sezione addetti rimossa e unificata nel blocco superiore */}
                       </div>
+
+                      {overlappingVacations.length > 0 && (
+                        <div style={{ marginTop: 16, padding: 12, borderRadius: 6, backgroundColor: '#fef3c7', border: '1px solid #f59e0b' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#b45309', fontWeight: 600, marginBottom: 8 }}>
+                            <AppIcon name="alertTriangle" size={16} />
+                            <span>Attenzione: Conflitto Ferie</span>
+                          </div>
+                          <div style={{ fontSize: '0.85rem', color: '#92400e', marginBottom: 8 }}>
+                            Gli addetti selezionati hanno delle ferie in questo periodo. Se vuoi pianificare ugualmente la fase, seleziona i giorni di ferie da ignorare per aggirare il blocco:
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                            {overlappingVacations.map(ov => {
+                              const isExcluded = (taskForm.excluded_dates || []).includes(ov.date);
+                              return (
+                                <div
+                                  key={`${ov.worker}-${ov.date}`}
+                                  onClick={() => handleToggleExcludedDate(ov.date)}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    padding: '4px 8px',
+                                    backgroundColor: isExcluded ? '#fcd694ff' : '#fff',
+                                    border: `1px solid ${isExcluded ? '#d97706' : '#d97706'}`,
+                                    borderRadius: 12,
+                                    cursor: 'pointer',
+                                    fontSize: '0.8rem',
+                                    color: '#92400e'
+                                  }}
+                                >
+                                  <input type="checkbox" checked={isExcluded} readOnly style={{ margin: 0 }} />
+                                  <span>{ov.worker}: {ov.date}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Sezione addetti rimossa e unificata nel blocco superiore */}
 
                       <div className="modal-footer" style={{ marginTop: 24 }}>
                         <button type="button" className="btn btn-secondary" onClick={() => setShowTaskModal(false)}>

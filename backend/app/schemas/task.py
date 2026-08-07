@@ -29,6 +29,7 @@ class TaskCreate(BaseModel):
     budget_mode: Optional[str] = None
     completed: int = 0
     has_vacation_conflict: int = 0
+    excluded_dates: List[str] = []
 
 
 class TaskUpdate(BaseModel):
@@ -52,6 +53,7 @@ class TaskUpdate(BaseModel):
     budget_mode: Optional[str] = None
     completed: Optional[int] = None
     has_vacation_conflict: Optional[int] = None
+    excluded_dates: Optional[List[str]] = None
 
 
 class TaskOut(BaseModel):
@@ -77,6 +79,7 @@ class TaskOut(BaseModel):
     budget_mode: Optional[str] = None
     completed: int = 0
     has_vacation_conflict: int = 0
+    excluded_dates: List[str] = []
 
     model_config = ConfigDict(from_attributes=True)
 
