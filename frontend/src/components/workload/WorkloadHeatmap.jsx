@@ -417,7 +417,10 @@ export default function WorkloadHeatmap() {
                 Object.values(currentWorkload).forEach(day => {
                   if (day.tasks) {
                     day.tasks.forEach(t => {
-                      if (!uniqueTasks[t.id]) uniqueTasks[t.id] = t;
+                      const isActive = t.project_status !== 'archived' && t.project_status !== 'completed';
+                      if (isActive && !uniqueTasks[t.id]) {
+                        uniqueTasks[t.id] = t;
+                      }
                     });
                   }
                 });

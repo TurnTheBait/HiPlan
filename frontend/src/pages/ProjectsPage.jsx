@@ -124,7 +124,7 @@ export default function ProjectsPage() {
   const filtered = useMemo(() => {
     let list = projects;
     if (filter === 'my_projects') {
-      list = list.filter(p => p.is_assigned && p.status !== 'archived');
+      list = list.filter(p => p.is_assigned && p.status !== 'archived' && p.status !== 'completed');
     } else if (filter !== 'all') {
       list = list.filter(p => p.status === filter);
     }
