@@ -8,8 +8,8 @@ export const STATUS_LABELS_IT = {
 };
 
 export const STATUS_OPTIONS = [
-  { value: 'planning', label: 'Pianificazione (Preventivo / Studio)' },
-  { value: 'active', label: 'In Corso (Operativa / In Produzione)' },
-  { value: 'completed', label: 'Completata (Consegnata / Collaudata)' },
-  { value: 'archived', label: 'Archiviata (Storica / Sospesa)' },
+  { value: 'planning', label: 'Pianificazione' },
+  { value: 'active', label: 'In Corso' },
+  { value: 'completed', label: 'Completata' },
+  { value: 'archived', label: 'Archiviata' },
 ];

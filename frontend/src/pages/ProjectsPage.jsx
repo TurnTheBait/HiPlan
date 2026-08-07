@@ -17,7 +17,7 @@ export default function ProjectsPage() {
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
-  const [editForm, setEditForm] = useState({ name: '', code: '', client: '', color: '#185FA5', description: '', start_date: '', end_date: '', responsible_id: '', assigned_workers: [] });
+  const [editForm, setEditForm] = useState({ name: '', code: '', client: '', color: '#185FA5', description: '', start_date: '', end_date: '', responsible_id: '', assigned_workers: [], status: 'planning' });
   const [filter, setFilter] = useState('my_projects');
   const [searchQuery, setSearchQuery] = useState('');
   const [form, setForm] = useState({ name: '', code: '', client: '', color: '#185FA5', status: 'planning', description: '', start_date: '', end_date: '', responsible_id: '', assigned_workers: [] });
@@ -97,6 +97,7 @@ export default function ProjectsPage() {
       end_date: project.end_date || '',
       responsible_id: project.responsible_id || '',
       assigned_workers: Array.isArray(project.assigned_workers) ? [...project.assigned_workers] : [],
+      status: project.status || 'planning',
     });
     setShowEditModal(true);
   }
@@ -631,6 +632,21 @@ export default function ProjectsPage() {
                       style={{ flex: 1, minWidth: 0 }}
                     />
                   </div>
+                </div>
+                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                  <label htmlFor="card-edit-status">Stato Commessa</label>
+                  <select
+                    id="card-edit-status"
+                    className="input"
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                  >
+                    {STATUS_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
