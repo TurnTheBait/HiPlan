@@ -453,7 +453,13 @@ export default function NotesPage() {
   // Formatta data in modo compatto
   function formatRelativeDate(dateStr) {
     if (!dateStr) return '';
-    const date = new Date(dateStr);
+    // Append 'Z' to treat the date as UTC if it lacks timezone info
+    let safeDateStr = dateStr;
+    if (typeof safeDateStr === 'string' && !safeDateStr.endsWith('Z') && !safeDateStr.includes('+')) {
+      if (!safeDateStr.includes('T')) safeDateStr = safeDateStr.replace(' ', 'T');
+      safeDateStr += 'Z';
+    }
+    const date = new Date(safeDateStr);
     const now = new Date();
     const diffHours = Math.round((now - date) / (1000 * 60 * 60));
     if (diffHours < 1) return 'Adesso';
