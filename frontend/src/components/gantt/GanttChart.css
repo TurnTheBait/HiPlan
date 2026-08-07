@@ -295,7 +295,7 @@
 .gantt_marker.gantt-project-end-marker,
 .custom-project-marker.custom-end-marker {
   width: 2px !important;
-  border-left: 2px solid #ef4444 !important;
+  border-right: 2px solid #ef4444 !important;
   /* Rosso corsa */
 }
 
@@ -334,6 +334,8 @@
   background-color: #ef4444 !important;
   color: #ffffff !important;
   border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  left: auto !important;
+  right: 6px !important;
 }
 
 /* Evidenziazione colonna/cella del giorno/settimana/mese/trimestre di oggi nella timeline (solo sfondo, senza linea blu verticale) */

@@ -588,7 +588,9 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
 
       if (eDate) {
         try {
-          const posEnd = gantt.posFromDate(eDate);
+          const markerEndDate = new Date(eDate);
+          markerEndDate.setHours(23, 59, 59, 999);
+          const posEnd = gantt.posFromDate(markerEndDate);
           if (typeof posEnd === 'number' && !isNaN(posEnd) && posEnd >= 0) {
             const formattedE = `${String(eDate.getDate()).padStart(2, '0')}/${String(eDate.getMonth() + 1).padStart(2, '0')}/${eDate.getFullYear()}`;
             const markerDiv = document.createElement('div');

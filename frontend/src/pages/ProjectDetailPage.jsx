@@ -543,10 +543,25 @@ export default function ProjectDetailPage() {
 
   // Gestione Task da Gantt e Form
   async function handleTaskUpdate(taskId, data) {
+    if (project && project.end_date) {
+      if (data.end_date && data.end_date.substring(0, 10) > project.end_date) {
+        toast.error(`La data di fine fase non può superare la data di fine commessa (${formatDateItalian(project.end_date)})`);
+        loadProject();
+        return;
+      }
+      if (data.start_date && data.start_date.substring(0, 10) > project.end_date) {
+        toast.error(`La data di inizio fase non può superare la data di fine commessa (${formatDateItalian(project.end_date)})`);
+        loadProject();
+        return;
+      }
+    }
     try {
       await api.put(`/projects/${id}/tasks/${taskId}`, data);
       loadProject();
-    } catch { toast.error('Errore aggiornamento fase'); }
+    } catch (err) { 
+      toast.error(err.response?.data?.detail || 'Errore aggiornamento fase'); 
+      loadProject();
+    }
   }
 
   async function handleSaveNotes() {
@@ -560,11 +575,26 @@ export default function ProjectDetailPage() {
   }
 
   async function handleTaskCreate(data, tempId) {
+    if (project && project.end_date) {
+      if (data.end_date && data.end_date.substring(0, 10) > project.end_date) {
+        toast.error(`La data di fine fase non può superare la data di fine commessa (${formatDateItalian(project.end_date)})`);
+        loadProject();
+        return;
+      }
+      if (data.start_date && data.start_date.substring(0, 10) > project.end_date) {
+        toast.error(`La data di inizio fase non può superare la data di fine commessa (${formatDateItalian(project.end_date)})`);
+        loadProject();
+        return;
+      }
+    }
     try {
       const { data: created } = await api.post(`/projects/${id}/tasks`, data);
       if (tempId) gantt.changeTaskId(tempId, created.id);
       loadProject();
-    } catch { toast.error('Errore creazione fase'); }
+    } catch (err) { 
+      toast.error(err.response?.data?.detail || 'Errore creazione fase');
+      loadProject();
+    }
   }
 
   async function handleTaskDelete(taskId, skipConfirm = false) {
@@ -868,6 +898,17 @@ export default function ProjectDetailPage() {
       }
     }
 
+    if (project && project.end_date) {
+      if (taskForm.end_date && taskForm.end_date > project.end_date) {
+        toast.error(`La data di fine fase non può superare la data di fine commessa (${formatDateItalian(project.end_date)})`);
+        return;
+      }
+      if (taskForm.start_date && taskForm.start_date > project.end_date) {
+        toast.error(`La data di inizio fase non può superare la data di fine commessa (${formatDateItalian(project.end_date)})`);
+        return;
+      }
+    }
+
     const payload = {
       text: taskName.trim(),
       start_date: taskForm.start_date,
@@ -961,6 +1002,11 @@ export default function ProjectDetailPage() {
 
   function handleSpecificDateChange(dateStr) {
     if (!dateStr || !selectedTaskForHours) return;
+    if (project && project.end_date && dateStr > project.end_date) {
+      toast.error(`Non è possibile aggiungere giorni oltre la fine della commessa (${formatDateItalian(project.end_date)}).`);
+      setSpecificExtraDate('');
+      return;
+    }
     const plannedDates = getWorkDatesBetween(
       selectedTaskForHours.start_date ? selectedTaskForHours.start_date.split(' ')[0] : '',
       selectedTaskForHours.end_date ? selectedTaskForHours.end_date.split(' ')[0] : ''
@@ -996,6 +1042,10 @@ export default function ProjectDetailPage() {
     const nextWorkDateStr = addWorkingDays(`${y}-${m}-${d}`, 1);
 
     if (nextWorkDateStr && !allCurrentDates.includes(nextWorkDateStr)) {
+      if (project && project.end_date && nextWorkDateStr > project.end_date) {
+        toast.error(`Non è possibile aggiungere giorni oltre la fine della commessa (${formatDateItalian(project.end_date)}).`);
+        return;
+      }
       setModalExtraDates(prev => [...prev, nextWorkDateStr].sort());
       toast.success(`Aggiunta colonna giorno extra: ${nextWorkDateStr.split('-').reverse().join('/')}`);
     }
