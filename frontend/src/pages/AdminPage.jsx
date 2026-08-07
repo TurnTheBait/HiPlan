@@ -51,6 +51,16 @@ export default function AdminPage() {
   const [showAdminColumnsMenu, setShowAdminColumnsMenu] = useState(false);
   const [managingUser, setManagingUser] = useState(null);
   const [newPassword, setNewPassword] = useState('');
+  
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newUserForm, setNewUserForm] = useState({
+    username: '',
+    email: '',
+    full_name: '',
+    password: '',
+    role: 'viewer',
+    department: 'ufficio_tecnico'
+  });
 
   const [collapsedSections, setCollapsedSections] = useState({
     annunci: true,
@@ -77,6 +87,26 @@ export default function AdminPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  async function handleCreateUser(e) {
+    e.preventDefault();
+    try {
+      await api.post('/auth/register', newUserForm);
+      toast.success('Utente creato con successo!');
+      setShowAddUserModal(false);
+      setNewUserForm({
+        username: '',
+        email: '',
+        full_name: '',
+        password: '',
+        role: 'viewer',
+        department: 'ufficio_tecnico'
+      });
+      loadUsers();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Errore durante la creazione utente');
+    }
+  }
 
   async function loadData() {
     setLoading(true);
@@ -503,6 +533,13 @@ export default function AdminPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
             {!collapsedSections.users && (
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setShowAddUserModal(true)}
+                >
+                  <AppIcon name="plus" />
+                  Crea Utente
+                </button>
                 <div style={{ position: 'relative' }}>
                   <button
                     className="btn btn-secondary btn-sm"
@@ -1047,6 +1084,107 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+      {/* MODAL CREAZIONE UTENTE */}
+      {showAddUserModal && (
+        <div className="modal-overlay animate-fadeIn">
+          <div className="modal" style={{ maxWidth: 500, background: 'var(--bg-secondary)', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-xl)' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Crea Nuovo Utente</h2>
+              <button className="btn-ghost btn-icon" type="button" onClick={() => setShowAddUserModal(false)} aria-label="Chiudi">
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateUser}>
+              <div className="modal-body">
+                <div className="input-group">
+                  <label>Nome Utente (Username) *</label>
+                  <input
+                    className="input"
+                    value={newUserForm.username}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, username: e.target.value })}
+                    required
+                    placeholder="es. mario.rossi"
+                  />
+                </div>
+                
+                <div className="input-group" style={{ marginTop: 14 }}>
+                  <label>Email *</label>
+                  <input
+                    type="email"
+                    className="input"
+                    value={newUserForm.email}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                    required
+                    placeholder="es. mario@example.com"
+                  />
+                </div>
+
+                <div className="input-group" style={{ marginTop: 14 }}>
+                  <label>Nome Completo</label>
+                  <input
+                    className="input"
+                    value={newUserForm.full_name}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, full_name: e.target.value })}
+                    placeholder="es. Mario Rossi"
+                  />
+                </div>
+
+                <div className="input-group" style={{ marginTop: 14 }}>
+                  <label>Password *</label>
+                  <input
+                    type="password"
+                    className="input"
+                    value={newUserForm.password}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                    required
+                    placeholder="Scegli una password"
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: 16, marginTop: 14 }}>
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Ruolo *</label>
+                    <select
+                      className="input"
+                      value={newUserForm.role}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value })}
+                      required
+                    >
+                      <option value="viewer">Viewer (Solo lettura)</option>
+                      <option value="editor">Editor (Lettura/Scrittura parziale)</option>
+                      <option value="admin">Admin (Completo)</option>
+                    </select>
+                  </div>
+                  
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Reparto *</label>
+                    <select
+                      className="input"
+                      value={newUserForm.department}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, department: e.target.value })}
+                      required
+                    >
+                      <option value="ufficio_tecnico">Ufficio Tecnico</option>
+                      <option value="produzione">Produzione</option>
+                      <option value="acquisti">Acquisti</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowAddUserModal(false)}>
+                  Annulla
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Crea Utente
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* MODAL GESTIONE UTENTE */}
       {managingUser && (
         <div className="modal-overlay">
