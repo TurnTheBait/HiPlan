@@ -461,7 +461,16 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
         elif "end_date" in update_data and old_end and task.end_date:
             delta_days = (task.end_date - old_end).days
         if delta_days != 0:
-            await propagate_shift(task, delta_days)
+            # We already updated `task.start_date` and `task.end_date` via setattr.
+            # We just need to propagate to children, so we add task to visited
+            # and only call propagate_shift on the children links.
+            visited_for_shift = {task.id}
+            links_result = await db.execute(select(Link).where(Link.source == task.id))
+            for link in links_result.scalars().all():
+                child_res = await db.execute(select(Task).where(Task.id == link.target))
+                child = child_res.scalar_one_or_none()
+                if child:
+                    await propagate_shift(child, delta_days, visited_for_shift)
 
         # Se ci sono ore consuntivate nella finestra di ferie, segnala criticità
         try:

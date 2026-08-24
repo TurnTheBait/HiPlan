@@ -284,10 +284,24 @@ export default function ProjectDetailPage() {
             t.orig_duration = t.duration;
             const s = new Date(String(t.start_date).split(' ')[0] + 'T00:00:00');
             const e = new Date(String(t.end_date).split(' ')[0] + 'T00:00:00');
+
+            let exDates = [];
+            if (typeof t.excluded_dates === 'string') {
+              try { exDates = JSON.parse(t.excluded_dates); } catch (e) { }
+            } else if (Array.isArray(t.excluded_dates)) {
+              exDates = t.excluded_dates;
+            }
+
             let wDays = 0;
             let cur = new Date(s);
             while (cur <= e) {
-              if (cur.getDay() !== 0 && cur.getDay() !== 6) wDays++;
+              const y = cur.getFullYear();
+              const m = String(cur.getMonth() + 1).padStart(2, '0');
+              const d = String(cur.getDate()).padStart(2, '0');
+              const dStr = `${y}-${m}-${d}`;
+              if (cur.getDay() !== 0 && cur.getDay() !== 6 && !exDates.includes(dStr)) {
+                wDays++;
+              }
               cur.setDate(cur.getDate() + 1);
             }
             t.duration = wDays > 0 ? wDays : 1;
@@ -656,7 +670,18 @@ export default function ProjectDetailPage() {
       openOreModalForTask(task);
       return;
     }
-    const realTask = (ganttData && Array.isArray(ganttData.tasks) ? ganttData.tasks.find(t => String(t.id) === String(task.id)) : null) || task;
+    let realTask = null;
+    if (ganttData && Array.isArray(ganttData.tasks)) {
+      realTask = ganttData.tasks.find(t => String(t.id) === String(task.id));
+    }
+    if (!realTask) {
+      realTask = { ...task };
+      if (realTask.end_date && realTask.type !== 'milestone') {
+        const ed = new Date(realTask.end_date);
+        ed.setDate(ed.getDate() - 1);
+        realTask.end_date = ed;
+      }
+    }
 
     fetchPhaseTemplates();
     const available = getAvailableTemplates();

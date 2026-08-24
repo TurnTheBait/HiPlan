@@ -439,7 +439,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       if (onLinkDeleteRef.current) {
         onLinkDeleteRef.current(id, false);
       }
-      return false; // blocks native DHTMLX link deletion flow
+      return false; // blocks native DHTMLX popup
     });
 
     const handleResize = () => {
