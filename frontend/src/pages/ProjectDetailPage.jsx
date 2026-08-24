@@ -100,7 +100,7 @@ export default function ProjectDetailPage() {
   // STATO PER COLONNE GANTT (leggiamo dal localStorage)
   const [visibleColumns, setVisibleColumns] = useState(() => {
     const saved = localStorage.getItem('ganttVisibleColumns');
-    return saved ? JSON.parse(saved) : ['start_date', 'end_date', 'event_date', 'duration', 'workers'];
+    return saved ? JSON.parse(saved) : ['start_date', 'end_date', 'event_date', 'duration', 'workers', 'department'];
   });
   const [showColumnsMenu, setShowColumnsMenu] = useState(false);
 
@@ -214,6 +214,25 @@ export default function ProjectDetailPage() {
       }
     }
   }, [location.search, ganttData.tasks]);
+
+  // Sincronizza automaticamente le ore pianificate con l'addetto se c'è un solo addetto selezionato
+  useEffect(() => {
+    if (taskForm.taskType !== 'milestone' && taskForm.workers && taskForm.workers.length === 1) {
+      const singleWorker = taskForm.workers[0];
+      const plannedHours = Number(taskForm.planned_hours) || 0;
+      const currentWorkerHours = Number(taskForm.worker_hours?.[singleWorker]) || 0;
+      
+      if (plannedHours !== currentWorkerHours) {
+        setTaskForm(prev => ({
+          ...prev,
+          worker_hours: {
+            ...prev.worker_hours,
+            [singleWorker]: plannedHours
+          }
+        }));
+      }
+    }
+  }, [taskForm.planned_hours, taskForm.workers, taskForm.taskType]);
 
   async function handleUploadAttachment(e) {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -618,7 +637,9 @@ export default function ProjectDetailPage() {
     } catch {
       toast.error('Errore creazione dipendenza');
       if (tempId && gantt.isLinkExists && gantt.isLinkExists(tempId)) {
+        window.__programmaticLinkDelete = true;
         gantt.deleteLink(tempId);
+        window.__programmaticLinkDelete = false;
       }
     }
   }
@@ -641,7 +662,8 @@ export default function ProjectDetailPage() {
     fetchPhaseTemplates();
     const available = getAvailableTemplates();
     const initialFase = '__custom__';
-    const initialColor = '#3b82f6';
+    const initialDept = user?.department && user.department !== 'admin' ? user.department : 'ufficio_tecnico';
+    const initialColor = DEPT_OPTIONS.find(d => d.value === initialDept)?.color || '#3b82f6';
 
     setEditingTask(null);
     setTaskModalTab('generale');
@@ -659,7 +681,7 @@ export default function ProjectDetailPage() {
       workers: [],
       worker_hours: {},
       customWorker: '',
-      department: user?.department && user.department !== 'admin' ? user.department : 'ufficio_tecnico',
+      department: initialDept,
       completed: 0,
     });
     setShowTaskModal(true);
@@ -1586,7 +1608,8 @@ export default function ProjectDetailPage() {
                     { id: 'duration', label: 'Durata' },
                     { id: 'progress', label: 'Progresso' },
                     { id: 'priority', label: 'Priorità' },
-                    { id: 'workers', label: 'Addetti' }
+                    { id: 'workers', label: 'Addetti' },
+                    { id: 'department', label: 'Reparto' }
                   ].map(col => (
                     <label key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
                       <input
@@ -2302,8 +2325,8 @@ export default function ProjectDetailPage() {
               <form onSubmit={handleSaveTaskForm}>
                 {/* Scelta Tipo Fase: Normale o Milestone (Linea Verticale / Evento) */}
                 <div className="task-type-selector">
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Tipo di Voce:</label>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <label>Tipo di Voce:</label>
+                  <div>
                     <label className={`task-type-option ${taskForm.taskType !== 'milestone' ? 'selected' : ''}`}>
                       <input
                         type="radio"
@@ -2312,9 +2335,12 @@ export default function ProjectDetailPage() {
                         checked={taskForm.taskType !== 'milestone'}
                         onChange={() => setTaskForm({ ...taskForm, taskType: 'task' })}
                       />
-                      <AppIcon name="list" />
-                      Fase di lavorazione
-                      <small>Con durata e budget ore</small>
+                      <div className="option-content">
+                        <div className="option-title">
+                          <AppIcon name="list" size={18} />
+                          Fase di lavorazione
+                        </div>
+                      </div>
                     </label>
                     <label className={`task-type-option ${taskForm.taskType === 'milestone' ? 'selected' : ''}`}>
                       <input
@@ -2324,9 +2350,12 @@ export default function ProjectDetailPage() {
                         checked={taskForm.taskType === 'milestone'}
                         onChange={() => setTaskForm({ ...taskForm, taskType: 'milestone', color: taskForm.color === PHASE_DEFAULT_COLORS[PREDEFINED_PHASES[0]] ? '#f59e0b' : taskForm.color })}
                       />
-                      <AppIcon name="calendar" />
-                      Evento o scadenza
-                      <small>Milestone nel Gantt</small>
+                      <div className="option-content">
+                        <div className="option-title">
+                          <AppIcon name="calendar" size={18} />
+                          Evento o scadenza
+                        </div>
+                      </div>
                     </label>
                   </div>
                 </div>
@@ -2424,17 +2453,35 @@ export default function ProjectDetailPage() {
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
                         <AppIcon name="alert" size={14} style={{ color: 'var(--accent-500)' }} /> Questa nuova fase verrà automaticamente aggiunta all'elenco suggerito per il reparto selezionato:
                       </span>
-                      <select
-                        className="input"
-                        style={{ padding: '6px 10px', fontSize: '0.85rem' }}
-                        value={taskForm.department || user?.department || 'ufficio_tecnico'}
-                        onChange={(e) => setTaskForm({ ...taskForm, department: e.target.value })}
-                      >
-                        <option value="tutti">Condivisa tra tutti i reparti</option>
-                        <option value="ufficio_tecnico">Ufficio Tecnico</option>
-                        <option value="acquisti">Acquisti</option>
-                        <option value="produzione">Produzione</option>
-                      </select>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                        {[{ value: 'tutti', label: 'Tutti i reparti', color: '#6b7280' }, ...DEPT_OPTIONS].map(d => {
+                          const currentVal = taskForm.department || user?.department || 'ufficio_tecnico';
+                          const isSelected = currentVal === d.value;
+                          return (
+                            <div
+                              key={d.value}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setTaskForm({ 
+                                  ...taskForm, 
+                                  department: d.value, 
+                                  color: d.color === '#6b7280' ? taskForm.color : d.color 
+                                });
+                              }}
+                              style={{
+                                padding: '4px 12px', borderRadius: 20, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                                background: isSelected ? (d.color + '22') : 'var(--bg-primary)',
+                                color: isSelected ? d.color : 'var(--text-secondary)',
+                                border: `1px solid ${isSelected ? (d.color + '44') : 'var(--border-default)'}`,
+                                transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 6
+                              }}
+                            >
+                              <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: d.color, opacity: isSelected ? 1 : 0.4 }} />
+                              {d.label}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2613,16 +2660,27 @@ export default function ProjectDetailPage() {
                     )}
                   </label>
                   {user?.role === 'admin' || taskForm.faseSel === '__custom__' ? (
-                    <select
-                      className="input"
-                      value={taskForm.department || ''}
-                      onChange={(e) => setTaskForm({ ...taskForm, department: e.target.value || null })}
-                    >
-                      <option value="">— Seleziona reparto —</option>
-                      {DEPT_OPTIONS.map(d => (
-                        <option key={d.value} value={d.value}>{d.label}</option>
-                      ))}
-                    </select>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {DEPT_OPTIONS.map(d => {
+                        const isSelected = taskForm.department === d.value;
+                        return (
+                          <div
+                            key={d.value}
+                            onClick={() => setTaskForm({ ...taskForm, department: d.value })}
+                            style={{
+                              padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                              background: isSelected ? (d.color + '22') : 'var(--bg-primary)',
+                              color: isSelected ? d.color : 'var(--text-secondary)',
+                              border: `1px solid ${isSelected ? (d.color + '44') : 'var(--border-default)'}`,
+                              display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s'
+                            }}
+                          >
+                            <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: d.color, opacity: isSelected ? 1 : 0.4 }} />
+                            {d.label}
+                          </div>
+                        );
+                      })}
+                    </div>
                   ) : (
                     <div style={{
                       padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
@@ -2670,15 +2728,19 @@ export default function ProjectDetailPage() {
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
                           {[...predefinedWorkers].sort((a, b) => a === user?.username ? -1 : b === user?.username ? 1 : a.localeCompare(b)).map(w => {
                             const sel = taskForm.workers.includes(w);
+                            const wUser = usersList.find(u => u.username === w);
+                            const wDept = wUser ? wUser.department : null;
+                            const deptColor = wDept ? (DEPT_OPTIONS.find(d => d.value === wDept)?.color || 'var(--accent-600)') : 'var(--accent-600)';
+
                             return (
                               <div
                                 key={w}
                                 style={{
                                   display: 'flex',
                                   alignItems: 'center',
-                                  background: sel ? 'var(--accent-600)' : 'var(--bg-primary)',
+                                  background: sel ? deptColor : 'var(--bg-primary)',
                                   color: sel ? '#fff' : 'var(--text-secondary)',
-                                  border: `1px solid ${sel ? 'var(--accent-500)' : 'var(--border-default)'}`,
+                                  border: `1px solid ${sel ? deptColor : 'var(--border-default)'}`,
                                   padding: '6px 12px',
                                   borderRadius: '16px',
                                   cursor: 'pointer',
@@ -3118,6 +3180,8 @@ export default function ProjectDetailPage() {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
                   {usersList.map(u => {
                     const selected = (projectForm.assigned_workers || []).includes(u.username);
+                    const wDept = u.department;
+                    const deptColor = wDept ? (DEPT_OPTIONS.find(d => d.value === wDept)?.color || '#3b82f6') : '#3b82f6';
                     return (
                       <button
                         key={u.id}
@@ -3126,9 +3190,9 @@ export default function ProjectDetailPage() {
                         style={{
                           padding: '6px 12px',
                           borderRadius: 20,
-                          border: selected ? '2px solid #3b82f6' : '1px solid var(--border-color)',
-                          background: selected ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-tertiary)',
-                          color: selected ? '#60a5fa' : 'var(--text-secondary)',
+                          border: selected ? `2px solid ${deptColor}` : '1px solid var(--border-color)',
+                          background: selected ? `${deptColor}26` : 'var(--bg-tertiary)',
+                          color: selected ? deptColor : 'var(--text-secondary)',
                           fontSize: 13,
                           cursor: 'pointer',
                           fontWeight: selected ? 600 : 400

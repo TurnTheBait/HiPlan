@@ -185,6 +185,21 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         width: 120,
         template: function (task) { return Array.isArray(task.workers) ? task.workers.join(', ') : ''; }
       },
+      {
+        name: "department",
+        label: "Reparto",
+        align: "center",
+        width: 120,
+        template: function (task) {
+          if (!task.department || task.department === 'tutti') return '';
+          let color = '#6b7280';
+          let label = task.department;
+          if (task.department === 'ufficio_tecnico') { color = '#3b82f6'; label = 'Ufficio Tecnico'; }
+          else if (task.department === 'produzione') { color = '#10b981'; label = 'Produzione'; }
+          else if (task.department === 'acquisti') { color = '#f59e0b'; label = 'Acquisti'; }
+          return `<div style="display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:10px; font-size:11px; font-weight:600; background-color:${color}18; color:${color}; border:1px solid ${color}44; line-height:normal; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; vertical-align:middle;">${label}</div>`;
+        }
+      },
     ];
 
     // Inizializza con le colonne visibili attuali o di default
@@ -436,10 +451,11 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     });
 
     gantt.attachEvent("onBeforeLinkDelete", (id, link) => {
+      if (window.__programmaticLinkDelete) return true;
       if (onLinkDeleteRef.current) {
         onLinkDeleteRef.current(id, false);
       }
-      return false; // blocks native DHTMLX popup
+      return false;
     });
 
     const handleResize = () => {
@@ -553,6 +569,21 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         align: "center",
         width: 120,
         template: function (task) { return Array.isArray(task.workers) ? task.workers.join(', ') : ''; }
+      },
+      {
+        name: "department",
+        label: "Reparto",
+        align: "center",
+        width: 120,
+        template: function (task) {
+          if (!task.department || task.department === 'tutti') return '';
+          let color = '#6b7280';
+          let label = task.department;
+          if (task.department === 'ufficio_tecnico') { color = '#3b82f6'; label = 'Ufficio Tecnico'; }
+          else if (task.department === 'produzione') { color = '#10b981'; label = 'Produzione'; }
+          else if (task.department === 'acquisti') { color = '#f59e0b'; label = 'Acquisti'; }
+          return `<div style="display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:10px; font-size:11px; font-weight:600; background-color:${color}18; color:${color}; border:1px solid ${color}44; line-height:normal; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; vertical-align:middle;">${label}</div>`;
+        }
       },
     ];
 
@@ -744,6 +775,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       } catch (e) { /* ignore */ }
     }
 
+    window.__programmaticLinkDelete = true;
     gantt.clearAll();
     gantt.parse({
       data: sortedTaskList.map(t => {
@@ -790,6 +822,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         type: String(l.type || '0'),
       })),
     });
+    window.__programmaticLinkDelete = false;
 
     gantt.sort("start_date", false);
     drawCustomMarkers();

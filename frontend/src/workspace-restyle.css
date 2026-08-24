@@ -745,45 +745,80 @@
   text-transform: uppercase;
 }
 
+.task-type-selector {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.task-type-selector>label {
+  display: block;
+  margin-bottom: 12px !important;
+  font-weight: 700 !important;
+  font-size: 0.75rem !important;
+  color: var(--text-secondary) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .task-type-selector>div {
-  display: grid !important;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px !important;
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 12px !important;
 }
 
 .task-type-option {
-  display: grid !important;
-  grid-template-columns: auto auto 1fr;
-  align-items: center !important;
-  gap: 8px !important;
-  min-height: 54px;
-  padding: 9px 11px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-card);
-  color: var(--text-secondary) !important;
-  font-size: 0.72rem !important;
-  font-weight: 700 !important;
+  flex: 1;
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 12px !important;
+  min-height: auto;
+  padding: 16px !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: 10px !important;
+  background: var(--bg-primary) !important;
   cursor: pointer;
+  transition: all 0.2s;
 }
 
 .task-type-option.selected {
-  border-color: rgba(7, 151, 211, 0.34);
-  background: var(--accent-soft);
-  color: var(--accent-700) !important;
+  border-color: rgba(7, 151, 211, 0.4) !important;
+  background: var(--accent-soft) !important;
 }
 
 .task-type-option input {
-  width: 15px;
-  height: 15px;
+  margin-top: 2px;
+  width: 16px !important;
+  height: 16px !important;
   accent-color: var(--accent-600);
 }
 
+.task-type-option .option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-type-option .option-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.task-type-option.selected .option-title {
+  color: var(--accent-700);
+}
+
 .task-type-option small {
-  grid-column: 3;
-  color: var(--text-tertiary);
-  font-size: 0.6rem;
-  font-weight: 500;
+  color: var(--text-secondary) !important;
+  font-size: 0.75rem !important;
+  font-weight: 400 !important;
+  margin-left: 24px;
 }
 
 .task-editor-modal label[for="taskCompleted"] {
