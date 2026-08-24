@@ -39,7 +39,7 @@ async def list_phase_templates(
 ):
     query = select(PhaseTemplate)
     if department and department != "all":
-        query = query.where((PhaseTemplate.department == department) | (PhaseTemplate.department == "tutti"))
+        query = query.where((PhaseTemplate.department == department) | (PhaseTemplate.department == "condivisa"))
     
     query = query.order_by(PhaseTemplate.department, PhaseTemplate.name)
     result = await db.execute(query)
@@ -69,7 +69,7 @@ async def create_phase_template(
         raise HTTPException(status_code=400, detail="Il nome della fase è obbligatorio")
 
     clean_name = data.name.strip()
-    # Controlla se esiste già una fase con lo stesso nome per questo reparto o tutti
+    # Controlla se esiste già una fase con lo stesso nome per questo reparto o condivisa
     result = await db.execute(
         select(PhaseTemplate).where(
             (PhaseTemplate.name == clean_name) & (PhaseTemplate.department == data.department)

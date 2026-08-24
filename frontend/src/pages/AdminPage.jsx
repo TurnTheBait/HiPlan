@@ -9,12 +9,14 @@ const DEPT_LABELS = {
   produzione: 'Produzione',
   acquisti: 'Acquisti',
   admin: 'Admin',
+  condivisa: 'Condivisa tra più reparti',
 };
 const DEPT_COLORS = {
   ufficio_tecnico: '#3b82f6',
   produzione: '#10b981',
   acquisti: '#f59e0b',
   admin: '#8b5cf6',
+  condivisa: '#8b5cf6',
 };
 
 export default function AdminPage() {
@@ -668,7 +670,7 @@ export default function AdminPage() {
           <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('templates')}>
             <h2><AppIcon name="list" /> Fasi di lavorazione preimpostate</h2>
             <p className="admin-section-desc">
-              Gestisci l'elenco delle fasi suggerite nel menu a tendina quando gli addetti creano o modificano le attività di commessa ({phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'tutti').length} visualizzate).
+              Gestisci l'elenco delle fasi suggerite nel menu a tendina quando gli addetti creano o modificano le attività di commessa ({phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'condivisa').length} visualizzate).
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
@@ -684,7 +686,7 @@ export default function AdminPage() {
                   <option value="ufficio_tecnico">Ufficio Tecnico ({phaseTemplates.filter(t => t.department === 'ufficio_tecnico').length})</option>
                   <option value="produzione">Produzione ({phaseTemplates.filter(t => t.department === 'produzione').length})</option>
                   <option value="acquisti">Acquisti ({phaseTemplates.filter(t => t.department === 'acquisti').length})</option>
-                  <option value="tutti">Tutti / Condivise ({phaseTemplates.filter(t => t.department === 'tutti').length})</option>
+                  <option value="condivisa">Condivisa tra più reparti ({phaseTemplates.filter(t => t.department === 'condivisa').length})</option>
                 </select>
                 <button
                   className="btn btn-primary btn-sm"
@@ -714,14 +716,14 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'tutti').length === 0 ? (
+                {phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'condivisa').length === 0 ? (
                   <tr>
                     <td colSpan={5} style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-muted)' }}>
                       Nessuna fase preimpostata per il filtro selezionato.
                     </td>
                   </tr>
                 ) : (
-                  phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'tutti').sort((a, b) => (a.name || '').localeCompare(b.name || '', 'it')).map((tpl) => (
+                  phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'condivisa').sort((a, b) => (a.name || '').localeCompare(b.name || '', 'it')).map((tpl) => (
                     <tr key={tpl.id}>
                       <td>
                         <div style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -731,7 +733,7 @@ export default function AdminPage() {
                       </td>
                       <td>
                         <span className="badge" style={{ background: DEPT_COLORS[tpl.department] ? `${DEPT_COLORS[tpl.department]}20` : 'var(--bg-tertiary)', color: DEPT_COLORS[tpl.department] || 'var(--text-secondary)', border: `1px solid ${DEPT_COLORS[tpl.department] || 'var(--border)'}40` }}>
-                          {DEPT_LABELS[tpl.department] || (tpl.department === 'tutti' ? 'Condivisa / Tutti' : tpl.department)}
+                          {DEPT_LABELS[tpl.department] || (tpl.department === 'condivisa' ? 'Condivisa tra più reparti' : tpl.department)}
                         </span>
                       </td>
                       <td>
@@ -1018,7 +1020,7 @@ export default function AdminPage() {
                     <option value="ufficio_tecnico">Ufficio Tecnico</option>
                     <option value="produzione">Produzione</option>
                     <option value="acquisti">Acquisti</option>
-                    <option value="tutti">Condivisa per tutti i reparti</option>
+                    <option value="condivisa">Condivisa tra più reparti</option>
                   </select>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
                     Questa fase comparirà nel menu a tendina di tutti gli addetti del reparto selezionato.

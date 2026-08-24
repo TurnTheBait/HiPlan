@@ -22,6 +22,7 @@ const DEPT_OPTIONS = [
   { value: 'ufficio_tecnico', label: 'Ufficio Tecnico', color: '#3b82f6' },
   { value: 'produzione', label: 'Produzione', color: '#10b981' },
   { value: 'acquisti', label: 'Acquisti', color: '#f59e0b' },
+  { value: 'condivisa', label: 'Condivisa tra più reparti', color: '#8b5cf6' },
 ];
 
 const BACKEND_URL = import.meta.env.VITE_API_URL
@@ -959,7 +960,7 @@ export default function ProjectDetailPage() {
       // Se l'utente ha inserito una fase personalizzata o nuova, aggiungiamola automaticamente alle fasi suggerite per quel reparto
       if (taskForm.faseSel === '__custom__' && taskName.trim()) {
         try {
-          const targetDept = taskForm.department || (user?.role === 'admin' ? 'tutti' : (user?.department || 'ufficio_tecnico'));
+          const targetDept = taskForm.department || (user?.role === 'admin' ? 'condivisa' : (user?.department || 'ufficio_tecnico'));
           await api.post('/phase-templates', {
             name: taskName.trim(),
             department: targetDept,
@@ -2390,7 +2391,7 @@ export default function ProjectDetailPage() {
                     options={getAvailableTemplates().map(tpl => ({
                       value: tpl.name,
                       label: tpl.name,
-                      department: tpl.department || 'tutti',
+                      department: (tpl.department && tpl.department !== 'tutti') ? tpl.department : 'condivisa',
                       ...tpl
                     }))}
                     value={taskForm.faseSel === '__custom__' ? taskForm.customText : taskForm.faseSel}
@@ -2408,6 +2409,7 @@ export default function ProjectDetailPage() {
                           duration_days: newDays,
                           planned_hours: newHours,
                           end_date: newEnd,
+                          department: opt.department && opt.department !== 'tutti' ? opt.department : 'condivisa'
                         });
                       } else {
                         setTaskForm({
@@ -2424,7 +2426,7 @@ export default function ProjectDetailPage() {
                       ufficio_tecnico: 'Ufficio Tecnico',
                       produzione: 'Produzione',
                       acquisti: 'Acquisti',
-                      tutti: 'Condivise / Tutti'
+                      condivisa: 'Condivisa tra più reparti'
                     }}
                     renderOption={(opt, searchStr) => (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
@@ -2454,7 +2456,7 @@ export default function ProjectDetailPage() {
                         <AppIcon name="alert" size={14} style={{ color: 'var(--accent-500)' }} /> Questa nuova fase verrà automaticamente aggiunta all'elenco suggerito per il reparto selezionato:
                       </span>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
-                        {[{ value: 'tutti', label: 'Tutti i reparti', color: '#6b7280' }, ...DEPT_OPTIONS].map(d => {
+                        {DEPT_OPTIONS.map(d => {
                           const currentVal = taskForm.department || user?.department || 'ufficio_tecnico';
                           const isSelected = currentVal === d.value;
                           return (
@@ -2726,7 +2728,15 @@ export default function ProjectDetailPage() {
                           )}
                         </div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                          {[...predefinedWorkers].sort((a, b) => a === user?.username ? -1 : b === user?.username ? 1 : a.localeCompare(b)).map(w => {
+                          {[...predefinedWorkers]
+                            .filter(w => {
+                              if (taskForm.workers.includes(w)) return true;
+                              if (!taskForm.department || taskForm.department === 'condivisa') return true;
+                              const wUser = usersList.find(u => u.username === w);
+                              return wUser && wUser.department === taskForm.department;
+                            })
+                            .sort((a, b) => a === user?.username ? -1 : b === user?.username ? 1 : a.localeCompare(b))
+                            .map(w => {
                             const sel = taskForm.workers.includes(w);
                             const wUser = usersList.find(u => u.username === w);
                             const wDept = wUser ? wUser.department : null;
