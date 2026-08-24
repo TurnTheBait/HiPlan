@@ -45,13 +45,15 @@ def add_working_days(start: date, days: int) -> date:
     return cur
 
 
-def get_working_days_count(start: date, end: date) -> int:
+def get_working_days_count(start: date, end: date, excluded_dates: list = None) -> int:
+    if excluded_dates is None:
+        excluded_dates = []
     if not start or not end or start > end:
         return 1
     count = 0
     cur = start
     while cur <= end:
-        if not is_weekend_or_holiday(cur):
+        if not is_weekend_or_holiday(cur) and cur.strftime("%Y-%m-%d") not in excluded_dates:
             count += 1
         cur += timedelta(days=1)
     return max(1, count)
@@ -272,13 +274,18 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
         except Exception:
             worker_hours = {}
             
-        # DHTMLX Gantt sets exclusive end_date for tasks spanning entire days
-        inclusive_end = task.end_date - timedelta(days=1) if task.end_date > task.start_date else task.end_date
-        duration_days = get_working_days_count(task.start_date, inclusive_end)
+        try:
+            excluded_dates = json.loads(task.excluded_dates) if getattr(task, 'excluded_dates', None) else []
+        except:
+            excluded_dates = []
+
+        # task.end_date is already inclusive in the database as sent by the frontend modal
+        inclusive_end = task.end_date
+        duration_days = get_working_days_count(task.start_date, inclusive_end, excluded_dates)
         
         cur = task.start_date
         while cur <= inclusive_end:
-            if not is_weekend_or_holiday(cur):
+            if not is_weekend_or_holiday(cur) and cur.strftime("%Y-%m-%d") not in excluded_dates:
                 if cur not in timeline:
                     timeline[cur] = {}
                     

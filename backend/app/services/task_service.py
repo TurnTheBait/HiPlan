@@ -458,12 +458,13 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
         delta_days = 0
         if "start_date" in update_data and old_start and task.start_date:
             delta_days = (task.start_date - old_start).days
+            # If end_date was not explicitly updated (e.g. drag and drop from Gantt), shift it by the same amount
+            if "end_date" not in update_data and old_end:
+                task.end_date = old_end + timedelta(days=delta_days)
         elif "end_date" in update_data and old_end and task.end_date:
             delta_days = (task.end_date - old_end).days
+
         if delta_days != 0:
-            # We already updated `task.start_date` and `task.end_date` via setattr.
-            # We just need to propagate to children, so we add task to visited
-            # and only call propagate_shift on the children links.
             visited_for_shift = {task.id}
             links_result = await db.execute(select(Link).where(Link.source == task.id))
             for link in links_result.scalars().all():

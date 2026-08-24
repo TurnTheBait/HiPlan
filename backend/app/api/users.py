@@ -225,19 +225,23 @@ async def get_worker_conflicts(
         if not workers_list:
             continue
             
+        try:
+            excluded_dates = json.loads(task.excluded_dates) if getattr(task, 'excluded_dates', None) else []
+        except:
+            excluded_dates = []
+
         current_date = task.start_date
-        # DHTMLX Gantt sets exclusive end_date for tasks spanning entire days
-        inclusive_end = task.end_date - timedelta(days=1) if task.end_date > task.start_date else task.end_date
+        inclusive_end = task.end_date
         
         try:
             worker_hours_map = json.loads(getattr(task, 'worker_hours', '{}')) or {}
         except:
             worker_hours_map = {}
             
-        duration_days = get_working_days_count(task.start_date, inclusive_end)
+        duration_days = get_working_days_count(task.start_date, inclusive_end, excluded_dates)
             
         while current_date <= inclusive_end:
-            if not is_weekend_or_holiday(current_date):
+            if not is_weekend_or_holiday(current_date) and current_date.strftime("%Y-%m-%d") not in excluded_dates:
                 date_str = current_date.isoformat()
                 
                 for worker_name in workers_list:
