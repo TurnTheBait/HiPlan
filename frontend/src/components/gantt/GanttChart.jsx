@@ -81,8 +81,9 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.config.drag_links = true;
     gantt.config.drag_resize = false;
     gantt.config.drag_move = false;
-    
+
     // Disabilita i popup nativi di conferma per l'eliminazione dei link
+    gantt.config.confirm_link_deleting = false;
     if (gantt.locale && gantt.locale.labels) {
       gantt.locale.labels.confirm_link_deleting = null;
     }
@@ -108,24 +109,24 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
           return `${checkIcon}${task.text || ''}`;
         }
       },
-      { 
-        name: "start_date", 
-        label: "Inizio", 
-        align: "center", 
-        width: 85, 
+      {
+        name: "start_date",
+        label: "Inizio",
+        align: "center",
+        width: 85,
         resize: true,
-        template: function(task) {
+        template: function (task) {
           if (task.type === 'milestone') return '-';
           return gantt.templates.date_grid(task.start_date, task);
         }
       },
-      { 
-        name: "end_date", 
-        label: "Fine", 
-        align: "center", 
-        width: 85, 
+      {
+        name: "end_date",
+        label: "Fine",
+        align: "center",
+        width: 85,
         resize: true,
-        template: function(task) {
+        template: function (task) {
           if (task.type === 'milestone') return '-';
           if (!task.end_date) return '';
           const end = new Date(task.end_date);
@@ -139,7 +140,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         align: "center",
         width: 95,
         resize: true,
-        template: function(task) {
+        template: function (task) {
           if (task.type === 'milestone') return gantt.templates.date_grid(task.start_date, task);
           return '-';
         }
@@ -298,7 +299,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       if (task && unit === "day") {
         let exDates = [];
         if (typeof task.excluded_dates === 'string') {
-          try { exDates = JSON.parse(task.excluded_dates); } catch(e){}
+          try { exDates = JSON.parse(task.excluded_dates); } catch (e) { }
         } else if (Array.isArray(task.excluded_dates)) {
           exDates = task.excluded_dates;
         }
@@ -434,6 +435,13 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       return false; // blocks native DHTMLX popup
     });
 
+    gantt.attachEvent("onBeforeLinkDelete", (id, link) => {
+      if (onLinkDeleteRef.current) {
+        onLinkDeleteRef.current(id, false);
+      }
+      return false; // blocks native DHTMLX link deletion flow
+    });
+
     const handleResize = () => {
       if (initialized.current) gantt.setSizes();
     };
@@ -473,24 +481,24 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
           return `${checkIcon}${task.text || ''}`;
         }
       },
-      { 
-        name: "start_date", 
-        label: "Inizio", 
-        align: "center", 
-        width: 85, 
+      {
+        name: "start_date",
+        label: "Inizio",
+        align: "center",
+        width: 85,
         resize: true,
-        template: function(task) {
+        template: function (task) {
           if (task.type === 'milestone') return '-';
           return gantt.templates.date_grid(task.start_date, task);
         }
       },
-      { 
-        name: "end_date", 
-        label: "Fine", 
-        align: "center", 
-        width: 85, 
+      {
+        name: "end_date",
+        label: "Fine",
+        align: "center",
+        width: 85,
         resize: true,
-        template: function(task) {
+        template: function (task) {
           if (task.type === 'milestone') return '-';
           if (!task.end_date) return '';
           const end = new Date(task.end_date);
@@ -504,7 +512,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         align: "center",
         width: 95,
         resize: true,
-        template: function(task) {
+        template: function (task) {
           if (task.type === 'milestone') return gantt.templates.date_grid(task.start_date, task);
           return '-';
         }
@@ -585,12 +593,12 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
             markerDiv.style.top = '0px';
             markerDiv.style.height = `${totalRowsHeight}px`;
             markerDiv.title = `Avvio Commessa: ${formattedS}`;
-            
+
             const badgeDiv = document.createElement('div');
             badgeDiv.className = 'custom-marker-badge';
             badgeDiv.innerText = 'Inizio Commessa';
             markerDiv.appendChild(badgeDiv);
-            
+
             gantt.$task_data.appendChild(markerDiv);
           }
         } catch (e) { /* scala non ancora pronta */ }
@@ -609,12 +617,12 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
             markerDiv.style.top = '0px';
             markerDiv.style.height = `${totalRowsHeight}px`;
             markerDiv.title = `Fine Commessa: ${formattedE}`;
-            
+
             const badgeDiv = document.createElement('div');
             badgeDiv.className = 'custom-marker-badge';
             badgeDiv.innerText = 'Fine Commessa';
             markerDiv.appendChild(badgeDiv);
-            
+
             gantt.$task_data.appendChild(markerDiv);
           }
         } catch (e) { /* scala non ancora pronta */ }
@@ -743,18 +751,18 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         const totEff = calculateTaskEffHours(t);
         const plannedH = Number(t.planned_hours || 8.0);
         const isOverrun = plannedH > 0 && totEff > plannedH;
-        
+
         let parsedEndDate = t.end_date;
         if (parsedEndDate && t.type !== 'milestone') {
-            const dateParts = String(parsedEndDate).split(' ')[0].split('T')[0].split('-');
-            if (dateParts.length === 3) {
-                const ed = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
-                ed.setDate(ed.getDate() + 1);
-                const y = ed.getFullYear();
-                const m = String(ed.getMonth() + 1).padStart(2, '0');
-                const d = String(ed.getDate()).padStart(2, '0');
-                parsedEndDate = `${y}-${m}-${d}`;
-            }
+          const dateParts = String(parsedEndDate).split(' ')[0].split('T')[0].split('-');
+          if (dateParts.length === 3) {
+            const ed = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+            ed.setDate(ed.getDate() + 1);
+            const y = ed.getFullYear();
+            const m = String(ed.getMonth() + 1).padStart(2, '0');
+            const d = String(ed.getDate()).padStart(2, '0');
+            parsedEndDate = `${y}-${m}-${d}`;
+          }
         }
         const taskPayload = {
           ...t,
@@ -772,7 +780,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
           color: isCompleted ? '#10b981' : (isOverrun ? '#ef4444' : getTaskColor(t)),
           is_overrun: isOverrun,
         };
-        
+
         return taskPayload;
       }),
       links: validLinks.map(l => ({

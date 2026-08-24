@@ -20,7 +20,7 @@ def do_fix():
                     "project_name": task.project.name if task.project else "-",
                     "worker": None,
                     "date": str(first_delayed_date),
-                    "reason": f"Ritardo critico: il {first_delayed_date.strftime('%d/%m/%Y')} ha consuntivato meno del 50% delle ore giornaliere attese ({round(ore_gg, 1)}h).",
+                    "reason": f"Il {first_delayed_date.strftime('%d/%m/%Y')} non ha consuntivato le ore giornaliere attese ({round(ore_gg, 1)}h).",
                     "action_type": ReplanActionType.SHIFT_DELAY.value,
                     "action_payload": {
                         "task_id": str(task.id),
@@ -60,7 +60,7 @@ def do_fix():
                     "project_name": task.project.name if task.project else "-",
                     "worker": None,
                     "date": str(first_delayed_date),
-                    "reason": f"Ritardo critico: mancano all'appello circa {round(lost_hours, 1)}h rispetto al piano.",
+                    "reason": f"Mancano all'appello circa {round(lost_hours, 1)}h rispetto al piano.",
                     "action_type": ReplanActionType.SHIFT_DELAY.value,
                     "action_payload": {
                         "task_id": str(task.id),
