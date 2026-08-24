@@ -1,6 +1,8 @@
 import enum
+# pyrefly: ignore [missing-import]
 from sqlalchemy import Column, String, Text, Boolean, ForeignKey
-from sqlalchemy.orm import relationship
+# pyrefly: ignore [missing-import]
+from sqlalchemy.orm import relationship, backref
 from app.models.base import Base, TimestampMixin, uuid_pk, uuid_fk
 
 class TaskComment(Base, TimestampMixin):
@@ -11,7 +13,7 @@ class TaskComment(Base, TimestampMixin):
     author_id = Column(uuid_fk(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     content = Column(Text, nullable=False)
     
-    task = relationship("Task", backref="comments")
+    task = relationship("Task", backref=backref("comments", cascade="all, delete-orphan"))
     author = relationship("User", foreign_keys=[author_id])
 
 class TaskChecklistItem(Base, TimestampMixin):
@@ -22,4 +24,4 @@ class TaskChecklistItem(Base, TimestampMixin):
     text = Column(String(500), nullable=False)
     is_completed = Column(Boolean, default=False, nullable=False)
     
-    task = relationship("Task", backref="checklist_items")
+    task = relationship("Task", backref=backref("checklist_items", cascade="all, delete-orphan"))
