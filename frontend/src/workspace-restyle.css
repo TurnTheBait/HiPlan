@@ -230,6 +230,15 @@
   box-shadow: var(--shadow-xs);
 }
 
+/* Agent command stack: same look as projects-command-stack */
+.replanning-page .agent-command-stack {
+  margin-bottom: 0;
+}
+
+.replanning-page .agent-command-stack .btn-primary {
+  min-height: 36px;
+}
+
 .projects-page .filter-chip,
 .replanning-page .filter-chip {
   min-height: 34px;

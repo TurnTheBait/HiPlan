@@ -1,7 +1,5 @@
 .replanning-page {
-  padding: 24px;
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
 }
 
 .agent-header {
@@ -58,8 +56,13 @@
 }
 
 @keyframes pulse-glow {
-  0% { box-shadow: 0 4px 12px rgba(24, 95, 165, 0.3); }
-  100% { box-shadow: 0 4px 20px rgba(24, 95, 165, 0.6); }
+  0% {
+    box-shadow: 0 4px 12px rgba(24, 95, 165, 0.3);
+  }
+
+  100% {
+    box-shadow: 0 4px 20px rgba(24, 95, 165, 0.6);
+  }
 }
 
 .agent-controls {
@@ -104,10 +107,25 @@
   letter-spacing: 0.5px;
 }
 
-.type-shift_conflict { background: #fef3c7; color: #b45309; }
-.type-shift_overload { background: #fee2e2; color: #b91c1c; }
-.type-shift_vacation { background: #e0e7ff; color: #4338ca; }
-.type-shift_cascade { background: #f3f4f6; color: #4b5563; }
+.type-shift_conflict {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.type-shift_overload {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.type-shift_vacation {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.type-shift_cascade {
+  background: #f3f4f6;
+  color: #4b5563;
+}
 
 .log-task-info {
   display: flex;

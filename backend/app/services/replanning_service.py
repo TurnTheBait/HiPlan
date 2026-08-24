@@ -146,6 +146,7 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
                 "project_id": str(task.project_id),
                 "project_name": task.project.name,
                 "project_code": task.project.code if task.project.code else "",
+                "project_color": task.project.color if getattr(task.project, 'color', None) else None,
                 "worker": None,
                 "date": str(task.end_date),
                 "reason": f"La fase termina il {task.end_date.strftime('%d/%m/%Y')}, superando la scadenza della commessa ({task.project.end_date.strftime('%d/%m/%Y')})."
@@ -180,6 +181,7 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
                 "project_id": str(task.project_id),
                 "project_name": task.project.name if task.project else "-",
                 "project_code": (task.project.code if task.project.code else "") if task.project else "",
+                "project_color": task.project.color if getattr(task, 'project', None) and getattr(task.project, 'color', None) else None,
                 "worker": None,
                 "date": str(task.end_date),
                 "reason": f"La fase ha superato le ore previste ({round(tot_eff, 1)}h consuntivate su {planned_h}h previste)."
@@ -252,6 +254,7 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
                     "project_id": str(task.project_id),
                     "project_name": task.project.name if task.project else "-",
                     "project_code": (task.project.code if task.project.code else "") if task.project else "",
+                    "project_color": task.project.color if getattr(task, 'project', None) and getattr(task.project, 'color', None) else None,
                     "worker": None,
                     "date": str(first_delayed_date),
                     "reason": reason_msg
@@ -269,6 +272,7 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
                     "project_id": str(task.project_id),
                     "project_name": task.project.name if task.project else "-",
                     "project_code": (task.project.code if task.project.code else "") if task.project else "",
+                    "project_color": task.project.color if getattr(task, 'project', None) and getattr(task.project, 'color', None) else None,
                     "worker": None,
                     "date": str(task.end_date),
                     "reason": f"La fase è scaduta il {task.end_date.strftime('%d/%m/%Y')} ma non risulta completata."
@@ -340,6 +344,7 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
                         "project_id": str(t.project_id),
                         "project_name": t.project.name if t.project else "-",
                         "project_code": (t.project.code if t.project.code else "") if t.project else "",
+                        "project_color": t.project.color if getattr(t, 'project', None) and getattr(t.project, 'color', None) else None,
                         "worker": w,
                         "date": str(d),
                         "reason": f"L'addetto {w} è in ferie il {d.strftime('%d/%m/%Y')}."
@@ -370,10 +375,10 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
                     "project_id": str(t_to_shift.project_id),
                     "project_name": t_to_shift.project.name if t_to_shift.project else "-",
                     "project_code": (t_to_shift.project.code if t_to_shift.project.code else "") if t_to_shift.project else "",
+                    "project_color": t_to_shift.project.color if getattr(t_to_shift, 'project', None) and getattr(t_to_shift.project, 'color', None) else None,
                     "worker": w,
                     "date": str(d),
                     "reason": f"L'addetto {w} ha un carico di {round(total_h, 1)}h (limite {max_daily_hours}h) il {d.strftime('%d/%m/%Y')}."
                 })
 
     return suggestions
-

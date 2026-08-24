@@ -270,7 +270,7 @@ export default function MainLayout() {
       '/notes': { title: 'Blocchi Note', subtitle: 'Appunti e documenti condivisi' },
       '/todo': { title: 'TODO', subtitle: 'Priorità personali e di team' },
       '/conflicts': { title: 'Panoramica addetti', subtitle: 'Carichi e sovrapposizioni' },
-      '/replanning': { title: 'Agent', subtitle: 'Log e impostazioni agent' },
+      '/replanning': { title: 'Agent', subtitle: 'Analisi e conflitti' },
       '/tickets': { title: 'Ticket', subtitle: 'Richieste e supporto operativo' },
       '/admin': { title: 'Amministrazione', subtitle: 'Utenti e configurazione' },
       '/me': { title: 'Il mio profilo', subtitle: 'Profilo, reparto e ferie' },
