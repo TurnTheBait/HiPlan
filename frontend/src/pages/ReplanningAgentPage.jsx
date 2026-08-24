@@ -183,7 +183,23 @@ export default function ReplanningAgentPage() {
                 ) : (
                   <div className="suggestions-list" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     {filteredSuggestions.map(s => {
-                      const badge = getActionBadge(s.type);
+                      let badge = { ...getActionBadge(s.type) };
+
+                      if (s.type === 'delay_conflict') {
+                        if (s.reason && s.reason.toLowerCase().includes('ritardo critico')) {
+                          badge.color = '#e2445c'; // Red for critical delay
+                          badge.label = 'Ritardo Critico';
+                        } else if (s.reason && s.reason.toLowerCase().includes('scaduta')) {
+                          badge.color = '#e2445c'; // Red for expired
+                          badge.label = 'Scaduta';
+                        } else {
+                          badge.color = '#f59e0b'; // Orange for warning/overrun
+                          badge.label = 'Ritardo';
+                        }
+                      } else if (s.type === 'project_end_exceeded') {
+                        badge.color = '#e2445c'; // Red
+                      }
+
                       return (
                         <div key={s.id} className="suggestion-card" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 8, padding: 20, display: 'flex', gap: 20, alignItems: 'flex-start' }}>
                           <div className="suggestion-icon" style={{ background: `${badge.color}15`, color: badge.color, padding: 12, borderRadius: '50%' }}>
@@ -196,12 +212,28 @@ export default function ReplanningAgentPage() {
                               </span>
                               <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                                 Commessa: <strong>{s.project_code ? `${s.project_code} - ${s.project_name}` : s.project_name}</strong>
+                                {s.task_name && (
+                                  <>
+                                    <span style={{ margin: '0 8px', color: 'var(--border-strong)' }}>|</span>
+                                    Fase: <strong>{s.task_name}</strong>
+                                  </>
+                                )}
                               </span>
                             </div>
                             <h4 style={{ margin: '0 0 8px', fontSize: '1.1rem' }}>{s.reason}</h4>
                             {/*<p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 14 }}><strong>Azione consigliata:</strong> {s.action_label}</p>*/}
                           </div>
                           <div className="suggestion-actions" style={{ display: 'flex', gap: 8 }}>
+                            {s.project_id && (
+                              <button
+                                className="btn btn-primary"
+                                onClick={() => navigate(`/projects/${s.project_id}`)}
+                                title="Vai alla commessa"
+                                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', padding: '6px 12px' }}
+                              >
+                                <AppIcon name="arrowRight" size={14} />
+                              </button>
+                            )}
                             {activeTab === 'suggestions' ? (
                               <button
                                 className="btn btn-secondary"

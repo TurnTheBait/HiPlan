@@ -191,6 +191,7 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
             
             cur_d = task.start_date
             has_critical_delay = False
+            has_warning_delay = False
             first_delayed_date = None
             
             while cur_d <= task.end_date and cur_d <= today:
@@ -206,11 +207,16 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
                                 
                     if tot_day_eff < (ore_gg * 0.5) or (tot_day_eff == 0 and ore_gg > 0):
                         has_critical_delay = True
-                        first_delayed_date = cur_d
+                        if not first_delayed_date:
+                            first_delayed_date = cur_d
                         break
+                    elif tot_day_eff < ore_gg:
+                        has_warning_delay = True
+                        if not first_delayed_date:
+                            first_delayed_date = cur_d
                 cur_d += timedelta(days=1)
                 
-            if has_critical_delay:
+            if has_critical_delay or has_warning_delay:
                 tot_expected_so_far = 0
                 tot_actual_so_far = 0
                 c_d = task.start_date
@@ -230,7 +236,14 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
                 if days_to_add <= 0: days_to_add = 1
 
                 date_str_val = first_delayed_date.strftime('%Y%m%d') if first_delayed_date else 'unknown'
-                sugg_id = f"delay_{task.id}_{date_str_val}_critico"
+                
+                if has_critical_delay:
+                    sugg_id = f"delay_{task.id}_{date_str_val}_critico"
+                    reason_msg = f"Ritardo critico: mancano all'appello circa {round(lost_hours, 1)}h rispetto al piano."
+                else:
+                    sugg_id = f"delay_{task.id}_{date_str_val}_attenzione"
+                    reason_msg = f"Attenzione: la consuntivazione è sotto le attese (mancano circa {round(lost_hours, 1)}h)."
+                    
                 suggestions.append({
                     "id": sugg_id,
                     "type": "delay_conflict",
@@ -241,7 +254,7 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
                     "project_code": (task.project.code if task.project.code else "") if task.project else "",
                     "worker": None,
                     "date": str(first_delayed_date),
-                    "reason": f"Ritardo critico: mancano all'appello circa {round(lost_hours, 1)}h rispetto al piano."
+                    "reason": reason_msg
                 })
             elif task.end_date < today:
                 # Fallback: scaduta e non in sforamento / ritardo critico specifico

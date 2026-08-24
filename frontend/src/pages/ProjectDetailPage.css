@@ -368,3 +368,10 @@
   background: var(--warning-bg);
   border-color: rgba(253, 171, 61, 0.3);
 }
+
+.alert-card.ritardo,
+.alert-card.ritardo_ferie,
+.alert-card.sforamento {
+  background: var(--danger-bg);
+  border-color: rgba(226, 68, 92, 0.3);
+}

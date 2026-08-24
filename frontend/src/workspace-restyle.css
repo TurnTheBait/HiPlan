@@ -941,6 +941,18 @@
   box-shadow: var(--shadow-sm);
 }
 
+.alert-card.attenzione {
+  background: var(--warning-bg) !important;
+  border-color: rgba(253, 171, 61, 0.3) !important;
+}
+
+.alert-card.ritardo,
+.alert-card.ritardo_ferie,
+.alert-card.sforamento {
+  background: var(--danger-bg) !important;
+  border-color: rgba(226, 68, 92, 0.3) !important;
+}
+
 .commessa-stats-grid {
   gap: 12px;
 }
