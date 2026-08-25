@@ -144,7 +144,7 @@ export default function ProjectsPage() {
         (p.responsible_username && p.responsible_username.toLowerCase().includes(q))
       );
     }
-    
+
     if (sortConfig.key !== 'none') {
       list = [...list].sort((a, b) => {
         let valA, valB;
@@ -450,7 +450,7 @@ export default function ProjectsPage() {
                 {(user?.role === 'admin' || user?.role === 'editor' || project.owner_id === user?.id || project.responsible_id === user?.id || project.responsible_username === user?.username) && (
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button
-                      className="btn-ghost btn-sm"
+                      className="btn-ghost btn-sm project-delete"
                       onClick={(e) => openEditProject(project, e)}
                       title="Modifica commessa (titolo, cliente, codice, referente, addetti)"
                       style={{ fontSize: 14 }}
