@@ -1208,41 +1208,53 @@ async def export_ticket_pdf(db: AsyncSession, ticket_id: str) -> io.BytesIO:
     output.seek(0)
     return output
 
+def _is_vacation(date_str, user_dict):
+    for v in user_dict.get("vacations", []):
+        if v.get("start_date") and v.get("end_date"):
+            if v["start_date"] <= date_str <= v["end_date"]:
+                return True
+    return False
+
 async def export_workload_excel(heatmap_data: dict) -> io.BytesIO:
     # pyrefly: ignore [missing-import]
     import openpyxl
+    import datetime
     # pyrefly: ignore [missing-import]
     from openpyxl.styles import Font, Alignment, PatternFill
+    from app.utils.working_days import is_italian_holiday
     
     wb = openpyxl.Workbook()
     ws_planned = wb.active
     ws_planned.title = "Ore Pianificate"
     ws_actual = wb.create_sheet(title="Ore Consuntivate")
     
-    all_dates = set()
-    for u in heatmap_data.values():
-        for d in u.get('workload', {}).keys():
-            if d != '__extra__':
-                all_dates.add(d)
-        for d in u.get('actual_workload', {}).keys():
-            if d != '__extra__':
-                all_dates.add(d)
-                
-    sorted_dates = sorted(list(all_dates))
+    today = datetime.date.today()
+    start_date = today - datetime.timedelta(days=365)
+    end_date = today + datetime.timedelta(days=365)
+    sorted_dates = [(start_date + datetime.timedelta(days=i)).strftime("%Y-%m-%d") for i in range((end_date - start_date).days + 1)]
     
     headers = ["Addetto", "Reparto"] + sorted_dates
     ws_planned.append(headers)
     ws_actual.append(headers)
     
     header_fill = PatternFill(start_color="1F2937", end_color="1F2937", fill_type="solid")
+    holiday_fill = PatternFill(start_color="EF4444", end_color="EF4444", fill_type="solid")
+    holiday_col_fill = PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid")
     header_font = Font(color="FFFFFF", bold=True)
     
     for ws in [ws_planned, ws_actual]:
-        for col_idx in range(1, len(headers) + 1):
-            cell = ws.cell(row=1, column=col_idx)
-            cell.fill = header_fill
+        for col_idx, h_text in enumerate(headers):
+            cell = ws.cell(row=1, column=col_idx + 1)
             cell.font = header_font
             cell.alignment = Alignment(horizontal="center", vertical="center")
+            if col_idx >= 2:
+                d = datetime.datetime.strptime(h_text, "%Y-%m-%d").date()
+                if is_italian_holiday(d):
+                    cell.fill = holiday_fill
+                else:
+                    cell.fill = header_fill
+            else:
+                cell.fill = header_fill
         
     for user_id, u in heatmap_data.items():
         row_planned = [u.get("full_name") or u.get("username"), u.get("department") or "-"]
@@ -1255,11 +1267,27 @@ async def export_workload_excel(heatmap_data: dict) -> io.BytesIO:
             eff_data = actual_workload.get(d, {})
             prev_val = prev_data.get("hours", 0) if isinstance(prev_data, dict) else 0
             eff_val = eff_data.get("hours", 0) if isinstance(eff_data, dict) else 0
-            row_planned.append(float(prev_val))
-            row_actual.append(float(eff_val))
+            
+            p_val = float(prev_val)
+            e_val = float(eff_val)
+            
+            if _is_vacation(d, u):
+                row_planned.append("Ferie" if p_val == 0 else f"Ferie ({p_val})")
+                row_actual.append("Ferie" if e_val == 0 else f"Ferie ({e_val})")
+            else:
+                row_planned.append(p_val)
+                row_actual.append(e_val)
             
         ws_planned.append(row_planned)
         ws_actual.append(row_actual)
+        
+    for ws in [ws_planned, ws_actual]:
+        for row_idx in range(2, ws.max_row + 1):
+            for col_idx in range(3, len(headers) + 1):
+                d_str = headers[col_idx - 1]
+                d = datetime.datetime.strptime(d_str, "%Y-%m-%d").date()
+                if is_italian_holiday(d):
+                    ws.cell(row=row_idx, column=col_idx).fill = holiday_col_fill
         
     output = io.BytesIO()
     wb.save(output)
@@ -1275,10 +1303,8 @@ async def export_workload_pdf(heatmap_data: dict) -> io.BytesIO:
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
     # pyrefly: ignore [missing-import]
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    # pyrefly: ignore [missing-import]
-    from collections import defaultdict
-    # pyrefly: ignore [missing-import]
     import datetime
+    from collections import defaultdict
     
     output = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -1297,73 +1323,83 @@ async def export_workload_pdf(heatmap_data: dict) -> io.BytesIO:
     elements.append(Paragraph("Saturazione Carichi di Lavoro (Pianificate vs Consuntivate)", title_style))
     elements.append(Spacer(1, 10))
     
-    user_weeks = {}
-    all_weeks = set()
+    today = datetime.date.today()
+    start_date = today - datetime.timedelta(days=365)
+    end_date = today + datetime.timedelta(days=365)
     
+    week_map = {}
+    week_to_month = {}
+    for i in range((end_date - start_date).days + 1):
+        d = start_date + datetime.timedelta(days=i)
+        iso_year, iso_week, _ = d.isocalendar()
+        key = (iso_year, iso_week)
+        if key not in week_map:
+            week_map[key] = f"W{iso_week:02d}"
+            # Use Thursday to determine the month of the ISO week
+            thursday = d + datetime.timedelta(days=(3 - d.weekday()))
+            week_to_month[key] = (thursday.year, thursday.month)
+            
+    sorted_week_keys = sorted(week_map.keys())
+    
+    user_weeks = {}
     for uid, u in heatmap_data.items():
         user_weeks[uid] = defaultdict(lambda: {"prev": 0.0, "eff": 0.0})
         
         for d_str, data in u.get("workload", {}).items():
             if d_str != '__extra__':
-                dt = datetime.datetime.strptime(d_str, "%Y-%m-%d")
-                week_str = f"W{dt.isocalendar()[1]}-{dt.year}"
-                val = data.get("hours", 0) if isinstance(data, dict) else 0
-                user_weeks[uid][week_str]["prev"] += float(val)
-                all_weeks.add(week_str)
-                
+                dt = datetime.datetime.strptime(d_str, "%Y-%m-%d").date()
+                if start_date <= dt <= end_date:
+                    iso_year, iso_week, _ = dt.isocalendar()
+                    key = (iso_year, iso_week)
+                    val = data.get("hours", 0) if isinstance(data, dict) else 0
+                    user_weeks[uid][key]["prev"] += float(val)
+                    
         for d_str, data in u.get("actual_workload", {}).items():
             if d_str != '__extra__':
-                dt = datetime.datetime.strptime(d_str, "%Y-%m-%d")
-                week_str = f"W{dt.isocalendar()[1]}-{dt.year}"
-                val = data.get("hours", 0) if isinstance(data, dict) else 0
-                user_weeks[uid][week_str]["eff"] += float(val)
-                all_weeks.add(week_str)
-                
-    sorted_weeks = sorted(list(all_weeks))
-    
-    headers = ["Addetto", "Reparto"]
-    for w in sorted_weeks:
-        headers.append(f"{w}")
+                dt = datetime.datetime.strptime(d_str, "%Y-%m-%d").date()
+                if start_date <= dt <= end_date:
+                    iso_year, iso_week, _ = dt.isocalendar()
+                    key = (iso_year, iso_week)
+                    val = data.get("hours", 0) if isinstance(data, dict) else 0
+                    user_weeks[uid][key]["eff"] += float(val)
+                    
+    month_to_weeks = defaultdict(list)
+    for key in sorted_week_keys:
+        month_to_weeks[week_to_month[key]].append(key)
         
-    table_data = [headers]
+    sorted_months = sorted(month_to_weeks.keys())
+    month_names = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"]
     
-    for uid, u in heatmap_data.items():
-        row = [u.get("full_name") or u.get("username"), u.get("department") or "-"]
-        for w in sorted_weeks:
-            prev = user_weeks[uid][w]["prev"]
-            eff = user_weeks[uid][w]["eff"]
-            row.append(f"{prev:.1f} / {eff:.1f} h")
-        table_data.append(row)
+    for m_year, m_month in sorted_months:
+        week_keys = month_to_weeks[(m_year, m_month)]
+        m_name = month_names[m_month - 1]
         
-    # Split table horizontally if there are too many weeks
-    tables_to_draw = []
-    max_cols_per_page = 10
-    total_cols = len(headers)
-    
-    for i in range(2, total_cols, max_cols_per_page):
-        end_idx = min(i + max_cols_per_page, total_cols)
-        sub_headers = headers[0:2] + headers[i:end_idx]
-        sub_data = [sub_headers]
-        for idx in range(1, len(table_data)):
-            orig_row = table_data[idx]
-            sub_data.append(orig_row[0:2] + orig_row[i:end_idx])
+        elements.append(Paragraph(f"{m_name} {m_year}", ParagraphStyle("Sub", parent=styles["Heading2"], spaceAfter=10)))
+        
+        headers = ["Addetto", "Reparto"] + [week_map[k] for k in week_keys]
+        sub_data = [headers]
+        
+        for uid, u in heatmap_data.items():
+            row = [u.get("full_name") or u.get("username"), u.get("department") or "-"]
+            for k in week_keys:
+                prev = user_weeks[uid][k]["prev"]
+                eff = user_weeks[uid][k]["eff"]
+                row.append(f"{prev:.1f} / {eff:.1f} h")
+            sub_data.append(row)
             
         t = Table(sub_data)
-        t.setStyle(TableStyle([
+        style_cmds = [
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F2937")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ]))
-        tables_to_draw.append(t)
-        
-    for idx, t in enumerate(tables_to_draw):
+        ]
+        t.setStyle(TableStyle(style_cmds))
         elements.append(t)
-        if idx < len(tables_to_draw) - 1:
-            elements.append(Spacer(1, 20))
-            
+        elements.append(Spacer(1, 20))
+        
     doc.build(elements)
     output.seek(0)
     return output
