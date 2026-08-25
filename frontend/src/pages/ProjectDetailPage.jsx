@@ -1234,12 +1234,17 @@ export default function ProjectDetailPage() {
       const taskName = t.text || 'Fase senza nome';
       const startDate = new Date(t.start_date).toLocaleDateString();
       const endDate = new Date(t.end_date).toLocaleDateString();
-      const progress = t.completed || 0;
+      let progressStr = `${Math.round((t.progress || 0) * 100)}% completata`;
+      if (isTaskCompleted(t)) {
+        progressStr = 'Completata (100%)';
+      } else if (Number(t.completed) === -1) {
+        progressStr = 'Sospesa';
+      }
 
       const workers = Array.isArray(t.workers) ? t.workers : [];
 
       promptLines.push(`- [${dept}] ${taskName}`);
-      promptLines.push(`  Date: dal ${startDate} al ${endDate} (${t.duration || 0} giorni) | Stato: ${progress}% completata`);
+      promptLines.push(`  Date: dal ${startDate} al ${endDate} (${t.duration || 0} giorni) | Stato: ${progressStr}`);
 
       if (workers.length > 0) {
         promptLines.push(`  Addetti:`);
@@ -1247,17 +1252,20 @@ export default function ProjectDetailPage() {
           const wAssigned = (t.worker_hours && t.worker_hours[w] !== undefined && t.worker_hours[w] !== '')
             ? Number(t.worker_hours[w])
             : (Number(t.planned_hours || 8) / workers.length);
-          const wActual = (t.actual_hours && t.actual_hours[w]) ? Number(t.actual_hours[w]) : 0;
+          
+          let wActual = 0;
+          if (t.actual_hours && t.actual_hours[w] && typeof t.actual_hours[w] === 'object') {
+            Object.values(t.actual_hours[w]).forEach(h => {
+              wActual += Number(h) || 0;
+            });
+          }
           promptLines.push(`    - ${w}: ${wActual}h fatte / ${Number(wAssigned.toFixed(1))}h assegnate`);
         });
       } else {
         promptLines.push(`  Addetti: Nessuno`);
       }
 
-      let totOreReg = 0;
-      if (t.actual_hours && typeof t.actual_hours === 'object') {
-        totOreReg = Object.values(t.actual_hours).reduce((acc, v) => acc + (Number(v) || 0), 0);
-      }
+      const totOreReg = calculateTaskEffHours(t);
       promptLines.push(`  Totale Fase: ${totOreReg}h fatte su ${t.planned_hours || 0}h previste`);
     });
 
