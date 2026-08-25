@@ -12,7 +12,7 @@ from app.models.user import User, UserRole
 from app.models.project import Project
 from app.models.task import Task
 from app.models.ticket import Ticket, TicketReply
-from app.models.task_collaboration import TaskComment
+from app.models.task_collaboration import TaskComment, TaskChecklistItem
 from app.models.note import Note
 from app.models.todo import Todo
 from app.services import project_service
@@ -88,8 +88,25 @@ async def global_search(
                 "id": t.id,
                 "title": t.text,
                 "subtitle": f"Lavorazione in {p_code or ''} {p_name}".strip(),
-                "link": f"/projects/{t.project_id}?tab=commessa&open_task={t.id}",
+                "link": f"/projects/{t.project_id}?tab=commessa&open_task={t.id}&open_tab=generale",
                 "match_context": "Trovato nel testo della fase o assegnatari"
+            })
+            
+    # --- TASK CHECKLISTS ---
+    if allowed_project_ids:
+        query_tchecklists = select(TaskChecklistItem, Task.text, Task.project_id).join(Task, TaskChecklistItem.task_id == Task.id).where(
+            Task.project_id.in_(allowed_project_ids),
+            TaskChecklistItem.text.ilike(search_pattern)
+        )
+        res_tchecklists = await db.execute(query_tchecklists)
+        for tck, t_text, t_proj_id in res_tchecklists.all():
+            results.append({
+                "type": "task_checklist",
+                "id": tck.id,
+                "title": f"Checklist in: {t_text}",
+                "subtitle": "Elemento checklist",
+                "link": f"/projects/{t_proj_id}?tab=commessa&open_task={tck.task_id}&open_tab=checklist",
+                "match_context": "Trovato nel contenuto della checklist"
             })
             
     # --- TASK COMMENTS ---
@@ -105,7 +122,7 @@ async def global_search(
                 "id": tc.id,
                 "title": f"Commento su: {t_text}",
                 "subtitle": "Commento fase",
-                "link": f"/projects/{t_proj_id}?tab=commessa&open_task={tc.task_id}",
+                "link": f"/projects/{t_proj_id}?tab=commessa&open_task={tc.task_id}&open_tab=commenti",
                 "match_context": "Trovato nel contenuto del commento"
             })
             

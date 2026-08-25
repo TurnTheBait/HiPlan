@@ -205,12 +205,14 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const openTask = params.get('open_task');
+    const openTab = params.get('open_tab') || 'generale';
     if (openTask && ganttData.tasks && ganttData.tasks.length > 0) {
       const t = ganttData.tasks.find(t => String(t.id) === openTask);
       if (t && !showTaskModal) {
-        openEditTaskModal(t, 'commenti');
+        openEditTaskModal(t, openTab);
         // Remove from url
         params.delete('open_task');
+        params.delete('open_tab');
         navigate({ search: params.toString() }, { replace: true });
       }
     }
