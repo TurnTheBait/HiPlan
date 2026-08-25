@@ -204,3 +204,33 @@ async def get_workload_heatmap(
                         })
                 
     return {"heatmap": heatmap}
+
+@router.get("/export/excel")
+async def export_workload_excel_route(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from fastapi.responses import StreamingResponse
+    from app.services import export_service
+    data = await get_workload_heatmap(db, current_user)
+    buffer = await export_service.export_workload_excel(data["heatmap"])
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=Saturazione_Carichi_Lavoro.xlsx"}
+    )
+
+@router.get("/export/pdf")
+async def export_workload_pdf_route(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from fastapi.responses import StreamingResponse
+    from app.services import export_service
+    data = await get_workload_heatmap(db, current_user)
+    buffer = await export_service.export_workload_pdf(data["heatmap"])
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=Saturazione_Carichi_Lavoro.pdf"}
+    )

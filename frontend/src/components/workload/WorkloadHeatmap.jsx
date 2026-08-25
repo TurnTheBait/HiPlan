@@ -19,6 +19,9 @@ export default function WorkloadHeatmap() {
   const [viewMode, setViewMode] = useState('day');
   const [dataMode, setDataMode] = useState('planned');
   const [dayDetails, setDayDetails] = useState(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportFormat, setExportFormat] = useState('pdf');
+  const exportMenuRef = React.useRef(null);
   const toast = useToast();
   const gridRef = React.useRef(null);
   useDragScroll(gridRef, [loading]);
@@ -39,6 +42,40 @@ export default function WorkloadHeatmap() {
 
   const toggleUser = (userId) => {
     setExpandedUsers(prev => ({ ...prev, [userId]: !prev[userId] }));
+  };
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) {
+        setShowExportMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleChatGPTAnalysis = () => {
+    const prompt = "Agisci come un esperto HR e Resource Planner. In allegato troverai l'export dei carichi di lavoro (ore pianificate vs ore consuntivate). Analizza la saturazione degli addetti, evidenziando chi è sovraccarico e chi ha disponibilità, e suggerisci eventuali ribilanciamenti.";
+    window.open('https://chatgpt.com/?q=' + encodeURIComponent(prompt), '_blank');
+  };
+
+  const handleExport = async (format) => {
+    try {
+      const response = await api.get(`/workload/export/${format}`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Saturazione_Carichi_Lavoro.${format === 'excel' ? 'xlsx' : 'pdf'}`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      toast.success(`Export ${format.toUpperCase()} completato!`);
+      setShowExportMenu(false);
+    } catch (err) {
+      console.error(err);
+      toast.error(`Errore durante l'esportazione in ${format.toUpperCase()}`);
+    }
   };
 
   // Build full date range including weekends
@@ -220,6 +257,94 @@ export default function WorkloadHeatmap() {
             <option value="week">Per Settimana</option>
             <option value="month">Per Mese</option>
           </select>
+          <div style={{ position: 'relative' }} ref={exportMenuRef}>
+            <button
+              className="btn btn-primary btn-sm"
+              style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+              onClick={() => setShowExportMenu(!showExportMenu)}
+            >
+              <AppIcon name="download" size={14} />
+            </button>
+            {showExportMenu && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, marginTop: 8, background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-default)', borderRadius: 12, padding: 16, width: 320,
+                boxShadow: '0 10px 25px rgba(0,0,0,0.2)', zIndex: 9999
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>Esporta Carichi di Lavoro</div>
+
+                <div style={{ borderTop: '1px solid var(--border-default)', marginTop: 10, paddingTop: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Formato:
+                  </div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <label style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                      background: exportFormat === 'pdf' ? 'rgba(239, 68, 68, 0.15)' : 'var(--bg-tertiary)',
+                      border: exportFormat === 'pdf' ? '2px solid #ef4444' : '1px solid var(--border-default)',
+                      color: exportFormat === 'pdf' ? '#ef4444' : 'var(--text-secondary)',
+                    }}>
+                      <input
+                        type="radio"
+                        name="exportFormat"
+                        value="pdf"
+                        checked={exportFormat === 'pdf'}
+                        onChange={() => setExportFormat('pdf')}
+                        style={{ display: 'none' }}
+                      />
+                      <AppIcon name="download" size={14} /> PDF
+                    </label>
+                    <label style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                      background: exportFormat === 'excel' ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-tertiary)',
+                      border: exportFormat === 'excel' ? '2px solid #10b981' : '1px solid var(--border-default)',
+                      color: exportFormat === 'excel' ? '#10b981' : 'var(--text-secondary)',
+                    }}>
+                      <input
+                        type="radio"
+                        name="exportFormat"
+                        value="excel"
+                        checked={exportFormat === 'excel'}
+                        onChange={() => setExportFormat('excel')}
+                        style={{ display: 'none' }}
+                      />
+                      <AppIcon name="download" size={14} /> Excel
+                    </label>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#10a37f', color: '#fff', borderColor: '#10a37f' }}
+                    onClick={() => { setShowExportMenu(false); handleChatGPTAnalysis(); }}
+                  >
+                    <img src="/chatgpt-logo.png" style={{ width: 16, height: 16, filter: 'brightness(0) invert(1)' }} alt="ChatGPT" />
+                    Analizza con ChatGPT
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ flex: 1 }}
+                    onClick={() => setShowExportMenu(false)}
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    style={{ flex: 1 }}
+                    onClick={() => handleExport(exportFormat)}
+                  >
+                    Export {exportFormat.toUpperCase()}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
