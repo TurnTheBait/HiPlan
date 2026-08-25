@@ -279,7 +279,7 @@ export default function NotesPage() {
       setNotes(prev => prev.map(n => n.id === activeNoteId ? data : n));
       // Only close the menu if we are clicking a major option, not while editing the user list
       if (targetVisibility !== 'selected' || targetSharedWith === sharedWith) {
-         // Do not auto-close if we are just updating the sharedWith list interactively
+        // Do not auto-close if we are just updating the sharedWith list interactively
       }
       toast.success('Visibilità blocco note aggiornata!');
     } catch {
@@ -376,6 +376,24 @@ export default function NotesPage() {
       toast.error('Errore durante l\'eliminazione');
     }
   }
+
+  const handleDownloadDoc = () => {
+    if (!activeNoteId || !editorRef.current) return;
+    const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>" + (title || 'Nota') + "</title><style>body { font-family: sans-serif; } .note-code-block { background: #f4f4f4; padding: 10px; border-radius: 4px; } .note-checklist-item { margin-bottom: 5px; list-style-type: none; } h1, h2, h3 { color: #1f2937; margin-bottom: 16px; }</style></head><body>";
+    const footer = "</body></html>";
+    const htmlContent = editorRef.current.innerHTML;
+    const html = header + `<h1>${title || 'Senza Titolo'}</h1><hr>` + htmlContent + footer;
+
+    const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${title || 'Nota'}.doc`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   // Formattazione visuale istantanea stile Notion (H1, H2, Bold, Check-list, ecc.)
   function applyFormatting(formatType) {
@@ -677,19 +695,29 @@ export default function NotesPage() {
                       {visibility === 'selected' && (
                         <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border-subtle)', marginTop: 8 }}>
                           <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>SELEZIONA UTENTI</div>
-                          <AssigneeInput 
-                            selected={sharedWith} 
+                          <AssigneeInput
+                            selected={sharedWith}
                             onChange={(newShared) => {
                               setSharedWith(newShared);
                               handleToggleVisibility('selected', newShared);
-                            }} 
-                            users={users} 
+                            }}
+                            users={users}
                           />
                         </div>
                       )}
                     </div>
                   )}
                 </div>
+
+                {/* PULSANTE DOWNLOAD DOC */}
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={handleDownloadDoc}
+                  title="Scarica in formato Word (.doc)"
+                >
+                  <AppIcon name="download" size={15} />
+                </button>
 
                 {/* PULSANTE ELIMINA */}
                 <button
@@ -743,7 +771,7 @@ export default function NotesPage() {
 
               {/* ALLEGATI DELLA NOTA */}
               {activeNote && (
-                <div 
+                <div
                   style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border-default)', paddingBottom: 16 }}
                   onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
                   onDrop={handleDropAttachment}
@@ -763,19 +791,19 @@ export default function NotesPage() {
                       </label>
                     </div>
                   </div>
-                  
+
                   {Array.isArray(activeNote.attachments) && activeNote.attachments.length > 0 ? (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                       {activeNote.attachments.map((att, idx) => (
-                        <div key={idx} style={{ 
-                          display: 'flex', alignItems: 'center', gap: 8, 
-                          padding: '4px 12px', background: 'var(--bg-secondary)', 
-                          border: '1px solid var(--border-subtle)', borderRadius: 16, fontSize: 13 
+                        <div key={idx} style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '4px 12px', background: 'var(--bg-secondary)',
+                          border: '1px solid var(--border-subtle)', borderRadius: 16, fontSize: 13
                         }}>
                           <a className="inline-detail-row" href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-500)', textDecoration: 'none' }}>
                             <AppIcon name="paperclip" size={13} />{att.name}
                           </a>
-                          <button 
+                          <button
                             onClick={() => handleDeleteAttachment(att.name)}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: 0, fontSize: 14 }}
                             title="Elimina allegato"
@@ -919,10 +947,10 @@ export default function NotesPage() {
                     </label>
                     {newVisibility === 'selected' && (
                       <div style={{ padding: '0 14px 14px 44px' }}>
-                        <AssigneeInput 
-                          selected={newSharedWith} 
-                          onChange={setNewSharedWith} 
-                          users={users} 
+                        <AssigneeInput
+                          selected={newSharedWith}
+                          onChange={setNewSharedWith}
+                          users={users}
                           placeholder="Cerca utente per aggiungerlo..."
                         />
                       </div>
