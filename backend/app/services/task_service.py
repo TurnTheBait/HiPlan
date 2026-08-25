@@ -11,6 +11,7 @@ from app.models.notification import Notification, NotificationType
 from app.models.user import User
 from datetime import timedelta, date
 from app.schemas.task import TaskCreate, TaskUpdate, TaskOut, LinkCreate, LinkOut, GanttData
+# pyrefly: ignore [missing-import]
 from fastapi import HTTPException, status
 from app.core.websocket_manager import manager
 
@@ -659,8 +660,9 @@ async def delete_link(db: AsyncSession, link_id: str, user=None):
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link non trovato")
     await _check_task_manage_permissions(db, link.project_id, user)
+    project_id = link.project_id
     await db.delete(link)
     await db.commit()
 
     # Broadcast websocket
-    await manager.broadcast(link.project_id, {"action": "link_deleted", "link_id": link_id})
+    await manager.broadcast(project_id, {"action": "link_deleted", "link_id": link_id})

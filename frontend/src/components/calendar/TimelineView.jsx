@@ -143,7 +143,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
             <div className="timeline-project-row" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
               <div className="timeline-project-info timeline-vacation-info" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                 <span className="timeline-proj-title timeline-vacation-title" style={{ fontWeight: 'bold' }}>
-                  🏖️ Panoramica Ferie
+                  Panoramica Ferie
                 </span>
                 <span className="timeline-proj-meta">
                   {totalWorkers} addetti • {totalPeriods} periodi
@@ -191,7 +191,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                 <div key={`vac-group-${username}`} className="timeline-project-row" style={{ backgroundColor: 'var(--bg-card)', borderTop: '1px dashed var(--border-subtle)' }}>
                   <div className="timeline-project-info timeline-vacation-info" style={{ paddingLeft: '24px' }}>
                     <span className="timeline-proj-title timeline-vacation-title">
-                      🏖️ {username}
+                      {username}
                     </span>
                     <span className="timeline-proj-meta">
                       {userVacations.length > 1 ? `${userVacations.length} periodi registrati` : (userVacations[0].reason || '')}
@@ -228,7 +228,7 @@ export default function TimelineView({ projects, currYear, currMonth, filterWork
                             }
                           }}
                         >
-                          🏖️ {vStart === vEnd ? vStart.substring(8, 10) + '/' + vStart.substring(5, 7) : `${vStart.substring(8, 10)}/${vStart.substring(5, 7)} → ${vEnd.substring(8, 10)}/${vEnd.substring(5, 7)}`}
+                          {vStart === vEnd ? vStart.substring(8, 10) + '/' + vStart.substring(5, 7) : `${vStart.substring(8, 10)}/${vStart.substring(5, 7)} → ${vEnd.substring(8, 10)}/${vEnd.substring(5, 7)}`}
                         </div>
                       );
                     })}
