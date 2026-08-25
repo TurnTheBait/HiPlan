@@ -224,7 +224,7 @@ export default function ProjectDetailPage() {
       const singleWorker = taskForm.workers[0];
       const plannedHours = Number(taskForm.planned_hours) || 0;
       const currentWorkerHours = Number(taskForm.worker_hours?.[singleWorker]) || 0;
-      
+
       if (plannedHours !== currentWorkerHours) {
         setTaskForm(prev => ({
           ...prev,
@@ -428,6 +428,7 @@ export default function ProjectDetailPage() {
   // Calcolo stato semaforo e ore giornaliere previste (algoritmo prototipo Ufficio Tecnico)
   function computeStato(task) {
     if (!task) return 'ok';
+    if (task.type === 'milestone' || task.type === 'project') return 'ok';
     const totEff = calculateTaskEffHours(task);
     const plannedH = Number(task.planned_hours || 8.0);
     if (plannedH > 0 && totEff > plannedH) {
@@ -541,7 +542,7 @@ export default function ProjectDetailPage() {
     });
 
     if (project && (!project.responsible_id && !project.responsible_name) && (user?.role === 'admin' || user?.role === 'editor')) {
-      delays.push({ isProjectAlert: true, type: 'no_responsible', text: 'Commessa senza referente/responsabile assegnato', stato: 'no_responsible' });
+      delays.push({ isProjectAlert: true, type: 'no_responsible', text: 'Commessa senza responsabile assegnato', stato: 'no_responsible' });
     }
 
     return { totalPrev: prev, totalEff: eff, delaysList: delays };
@@ -1262,7 +1263,7 @@ export default function ProjectDetailPage() {
           const wAssigned = (t.worker_hours && t.worker_hours[w] !== undefined && t.worker_hours[w] !== '')
             ? Number(t.worker_hours[w])
             : (Number(t.planned_hours || 8) / workers.length);
-          
+
           let wActual = 0;
           if (t.actual_hours && t.actual_hours[w] && typeof t.actual_hours[w] === 'object') {
             Object.values(t.actual_hours[w]).forEach(h => {
@@ -2289,50 +2290,50 @@ export default function ProjectDetailPage() {
                     }
 
                     return (
-                    <div
-                      key={item.task.id}
-                      className={`alert-card ${item.stato}`}
-                      style={{ marginBottom: 12, cursor: 'default' }}
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                          <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
-                            {item.task.text}
-                          </span>
-                          {item.stato === 'ritardo' ? (
-                            <span className="semaforo-ritardo"><span className="status-dot danger" />Ritardo critico</span>
-                          ) : item.stato === 'ritardo_ferie' ? (
-                            <span className="semaforo-ritardo"><span className="status-dot danger" />Rischio ritardo ferie</span>
-                          ) : item.stato === 'sforamento' ? (
-                            <span className="semaforo-ritardo"><span className="status-dot danger" />Sforamento ore</span>
-                          ) : item.stato === 'orfana' ? (
-                            <span className="semaforo-attenzione" style={{ color: '#f59e0b', background: '#fffbeb', border: '1px solid #fef3c7' }}><span className="status-dot warning" />Nessun addetto</span>
-                          ) : (
-                            <span className="semaforo-attenzione"><span className="status-dot open" />Attenzione</span>
-                          )}
-                        </div>
-                        <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                          <AppIcon name="calendar" size={14} /> Inizio/Fine: <strong>{formatDateItalian(item.task.start_date)} → {formatDateItalian(item.task.end_date)}</strong> |{' '}
-                          Addetti: <strong>{Array.isArray(item.task.workers) ? item.task.workers.join(', ') : 'Nessuno'}</strong>
-                        </div>
-                        <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                          <AppIcon name="clock" size={13} />Ore previste: <strong>{item.task.planned_hours || 8}h</strong> | Consuntivate finora: <strong>{item.tEff}h</strong>
-                        </div>
-                      </div>
-                      <button
-                        className="btn btn-primary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openOreModalForTask(item.task);
-                        }}
+                      <div
+                        key={item.task.id}
+                        className={`alert-card ${item.stato}`}
+                        style={{ marginBottom: 12, cursor: 'default' }}
+                        onClick={e => e.stopPropagation()}
                       >
-                        <AppIcon name="clock" />
-                        Registra ore
-                      </button>
-                    </div>
-                  );
-                })
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                            <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
+                              {item.task.text}
+                            </span>
+                            {item.stato === 'ritardo' ? (
+                              <span className="semaforo-ritardo"><span className="status-dot danger" />Ritardo critico</span>
+                            ) : item.stato === 'ritardo_ferie' ? (
+                              <span className="semaforo-ritardo"><span className="status-dot danger" />Rischio ritardo ferie</span>
+                            ) : item.stato === 'sforamento' ? (
+                              <span className="semaforo-ritardo"><span className="status-dot danger" />Sforamento ore</span>
+                            ) : item.stato === 'orfana' ? (
+                              <span className="semaforo-attenzione" style={{ color: '#f59e0b', background: '#fffbeb', border: '1px solid #fef3c7' }}><span className="status-dot warning" />Nessun addetto</span>
+                            ) : (
+                              <span className="semaforo-attenzione"><span className="status-dot open" />Attenzione</span>
+                            )}
+                          </div>
+                          <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                            <AppIcon name="calendar" size={14} /> Inizio/Fine: <strong>{formatDateItalian(item.task.start_date)} → {formatDateItalian(item.task.end_date)}</strong> |{' '}
+                            Addetti: <strong>{Array.isArray(item.task.workers) ? item.task.workers.join(', ') : 'Nessuno'}</strong>
+                          </div>
+                          <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                            <AppIcon name="clock" size={13} />Ore previste: <strong>{item.task.planned_hours || 8}h</strong> | Consuntivate finora: <strong>{item.tEff}h</strong>
+                          </div>
+                        </div>
+                        <button
+                          className="btn btn-primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openOreModalForTask(item.task);
+                          }}
+                        >
+                          <AppIcon name="clock" />
+                          Registra ore
+                        </button>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             )}
@@ -2509,10 +2510,10 @@ export default function ProjectDetailPage() {
                               key={d.value}
                               onClick={(e) => {
                                 e.preventDefault();
-                                setTaskForm({ 
-                                  ...taskForm, 
-                                  department: d.value, 
-                                  color: d.color === '#6b7280' ? taskForm.color : d.color 
+                                setTaskForm({
+                                  ...taskForm,
+                                  department: d.value,
+                                  color: d.color === '#6b7280' ? taskForm.color : d.color
                                 });
                               }}
                               style={{
@@ -2782,32 +2783,32 @@ export default function ProjectDetailPage() {
                             })
                             .sort((a, b) => a === user?.username ? -1 : b === user?.username ? 1 : a.localeCompare(b))
                             .map(w => {
-                            const sel = taskForm.workers.includes(w);
-                            const wUser = usersList.find(u => u.username === w);
-                            const wDept = wUser ? wUser.department : null;
-                            const deptColor = wDept ? (DEPT_OPTIONS.find(d => d.value === wDept)?.color || 'var(--accent-600)') : 'var(--accent-600)';
+                              const sel = taskForm.workers.includes(w);
+                              const wUser = usersList.find(u => u.username === w);
+                              const wDept = wUser ? wUser.department : null;
+                              const deptColor = wDept ? (DEPT_OPTIONS.find(d => d.value === wDept)?.color || 'var(--accent-600)') : 'var(--accent-600)';
 
-                            return (
-                              <div
-                                key={w}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  background: sel ? deptColor : 'var(--bg-primary)',
-                                  color: sel ? '#fff' : 'var(--text-secondary)',
-                                  border: `1px solid ${sel ? deptColor : 'var(--border-default)'}`,
-                                  padding: '6px 12px',
-                                  borderRadius: '16px',
-                                  cursor: 'pointer',
-                                  fontSize: '0.85rem',
-                                  fontWeight: sel ? 600 : 400
-                                }}
-                                onClick={() => toggleWorkerSelection(w)}
-                              >
-                                <span>{sel ? '✓ ' : '+ '}{w}</span>
-                              </div>
-                            );
-                          })}
+                              return (
+                                <div
+                                  key={w}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    background: sel ? deptColor : 'var(--bg-primary)',
+                                    color: sel ? '#fff' : 'var(--text-secondary)',
+                                    border: `1px solid ${sel ? deptColor : 'var(--border-default)'}`,
+                                    padding: '6px 12px',
+                                    borderRadius: '16px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.85rem',
+                                    fontWeight: sel ? 600 : 400
+                                  }}
+                                  onClick={() => toggleWorkerSelection(w)}
+                                >
+                                  <span>{sel ? '✓ ' : '+ '}{w}</span>
+                                </div>
+                              );
+                            })}
                         </div>
                       </div>
 
