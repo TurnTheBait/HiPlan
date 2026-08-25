@@ -45,7 +45,7 @@ def add_working_days(start: date, days: int) -> date:
     return cur
 
 
-def get_working_days_count(start: date, end: date, excluded_dates: list = None) -> int:
+def get_working_days_count(start: date, end: date, excluded_dates: list | None = None) -> int:
     if excluded_dates is None:
         excluded_dates = []
     if not start or not end or start > end:
@@ -129,8 +129,48 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
 
     max_daily_hours = 8.0
     timeline = {}
+    checked_projects = set()
     
     for task in all_tasks:
+        if task.project and task.project.id not in checked_projects:
+            checked_projects.add(task.project.id)
+            if not getattr(task.project, 'responsible_id', None):
+                if current_user and getattr(current_user, "role", "") in ["admin", "editor"]:
+                    suggestions.append({
+                        "id": f"proj_no_resp_{task.project.id}",
+                        "type": "missing_data",
+                        "task_id": None,
+                        "task_name": "Intera Commessa",
+                        "project_id": str(task.project.id),
+                        "project_name": task.project.name,
+                        "project_code": task.project.code if task.project.code else "",
+                        "project_color": task.project.color if task.project.color else None,
+                        "worker": None,
+                        "date": str(today),
+                        "reason": "La commessa non ha un referente o responsabile assegnato."
+                    })
+
+        workers_list = []
+        if task.workers:
+            try:
+                workers_list = json.loads(task.workers) if isinstance(task.workers, str) else task.workers
+            except:
+                pass
+        if len(workers_list) == 0 and getattr(task, 'type', '') != 'milestone':
+            suggestions.append({
+                "id": f"orphan_{task.id}",
+                "type": "missing_data",
+                "task_id": str(task.id),
+                "task_name": task.text,
+                "project_id": str(task.project_id),
+                "project_name": task.project.name if task.project else "-",
+                "project_code": (task.project.code if task.project.code else "") if task.project else "",
+                "project_color": task.project.color if getattr(task, 'project', None) and getattr(task.project, 'color', None) else None,
+                "worker": None,
+                "date": str(task.start_date) if task.start_date else str(today),
+                "reason": "La fase non ha nessun addetto assegnato."
+            })
+
         if not task.start_date or not task.end_date:
             continue
             

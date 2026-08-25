@@ -431,11 +431,15 @@ export default function ProjectDetailPage() {
     if (plannedH > 0 && totEff > plannedH) {
       return 'sforamento';
     }
+    const isCompleted = isTaskCompleted(task);
+    if (!isCompleted && (!task.workers || task.workers.length === 0) && task.type !== 'milestone') {
+      return 'orfana';
+    }
     if (plannedH > 0 && totEff === plannedH) {
       return 'ok';
     }
     if (!task.start_date) return 'ok';
-    if (isTaskCompleted(task)) return 'ok';
+    if (isCompleted) return 'ok';
     const startStr = formatDateOnly(task.start_date);
     const endStr = task.end_date ? formatDateOnly(task.end_date) : startStr;
     if (!startStr) return 'ok';
@@ -529,13 +533,17 @@ export default function ProjectDetailPage() {
       eff += tEff;
 
       const st = computeStato(t);
-      if (st === 'ritardo' || st === 'attenzione' || st === 'ritardo_ferie') {
+      if (['ritardo', 'attenzione', 'ritardo_ferie', 'sforamento', 'orfana'].includes(st)) {
         delays.push({ task: t, stato: st, tEff });
       }
     });
 
+    if (project && (!project.responsible_id && !project.responsible_name) && (user?.role === 'admin' || user?.role === 'editor')) {
+      delays.push({ isProjectAlert: true, type: 'no_responsible', text: 'Commessa senza referente/responsabile assegnato', stato: 'no_responsible' });
+    }
+
     return { totalPrev: prev, totalEff: eff, delaysList: delays };
-  }, [ganttData.tasks]);
+  }, [ganttData.tasks, project, user?.role]);
 
   // Gestione Task da Gantt e Form
   async function handleTaskUpdate(taskId, data) {
@@ -2254,7 +2262,31 @@ export default function ProjectDetailPage() {
                     </p>
                   </div>
                 ) : (
-                  delaysList.map(item => (
+                  delaysList.map((item, idx) => {
+                    if (item.isProjectAlert) {
+                      return (
+                        <div
+                          key={`proj-alert-${idx}`}
+                          className={`alert-card attenzione`}
+                          style={{ marginBottom: 12, cursor: 'default' }}
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                              <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
+                                Allarme Commessa
+                              </span>
+                              <span className="semaforo-attenzione"><span className="status-dot warning" />Dato mancante</span>
+                            </div>
+                            <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                              <AppIcon name="alertTriangle" size={14} style={{ color: '#f59e0b' }} /> <strong style={{ marginLeft: 6 }}>{item.text}</strong>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
                     <div
                       key={item.task.id}
                       className={`alert-card ${item.stato}`}
@@ -2272,6 +2304,8 @@ export default function ProjectDetailPage() {
                             <span className="semaforo-ritardo"><span className="status-dot danger" />Rischio ritardo ferie</span>
                           ) : item.stato === 'sforamento' ? (
                             <span className="semaforo-ritardo"><span className="status-dot danger" />Sforamento ore</span>
+                          ) : item.stato === 'orfana' ? (
+                            <span className="semaforo-attenzione" style={{ color: '#f59e0b', background: '#fffbeb', border: '1px solid #fef3c7' }}><span className="status-dot warning" />Nessun addetto</span>
                           ) : (
                             <span className="semaforo-attenzione"><span className="status-dot open" />Attenzione</span>
                           )}
@@ -2295,7 +2329,8 @@ export default function ProjectDetailPage() {
                         Registra ore
                       </button>
                     </div>
-                  ))
+                  );
+                })
                 )}
               </div>
             )}

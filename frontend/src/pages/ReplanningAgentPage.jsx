@@ -67,6 +67,7 @@ export default function ReplanningAgentPage() {
       case 'delay_conflict': return { label: 'In Ritardo', color: '#eab308', icon: 'clock' };
       case 'vacation_conflict': return { label: 'Ferie', color: '#f59e0b', icon: 'vacations' };
       case 'overload_conflict': return { label: 'Sovraccarico', color: '#f97316', icon: 'user' };
+      case 'missing_data': return { label: 'Dato Mancante', color: '#0ea5e9', icon: 'alertTriangle' };
       default: return { label: type, color: '#64748b', icon: 'notes' };
     }
   }
