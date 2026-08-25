@@ -114,3 +114,8 @@ class LinkOut(BaseModel):
 class GanttData(BaseModel):
     tasks: List[TaskOut] = []
     links: List[LinkOut] = []
+
+
+class LogHoursRequest(BaseModel):
+    date: str
+    hours: float

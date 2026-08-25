@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '../context/ToastContext';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import TimelineView from '../components/calendar/TimelineView';
@@ -9,6 +10,7 @@ import { STATUS_LABELS_IT } from '../utils/statusLabels';
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
   const today = new Date();
   const [timelineYear, setTimelineYear] = useState(today.getFullYear());
@@ -17,6 +19,7 @@ export default function DashboardPage() {
   const [projectsWithTasks, setProjectsWithTasks] = useState([]);
   const [assignedTodos, setAssignedTodos] = useState([]);
   const [myTasksToday, setMyTasksToday] = useState([]);
+  const [quickLogHours, setQuickLogHours] = useState({});
   const [vacations, setVacations] = useState([]);
   const [recoveryItems, setRecoveryItems] = useState([]);
   const [dismissedKeys, setDismissedKeys] = useState(
@@ -76,6 +79,13 @@ export default function DashboardPage() {
       const openAssigned = todosData.filter(t => !t.is_completed && t.assignees?.includes(user?.id));
       setAssignedTodos(openAssigned);
       setMyTasksToday(tasksRes.data);
+      
+      const initHours = {};
+      tasksRes.data.forEach(t => {
+        initHours[t.id] = t.actual_hours_today || t.expected_hours_today || '';
+      });
+      setQuickLogHours(initHours);
+
       setVacations(vacRes.data || []);
       setRecoveryItems(recoveryRes.data || []);
 
@@ -95,7 +105,25 @@ export default function DashboardPage() {
     finally { setLoading(false); }
   }
 
-
+  async function handleQuickLog(task) {
+    const val = quickLogHours[task.id];
+    if (val === '' || isNaN(val)) {
+      toast.error('Inserisci un valore numerico valido');
+      return;
+    }
+    try {
+      const dateStr = new Date().toISOString().split('T')[0];
+      await api.post(`/projects/${task.project_id}/tasks/${task.id}/log-hours`, {
+        date: dateStr,
+        hours: parseFloat(val)
+      });
+      toast.success('Ore consuntivate con successo');
+      loadData();
+    } catch (e) {
+      toast.error('Errore durante la consuntivazione delle ore');
+      console.error(e);
+    }
+  }
 
   function getRecoveryKey(item) {
     return `${item.task_id}_${item.vacation_start}`;
@@ -280,31 +308,56 @@ export default function DashboardPage() {
           ) : (
             <div className="today-tasks-grid">
               {myTasksToday.map(task => (
-                <button
-                  type="button"
+                <div
                   key={task.id}
                   className="recent-project-item today-task-item"
-                  onClick={() => navigate(`/projects/${task.project_id}`)}
+                  style={{ cursor: 'default', display: 'flex', flexDirection: 'column', '--task-color': task.color || 'var(--primary-color)' }}
                 >
-                  <div className="recent-project-info">
-                    <span className="recent-project-name">{task.text}</span>
-                    <span className="task-progress-label">{task.progress}%</span>
+                  <div style={{ cursor: 'pointer', marginBottom: '8px' }} onClick={() => navigate(`/projects/${task.project_id}`)}>
+                    <div className="recent-project-info">
+                      <span className="recent-project-name">{task.text}</span>
+                      <span className="task-progress-label">{task.progress}%</span>
+                    </div>
+                    <div className="recent-project-meta">
+                      <span>{task.project_name}</span>
+                      {task.my_assigned_hours ? (
+                        <span>{task.my_assigned_hours}h assegnate / {task.planned_hours}h</span>
+                      ) : (
+                        <span>{task.planned_hours}h pianificate</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="recent-project-meta">
-                    <span>{task.project_name}</span>
-                    {task.my_assigned_hours ? (
-                      <span>{task.my_assigned_hours}h assegnate / {task.planned_hours}h</span>
-                    ) : (
-                      <span>{task.planned_hours}h pianificate</span>
-                    )}
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 'auto', marginBottom: '8px' }}>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      className="form-input"
+                      style={{ width: '80px', padding: '4px 8px', fontSize: '14px', height: '32px' }}
+                      value={quickLogHours[task.id] !== undefined ? quickLogHours[task.id] : ''}
+                      onChange={e => setQuickLogHours(prev => ({ ...prev, [task.id]: e.target.value }))}
+                      placeholder="Ore"
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ padding: '4px 12px', fontSize: '14px', height: '32px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      onClick={(e) => { e.stopPropagation(); handleQuickLog(task); }}
+                      disabled={task.actual_hours_today !== undefined && String(task.actual_hours_today) === String(quickLogHours[task.id]) && String(quickLogHours[task.id]) !== ''}
+                    >
+                      <AppIcon name="check" size={14} />
+                      {task.actual_hours_today ? 'Aggiorna' : 'Conferma'}
+                    </button>
                   </div>
+                  
                   <div className="progress-bar">
                     <div
                       className="progress-bar-fill"
                       style={{ width: `${task.progress}%`, background: task.progress === 100 ? 'var(--success)' : undefined }}
                     />
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           )}

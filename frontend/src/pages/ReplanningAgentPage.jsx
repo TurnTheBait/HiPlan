@@ -223,6 +223,9 @@ export default function ReplanningAgentPage() {
               } else if (s.reason && s.reason.toLowerCase().includes('scaduta')) {
                 badge.color = '#e2445c';
                 badge.label = 'Scaduta';
+              } else if (s.reason && s.reason.toLowerCase().includes('superato le ore previste')) {
+                badge.color = '#db2777';
+                badge.label = 'Sforamento Ore';
               } else {
                 badge.color = '#f59e0b';
                 badge.label = 'Ritardo';

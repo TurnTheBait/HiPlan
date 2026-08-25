@@ -666,3 +666,33 @@ async def delete_link(db: AsyncSession, link_id: str, user=None):
 
     # Broadcast websocket
     await manager.broadcast(project_id, {"action": "link_deleted", "link_id": link_id})
+
+
+async def log_task_hours(db: AsyncSession, task_id: str, date_str: str, hours: float, user):
+    result = await db.execute(select(Task).where(Task.id == task_id))
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task non trovato")
+        
+    actual_hours = {}
+    if task.actual_hours:
+        try:
+            actual_hours = json.loads(task.actual_hours)
+        except:
+            pass
+            
+    worker_key = user.username
+    if worker_key not in actual_hours:
+        actual_hours[worker_key] = {}
+        
+    actual_hours[worker_key][date_str] = str(hours)
+    
+    task.actual_hours = json.dumps(actual_hours)
+    await db.commit()
+    await db.refresh(task)
+    
+    # Broadcast websocket
+    await manager.broadcast(task.project_id, {"action": "task_updated", "task": _task_to_out(task).model_dump()})
+    
+    return _task_to_out(task)
+

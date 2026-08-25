@@ -2956,13 +2956,19 @@ export default function ProjectDetailPage() {
               const dates = Array.from(datesSet).sort();
               const plannedSet = new Set(plannedDates);
 
-              const workers = Array.isArray(selectedTaskForHours.workers) && selectedTaskForHours.workers.length > 0
+              const assignedWorkers = Array.isArray(selectedTaskForHours.workers) && selectedTaskForHours.workers.length > 0
                 ? selectedTaskForHours.workers
                 : ['Addetto Generico'];
+              const allWorkersSet = new Set(assignedWorkers);
+              Object.keys(actualHoursMap).forEach(w => {
+                if (w !== '__extra__') allWorkersSet.add(w);
+              });
+              const workers = Array.from(allWorkersSet);
+              
               const oreGgTotale = plannedDates.length > 0 ? workers.reduce((acc, w) => {
                 const wAssigned = (selectedTaskForHours.worker_hours && selectedTaskForHours.worker_hours[w] !== undefined && selectedTaskForHours.worker_hours[w] !== '')
                   ? Number(selectedTaskForHours.worker_hours[w])
-                  : (Number(selectedTaskForHours.planned_hours || 8) / workers.length);
+                  : (assignedWorkers.includes(w) ? (Number(selectedTaskForHours.planned_hours || 8) / assignedWorkers.length) : 0);
                 return acc + (wAssigned / plannedDates.length);
               }, 0) : (Number(selectedTaskForHours.planned_hours || 8));
 
@@ -3000,7 +3006,7 @@ export default function ProjectDetailPage() {
                           const assignedH = (selectedTaskForHours.worker_hours && selectedTaskForHours.worker_hours[w] !== undefined && selectedTaskForHours.worker_hours[w] !== '')
                             ? Number(selectedTaskForHours.worker_hours[w])
                             : null;
-                          const targetH = assignedH !== null ? assignedH : Number((Number(selectedTaskForHours.planned_hours || 8) / workers.length).toFixed(1));
+                          const targetH = assignedH !== null ? assignedH : (assignedWorkers.includes(w) ? Number((Number(selectedTaskForHours.planned_hours || 8) / assignedWorkers.length).toFixed(1)) : 0);
                           const workerDailyTarget = dates.length > 0 ? (targetH / dates.length) : targetH;
 
                           const isCurrentUser = (w === user?.username || w === (user?.full_name || user?.username));
@@ -3059,18 +3065,11 @@ export default function ProjectDetailPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, background: 'var(--bg-primary)', padding: 12, borderRadius: 6, border: '1px solid var(--border-color)' }}>
                     <div>
                       {(() => {
-                        let totAll = 0;
-                        workers.forEach(w => {
-                          if (actualHoursMap[w]) {
-                            Object.entries(actualHoursMap[w]).forEach(([key, h]) => {
-                              if (key !== '__extra__') totAll += Number(h) || 0;
-                            });
-                          }
-                        });
                         const tempTask = {
                           ...selectedTaskForHours,
                           actual_hours: actualHoursMap
                         };
+                        const totAll = calculateTaskEffHours(tempTask);
                         const st = computeStato(tempTask);
                         const plannedH = Number(selectedTaskForHours.planned_hours || 8);
                         const isModalCompleted = isTaskCompleted(tempTask);

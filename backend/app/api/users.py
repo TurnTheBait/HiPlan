@@ -176,6 +176,32 @@ async def get_my_tasks_today(
                 except:
                     pass
                     
+            actual_h = {}
+            if getattr(task, 'actual_hours', None):
+                try:
+                    actual_h = json.loads(task.actual_hours)
+                except:
+                    pass
+            actual_hours_today = actual_h.get(user_name, {}).get(today_date.strftime("%Y-%m-%d"), "")
+
+            expected_hours_today = ""
+            if task.start_date and task.end_date:
+                from app.services.replanning_service import get_working_days_count
+                try:
+                    excluded = json.loads(task.excluded_dates) if task.excluded_dates else []
+                except:
+                    excluded = []
+                wdays = get_working_days_count(task.start_date, task.end_date, excluded)
+                if wdays > 0:
+                    try:
+                        val = worker_hours.get(user_name)
+                        if val is None:
+                            raise ValueError()
+                        tot_worker = float(val)
+                    except:
+                        tot_worker = float(task.planned_hours or 0) / max(1, len(workers_list))
+                    expected_hours_today = round(tot_worker / wdays, 1)
+
             t_out = task_service._task_to_out(task)
             my_tasks.append({
                 "id": task.id,
@@ -184,7 +210,10 @@ async def get_my_tasks_today(
                 "project_name": task.project.name if task.project else "Sconosciuto",
                 "progress": round((t_out.progress or 0) * 100),
                 "planned_hours": task.planned_hours,
-                "my_assigned_hours": worker_hours.get(user_name, None)
+                "my_assigned_hours": worker_hours.get(user_name, None),
+                "actual_hours_today": actual_hours_today,
+                "expected_hours_today": expected_hours_today,
+                "color": task.color
             })
             
     return my_tasks
