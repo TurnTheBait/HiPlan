@@ -17,6 +17,7 @@ export default function ReplanningAgentPage() {
 
   const [filterProject, setFilterProject] = useState('');
   const [filterType, setFilterType] = useState('');
+  const [filterDept, setFilterDept] = useState('');
   const [sortBy, setSortBy] = useState('date_asc');
   const [archivedKeys, setArchivedKeys] = useState(() => JSON.parse(localStorage.getItem('agentArchivedKeys') || '[]'));
 
@@ -82,6 +83,7 @@ export default function ReplanningAgentPage() {
   const filteredSuggestions = baseListForFilters.filter(s => {
     if (filterProject && s.project_name !== filterProject) return false;
     if (filterType && s.type !== filterType) return false;
+    if (filterDept && s.department !== filterDept) return false;
     return true;
   }).sort((a, b) => {
     if (sortBy === 'date_desc') return new Date(b.date || 0) - new Date(a.date || 0);
@@ -111,7 +113,7 @@ export default function ReplanningAgentPage() {
             ].map(tab => (
               <button
                 key={tab.id}
-                onClick={() => { setActiveTab(tab.id); setFilterProject(''); setFilterType(''); }}
+                onClick={() => { setActiveTab(tab.id); setFilterProject(''); setFilterType(''); setFilterDept(''); }}
                 className={`filter-chip ${activeTab === tab.id ? 'active' : ''}`}
                 style={{ display: 'flex', alignItems: 'center', gap: 6 }}
               >
@@ -163,6 +165,18 @@ export default function ReplanningAgentPage() {
           >
             <option value="">Tutte le tipologie</option>
             {uniqueTypes.map(t => <option key={t} value={t}>{getActionBadge(t).label}</option>)}
+          </select>
+
+          <select
+            className="input"
+            value={filterDept}
+            onChange={e => setFilterDept(e.target.value)}
+            style={{ padding: '6px 12px', fontSize: 13, borderRadius: 10, minWidth: 200, flex: 1, maxWidth: 300, minHeight: 38 }}
+          >
+            <option value="">Tutti i reparti</option>
+            <option value="ufficio_tecnico">Ufficio Tecnico</option>
+            <option value="acquisti">Acquisti</option>
+            <option value="produzione">Produzione</option>
           </select>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', marginLeft: 'auto' }}>
