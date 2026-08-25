@@ -69,7 +69,7 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
         .options(selectinload(Task.project))
         .where(Task.type != TaskType.PROJECT)
         .where(Task.type != TaskType.MILESTONE)
-        .where(Task.completed == 0)
+        .where(Task.completed != 1)
     )
     all_tasks_raw = tasks_res.scalars().all()
     all_tasks = []
