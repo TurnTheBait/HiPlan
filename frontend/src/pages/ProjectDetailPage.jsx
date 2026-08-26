@@ -2222,12 +2222,6 @@ export default function ProjectDetailPage() {
               </div>
             </div>
           </div>
-          {wsConnected && (
-            <div style={{ marginLeft: 16, display: 'flex', alignItems: 'center', gap: 6, color: '#10b981', fontSize: '0.9rem' }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#10b981', display: 'inline-block' }}></span>
-              Sincronizzato
-            </div>
-          )}
         </div>
       )}
 
@@ -2377,7 +2371,8 @@ export default function ProjectDetailPage() {
             )}
 
             {taskModalTab === 'generale' && (
-              <form onSubmit={handleSaveTaskForm}>
+              <form onSubmit={handleSaveTaskForm} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
                 {/* Scelta Tipo Fase: Normale o Milestone (Linea Verticale / Evento) */}
                 <div className="task-type-selector">
                   <label>Tipo di Voce:</label>
@@ -2408,7 +2403,7 @@ export default function ProjectDetailPage() {
                       <div className="option-content">
                         <div className="option-title">
                           <AppIcon name="calendar" size={18} />
-                          Evento o scadenza
+                          Milestone
                         </div>
                       </div>
                     </label>
@@ -2856,29 +2851,45 @@ export default function ProjectDetailPage() {
                       )}
 
                       {/* Sezione addetti rimossa e unificata nel blocco superiore */}
-
-                      <div className="modal-footer" style={{ marginTop: 24 }}>
-                        <button type="button" className="btn btn-secondary" onClick={() => setShowTaskModal(false)}>
-                          Annulla
-                        </button>
-                        <button type="submit" className="btn btn-primary" disabled={isOverBudget}>
-                          {editingTask ? 'Salva Modifiche' : 'Aggiungi Fase'}
-                        </button>
-                      </div>
                     </>
+                  );
+                })()}
+                </div>
+                
+                {(() => {
+                  const isMilestone = taskForm.taskType === 'milestone';
+                  const currentAssignedTotal = taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0);
+                  const sDateForBudget = taskForm.start_date;
+                  const eDateForBudget = taskForm.end_date;
+                  const diffDaysForBudget = sDateForBudget && eDateForBudget ? countWorkingDays(sDateForBudget, eDateForBudget, taskForm.excluded_dates) : 1;
+                  const finalDaysForBudget = Math.max(1, Number(taskForm.duration_days) || diffDaysForBudget);
+                  const currentBudgetTotal = isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDaysForBudget * 8.0));
+                  const roundedAssigned = Math.round(currentAssignedTotal * 10) / 10;
+                  const roundedBudget = Math.round(currentBudgetTotal * 10) / 10;
+                  const isOverBudget = !isMilestone && roundedAssigned > roundedBudget;
+
+                  return (
+                    <div className="modal-footer" style={{ padding: '16px 24px 16px', borderTop: '1px solid var(--border-default)', background: 'var(--bg-secondary)', margin: 0, flexShrink: 0 }}>
+                      <button type="button" className="btn btn-secondary" onClick={() => setShowTaskModal(false)}>
+                        Annulla
+                      </button>
+                      <button type="submit" className="btn btn-primary" disabled={isOverBudget}>
+                        {editingTask ? 'Salva Modifiche' : 'Aggiungi Fase'}
+                      </button>
+                    </div>
                   );
                 })()}
               </form>
             )}
 
             {taskModalTab === 'checklist' && editingTask && (
-              <div style={{ height: 400 }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
                 <TaskChecklist projectId={id} taskId={editingTask.id} />
               </div>
             )}
 
             {taskModalTab === 'commenti' && editingTask && (
-              <div style={{ height: 400 }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
                 <TaskComments projectId={id} taskId={editingTask.id} currentUser={user} />
               </div>
             )}
@@ -2972,7 +2983,7 @@ export default function ProjectDetailPage() {
                 if (w !== '__extra__') allWorkersSet.add(w);
               });
               const workers = Array.from(allWorkersSet);
-              
+
               const oreGgTotale = plannedDates.length > 0 ? workers.reduce((acc, w) => {
                 const wAssigned = (selectedTaskForHours.worker_hours && selectedTaskForHours.worker_hours[w] !== undefined && selectedTaskForHours.worker_hours[w] !== '')
                   ? Number(selectedTaskForHours.worker_hours[w])
