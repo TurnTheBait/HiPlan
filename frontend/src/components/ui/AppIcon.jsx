@@ -248,12 +248,13 @@ const paths = {
   ),
 };
 
-export default function AppIcon({ name, size = 18, className = '', strokeWidth = 1.9 }) {
+export default function AppIcon({ name, size = 18, className = '', strokeWidth = 1.9, style = {} }) {
   return (
     <svg
       className={`app-icon ${className}`.trim()}
       width={size}
       height={size}
+      style={style}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

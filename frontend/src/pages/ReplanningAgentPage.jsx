@@ -4,6 +4,7 @@ import api from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import AppIcon from '../components/ui/AppIcon';
+import MultiSelectDropdown from '../components/ui/MultiSelectDropdown';
 import './ReplanningAgentPage.css';
 
 export default function ReplanningAgentPage() {
@@ -15,9 +16,13 @@ export default function ReplanningAgentPage() {
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
   const [activeTab, setActiveTab] = useState('suggestions');
 
-  const [filterProject, setFilterProject] = useState('');
-  const [filterType, setFilterType] = useState('');
-  const [filterDept, setFilterDept] = useState('');
+  const [filterProject, setFilterProject] = useState(() => JSON.parse(localStorage.getItem('agentFilterProject') || '[]'));
+  const [filterType, setFilterType] = useState(() => JSON.parse(localStorage.getItem('agentFilterType') || '[]'));
+  const [filterDept, setFilterDept] = useState(() => JSON.parse(localStorage.getItem('agentFilterDept') || '[]'));
+
+  useEffect(() => { localStorage.setItem('agentFilterProject', JSON.stringify(filterProject)); }, [filterProject]);
+  useEffect(() => { localStorage.setItem('agentFilterType', JSON.stringify(filterType)); }, [filterType]);
+  useEffect(() => { localStorage.setItem('agentFilterDept', JSON.stringify(filterDept)); }, [filterDept]);
   const [sortBy, setSortBy] = useState('date_asc');
   const [archivedKeys, setArchivedKeys] = useState(() => JSON.parse(localStorage.getItem('agentArchivedKeys') || '[]'));
 
@@ -82,9 +87,9 @@ export default function ReplanningAgentPage() {
   const uniqueTypes = [...new Set(baseListForFilters.map(s => s.type))].filter(Boolean).sort();
 
   const filteredSuggestions = baseListForFilters.filter(s => {
-    if (filterProject && s.project_name !== filterProject) return false;
-    if (filterType && s.type !== filterType) return false;
-    if (filterDept && s.department !== filterDept) return false;
+    if (filterProject.length > 0 && !filterProject.includes(s.project_name)) return false;
+    if (filterType.length > 0 && !filterType.includes(s.type)) return false;
+    if (filterDept.length > 0 && !filterDept.includes(s.department)) return false;
     return true;
   }).sort((a, b) => {
     if (sortBy === 'date_desc') return new Date(b.date || 0) - new Date(a.date || 0);
@@ -114,7 +119,7 @@ export default function ReplanningAgentPage() {
             ].map(tab => (
               <button
                 key={tab.id}
-                onClick={() => { setActiveTab(tab.id); setFilterProject(''); setFilterType(''); setFilterDept(''); }}
+                onClick={() => { setActiveTab(tab.id); setFilterProject([]); setFilterType([]); setFilterDept([]); }}
                 className={`filter-chip ${activeTab === tab.id ? 'active' : ''}`}
                 style={{ display: 'flex', alignItems: 'center', gap: 6 }}
               >
@@ -148,37 +153,33 @@ export default function ReplanningAgentPage() {
             <AppIcon name="filter" size={14} />
           </span>
 
-          <select
-            className="input"
+          <MultiSelectDropdown
             value={filterProject}
-            onChange={e => setFilterProject(e.target.value)}
-            style={{ padding: '6px 12px', fontSize: 13, borderRadius: 10, minWidth: 200, flex: 1, maxWidth: 300, minHeight: 38 }}
-          >
-            <option value="">Tutte le commesse</option>
-            {uniqueProjects.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
+            onChange={setFilterProject}
+            placeholder="Tutte le commesse"
+            options={uniqueProjects.map(p => ({ label: p, value: p }))}
+            style={{ minWidth: 200, flex: 1, maxWidth: 300 }}
+          />
 
-          <select
-            className="input"
+          <MultiSelectDropdown
             value={filterType}
-            onChange={e => setFilterType(e.target.value)}
-            style={{ padding: '6px 12px', fontSize: 13, borderRadius: 10, minWidth: 200, flex: 1, maxWidth: 300, minHeight: 38 }}
-          >
-            <option value="">Tutte le tipologie</option>
-            {uniqueTypes.map(t => <option key={t} value={t}>{getActionBadge(t).label}</option>)}
-          </select>
+            onChange={setFilterType}
+            placeholder="Tutte le tipologie"
+            options={uniqueTypes.map(t => ({ label: getActionBadge(t).label, value: t }))}
+            style={{ minWidth: 200, flex: 1, maxWidth: 300 }}
+          />
 
-          <select
-            className="input"
+          <MultiSelectDropdown
             value={filterDept}
-            onChange={e => setFilterDept(e.target.value)}
-            style={{ padding: '6px 12px', fontSize: 13, borderRadius: 10, minWidth: 200, flex: 1, maxWidth: 300, minHeight: 38 }}
-          >
-            <option value="">Tutti i reparti</option>
-            <option value="ufficio_tecnico">Ufficio Tecnico</option>
-            <option value="acquisti">Acquisti</option>
-            <option value="produzione">Produzione</option>
-          </select>
+            onChange={setFilterDept}
+            placeholder="Tutti i reparti"
+            options={[
+              { label: 'Ufficio Tecnico', value: 'ufficio_tecnico' },
+              { label: 'Acquisti', value: 'acquisti' },
+              { label: 'Produzione', value: 'produzione' }
+            ]}
+            style={{ minWidth: 200, flex: 1, maxWidth: 300 }}
+          />
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', marginLeft: 'auto' }}>
             <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Ordina per:</span>
