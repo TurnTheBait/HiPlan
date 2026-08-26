@@ -251,12 +251,38 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
                             except:
                                 pass
                                 
-                    if tot_day_eff < (ore_gg * 0.5) or (tot_day_eff == 0 and ore_gg > 0):
+                    for w in workers_list:
+                        w_eff = 0
+                        if w in actual_h_map and isinstance(actual_h_map[w], dict) and date_str in actual_h_map[w]:
+                            try:
+                                w_eff = float(actual_h_map[w][date_str])
+                            except:
+                                pass
+                        
+                        if w_eff == 0 and ore_gg > 0:
+                            sugg_id = f"zero_hours_{task.id}_{w}_{date_str.replace('-','')}"
+                            if not any(s["id"] == sugg_id for s in suggestions):
+                                suggestions.append({
+                                    "id": sugg_id,
+                                    "type": "zero_hours",
+                                    "task_id": str(task.id),
+                                    "task_name": task.text,
+                                    "project_id": str(task.project_id),
+                                    "project_name": task.project.name if task.project else "-",
+                                    "project_code": (task.project.code if task.project.code else "") if task.project else "",
+                                    "project_color": task.project.color if getattr(task, 'project', None) and getattr(task.project, 'color', None) else None,
+                                    "department": getattr(task, "department", None),
+                                    "worker": w,
+                                    "date": str(cur_d),
+                                    "reason": f"L'addetto {w} il {cur_d.strftime('%d/%m/%Y')} non ha consuntivato ore per questa fase."
+                                })
+
+                    if tot_day_eff > 0 and tot_day_eff < (ore_gg * 0.5):
                         has_critical_delay = True
                         if not first_delayed_date:
                             first_delayed_date = cur_d
                         break
-                    elif tot_day_eff < ore_gg:
+                    elif tot_day_eff > 0 and tot_day_eff < ore_gg:
                         has_warning_delay = True
                         if not first_delayed_date:
                             first_delayed_date = cur_d

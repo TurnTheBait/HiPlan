@@ -464,6 +464,7 @@ export default function ProjectDetailPage() {
 
     let hasRitardo = false;
     let hasAttenzione = false;
+    let hasZeroHours = false;
 
     cur = new Date(start);
     while (cur <= end && cur <= today) {
@@ -480,10 +481,13 @@ export default function ProjectDetailPage() {
             if (dayMap && dayMap[dateStr]) totDayEff += Number(dayMap[dateStr]) || 0;
           });
         }
-        if (totDayEff < oreGg * 0.5 || (totDayEff === 0 && oreGg > 0)) {
+
+        if (totDayEff > 0 && totDayEff < oreGg * 0.5) {
           hasRitardo = true;
-        } else if (totDayEff < oreGg) {
+        } else if (totDayEff > 0 && totDayEff < oreGg) {
           hasAttenzione = true;
+        } else if (totDayEff === 0 && oreGg > 0) {
+          hasZeroHours = true;
         }
       }
       cur.setDate(cur.getDate() + 1);
@@ -491,6 +495,7 @@ export default function ProjectDetailPage() {
 
     if (hasRitardo) return 'ritardo';
     if (hasAttenzione) return 'attenzione';
+    if (hasZeroHours) return 'mancata_consuntivazione';
     return 'ok';
   }
 
@@ -536,7 +541,7 @@ export default function ProjectDetailPage() {
       eff += tEff;
 
       const st = computeStato(t);
-      if (['ritardo', 'attenzione', 'ritardo_ferie', 'sforamento', 'orfana'].includes(st)) {
+      if (['ritardo', 'attenzione', 'ritardo_ferie', 'sforamento', 'orfana', 'mancata_consuntivazione'].includes(st)) {
         delays.push({ task: t, stato: st, tEff });
       }
     });
@@ -2068,6 +2073,7 @@ export default function ProjectDetailPage() {
                             {st === 'ritardo_ferie' && <span className="semaforo-ritardo"><span className="status-dot danger" />Rischio ritardo ferie</span>}
                             {st === 'ritardo' && <span className="semaforo-ritardo"><span className="status-dot danger" />Ritardo lavorazione</span>}
                             {st === 'sforamento' && <span className="semaforo-ritardo"><span className="status-dot danger" />Sforamento ore</span>}
+                            {st === 'mancata_consuntivazione' && <span className="semaforo-mancata-consuntivazione"><span className="status-dot" style={{ background: '#8b5cf6' }} />Mancata consuntivazione</span>}
                           </td>
                         )}
                         {tableVisibleColumns.includes('azioni') && (
@@ -2270,7 +2276,7 @@ export default function ProjectDetailPage() {
                       return (
                         <div
                           key={`proj-alert-${idx}`}
-                          className={`alert-card attenzione`}
+                          className={`alert-card no_responsible`}
                           style={{ marginBottom: 12, cursor: 'default' }}
                           onClick={e => e.stopPropagation()}
                         >
@@ -2279,10 +2285,10 @@ export default function ProjectDetailPage() {
                               <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
                                 Allarme Commessa
                               </span>
-                              <span className="semaforo-attenzione"><span className="status-dot warning" />Dato mancante</span>
+                              <span className="semaforo-dato-mancante"><span className="status-dot" style={{ background: '#0ea5e9' }} />Dato mancante</span>
                             </div>
                             <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                              <AppIcon name="alertTriangle" size={14} style={{ color: '#f59e0b' }} /> <strong style={{ marginLeft: 6 }}>{item.text}</strong>
+                              <AppIcon name="alertTriangle" size={14} style={{ color: '#0ea5e9' }} /> <strong style={{ marginLeft: 6 }}>{item.text}</strong>
                             </div>
                           </div>
                         </div>
@@ -2309,6 +2315,8 @@ export default function ProjectDetailPage() {
                               <span className="semaforo-ritardo"><span className="status-dot danger" />Sforamento ore</span>
                             ) : item.stato === 'orfana' ? (
                               <span className="semaforo-attenzione" style={{ color: '#f59e0b', background: '#fffbeb', border: '1px solid #fef3c7' }}><span className="status-dot warning" />Nessun addetto</span>
+                            ) : item.stato === 'mancata_consuntivazione' ? (
+                              <span className="semaforo-mancata-consuntivazione"><span className="status-dot" style={{ background: '#8b5cf6' }} />Mancata consuntivazione</span>
                             ) : (
                               <span className="semaforo-attenzione"><span className="status-dot open" />Attenzione</span>
                             )}
@@ -3083,6 +3091,7 @@ export default function ProjectDetailPage() {
                             {st === 'ritardo_ferie' && <span className="semaforo-ritardo"><span className="status-dot danger" />Rischio ritardo (ferie)</span>}
                             {st === 'ritardo' && <span className="semaforo-ritardo"><span className="status-dot danger" />Stato ritardo</span>}
                             {st === 'sforamento' && <span className="semaforo-ritardo" style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#ef4444', border: '1px solid #dc2626', padding: '3px 10px', borderRadius: '12px', fontWeight: 700 }}><span className="status-dot danger" />Sforamento ore</span>}
+                            {st === 'mancata_consuntivazione' && <span className="semaforo-mancata-consuntivazione"><span className="status-dot" style={{ background: '#8b5cf6' }} />Mancata consuntivazione</span>}
                             {isModalCompleted && (
                               <span style={{ background: 'rgba(16, 185, 129, 0.18)', color: '#10b981', padding: '3px 10px', borderRadius: '12px', fontWeight: 600, fontSize: '0.82rem', border: '1px solid #059669' }}>
                                 ✓ Fase Completata (100% Ore / Flaggata)
