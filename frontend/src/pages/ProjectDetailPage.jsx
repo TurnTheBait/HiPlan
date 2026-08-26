@@ -620,8 +620,19 @@ export default function ProjectDetailPage() {
   async function handleToggleTaskCompleted(task, currentIsCompleted) {
     if (!canManageProject) {
       toast.error('Solo proprietario, referente o editor possono segnare la fase come completata/in corso');
-      return;
+      return false;
     }
+
+    if (currentIsCompleted) {
+      if (user?.role !== 'admin' && user?.role !== 'editor') {
+        toast.error('Solo un admin o un editor può riaprire una fase già completata.');
+        return false;
+      }
+      if (!window.confirm(`Sei sicuro di voler riaprire la fase "${task.text}"?`)) return false;
+    } else {
+      if (!window.confirm(`Sei sicuro di voler segnare la fase "${task.text}" come completata?`)) return false;
+    }
+
     const newCompleted = currentIsCompleted ? -1 : 1;
     try {
       await api.put(`/projects/${id}/tasks/${task.id}`, {
@@ -629,8 +640,10 @@ export default function ProjectDetailPage() {
       });
       toast.success(newCompleted === 1 ? 'Fase completata!' : 'Fase ripristinata in corso');
       loadProject();
+      return true;
     } catch {
       toast.error("Errore durante l'aggiornamento dello stato della fase");
+      return false;
     }
   }
 
@@ -1995,16 +2008,14 @@ export default function ProjectDetailPage() {
                       <tr key={task.id} style={{ backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.18)' : (task.type === 'milestone' ? 'rgba(245, 158, 11, 0.15)' : undefined) }}>
                         <td style={{ fontWeight: 600 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <input
-                              type="checkbox"
-                              checked={isCompleted}
-                              onChange={() => handleToggleTaskCompleted(task, isCompleted)}
-                              title="Clicca per spuntare/rimuovere completamento fase"
-                              style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#10b981' }}
-                            />
                             <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: tColor, flexShrink: 0, display: 'inline-block', border: '1px solid rgba(255,255,255,0.2)' }} title={`Colore fase: ${tColor}`} />
-                            <span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               {task.text}
+                              {isCompleted && (
+                                <div title="Fase completata" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <AppIcon name="check" size={16} style={{ color: '#10b981' }} />
+                                </div>
+                              )}
                             </span>
                           </div>
                         </td>
@@ -3112,7 +3123,33 @@ export default function ProjectDetailPage() {
                         );
                       })()}
                     </div>
-                    <div style={{ display: 'flex', gap: 10 }}>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        className={`btn ${Number(selectedTaskForHours.completed) === 1 ? '' : 'btn-secondary'}`}
+                        style={{
+                          marginRight: 16,
+                          borderColor: Number(selectedTaskForHours.completed) === 1 ? '#10b981' : undefined,
+                          color: Number(selectedTaskForHours.completed) === 1 ? '#10b981' : undefined,
+                          background: Number(selectedTaskForHours.completed) === 1 ? 'rgba(16, 185, 129, 0.1)' : undefined,
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          fontWeight: 600
+                        }}
+                        onClick={() => {
+                          const isCurrentlyCompleted = Number(selectedTaskForHours.completed) === 1;
+                          handleToggleTaskCompleted(selectedTaskForHours, isCurrentlyCompleted).then((success) => {
+                            if (success) {
+                              setSelectedTaskForHours(prev => ({...prev, completed: isCurrentlyCompleted ? -1 : 1}));
+                            }
+                          });
+                        }}
+                      >
+                        {Number(selectedTaskForHours.completed) === 1 ? (
+                          <><AppIcon name="check" size={16} /> Fase Completata</>
+                        ) : (
+                          <><AppIcon name="checkCircle" size={16} /> Segna Completata</>
+                        )}
+                      </button>
                       <button type="button" className="btn btn-secondary" onClick={() => setShowOreModal(false)}>
                         Annulla
                       </button>
