@@ -69,7 +69,7 @@ export default function ReplanningAgentPage() {
       case 'vacation_conflict': return { label: 'Ferie', color: '#f59e0b', icon: 'vacations' };
       case 'overload_conflict': return { label: 'Sovraccarico', color: '#f97316', icon: 'user' };
       case 'missing_data': return { label: 'Dato Mancante', color: '#0ea5e9', icon: 'alertTriangle' };
-      case 'zero_hours': return { label: 'Mancata Consuntivazione', color: '#8b5cf6', icon: 'clock' };
+      case 'zero_hours': return { label: 'Mancata Consuntivazione', color: '#8b5cf6', icon: 'user' };
       default: return { label: type, color: '#64748b', icon: 'notes' };
     }
   }
