@@ -72,7 +72,7 @@ export default function TaskChecklist({ projectId, taskId }) {
   const completedCount = items.filter(i => i.is_completed).length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1 }}>
       <div style={{ marginBottom: 16 }}>
         <h3 style={{ margin: '0 0 8px 0', fontSize: '1rem' }}>Sotto-attività</h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

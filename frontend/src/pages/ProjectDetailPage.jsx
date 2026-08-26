@@ -2357,7 +2357,7 @@ export default function ProjectDetailPage() {
       {/* MODALE NUOVA / MODIFICA FASE (TASK MODAL) */}
       {showTaskModal && (
         <div className="modal-overlay">
-          <div className="modal task-editor-modal" style={{ maxWidth: 900 }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal task-editor-modal" style={{ maxWidth: 900, minHeight: '85vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{editingTask ? 'Dettagli Fase Lavorazione' : 'Nuova Fase Lavorazione'}</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowTaskModal(false)} aria-label="Chiudi" style={{ marginRight: '-45px' }}>
@@ -2383,7 +2383,7 @@ export default function ProjectDetailPage() {
 
             {taskModalTab === 'generale' && (
               <form onSubmit={handleSaveTaskForm} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-                <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '10px 4px', marginRight: -8, paddingRight: 12 }}>
                 {/* Scelta Tipo Fase: Normale o Milestone (Linea Verticale / Evento) */}
                 <div className="task-type-selector">
                   <label>Tipo di Voce:</label>
@@ -2894,13 +2894,13 @@ export default function ProjectDetailPage() {
             )}
 
             {taskModalTab === 'checklist' && editingTask && (
-              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', padding: '10px 4px', marginRight: -8, paddingRight: 12 }}>
                 <TaskChecklist projectId={id} taskId={editingTask.id} />
               </div>
             )}
 
             {taskModalTab === 'commenti' && editingTask && (
-              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', padding: '10px 4px', marginRight: -8, paddingRight: 12 }}>
                 <TaskComments projectId={id} taskId={editingTask.id} currentUser={user} />
               </div>
             )}
