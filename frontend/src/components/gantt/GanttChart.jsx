@@ -343,6 +343,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       return "";
     };
 
+    // Layer per mostrare ore consuntivate extra (fuori dal periodo previsto)
     gantt.init(containerRef.current);
 
     gantt.attachEvent("onGanttRender", () => {
@@ -600,6 +601,91 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       // Rimuovi vecchi marker custom
       const existing = gantt.$task_data.querySelectorAll('.custom-project-marker');
       existing.forEach(el => el.remove());
+      
+      const existingExtra = gantt.$task_data.querySelectorAll('.custom-extra-hours-marker');
+      existingExtra.forEach(el => el.remove());
+
+      if (Array.isArray(tasksRef.current)) {
+        tasksRef.current.forEach(task => {
+          if (task.type === 'milestone') return;
+          if (!task.actual_hours || typeof task.actual_hours !== 'object') return;
+          if (!task.start_date || !task.end_date) return;
+          
+          try {
+            if (!gantt.isTaskExists(task.id)) return;
+            
+            const ganttTask = gantt.getTask(task.id);
+            const taskTop = gantt.getTaskTop(task.id);
+            const rowHeight = gantt.config.row_height || 44;
+            
+            const extraDays = {};
+            const tStart = new Date(ganttTask.start_date).setHours(0,0,0,0);
+            const tEnd = new Date(ganttTask.end_date).setHours(0,0,0,0);
+            
+            Object.values(task.actual_hours).forEach(dayMap => {
+              if (dayMap && typeof dayMap === 'object') {
+                Object.keys(dayMap).forEach(dateStr => {
+                  const h = Number(dayMap[dateStr]) || 0;
+                  if (h > 0) {
+                    const parts = dateStr.split('-');
+                    if (parts.length === 3) {
+                      const d = new Date(parts[0], parts[1]-1, parts[2]);
+                      const time = d.getTime();
+                      if (time < tStart || time >= tEnd) {
+                        extraDays[dateStr] = (extraDays[dateStr] || 0) + h;
+                      }
+                    }
+                  }
+                });
+              }
+            });
+            
+            const ganttState = gantt.getState();
+            Object.keys(extraDays).forEach(dateStr => {
+              const h = extraDays[dateStr];
+              const parts = dateStr.split('-');
+              const d = new Date(parts[0], parts[1]-1, parts[2]);
+              
+              // Disegna il marker SOLO se visibile nella scala attuale (evita espansione infinita layout)
+              if (ganttState.min_date && ganttState.max_date) {
+                if (d < ganttState.min_date || d > ganttState.max_date) return;
+              }
+              
+              const pos = gantt.posFromDate(d);
+              const nextDay = gantt.date.add(d, 1, 'day');
+              const endPos = gantt.posFromDate(nextDay);
+              if (!isFinite(pos) || !isFinite(endPos)) return;
+              
+              const width = endPos - pos;
+
+              const size = 18;
+              const markerDiv = document.createElement('div');
+              markerDiv.className = 'custom-extra-hours-marker';
+              markerDiv.style.position = 'absolute';
+              markerDiv.style.left = (pos + width / 2 - size / 2) + 'px';
+              markerDiv.style.width = size + 'px';
+              markerDiv.style.height = size + 'px';
+              markerDiv.style.top = (taskTop + rowHeight / 2 - size / 2) + 'px';
+              markerDiv.style.borderRadius = '50%';
+              markerDiv.style.backgroundColor = '#f59e0b';
+              markerDiv.style.color = '#ffffff';
+              markerDiv.style.display = 'flex';
+              markerDiv.style.alignItems = 'center';
+              markerDiv.style.justifyContent = 'center';
+              markerDiv.style.zIndex = 10;
+              markerDiv.style.pointerEvents = 'auto'; 
+              markerDiv.style.boxShadow = '0 2px 5px rgba(245, 158, 11, 0.4)';
+              markerDiv.style.cursor = 'pointer';
+              markerDiv.title = `${h}h extra il ${parts[2]}/${parts[1]}/${parts[0]}`;
+              markerDiv.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`;
+              
+              gantt.$task_data.appendChild(markerDiv);
+            });
+          } catch (e) {
+            console.warn("Errore rendering marker extra hours per task", task.id, e);
+          }
+        });
+      }
 
       const visibleTasksCount = (typeof gantt.getVisibleTaskCount === 'function' ? gantt.getVisibleTaskCount() : 0) || (Array.isArray(tasksRef.current) ? tasksRef.current.length : 10);
       const rowHeight = gantt.config.row_height || 38;
