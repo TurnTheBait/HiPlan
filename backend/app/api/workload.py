@@ -21,7 +21,7 @@ async def get_workload_heatmap(
 ) -> Dict[str, Any]:
     # pyrefly: ignore [missing-import]
     from sqlalchemy.orm import joinedload
-    users_res = await db.execute(select(User).where(User.is_active == True))
+    users_res = await db.execute(select(User))
     users = users_res.scalars().all()
     
     tasks_res = await db.execute(select(Task).options(joinedload(Task.project)))
@@ -210,6 +210,7 @@ async def export_workload_excel_route(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # pyrefly: ignore [missing-import]
     from fastapi.responses import StreamingResponse
     from app.services import export_service
     data = await get_workload_heatmap(db, current_user)
@@ -225,6 +226,7 @@ async def export_workload_pdf_route(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # pyrefly: ignore [missing-import]
     from fastapi.responses import StreamingResponse
     from app.services import export_service
     data = await get_workload_heatmap(db, current_user)

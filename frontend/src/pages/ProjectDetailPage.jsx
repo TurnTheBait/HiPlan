@@ -986,6 +986,69 @@ export default function ProjectDetailPage() {
         }
       }
 
+      // ----------------------------------------------------
+      // Controllo Sovraccarico Post-Salvataggio (sempre eseguito)
+      // ----------------------------------------------------
+      if (!isMilestone && taskForm.workers && taskForm.workers.length > 0) {
+        try {
+          await new Promise(r => setTimeout(r, 400)); // Attendiamo il commit su DB
+          
+          const workloadRes = await api.get(`/workload/heatmap?_t=${Date.now()}`);
+          const heatmap = workloadRes.data.heatmap || {};
+          let overloadedWorkers = new Map();
+          
+          const assignedWorkerIds = [];
+          Object.keys(heatmap).forEach(uid => {
+            const h = heatmap[uid];
+            // Match case-insensitive
+            const isMatch = taskForm.workers.some(w => {
+              const workerLower = (w || '').toLowerCase().trim();
+              const hUser = (h.username || '').toLowerCase().trim();
+              const hFull = (h.full_name || '').toLowerCase().trim();
+              return (hUser && hUser.includes(workerLower)) || (hFull && hFull.includes(workerLower));
+            });
+
+            if (isMatch) {
+              assignedWorkerIds.push({ uid, name: h.username || h.full_name });
+            }
+          });
+          
+          for (const w of assignedWorkerIds) {
+            const wData = heatmap[w.uid];
+            if (!wData || !wData.workload) continue;
+            
+            let curDate = new Date(taskForm.start_date + 'T12:00:00');
+            const endDate = new Date(taskForm.end_date + 'T12:00:00');
+            
+            while (curDate <= endDate) {
+              const dd = String(curDate.getDate()).padStart(2, '0');
+              const mm = String(curDate.getMonth() + 1).padStart(2, '0');
+              const yyyy = curDate.getFullYear();
+              const dStr = `${yyyy}-${mm}-${dd}`;
+              
+              const h = wData.workload[dStr] ? wData.workload[dStr].hours : 0;
+              
+              if (h > 8.01) {
+                if (!overloadedWorkers.has(w.name)) {
+                  overloadedWorkers.set(w.name, []);
+                }
+                overloadedWorkers.get(w.name).push(`${dd}/${mm}`);
+              }
+              curDate.setDate(curDate.getDate() + 1);
+            }
+          }
+          
+          if (overloadedWorkers.size > 0) {
+            overloadedWorkers.forEach((dates, workerName) => {
+              toast.warning(`Attenzione: l'addetto ${workerName} è andato in sovraccarico (più di 8h/giorno) nei giorni: ${dates.join(', ')}!`);
+            });
+          }
+        } catch (err) {
+          console.error("Errore controllo sovraccarico post-salvataggio:", err);
+          toast.error("Errore nel controllo del sovraccarico: " + err.message);
+        }
+      }
+
       // Se l'utente ha inserito una fase personalizzata o nuova, aggiungiamola automaticamente alle fasi suggerite per quel reparto
       if (taskForm.faseSel === '__custom__' && taskName.trim()) {
         try {
