@@ -443,7 +443,7 @@ export default function WorkloadHeatmap() {
               dayData.tasks.forEach(t => {
                 const roundedTaskHours = Number(t.hours.toFixed(1));
                 dailySumRounded += roundedTaskHours;
-                
+
                 const existing = aggregatedWorkload[key].tasks.find(x => x.id === t.id);
                 if (existing) {
                   existing.hours += roundedTaskHours;
@@ -499,6 +499,10 @@ export default function WorkloadHeatmap() {
 
                 if (isVacation) {
                   tooltipText = 'Ferie (' + formatDateStr(colKey) + ')';
+                  if (data.tasks.length > 0) {
+                    tooltipText += '\n\n⚠️ ATTENZIONE: Ci sono ' + (data.hours?.toFixed(1) || 0) + 'h assegnate su un giorno di ferie!\n\n';
+                    tooltipText += data.tasks.map(t => '📁 ' + (t.project_name || 'Progetto') + '\n📌 ' + t.name + (t.type === 'milestone' ? '' : (': ' + (t.hours?.toFixed(1) || 0) + 'h (' + (columnsMap.get(colKey) || '') + ')'))).join('\n\n');
+                  }
                 } else if (isWeekendCol) {
                   tooltipText = formatDateStr(colKey) + ' (Sabato/Domenica/Festivo)';
                 } else if (data.tasks.length > 0) {
@@ -509,11 +513,26 @@ export default function WorkloadHeatmap() {
 
                 let displayContent;
                 if (isVacation) {
-                  displayContent = <AppIcon name="vacations" size={16} />;
+                  if (data.hours > 0) {
+                    displayContent = (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', color: '#dc2626', fontWeight: 'bold' }} title={tooltipText}>
+                        <AppIcon name="vacations" size={14} />
+                        <span>{data.hours.toFixed(1)}h</span>
+                      </div>
+                    );
+                  } else {
+                    displayContent = <AppIcon name="vacations" size={16} />;
+                  }
                 } else if (isWeekendCol) {
                   displayContent = data.hours > 0 ? data.hours.toFixed(1) + 'h' : '';
                 } else {
                   displayContent = data.hours > 0 ? data.hours.toFixed(1) + 'h' : '-';
+                }
+
+                const isConflict = isVacation && data.hours > 0;
+                const isClickable = data.tasks.length > 0;
+                if (isConflict) {
+                  colorClass = 'over-capacity';
                 }
 
                 return (
@@ -522,7 +541,7 @@ export default function WorkloadHeatmap() {
                     className={'heatmap-cell ' + colorClass + (colKey === todayKey ? ' today-cell' : '') + (isWeekendCol ? ' heatmap-weekend' : '')}
                     title={tooltipText}
                     onClick={() => {
-                      if (!isVacation && data.tasks.length > 0) {
+                      if (isClickable) {
                         setDayDetails({
                           user: userData.full_name,
                           date: colKey,
@@ -532,7 +551,9 @@ export default function WorkloadHeatmap() {
                         });
                       }
                     }}
-                    style={{ cursor: (!isVacation && data.tasks.length > 0) ? 'pointer' : 'default' }}
+                    style={{
+                      cursor: isClickable ? 'pointer' : 'default'
+                    }}
                   >
                     {displayContent}
                   </div>
@@ -881,8 +902,19 @@ export default function WorkloadHeatmap() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {dayDetails.tasks.map((t, idx) => (
                   <div key={idx} style={{ padding: '12px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-default)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                    <div style={{ color: 'var(--accent-500)', fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <AppIcon name="folder" size={16} /> {t.project_code && t.project_name && t.project_name !== 'Progetto non specificato' ? `${t.project_code} - ${t.project_name}` : (t.project_code || t.project_name || 'Progetto non specificato')}
+                    <div style={{ color: 'var(--accent-500)', fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <AppIcon name="folder" size={16} /> {t.project_code && t.project_name && t.project_name !== 'Progetto non specificato' ? `${t.project_code} - ${t.project_name}` : (t.project_code || t.project_name || 'Progetto non specificato')}
+                      </div>
+                      {t.project_id && (
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => navigate(`/projects/${t.project_id}`)}
+                          style={{ padding: '4px 12px', fontSize: '0.8rem', minHeight: 'unset' }}
+                        >
+                          Apri commessa
+                        </button>
+                      )}
                     </div>
                     <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ color: 'var(--text-secondary)', display: 'flex' }}><AppIcon name="todo" size={16} /></span> {t.name}
