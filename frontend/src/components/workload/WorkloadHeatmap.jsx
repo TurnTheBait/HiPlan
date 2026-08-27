@@ -439,15 +439,19 @@ export default function WorkloadHeatmap() {
             }
 
             if (aggregatedWorkload[key]) {
-              aggregatedWorkload[key].hours += dayData.hours;
+              let dailySumRounded = 0;
               dayData.tasks.forEach(t => {
+                const roundedTaskHours = Number(t.hours.toFixed(1));
+                dailySumRounded += roundedTaskHours;
+                
                 const existing = aggregatedWorkload[key].tasks.find(x => x.id === t.id);
                 if (existing) {
-                  existing.hours += t.hours;
+                  existing.hours += roundedTaskHours;
                 } else {
-                  aggregatedWorkload[key].tasks.push({ ...t });
+                  aggregatedWorkload[key].tasks.push({ ...t, hours: roundedTaskHours });
                 }
               });
+              aggregatedWorkload[key].hours += dailySumRounded;
             }
           });
 

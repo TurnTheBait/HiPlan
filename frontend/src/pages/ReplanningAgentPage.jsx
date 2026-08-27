@@ -157,7 +157,7 @@ export default function ReplanningAgentPage() {
             value={filterProject}
             onChange={setFilterProject}
             placeholder="Tutte le commesse"
-            options={uniqueProjects.map(p => ({ label: p, value: p }))}
+            options={Array.from(new Set([...uniqueProjects, ...filterProject])).map(p => ({ label: p, value: p }))}
             style={{ minWidth: 200, flex: 1, maxWidth: 300 }}
           />
 
@@ -165,7 +165,7 @@ export default function ReplanningAgentPage() {
             value={filterType}
             onChange={setFilterType}
             placeholder="Tutte le tipologie"
-            options={uniqueTypes.map(t => ({ label: getActionBadge(t).label, value: t }))}
+            options={Array.from(new Set([...uniqueTypes, ...filterType])).map(t => ({ label: getActionBadge(t).label, value: t }))}
             style={{ minWidth: 200, flex: 1, maxWidth: 300 }}
           />
 
