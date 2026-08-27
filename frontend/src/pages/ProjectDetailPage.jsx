@@ -3021,9 +3021,11 @@ export default function ProjectDetailPage() {
                                   {dayName}
                                 </span>
                                 {d.split('-')[2]}/{d.split('-')[1]}<br />
-                                <span style={{ fontSize: 11, fontWeight: 400, color: !plannedSet.has(d) ? '#ef4444' : 'var(--text-tertiary)' }}>
-                                  {plannedSet.has(d) ? `(${oreGgTotale.toFixed(1)}h)` : 'Extra'}
-                                </span>
+                                {!plannedSet.has(d) && (
+                                  <span style={{ fontSize: 11, fontWeight: 400, color: '#ef4444' }}>
+                                    Extra
+                                  </span>
+                                )}
                               </th>
                             );
                           })}
@@ -3037,7 +3039,18 @@ export default function ProjectDetailPage() {
                             ? Number(selectedTaskForHours.worker_hours[w])
                             : null;
                           const targetH = assignedH !== null ? assignedH : (assignedWorkers.includes(w) ? Number((Number(selectedTaskForHours.planned_hours || 8) / assignedWorkers.length).toFixed(1)) : 0);
-                          const workerDailyTarget = dates.length > 0 ? (targetH / dates.length) : targetH;
+                          
+                          const excludedDays = Array.isArray(selectedTaskForHours.excluded_dates) ? selectedTaskForHours.excluded_dates : 
+                                               (typeof selectedTaskForHours.excluded_dates === 'string' ? JSON.parse(selectedTaskForHours.excluded_dates || '[]') : []);
+                                               
+                          const activeDates = dates.filter(d => {
+                            if (!plannedSet.has(d)) return false;
+                            if (excludedDays.includes(d)) return false;
+                            if (allVacations.some(v => v.username === w && d >= v.start_date && d <= v.end_date)) return false;
+                            return true;
+                          });
+
+                          const workerDailyTarget = activeDates.length > 0 ? (targetH / activeDates.length) : 0;
 
                           const isCurrentUser = (w === user?.username || w === (user?.full_name || user?.username));
                           return (
@@ -3049,6 +3062,11 @@ export default function ProjectDetailPage() {
                                 const val = (actualHoursMap[w] && actualHoursMap[w][d]) || '';
                                 totW += Number(val) || 0;
                                 const isHoliday = allVacations.some(v => v.username === w && d >= v.start_date && d <= v.end_date);
+                                const isExcluded = excludedDays.includes(d);
+                                const isExtra = !plannedSet.has(d);
+                                const isActiveDay = !isExtra && !isExcluded && !isHoliday;
+                                const dayPrevHours = isActiveDay ? workerDailyTarget : 0;
+                                
                                 return (
                                   <td key={d}>
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
@@ -3058,10 +3076,10 @@ export default function ProjectDetailPage() {
                                         min="0"
                                         max="24"
                                         className="ore-input"
-                                        style={isHoliday ? { backgroundColor: '#fef08a' } : {}}
+                                        style={isHoliday || isExcluded ? { backgroundColor: '#fef08a' } : {}}
                                         disabled={user?.role !== 'admin' && w !== user?.username && w !== (user?.full_name || user?.username)}
                                         value={val}
-                                        placeholder={`${workerDailyTarget.toFixed(1)}h`}
+                                        placeholder={`${dayPrevHours.toFixed(1)}h`}
                                         onChange={(e) => {
                                           const newVal = e.target.value;
                                           setActualHoursMap(prev => {
@@ -3072,9 +3090,12 @@ export default function ProjectDetailPage() {
                                         }}
                                       />
                                       {isHoliday && <span style={{ fontSize: '0.65rem', color: '#b45309', fontWeight: 'bold' }}>Ferie</span>}
-                                      <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-tertiary)' }}>
-                                        ({workerDailyTarget.toFixed(1)}h prev)
-                                      </span>
+                                      {isExcluded && !isHoliday && <span style={{ fontSize: '0.65rem', color: '#b45309', fontWeight: 'bold' }}>Saltato</span>}
+                                      {!isHoliday && !isExcluded && (
+                                        <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-tertiary)' }}>
+                                          ({dayPrevHours.toFixed(1)}h prev)
+                                        </span>
+                                      )}
                                     </div>
                                   </td>
                                 );
