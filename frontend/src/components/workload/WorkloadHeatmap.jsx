@@ -223,7 +223,7 @@ export default function WorkloadHeatmap() {
     <div className="workload-heatmap-container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
         <div>
-          <h3 style={{ margin: 0 }}>Saturazione Carichi di Lavoro</h3>
+          <h3 style={{ margin: 0 }}>Pianificazione Carichi di Lavoro</h3>
           <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
             {dataMode === 'planned' ? 'Panoramica ore assegnate nelle fasi dei vari progetti (ore previste, non a consuntivo)' : 'Panoramica ore effettivamente registrate (consuntivate) dagli addetti'}
           </span>

@@ -768,6 +768,10 @@
 }
 
 @media (max-width: 900px) {
+  .sidebar-toggle {
+    display: none !important;
+  }
+
   .sidebar {
     width: min(84vw, 286px);
     transform: translateX(-105%);
