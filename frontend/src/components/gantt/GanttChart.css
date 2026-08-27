@@ -157,7 +157,8 @@
 
 .gantt_task_line .gantt_task_progress {
   border-radius: 8px 0 0 8px !important;
-  background: rgba(255, 255, 255, 0.28) !important;
+  background: rgba(255, 255, 255, 0.5) !important;
+  border-right: 2px solid rgba(255, 255, 255, 0.7) !important;
 }
 
 .gantt_task_line .gantt_task_content {
