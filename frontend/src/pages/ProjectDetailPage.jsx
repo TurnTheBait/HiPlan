@@ -108,6 +108,7 @@ export default function ProjectDetailPage() {
   // STATO PER FILTRO TIPO FASE
   const [phaseFilter, setPhaseFilter] = useState('all'); // 'all', 'task', 'milestone'
   const [showPhaseFilterMenu, setShowPhaseFilterMenu] = useState(false);
+  const [linkToDelete, setLinkToDelete] = useState(null);
 
   // STATO PER COLONNE TABELLA FASI
   const [tableVisibleColumns, setTableVisibleColumns] = useState(() => {
@@ -675,16 +676,21 @@ export default function ProjectDetailPage() {
   }
 
   async function handleLinkDelete(linkId, skipConfirm = false) {
-    if (!skipConfirm && !window.confirm("Confermi l'eliminazione di questa dipendenza tra fasi?")) return;
+    if (!skipConfirm) {
+      setLinkToDelete(linkId);
+      return;
+    }
     try {
       await api.delete(`/projects/${id}/links/${linkId}`);
       setGanttData(prev => ({
         ...prev,
         links: prev.links.filter(l => String(l.id) !== String(linkId))
       }));
+      setLinkToDelete(null);
     } catch (e) {
       toast.error('Errore eliminazione dipendenza');
       console.error(e);
+      setLinkToDelete(null);
     }
   }
 
@@ -992,11 +998,11 @@ export default function ProjectDetailPage() {
       if (!isMilestone && taskForm.workers && taskForm.workers.length > 0) {
         try {
           await new Promise(r => setTimeout(r, 400)); // Attendiamo il commit su DB
-          
+
           const workloadRes = await api.get(`/workload/heatmap?_t=${Date.now()}`);
           const heatmap = workloadRes.data.heatmap || {};
           let overloadedWorkers = new Map();
-          
+
           const assignedWorkerIds = [];
           Object.keys(heatmap).forEach(uid => {
             const h = heatmap[uid];
@@ -1012,22 +1018,22 @@ export default function ProjectDetailPage() {
               assignedWorkerIds.push({ uid, name: h.username || h.full_name });
             }
           });
-          
+
           for (const w of assignedWorkerIds) {
             const wData = heatmap[w.uid];
             if (!wData || !wData.workload) continue;
-            
+
             let curDate = new Date(taskForm.start_date + 'T12:00:00');
             const endDate = new Date(taskForm.end_date + 'T12:00:00');
-            
+
             while (curDate <= endDate) {
               const dd = String(curDate.getDate()).padStart(2, '0');
               const mm = String(curDate.getMonth() + 1).padStart(2, '0');
               const yyyy = curDate.getFullYear();
               const dStr = `${yyyy}-${mm}-${dd}`;
-              
+
               const h = wData.workload[dStr] ? wData.workload[dStr].hours : 0;
-              
+
               if (h > 8.01) {
                 if (!overloadedWorkers.has(w.name)) {
                   overloadedWorkers.set(w.name, []);
@@ -1037,7 +1043,7 @@ export default function ProjectDetailPage() {
               curDate.setDate(curDate.getDate() + 1);
             }
           }
-          
+
           if (overloadedWorkers.size > 0) {
             overloadedWorkers.forEach((dates, workerName) => {
               toast.warning(`Attenzione: l'addetto ${workerName} è andato in sovraccarico (più di 8h/giorno) nei giorni: ${dates.join(', ')}!`);
@@ -3406,6 +3412,29 @@ export default function ProjectDetailPage() {
       {activeTab === 'activity_log' && (
         <ActivityLogPanel projectId={id} />
       )}
+      {/* MODAL ELIMINA DIPENDENZA */}
+      {linkToDelete && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 450 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Elimina dipendenza</h2>
+              <button className="btn-ghost btn-icon" onClick={() => setLinkToDelete(null)} aria-label="Chiudi">
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <div style={{ padding: '24px 20px', textAlign: 'center' }}>
+              <p style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>
+                Sei sicuro di voler eliminare questa dipendenza tra le fasi?
+              </p>
+            </div>
+            <div className="modal-footer" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'flex-end', gap: 12, borderTop: '1px solid var(--border-color)' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setLinkToDelete(null)}>Annulla</button>
+              <button type="button" className="btn btn-danger" onClick={() => handleLinkDelete(linkToDelete, true)}>Elimina</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
