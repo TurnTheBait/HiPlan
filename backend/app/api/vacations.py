@@ -169,7 +169,7 @@ async def create_my_vacation(data: VacationCreate, db: AsyncSession = Depends(ge
             note_admin = Notification(
                 user_id=admin_user.id,
                 title=f"⚠️ Conflitti ferie: {current_user.username}",
-                message=f"L'addetto {current_user.username} ha inserito ferie dal {data.start_date} al {data.end_date}. Ci sono {len(recovery_items)} possibili conflitti da controllare nella Panoramica Addetti.",
+                message=f"L'addetto {current_user.username} ha inserito ferie dal {data.start_date} al {data.end_date}. Ci sono {len(recovery_items)} possibili conflitti da controllare.",
                 type=NotificationType.UPDATE,
             )
             db.add(note_admin)

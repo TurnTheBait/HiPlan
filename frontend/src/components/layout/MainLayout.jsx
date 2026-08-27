@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useToast } from '../../context/ToastContext';
 import api from '../../api/client';
 import './MainLayout.css';
 import GlobalSearch from './GlobalSearch';
@@ -175,19 +176,22 @@ export default function MainLayout() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  const notifiedIdsRef = useRef(new Set());
+  const initialLoadRef = useRef(true);
+
   useEffect(() => {
-    fetchUnread();
+    fetchNotificationsData();
     fetchAgentCount();
     const interval = setInterval(() => {
-      fetchUnread();
+      fetchNotificationsData();
       fetchAgentCount();
     }, 60000);
-    window.addEventListener('notifications-changed', fetchUnread);
+    window.addEventListener('notifications-changed', fetchNotificationsData);
     window.addEventListener('agent-suggestions-changed', fetchAgentCount);
     window.addEventListener('agent-data-modified', fetchAgentCount);
     return () => {
       clearInterval(interval);
-      window.removeEventListener('notifications-changed', fetchUnread);
+      window.removeEventListener('notifications-changed', fetchNotificationsData);
       window.removeEventListener('agent-suggestions-changed', fetchAgentCount);
       window.removeEventListener('agent-data-modified', fetchAgentCount);
     };
@@ -206,47 +210,50 @@ export default function MainLayout() {
     } catch { /* ignore */ }
   }
 
-  async function fetchUnread() {
-    try {
-      const { data } = await api.get('/notifications/unread-count');
-      setUnreadCount(data.count);
-    } catch { /* ignore */ }
-  }
-
-  async function fetchNotifications() {
+  async function fetchNotificationsData() {
     try {
       const { data } = await api.get('/notifications');
       setNotifications(data);
+      setUnreadCount(data.filter(n => !n.is_read).length);
+
+      if (initialLoadRef.current) {
+        data.forEach(n => notifiedIdsRef.current.add(n.id));
+        initialLoadRef.current = false;
+      } else {
+        data.forEach(n => {
+          if (!n.is_read && !notifiedIdsRef.current.has(n.id)) {
+            toast.info(`Nuova notifica: ${n.title}`);
+            notifiedIdsRef.current.add(n.id);
+          }
+        });
+      }
     } catch { /* ignore */ }
   }
 
   useEffect(() => {
     if (showNotifications) {
-      fetchNotifications();
+      fetchNotificationsData();
     }
   }, [showNotifications]);
 
   async function markAsRead(id) {
     try {
       await api.patch(`/notifications/${id}/read`);
-      fetchNotifications();
-      fetchUnread();
+      fetchNotificationsData();
     } catch { /* ignore */ }
   }
 
   async function deleteNotification(id) {
     try {
       await api.delete(`/notifications/${id}`);
-      fetchNotifications();
-      fetchUnread();
+      fetchNotificationsData();
     } catch { /* ignore */ }
   }
 
   async function deleteAllNotifications() {
     try {
       await api.delete('/notifications');
-      fetchNotifications();
-      fetchUnread();
+      fetchNotificationsData();
     } catch { /* ignore */ }
   }
 

@@ -279,37 +279,6 @@ async def create_task(db: AsyncSession, project_id: str, data: TaskCreate, user=
     # Broadcast websocket
     await manager.broadcast(project_id, {"action": "task_created", "task": _task_to_out(task).model_dump()})
 
-    # Notifiche per ferie sovrapposte
-    if total_shift_days > 0:
-        from app.models.project import Project
-        proj_res = await db.execute(select(Project).where(Project.id == project_id))
-        project = proj_res.scalar_one_or_none()
-        for worker_name in (data.workers or []):
-            u_res = await db.execute(select(User).where(User.username == worker_name))
-            worker_user = u_res.scalar_one_or_none()
-            if not worker_user:
-                continue
-            note = Notification(
-                user_id=worker_user.id,
-                title="Ferie rilevate - fase spostata",
-                message=f"La fase '{task.text}' è stata spostata di {total_shift_days} giorni a causa di ferie sovrapposte.",
-                type=NotificationType.ASSIGNMENT,
-                project_id=project.id if project else None,
-            )
-            db.add(note)
-        if project:
-            resp_id = project.responsible_id or project.owner_id
-            if resp_id:
-                note = Notification(
-                    user_id=resp_id,
-                    title="Fase spostata per ferie",
-                    message=f"La fase '{task.text}' nel progetto '{project.name}' è stata spostata di {total_shift_days} giorni.",
-                    type=NotificationType.UPDATE,
-                    project_id=project.id,
-                )
-                db.add(note)
-        await db.commit()
-
     # Esegui ripianificazione in background (non blocca se fallisce)
     import asyncio
 
@@ -491,19 +460,6 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
         from app.models.project import Project
         proj_res = await db.execute(select(Project).where(Project.id == task.project_id))
         project = proj_res.scalar_one_or_none()
-        for worker_name in workers_list:
-            u_res = await db.execute(select(User).where(User.username == worker_name))
-            worker_user = u_res.scalar_one_or_none()
-            if not worker_user:
-                continue
-            note = Notification(
-                user_id=worker_user.id,
-                title="Ferie rilevate - fase spostata",
-                message=f"La fase '{task.text}' è stata spostata di {total_shift_days} giorni a causa di ferie sovrapposte.",
-                type=NotificationType.ASSIGNMENT,
-                project_id=project.id if project else None,
-            )
-            db.add(note)
 
         if had_hours_in_vac and project:
             resp_id = project.responsible_id or project.owner_id
