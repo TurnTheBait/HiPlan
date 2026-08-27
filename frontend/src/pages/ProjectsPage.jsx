@@ -511,12 +511,13 @@ export default function ProjectsPage() {
 
               <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
                 <div className="input-group" style={{ flex: 2, minWidth: 0 }}>
-                  <label htmlFor="project-name">Nome Progetto / Commessa</label>
+                  <label htmlFor="project-name">Nome Progetto / Commessa *</label>
                   <input
                     id="project-name"
                     className="input"
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    required
                     placeholder="es. Impianto linea automatica"
                   />
                 </div>
