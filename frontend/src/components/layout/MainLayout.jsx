@@ -518,7 +518,12 @@ export default function MainLayout() {
                         <div className="notification-title">{n.title}</div>
                         <div className="notification-message">{n.message}</div>
                         <div className="notification-time">
-                          {new Date(n.created_at).toLocaleString('it-IT')}
+                          {(() => {
+                            // Se il backend non restituisce informazioni sul fuso orario, assumiamo UTC (SQLite standard)
+                            // per far sì che il browser lo converta correttamente nell'ora locale
+                            const dateStr = n.created_at.endsWith('Z') ? n.created_at : n.created_at + 'Z';
+                            return new Date(dateStr).toLocaleString('it-IT');
+                          })()}
                         </div>
                       </div>
                       <div className="notification-actions">
