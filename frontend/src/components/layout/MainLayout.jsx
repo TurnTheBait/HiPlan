@@ -356,8 +356,8 @@ export default function MainLayout() {
             <NavLink to="/replanning" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <span className="sidebar-link-icon"><AppIcon name="robot" /></span>
               {showSidebarText && <span>Agent</span>}
-              {agentSuggestionsCount > 0 && showSidebarText && (
-                <span style={{ marginLeft: 'auto', background: 'var(--accent-500)', color: 'white', fontSize: 11, padding: '2px 6px', borderRadius: 10, fontWeight: 600 }}>
+              {agentSuggestionsCount > 0 && (
+                <span className="sidebar-badge">
                   {agentSuggestionsCount}
                 </span>
               )}

@@ -225,6 +225,30 @@
   width: 24px;
 }
 
+.sidebar-badge {
+  margin-left: auto;
+  background: var(--accent-500, #185FA5);
+  color: white;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.sidebar-collapsed .sidebar-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 9px;
+  padding: 2px 4px;
+  border: 2px solid var(--sidebar-bg, #041220);
+  margin-left: 0;
+}
+
 .sidebar-footer {
   position: relative;
   display: flex;
