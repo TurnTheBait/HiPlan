@@ -127,34 +127,20 @@ def _compute_task_progress_and_completed(task: Task, update_data: Optional[dict]
 
     explicit_completed = update_data.get("completed") if update_data and "completed" in update_data else None
 
-    if explicit_completed is not None and int(explicit_completed) == 1:
-        task.completed = 1
+    if explicit_completed is not None:
+        task.completed = int(explicit_completed)
+
+    if task.completed == 1:
         task.progress = 1.0
-    elif explicit_completed is not None and int(explicit_completed) == -1:
-        task.completed = -1
+    elif task.completed == -1:
         task.progress = min(0.99, calc_progress) if calc_progress >= 1.0 else calc_progress
-    elif explicit_completed is not None and int(explicit_completed) == 0:
-        if task.completed != -1 and calc_progress >= 1.0 and planned > 0:
-            task.completed = 1
-            task.progress = 1.0
-        elif task.completed == 1 and calc_progress < 1.0:
-            task.completed = 0
-            task.progress = calc_progress
-        elif task.completed != 1:
-            if task.completed != -1:
-                task.completed = 0
-            task.progress = min(0.99, calc_progress) if calc_progress >= 1.0 else calc_progress
     else:
-        if task.completed != -1 and calc_progress >= 1.0 and planned > 0:
+        # task.completed == 0
+        if explicit_completed is None and calc_progress >= 1.0 and planned > 0:
             task.completed = 1
             task.progress = 1.0
-        elif calc_progress < 1.0:
-            if task.completed == 1:
-                task.completed = 0
-            if task.completed != 1:
-                task.progress = calc_progress
-            else:
-                task.progress = 1.0
+        else:
+            task.progress = min(0.99, calc_progress) if calc_progress >= 1.0 else calc_progress
 
     # Modifica commentata per mantenere le date originali preventivate:
     # if task.completed == 1 and isinstance(actual_map, dict):
