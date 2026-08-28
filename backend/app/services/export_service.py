@@ -1,7 +1,8 @@
 import io
 import json
 from typing import List, Tuple, Optional, Any, cast
-from datetime import timedelta
+from datetime import timedelta, date
+from app.utils.working_days import is_italian_holiday
 # pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
 # pyrefly: ignore [missing-import]
@@ -177,131 +178,132 @@ async def export_excel(db: AsyncSession, project_id: str, sections: Optional[Lis
         has_tasks_section = "tasks" in sections
         has_hours_section = "hours" in sections
 
-        # Find min/max dates
-        all_dates = []
-        for t in task_list:
-            if t.start_date:
-                all_dates.append(t.start_date)
-            if t.end_date:
-                all_dates.append(t.end_date)
-        if not all_dates:
-            all_dates = [proj.start_date or proj.created_at, proj.end_date or proj.start_date]
+        # Find min/max dates: prioritize project boundaries
+        min_date = proj.start_date
+        max_date = proj.end_date
+
+        if not min_date or not max_date:
+            all_dates = []
+            for t in task_list:
+                if t.start_date:
+                    all_dates.append(t.start_date)
+                if t.end_date:
+                    all_dates.append(t.end_date)
+            
+            if not min_date:
+                min_date = min(all_dates) if all_dates else (proj.created_at.date() if hasattr(proj.created_at, 'date') else proj.created_at)
+            if not max_date:
+                max_date = max(all_dates) if all_dates else min_date
         
-        min_date = min(all_dates) if all_dates else proj.start_date
-        max_date = max(all_dates) if all_dates else proj.end_date
-        
-        # Generate month columns
-        current = min_date.replace(day=1)
-        months = []
-        while current <= max_date:
-            months.append(current)
-            if current.month == 12:
-                current = current.replace(year=current.year + 1, month=1)
-            else:
-                current = current.replace(month=current.month + 1)
+        # Generate list of days from min_date to max_date
+        delta = max_date - min_date
+        num_days = max(1, delta.days + 1)
+        all_days = [min_date + timedelta(days=i) for i in range(num_days)]
 
         ws_gantt.append(["DIAGRAMMA GANTT - " + (proj.code or proj.name)])
         ws_gantt.cell(row=1, column=1).font = Font(size=14, bold=True, color="1E3A8A")
         ws_gantt.append([])
 
-        # Row 1: project bar header
+        # Row 3: Months header
         row = 3
         ws_gantt.cell(row=row, column=1, value="Commessa").font = Font(bold=True, size=10)
         ws_gantt.cell(row=row, column=1).fill = PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid")
         ws_gantt.cell(row=row, column=1).border = THIN_BORDER
 
         col = 2
-        for m in months:
-            month_label = m.strftime("%b %Y")
-            days_in_month = (m.replace(month=m.month % 12 + 1, day=1) - timedelta(days=1)).day if m.month < 12 else 31
-            ws_gantt.merge_cells(start_row=row, start_column=col, end_row=row, end_column=col + days_in_month - 1)
+        from itertools import groupby
+        for (year, month), g in groupby(all_days, key=lambda d: (d.year, d.month)):
+            days_in_this_group = len(list(g))
+            month_label = date(year, month, 1).strftime("%b %Y")
+            ws_gantt.merge_cells(start_row=row, start_column=col, end_row=row, end_column=col + days_in_this_group - 1)
             cell = ws_gantt.cell(row=row, column=col, value=month_label)
             cell.font = Font(bold=True, size=9, color="2563EB")
             cell.fill = PatternFill(start_color="EFF6FF", end_color="EFF6FF", fill_type="solid")
             cell.border = THIN_BORDER
             cell.alignment = Alignment(horizontal="center")
-            col += days_in_month
+            col += days_in_this_group
+
+        # Row 4 & 5: Day of week and day number headers
+        row_dow = 4
+        row_days = 5
+        ws_gantt.cell(row=row_dow, column=1, value="").border = THIN_BORDER
+        ws_gantt.cell(row=row_days, column=1, value="").border = THIN_BORDER
+        
+        ita_weekdays = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
+        holiday_cols = set()
+        col_days = 2
+        for cur_date in all_days:
+            is_festivo = is_italian_holiday(cur_date)
+            
+            if is_festivo:
+                holiday_cols.add(col_days)
+                
+            bg_color = "FEE2E2" if is_festivo else "F9FAFB"
+            text_color = "DC2626" if is_festivo else "6B7280"
+            
+            cell_dow = ws_gantt.cell(row=row_dow, column=col_days, value=ita_weekdays[cur_date.weekday()])
+            cell_dow.font = Font(size=8, color=text_color, bold=is_festivo)
+            cell_dow.fill = PatternFill(start_color=bg_color, end_color=bg_color, fill_type="solid")
+            cell_dow.border = THIN_BORDER
+            cell_dow.alignment = Alignment(horizontal="center")
+            
+            cell_day = ws_gantt.cell(row=row_days, column=col_days, value=f"{cur_date.day:02d}")
+            cell_day.font = Font(size=8, color=text_color, bold=is_festivo)
+            cell_day.fill = PatternFill(start_color=bg_color, end_color=bg_color, fill_type="solid")
+            cell_day.border = THIN_BORDER
+            cell_day.alignment = Alignment(horizontal="center")
+            col_days += 1
 
         # Determine total columns used
-        total_cols = col - 1
+        total_cols = col_days - 1
 
         # Project bar
-        row = 4
+        row = 6
         ws_gantt.cell(row=row, column=1, value=f"{proj.code or ''} {proj.name}").font = Font(size=9, bold=True)
         ws_gantt.cell(row=row, column=1).border = THIN_BORDER
+        
+        for c in range(2, total_cols + 1):
+            bg = "FEE2E2" if c in holiday_cols else "FFFFFF"
+            cell_bg = ws_gantt.cell(row=row, column=c)
+            cell_bg.border = THIN_BORDER
+            cell_bg.fill = PatternFill(start_color=bg, end_color=bg, fill_type="solid")
         
         if proj.start_date and proj.end_date:
             p_start = proj.start_date
             p_end = proj.end_date
-            first_month = months[0]
-            # Calculate offsets
-            start_offset = 0
-            cur_check = first_month
-            while cur_check < p_start.replace(day=1):
-                if cur_check.month == 12:
-                    cur_check = cur_check.replace(year=cur_check.year + 1, month=1)
-                else:
-                    cur_check = cur_check.replace(month=cur_check.month + 1)
-                days_m = (cur_check.replace(day=1) - timedelta(days=1)).day if cur_check.month > 1 else 31
-                start_offset += days_m
-            # add days from start month
-            start_offset += (p_start.day - 1)
-            
-            end_offset = 0
-            cur_check2 = first_month
-            while cur_check2 < p_end.replace(day=1):
-                if cur_check2.month == 12:
-                    cur_check2 = cur_check2.replace(year=cur_check2.year + 1, month=1)
-                else:
-                    cur_check2 = cur_check2.replace(month=cur_check2.month + 1)
-                days_m = (cur_check2.replace(day=1) - timedelta(days=1)).day if cur_check2.month > 1 else 31
-                end_offset += days_m
-            end_offset += (p_end.day - 1)
+            start_offset = (p_start - min_date).days if p_start >= min_date else 0
+            end_offset = (p_end - min_date).days if p_end >= min_date else 0
 
             bar_width = max(1, end_offset - start_offset + 1)
             start_col = 2 + start_offset
             end_col = min(start_col + bar_width - 1, total_cols)
             
-            ws_gantt.merge_cells(start_row=row, start_column=start_col, end_row=row, end_column=end_col)
-            bar_cell = ws_gantt.cell(row=row, column=start_col, value=f"{proj.code or ''} {proj.name}")
-            bar_cell.fill = PatternFill(start_color="3B82F6", end_color="3B82F6", fill_type="solid")
-            bar_cell.font = Font(color="FFFFFF", bold=True, size=8)
-            bar_cell.border = THIN_BORDER
-            bar_cell.alignment = Alignment(horizontal="center")
+            if end_col >= start_col:
+                ws_gantt.merge_cells(start_row=row, start_column=start_col, end_row=row, end_column=end_col)
+                bar_cell = ws_gantt.cell(row=row, column=start_col, value=f"{proj.code or ''} {proj.name}")
+                bar_cell.fill = PatternFill(start_color="3B82F6", end_color="3B82F6", fill_type="solid")
+                bar_cell.font = Font(color="FFFFFF", bold=True, size=8)
+                bar_cell.border = THIN_BORDER
+                bar_cell.alignment = Alignment(horizontal="center")
 
         # Task bars
-        row = 5
+        row = 7
         for task in task_list:
             ws_gantt.cell(row=row, column=1, value=task.text).font = Font(size=9)
             ws_gantt.cell(row=row, column=1).border = THIN_BORDER
             ws_gantt.cell(row=row, column=1).fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
 
+            for c in range(2, total_cols + 1):
+                bg = "FEE2E2" if c in holiday_cols else "FFFFFF"
+                cell_bg = ws_gantt.cell(row=row, column=c)
+                cell_bg.border = THIN_BORDER
+                cell_bg.fill = PatternFill(start_color=bg, end_color=bg, fill_type="solid")
+
             if task.start_date and task.end_date:
                 t_start = task.start_date
                 t_end = task.end_date
-                first_month = months[0]
-                
-                start_offset = 0
-                cur_check = first_month
-                while cur_check < t_start.replace(day=1):
-                    if cur_check.month == 12:
-                        cur_check = cur_check.replace(year=cur_check.year + 1, month=1)
-                    else:
-                        cur_check = cur_check.replace(month=cur_check.month + 1)
-                    days_m = (cur_check.replace(day=1) - timedelta(days=1)).day if cur_check.month > 1 else 31
-                    start_offset += days_m
-                start_offset += (t_start.day - 1)
-                
-                end_offset = 0
-                cur_check2 = first_month
-                while cur_check2 < t_end.replace(day=1):
-                    if cur_check2.month == 12:
-                        cur_check2 = cur_check2.replace(year=cur_check2.year + 1, month=1)
-                    else:
-                        cur_check2 = cur_check2.replace(month=cur_check2.month + 1)
-                    days_m = (cur_check2.replace(day=1) - timedelta(days=1)).day if cur_check2.month > 1 else 31
-                    end_offset += days_m
-                end_offset += (t_end.day - 1)
+                start_offset = (t_start - min_date).days if t_start >= min_date else 0
+                end_offset = (t_end - min_date).days if t_end >= min_date else 0
 
                 bar_width = max(1, end_offset - start_offset + 1)
                 start_col = 2 + start_offset
@@ -392,10 +394,18 @@ async def export_excel(db: AsyncSession, project_id: str, sections: Optional[Lis
         ws_tasks.column_dimensions["C"].width = 13
         ws_tasks.column_dimensions["D"].width = 13
         ws_tasks.column_dimensions["E"].width = 13
+        
+        col_offset = 5
         if has_hours_t:
             ws_tasks.column_dimensions["F"].width = 16
             ws_tasks.column_dimensions["G"].width = 20
             ws_tasks.column_dimensions["H"].width = 15
+            col_offset = 8
+            
+        ws_tasks.column_dimensions[get_column_letter(col_offset + 1)].width = 20  # Reparto
+        ws_tasks.column_dimensions[get_column_letter(col_offset + 2)].width = 30  # Addetti
+        ws_tasks.column_dimensions[get_column_letter(col_offset + 3)].width = 15  # Progresso
+        ws_tasks.column_dimensions[get_column_letter(col_offset + 4)].width = 15  # Priorità
 
     # ========== SHEET 3 o 4: CONSUNTIVO ORE ==========
     if "hours" in sections:
