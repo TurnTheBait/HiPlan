@@ -3,7 +3,7 @@ from datetime import date, timedelta, datetime, timezone
 import logging
 import math
 from uuid import uuid4
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 # pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
 # pyrefly: ignore [missing-import]
@@ -45,7 +45,7 @@ def add_working_days(start: date, days: int) -> date:
     return cur
 
 
-def get_working_days_count(start: date, end: date, excluded_dates: list | None = None) -> int:
+def get_working_days_count(start: date, end: date, excluded_dates: Optional[list] = None) -> int:
     if excluded_dates is None:
         excluded_dates = []
     if not start or not end or start > end:
