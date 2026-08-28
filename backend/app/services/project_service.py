@@ -6,7 +6,7 @@ from sqlalchemy import select, func
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import selectinload
 from app.models.project import Project, ProjectMember, MemberRole
-from app.models.task import Task
+from app.models.task import Task, TaskType
 from app.models.user import User, UserRole
 from app.schemas.project import ProjectCreate, ProjectUpdate, MemberAdd, ProjectOut, MemberOut
 from app.models.notification import Notification, NotificationType
@@ -23,13 +23,14 @@ async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
     import json
     for p in projects:
         tasks_data = await db.execute(
-            select(Task.id, Task.progress, Task.workers)
+            select(Task.id, Task.progress, Task.workers, Task.type)
             .where(Task.project_id == p.id)
         )
         tasks_rows = tasks_data.all()
         
-        task_count = len(tasks_rows)
-        avg_progress = sum((row.progress or 0) for row in tasks_rows) / task_count if task_count > 0 else 0.0
+        progress_tasks = [row for row in tasks_rows if row.type != TaskType.MILESTONE]
+        task_count = len(progress_tasks)
+        avg_progress = sum((row.progress or 0) for row in progress_tasks) / task_count if task_count > 0 else 0.0
         
         unique_workers = set()
         for row in tasks_rows:
