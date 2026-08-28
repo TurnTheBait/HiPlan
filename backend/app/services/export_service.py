@@ -1215,7 +1215,7 @@ def _is_vacation(date_str, user_dict):
                 return True
     return False
 
-async def export_workload_excel(heatmap_data: dict) -> io.BytesIO:
+async def export_workload_excel(heatmap_data: dict, mode: str = "both") -> io.BytesIO:
     # pyrefly: ignore [missing-import]
     import openpyxl
     import datetime
@@ -1224,9 +1224,17 @@ async def export_workload_excel(heatmap_data: dict) -> io.BytesIO:
     from app.utils.working_days import is_italian_holiday
     
     wb = openpyxl.Workbook()
-    ws_planned = wb.active
-    ws_planned.title = "Ore Pianificate"
-    ws_actual = wb.create_sheet(title="Ore Consuntivate")
+    
+    sheets = []
+    if mode in ["planned", "both"]:
+        ws_planned = wb.active if len(sheets) == 0 else wb.create_sheet()
+        ws_planned.title = "Ore Pianificate"
+        sheets.append((ws_planned, "planned"))
+    
+    if mode in ["actual", "both"]:
+        ws_actual = wb.active if len(sheets) == 0 else wb.create_sheet()
+        ws_actual.title = "Ore Consuntivate"
+        sheets.append((ws_actual, "actual"))
     
     today = datetime.date.today()
     start_date = today - datetime.timedelta(days=365)
@@ -1234,15 +1242,15 @@ async def export_workload_excel(heatmap_data: dict) -> io.BytesIO:
     sorted_dates = [(start_date + datetime.timedelta(days=i)).strftime("%Y-%m-%d") for i in range((end_date - start_date).days + 1)]
     
     headers = ["Addetto", "Reparto"] + sorted_dates
-    ws_planned.append(headers)
-    ws_actual.append(headers)
+    for ws, _ in sheets:
+        ws.append(headers)
     
     header_fill = PatternFill(start_color="1F2937", end_color="1F2937", fill_type="solid")
     holiday_fill = PatternFill(start_color="EF4444", end_color="EF4444", fill_type="solid")
     holiday_col_fill = PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid")
     header_font = Font(color="FFFFFF", bold=True)
     
-    for ws in [ws_planned, ws_actual]:
+    for ws, _ in sheets:
         for col_idx, h_text in enumerate(headers):
             cell = ws.cell(row=1, column=col_idx + 1)
             cell.font = header_font
@@ -1257,31 +1265,35 @@ async def export_workload_excel(heatmap_data: dict) -> io.BytesIO:
                 cell.fill = header_fill
         
     for user_id, u in heatmap_data.items():
-        row_planned = [u.get("full_name") or u.get("username"), u.get("department") or "-"]
-        row_actual = [u.get("full_name") or u.get("username"), u.get("department") or "-"]
         workload = u.get("workload", {})
         actual_workload = u.get("actual_workload", {})
         
-        for d in sorted_dates:
-            prev_data = workload.get(d, {})
-            eff_data = actual_workload.get(d, {})
-            prev_val = prev_data.get("hours", 0) if isinstance(prev_data, dict) else 0
-            eff_val = eff_data.get("hours", 0) if isinstance(eff_data, dict) else 0
+        for ws, sheet_type in sheets:
+            row = [u.get("full_name") or u.get("username"), u.get("department") or "-"]
             
-            p_val = float(prev_val)
-            e_val = float(eff_val)
-            
-            if _is_vacation(d, u):
-                row_planned.append("Ferie" if p_val == 0 else f"Ferie ({p_val})")
-                row_actual.append("Ferie" if e_val == 0 else f"Ferie ({e_val})")
-            else:
-                row_planned.append(p_val)
-                row_actual.append(e_val)
-            
-        ws_planned.append(row_planned)
-        ws_actual.append(row_actual)
+            for d in sorted_dates:
+                prev_data = workload.get(d, {})
+                eff_data = actual_workload.get(d, {})
+                prev_val = prev_data.get("hours", 0) if isinstance(prev_data, dict) else 0
+                eff_val = eff_data.get("hours", 0) if isinstance(eff_data, dict) else 0
+                
+                p_val = float(prev_val)
+                e_val = float(eff_val)
+                
+                if _is_vacation(d, u):
+                    if sheet_type == "planned":
+                        row.append("Ferie" if p_val == 0 else f"Ferie ({p_val})")
+                    else:
+                        row.append("Ferie" if e_val == 0 else f"Ferie ({e_val})")
+                else:
+                    if sheet_type == "planned":
+                        row.append(p_val)
+                    else:
+                        row.append(e_val)
+                        
+            ws.append(row)
         
-    for ws in [ws_planned, ws_actual]:
+    for ws, _ in sheets:
         for row_idx in range(2, ws.max_row + 1):
             for col_idx in range(3, len(headers) + 1):
                 d_str = headers[col_idx - 1]
@@ -1294,7 +1306,7 @@ async def export_workload_excel(heatmap_data: dict) -> io.BytesIO:
     output.seek(0)
     return output
 
-async def export_workload_pdf(heatmap_data: dict) -> io.BytesIO:
+async def export_workload_pdf(heatmap_data: dict, mode: str = "both") -> io.BytesIO:
     # pyrefly: ignore [missing-import]
     from reportlab.lib import colors
     # pyrefly: ignore [missing-import]
@@ -1320,7 +1332,13 @@ async def export_workload_pdf(heatmap_data: dict) -> io.BytesIO:
     title_style = ParagraphStyle("Title", parent=styles["Heading1"], fontSize=16, spaceAfter=10)
     elements = []
     
-    elements.append(Paragraph("Saturazione Carichi di Lavoro (Pianificate vs Consuntivate)", title_style))
+    title_text = "Saturazione Carichi di Lavoro (Pianificate vs Consuntivate)"
+    if mode == "planned":
+        title_text = "Saturazione Carichi di Lavoro (Ore Pianificate)"
+    elif mode == "actual":
+        title_text = "Saturazione Carichi di Lavoro (Ore Consuntivate)"
+        
+    elements.append(Paragraph(title_text, title_style))
     elements.append(Spacer(1, 10))
     
     today = datetime.date.today()
@@ -1384,7 +1402,13 @@ async def export_workload_pdf(heatmap_data: dict) -> io.BytesIO:
             for k in week_keys:
                 prev = user_weeks[uid][k]["prev"]
                 eff = user_weeks[uid][k]["eff"]
-                row.append(f"{prev:.1f} / {eff:.1f} h")
+                
+                if mode == "planned":
+                    row.append(f"{prev:.1f} h")
+                elif mode == "actual":
+                    row.append(f"{eff:.1f} h")
+                else:
+                    row.append(f"{eff:.1f} / {prev:.1f} h")
             sub_data.append(row)
             
         t = Table(sub_data)

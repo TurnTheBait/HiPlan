@@ -17,7 +17,7 @@ export default function WorkloadHeatmap() {
   const [leftColWidth, setLeftColWidth] = useState(200);
   const [expandedUsers, setExpandedUsers] = useState({});
   const [viewMode, setViewMode] = useState('day');
-  const [dataMode, setDataMode] = useState('planned');
+  const [dataMode, setDataMode] = useState('both'); // 'planned', 'actual', 'both'
   const [dayDetails, setDayDetails] = useState(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exportFormat, setExportFormat] = useState('pdf');
@@ -61,7 +61,7 @@ export default function WorkloadHeatmap() {
 
   const handleExport = async (format) => {
     try {
-      const response = await api.get(`/workload/export/${format}`, {
+      const response = await api.get(`/workload/export/${format}?mode=${dataMode}`, {
         responseType: 'blob'
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -225,7 +225,7 @@ export default function WorkloadHeatmap() {
         <div>
           <h3 style={{ margin: 0 }}>Pianificazione Carichi di Lavoro</h3>
           <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-            {dataMode === 'planned' ? 'Panoramica ore assegnate nelle fasi dei vari progetti (ore previste, non a consuntivo)' : 'Panoramica ore effettivamente registrate (consuntivate) dagli addetti'}
+            {dataMode === 'planned' ? 'Panoramica ore assegnate nelle fasi dei vari progetti (ore previste, non a consuntivo)' : dataMode === 'actual' ? 'Panoramica ore effettivamente registrate (consuntivate) dagli addetti' : 'Panoramica ore consuntivate rispetto alle previste (Consuntivate / Previste)'}
           </span>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -241,17 +241,18 @@ export default function WorkloadHeatmap() {
           <select
             className="input"
             value={dataMode}
-            onChange={(e) => setDataMode(e.target.value)}
-            style={{ width: 170 }}
+            onChange={e => setDataMode(e.target.value)}
+            style={{ minWidth: 100, padding: '4px 8px', fontSize: '0.75rem' }}
           >
-            <option value="planned">Ore Pianificate</option>
-            <option value="actual">Ore Consuntivate</option>
+            <option value="both">Consuntivate / Pianificate</option>
+            <option value="planned">Solo Ore Pianificate</option>
+            <option value="actual">Solo Ore Consuntivate</option>
           </select>
           <select
             className="input"
             value={viewMode}
             onChange={(e) => setViewMode(e.target.value)}
-            style={{ width: 150 }}
+            style={{ width: 200, padding: '4px 8px', fontSize: '0.75rem' }}
           >
             <option value="day">Per Giorno</option>
             <option value="week">Per Settimana</option>
@@ -421,39 +422,52 @@ export default function WorkloadHeatmap() {
         {Object.entries(heatmapData).sort(([, a], [, b]) => (a.full_name || '').localeCompare(b.full_name || '', 'it')).map(([userId, userData]) => {
 
           const aggregatedWorkload = {};
-          columns.forEach(c => aggregatedWorkload[c] = { hours: 0, tasks: [] });
+          columns.forEach(c => aggregatedWorkload[c] = { hours: 0, actual_hours: 0, tasks: [], actual_tasks: [] });
 
-          const currentWorkload = dataMode === 'actual' ? (userData.actual_workload || {}) : (userData.workload || {});
-          Object.entries(currentWorkload).forEach(([dStr, dayData]) => {
-            const d = new Date(dStr);
-            let key;
-            if (viewMode === 'month') key = dStr.substring(0, 7);
-            else if (viewMode === 'week') {
-              const day = d.getDay();
-              const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-              const monday = new Date(d);
-              monday.setDate(diff);
-              key = monday.toISOString().substring(0, 10);
-            } else {
-              key = dStr;
-            }
+          const processWorkload = (sourceWorkload, isActualField) => {
+            Object.entries(sourceWorkload || {}).forEach(([dStr, dayData]) => {
+              const d = new Date(dStr);
+              let key;
+              if (viewMode === 'month') key = dStr.substring(0, 7);
+              else if (viewMode === 'week') {
+                const day = d.getDay();
+                const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+                const monday = new Date(d);
+                monday.setDate(diff);
+                key = monday.toISOString().substring(0, 10);
+              } else {
+                key = dStr;
+              }
 
-            if (aggregatedWorkload[key]) {
-              let dailySumRounded = 0;
-              dayData.tasks.forEach(t => {
-                const roundedTaskHours = Number(t.hours.toFixed(1));
-                dailySumRounded += roundedTaskHours;
+              if (aggregatedWorkload[key]) {
+                let dailySumRounded = 0;
+                dayData.tasks.forEach(t => {
+                  const roundedTaskHours = Number(t.hours.toFixed(1));
+                  dailySumRounded += roundedTaskHours;
 
-                const existing = aggregatedWorkload[key].tasks.find(x => x.id === t.id);
-                if (existing) {
-                  existing.hours += roundedTaskHours;
+                  const targetTasks = isActualField ? aggregatedWorkload[key].actual_tasks : aggregatedWorkload[key].tasks;
+                  const existing = targetTasks.find(x => x.id === t.id);
+                  if (existing) {
+                    existing.hours += roundedTaskHours;
+                  } else {
+                    targetTasks.push({ ...t, hours: roundedTaskHours });
+                  }
+                });
+                if (isActualField) {
+                  aggregatedWorkload[key].actual_hours += dailySumRounded;
                 } else {
-                  aggregatedWorkload[key].tasks.push({ ...t, hours: roundedTaskHours });
+                  aggregatedWorkload[key].hours += dailySumRounded;
                 }
-              });
-              aggregatedWorkload[key].hours += dailySumRounded;
-            }
-          });
+              }
+            });
+          };
+
+          if (dataMode === 'planned' || dataMode === 'both') {
+            processWorkload(userData.workload, false);
+          }
+          if (dataMode === 'actual' || dataMode === 'both') {
+            processWorkload(userData.actual_workload, dataMode === 'both' ? true : false);
+          }
 
           const isCurrentUser = userData.username === user?.username;
           return (
@@ -511,26 +525,40 @@ export default function WorkloadHeatmap() {
                   tooltipText = 'Nessuna ora assegnata';
                 }
 
+                const getCellText = () => {
+                  if (dataMode === 'both') {
+                    if (data.actual_hours > 0 || data.hours > 0) {
+                      return `${data.actual_hours.toFixed(1)}h / ${data.hours.toFixed(1)}h`;
+                    }
+                    return '-';
+                  } else {
+                    return data.hours > 0 ? `${data.hours.toFixed(1)}h` : '-';
+                  }
+                };
+
+                const cellText = getCellText();
+                const cellTextNode = dataMode === 'both' && cellText !== '-' ? <span style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{cellText}</span> : cellText;
+
                 let displayContent;
                 if (isVacation) {
-                  if (data.hours > 0) {
+                  if (data.hours > 0 || (dataMode === 'both' && data.actual_hours > 0)) {
                     displayContent = (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', color: '#dc2626', fontWeight: 'bold' }} title={tooltipText}>
                         <AppIcon name="vacations" size={14} />
-                        <span>{data.hours.toFixed(1)}h</span>
+                        {dataMode === 'both' ? cellTextNode : <span>{data.hours.toFixed(1)}h</span>}
                       </div>
                     );
                   } else {
                     displayContent = <AppIcon name="vacations" size={16} />;
                   }
                 } else if (isWeekendCol) {
-                  displayContent = data.hours > 0 ? data.hours.toFixed(1) + 'h' : '';
+                  displayContent = cellText !== '-' ? cellTextNode : '';
                 } else {
-                  displayContent = data.hours > 0 ? data.hours.toFixed(1) + 'h' : '-';
+                  displayContent = cellTextNode;
                 }
 
                 const isConflict = isVacation && data.hours > 0;
-                const isClickable = data.tasks.length > 0;
+                const isClickable = data.tasks.length > 0 || (dataMode === 'both' && data.actual_tasks.length > 0);
                 if (isConflict) {
                   colorClass = 'over-capacity';
                 }
@@ -547,7 +575,9 @@ export default function WorkloadHeatmap() {
                           date: colKey,
                           dateLabel: formatDateStr(colKey),
                           tasks: data.tasks,
-                          hours: data.hours
+                          actual_tasks: data.actual_tasks || [],
+                          hours: data.hours,
+                          actual_hours: data.actual_hours || 0
                         });
                       }
                     }}
@@ -897,35 +927,56 @@ export default function WorkloadHeatmap() {
             </div>
             <div className="modal-content">
               <p style={{ color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                {dataMode === 'planned' ? 'Ore previste per questo giorno: ' : 'Ore consuntivate per questo giorno: '}<strong>{dayDetails.hours.toFixed(1)}h</strong>
+                {dataMode === 'planned' ? (
+                  <>Ore previste per questo giorno: <strong>{dayDetails.hours.toFixed(1)}h</strong></>
+                ) : dataMode === 'actual' ? (
+                  <>Ore consuntivate per questo giorno: <strong>{dayDetails.hours.toFixed(1)}h</strong></>
+                ) : (
+                  <>Ore Consuntivate / Previste: <strong>{dayDetails.actual_hours.toFixed(1)}h / {dayDetails.hours.toFixed(1)}h</strong></>
+                )}
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {dayDetails.tasks.map((t, idx) => (
-                  <div key={idx} style={{ padding: '12px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-default)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                    <div style={{ color: 'var(--accent-500)', fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <AppIcon name="folder" size={16} /> {t.project_code && t.project_name && t.project_name !== 'Progetto non specificato' ? `${t.project_code} - ${t.project_name}` : (t.project_code || t.project_name || 'Progetto non specificato')}
+                {(() => {
+                  const combinedTasks = dataMode === 'both'
+                    ? [...dayDetails.tasks, ...(dayDetails.actual_tasks || []).filter(a => !dayDetails.tasks.some(p => p.id === a.id))]
+                    : dayDetails.tasks;
+
+                  return combinedTasks.map((t, idx) => (
+                    <div key={idx} style={{ padding: '12px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-default)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                      <div style={{ color: 'var(--accent-500)', fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <AppIcon name="folder" size={16} /> {t.project_code && t.project_name && t.project_name !== 'Progetto non specificato' ? `${t.project_code} - ${t.project_name}` : (t.project_code || t.project_name || 'Progetto non specificato')}
+                        </div>
+                        {t.project_id && (
+                          <button
+                            className="btn btn-secondary"
+                            onClick={() => navigate(`/projects/${t.project_id}`)}
+                            style={{ padding: '4px 12px', fontSize: '0.8rem', minHeight: 'unset' }}
+                          >
+                            Apri commessa
+                          </button>
+                        )}
                       </div>
-                      {t.project_id && (
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => navigate(`/projects/${t.project_id}`)}
-                          style={{ padding: '4px 12px', fontSize: '0.8rem', minHeight: 'unset' }}
-                        >
-                          Apri commessa
-                        </button>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ color: 'var(--text-secondary)', display: 'flex' }}><AppIcon name="todo" size={16} /></span> {t.name}
+                      </div>
+                      {t.type !== 'milestone' && (
+                        <div style={{ marginTop: 8, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                          {dataMode === 'planned' ? (
+                            <>Assegnate: <strong style={{ color: 'var(--text-primary)' }}>{t.hours?.toFixed(1) || 0}h</strong> oggi su <strong style={{ color: 'var(--text-primary)' }}>{t.total_assigned_hours ? t.total_assigned_hours.toFixed(1) + 'h' : '-'}</strong> totali per questo addetto.</>
+                          ) : dataMode === 'actual' ? (
+                            <>Consuntivate: <strong style={{ color: 'var(--text-primary)' }}>{t.hours?.toFixed(1) || 0}h</strong> oggi.</>
+                          ) : (
+                            <>
+                              Consuntivate: <strong style={{ color: 'var(--text-primary)' }}>{dayDetails.actual_tasks?.find(a => a.id === t.id)?.hours?.toFixed(1) || 0}h</strong> /
+                              Previste: <strong style={{ color: 'var(--text-primary)' }}>{dayDetails.tasks?.find(p => p.id === t.id)?.hours?.toFixed(1) || 0}h</strong>
+                            </>
+                          )}
+                        </div>
                       )}
                     </div>
-                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ color: 'var(--text-secondary)', display: 'flex' }}><AppIcon name="todo" size={16} /></span> {t.name}
-                    </div>
-                    {t.type !== 'milestone' && (
-                      <div style={{ marginTop: 8, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        Assegnate: <strong style={{ color: 'var(--text-primary)' }}>{t.hours?.toFixed(1) || 0}h</strong> oggi su <strong style={{ color: 'var(--text-primary)' }}>{t.total_assigned_hours ? t.total_assigned_hours.toFixed(1) + 'h' : '-'}</strong> totali per questo addetto.
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  ));
+                })()}
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setDayDetails(null)}>

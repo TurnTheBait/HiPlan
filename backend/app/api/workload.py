@@ -207,6 +207,7 @@ async def get_workload_heatmap(
 
 @router.get("/export/excel")
 async def export_workload_excel_route(
+    mode: str = "both",
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -214,7 +215,7 @@ async def export_workload_excel_route(
     from fastapi.responses import StreamingResponse
     from app.services import export_service
     data = await get_workload_heatmap(db, current_user)
-    buffer = await export_service.export_workload_excel(data["heatmap"])
+    buffer = await export_service.export_workload_excel(data["heatmap"], mode)
     return StreamingResponse(
         buffer,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -223,6 +224,7 @@ async def export_workload_excel_route(
 
 @router.get("/export/pdf")
 async def export_workload_pdf_route(
+    mode: str = "both",
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -230,7 +232,7 @@ async def export_workload_pdf_route(
     from fastapi.responses import StreamingResponse
     from app.services import export_service
     data = await get_workload_heatmap(db, current_user)
-    buffer = await export_service.export_workload_pdf(data["heatmap"])
+    buffer = await export_service.export_workload_pdf(data["heatmap"], mode)
     return StreamingResponse(
         buffer,
         media_type="application/pdf",
