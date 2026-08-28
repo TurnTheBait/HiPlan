@@ -1,7 +1,7 @@
 import io
 import json
 from typing import List, Tuple, Optional, Any, cast
-from datetime import timedelta, date
+from datetime import timedelta, date, datetime
 from app.utils.working_days import is_italian_holiday
 # pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -422,7 +422,19 @@ async def export_excel(db: AsyncSession, project_id: str, sections: Optional[Lis
             if not workers:
                 workers = ["Addetto Generico"]
             actual_hours = _get_actual_hours_map(task)
-            work_dates = _compute_work_dates(task.start_date, task.end_date)
+            
+            base_dates = _compute_work_dates(task.start_date, task.end_date)
+            date_set = set(base_dates)
+            for w, dates_dict in actual_hours.items():
+                if isinstance(dates_dict, dict):
+                    for date_str in dates_dict.keys():
+                        try:
+                            extra_d = datetime.strptime(date_str, "%Y-%m-%d").date()
+                            date_set.add(extra_d)
+                        except ValueError:
+                            pass
+            work_dates = sorted(list(date_set))
+            
             worker_hours_map = _get_worker_hours_map(task)
             planned_total = float(task.planned_hours or 8.0)
 
@@ -795,7 +807,19 @@ async def export_pdf(db: AsyncSession, project_id: str, sections: Optional[List[
             if not workers:
                 workers = ["Addetto Generico"]
             actual_hours = _get_actual_hours_map(task)
-            work_dates = _compute_work_dates(task.start_date, task.end_date)
+            
+            base_dates = _compute_work_dates(task.start_date, task.end_date)
+            date_set = set(base_dates)
+            for w, dates_dict in actual_hours.items():
+                if isinstance(dates_dict, dict):
+                    for date_str in dates_dict.keys():
+                        try:
+                            extra_d = datetime.strptime(date_str, "%Y-%m-%d").date()
+                            date_set.add(extra_d)
+                        except ValueError:
+                            pass
+            work_dates = sorted(list(date_set))
+            
             worker_hours_map = _get_worker_hours_map(task)
             planned_total = float(task.planned_hours or 8.0)
 
