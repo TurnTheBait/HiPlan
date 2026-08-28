@@ -119,7 +119,7 @@ export default function GlobalSearch({ isOpen, onClose }) {
                   <div className="global-search-item-subtitle">{item.subtitle} &bull; {item.match_context}</div>
                 </div>
                 <div className="global-search-item-arrow">
-                  <AppIcon name="chevron-right" size={16} />
+                  <AppIcon name="chevronRight" size={16} />
                 </div>
               </div>
             );
