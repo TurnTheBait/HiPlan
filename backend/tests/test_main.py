@@ -1,4 +1,6 @@
+# pyrefly: ignore [missing-import]
 import pytest
+# pyrefly: ignore [missing-import]
 from httpx import AsyncClient
 from app.main import app
 
@@ -13,7 +15,9 @@ async def test_lifespan(db_session):
     async with lifespan(app):
         pass
     
+    # pyrefly: ignore [missing-import]
     from sqlalchemy.ext.asyncio import AsyncSession
+    # pyrefly: ignore [missing-import]
     from sqlalchemy import select
     from app.models.phase_template import PhaseTemplate
     

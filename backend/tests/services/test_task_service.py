@@ -1,4 +1,6 @@
+# pyrefly: ignore [missing-import]
 import pytest
+# pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.task_service import (
     create_task, update_task, delete_task, get_gantt_data, create_link
@@ -7,6 +9,7 @@ from app.schemas.task import TaskCreate, TaskUpdate, LinkCreate
 from app.models.user import User
 from app.models.project import Project
 from app.models.task import Task
+# pyrefly: ignore [missing-import]
 from fastapi import HTTPException
 import datetime
 
