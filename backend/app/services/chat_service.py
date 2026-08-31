@@ -5,16 +5,21 @@ from sqlalchemy import create_engine
 # pyrefly: ignore [missing-import]
 from langchain_community.utilities import SQLDatabase
 # pyrefly: ignore [missing-import]
-from langchain_community.agent_toolkits import create_sql_agent, SQLDatabaseToolkit
-# pyrefly: ignore [missing-import]
 from langchain_groq import ChatGroq
+# pyrefly: ignore [missing-import]
+from langchain.chains import create_sql_query_chain
+# pyrefly: ignore [missing-import]
+from langchain_community.tools.sql_database.tool import QuerySQLDataBaseTool
+# pyrefly: ignore [missing-import]
+from langchain_core.prompts import PromptTemplate
+# pyrefly: ignore [missing-import]
+from langchain_core.output_parsers import StrOutputParser
+# pyrefly: ignore [missing-import]
+from langchain_core.runnables import RunnablePassthrough
+from operator import itemgetter
 from app.core.config import settings
 
 def get_sync_db_url(async_url: str) -> str:
-    """
-    Converts the async SQLAlchemy URL to a sync URL for Langchain SQLDatabase.
-    e.g. sqlite+aiosqlite:///./ganttflow.db -> sqlite:///./ganttflow.db
-    """
     if async_url.startswith("sqlite+aiosqlite:///"):
         return async_url.replace("sqlite+aiosqlite:///", "sqlite:///")
     if async_url.startswith("postgresql+asyncpg://"):
@@ -25,9 +30,12 @@ class ChatService:
     def __init__(self):
         self.sync_db_url = get_sync_db_url(settings.DATABASE_URL)
         self.engine = create_engine(self.sync_db_url)
-        self.db = SQLDatabase(self.engine)
+        self.db = SQLDatabase(
+            self.engine, 
+            sample_rows_in_table_info=0,
+            ignore_tables=["activity_logs", "agent_logs", "email_logs", "replan_logs", "planning_runs"]
+        )
         
-        # Inizializza il modello Groq (Llama 3)
         if not settings.GROQ_API_KEY:
             self.llm = None
         else:
@@ -42,42 +50,37 @@ class ChatService:
             return "Errore: Chiave API Groq non configurata nel backend."
 
         try:
-            toolkit = SQLDatabaseToolkit(db=self.db, llm=self.llm)
-            agent_executor = create_sql_agent(
-                llm=self.llm,
-                toolkit=toolkit,
-                verbose=True,
-                agent_type="openai-tools"
+            # Crea la catena per generare la query SQL
+            generate_query = create_sql_query_chain(self.llm, self.db)
+            
+            # Crea lo strumento per eseguire la query
+            execute_query = QuerySQLDataBaseTool(db=self.db)
+            
+            # Prompt finale per formulare la risposta in linguaggio naturale
+            answer_prompt = PromptTemplate.from_template(
+                "Dati i seguenti risultati estratti dal database, rispondi alla domanda dell'utente in italiano in modo chiaro e professionale.\n"
+                "Se i risultati sono vuoti, di' che non hai trovato informazioni a riguardo.\n\n"
+                "Domanda: {question}\n"
+                "Query SQL eseguita: {query}\n"
+                "Risultato SQL: {result}\n\n"
+                "Risposta finale:"
             )
             
-            # Prompts personalizzati potrebbero essere aggiunti qui
-            prefix = (
-                "Sei un assistente AI per l'applicazione HiPlan, un software aziendale di project management. "
-                "Il tuo compito è aiutare un addetto aziendale (che utilizza il software) rispondendo alle sue domande "
-                "recuperando le informazioni dal database. "
-                "Le tabelle principali includono users, projects, tasks, tickets, ecc. "
-                "ATTENZIONE: Esegui ESCLUSIVAMENTE query di tipo SELECT. Non modificare o cancellare MAI i dati. "
-                "Rispondi in italiano in modo chiaro, utile e professionale."
+            # Catena completa: Genera -> Esegui -> Rispondi
+            chain = (
+                RunnablePassthrough.assign(query=generate_query).assign(
+                    result=itemgetter("query") | execute_query
+                )
+                | answer_prompt
+                | self.llm
+                | StrOutputParser()
             )
             
-            full_prompt = f"{prefix}\n\nDomanda utente: {user_message}"
-            
-            response = agent_executor.invoke({"input": full_prompt})
-            
-            output = response.get("output", "Non sono riuscito a trovare una risposta.")
-            
-            # Pulizia per evitare che scriva Final Answer nella chat (retaggio del ReAct loop)
-            output = output.replace("**Final Answer:**", "").replace("Final Answer:", "").strip()
-            
-            return output
+            response = chain.invoke({"question": user_message})
+            return response.strip()
             
         except Exception as e:
             error_msg = str(e)
-            if "Could not parse LLM output: `" in error_msg:
-                return error_msg.split("Could not parse LLM output: `")[1].rsplit("`", 1)[0]
-            elif "Could not parse LLM output: '" in error_msg:
-                return error_msg.split("Could not parse LLM output: '")[1].rsplit("'", 1)[0]
-            
             return f"Si è verificato un errore durante l'elaborazione della tua richiesta: {error_msg}"
 
 chat_service = ChatService()

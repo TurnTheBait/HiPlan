@@ -58,9 +58,25 @@ export default function ChatPage() {
     addToast('Chat resettata', 'success');
   };
 
-  const handleCopy = (text) => {
-    navigator.clipboard.writeText(text);
-    addToast('Risposta copiata negli appunti', 'success');
+  const handleCopy = async (text) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "absolute";
+        textArea.style.left = "-999999px";
+        document.body.prepend(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+      }
+      addToast('Risposta copiata negli appunti', 'success');
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+      addToast('Errore durante la copia', 'error');
+    }
   };
 
   const sendText = async (text) => {
