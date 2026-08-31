@@ -59,7 +59,10 @@ class ChatService:
             # Prompt finale per formulare la risposta in linguaggio naturale
             answer_prompt = PromptTemplate.from_template(
                 "Dati i seguenti risultati estratti dal database, rispondi alla domanda dell'utente in italiano in modo chiaro e professionale.\n"
-                "Se i risultati sono vuoti, di' che non hai trovato informazioni a riguardo.\n\n"
+                "Se i risultati sono vuoti, di' che non hai trovato informazioni a riguardo.\n"
+                "IMPORTANTE: L'utente finale è un addetto aziendale non tecnico. "
+                "NON mostrare MAI dettagli tecnici come ID, UUID, chiavi del database, nomi di colonne grezze o flag di sistema (es. is_active=1). "
+                "Formatta le date in modo naturale e ometti informazioni inutili per un utente normale.\n\n"
                 "Domanda: {question}\n"
                 "Query SQL eseguita: {query}\n"
                 "Risultato SQL: {result}\n\n"
