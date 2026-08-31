@@ -76,7 +76,7 @@ if not exist "backend\venv\Scripts\python.exe" (
     %PYTHON_CMD% -m venv "backend\venv"
     if errorlevel 1 goto error
 )
-"backend\venv\Scripts\python.exe" -m pip install --upgrade pip
+"backend\venv\Scripts\python.exe" -m pip install --upgrade pip setuptools wheel
 if errorlevel 1 goto error
 "backend\venv\Scripts\python.exe" -m pip install -r "backend\requirements.txt"
 if errorlevel 1 goto error

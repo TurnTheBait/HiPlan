@@ -47,7 +47,7 @@ class ChatService:
                 llm=self.llm,
                 toolkit=toolkit,
                 verbose=True,
-                agent_type="tool-calling"
+                agent_type="openai-tools"
             )
             
             # Prompts personalizzati potrebbero essere aggiunti qui

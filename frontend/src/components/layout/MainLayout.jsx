@@ -166,7 +166,10 @@ export default function MainLayout() {
   const { theme, cycleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(() => {
+    const saved = localStorage.getItem('hiplan-sidebar-collapsed');
+    return saved ? saved === 'true' : true;
+  });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [agentSuggestionsCount, setAgentSuggestionsCount] = useState(0);
@@ -184,6 +187,10 @@ export default function MainLayout() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('hiplan-sidebar-collapsed', collapsed);
+  }, [collapsed]);
 
   const notifiedIdsRef = useRef(new Set());
   const initialLoadRef = useRef(true);
@@ -309,7 +316,7 @@ export default function MainLayout() {
         aria-label="Chiudi menu"
         onClick={() => setMobileOpen(false)}
       />
-      <aside className="sidebar" onMouseEnter={() => setCollapsed(false)} onMouseLeave={() => setCollapsed(true)}>
+      <aside className="sidebar">
         <div className="sidebar-header">
           <div
             className="sidebar-logo"
@@ -328,10 +335,18 @@ export default function MainLayout() {
               </div>
             )}
           </div>
-
+          <button
+            className="sidebar-toggle"
+            onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? 'Espandi menu' : 'Riduci menu'}
+            title={collapsed ? 'Espandi menu' : 'Riduci menu'}
+          >
+            <AppIcon name={collapsed ? 'chevronRight' : 'chevronLeft'} size={17} />
+          </button>
         </div>
 
         <nav className="sidebar-nav">
+          <span className="sidebar-section-label">Workspace</span>
           <NavLink to="/dashboard" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon"><AppIcon name="dashboard" /></span>
             {showSidebarText && <span>Dashboard</span>}
@@ -344,6 +359,7 @@ export default function MainLayout() {
             <span className="sidebar-link-icon"><AppIcon name="calendar" /></span>
             {showSidebarText && <span>Calendario</span>}
           </NavLink>
+          <span className="sidebar-section-label">Collaborazione</span>
           <NavLink to="/notes" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon"><AppIcon name="notes" /></span>
             {showSidebarText && <span>Blocchi Note</span>}
@@ -360,6 +376,7 @@ export default function MainLayout() {
             <span className="sidebar-link-icon"><AppIcon name="robot" /></span>
             {showSidebarText && <span>HiPlan AI</span>}
           </NavLink>
+          <span className="sidebar-section-label">Controllo</span>
           <NavLink to="/conflicts" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon"><AppIcon name="users" /></span>
             {showSidebarText && <span>Panoramica addetti</span>}
@@ -381,6 +398,7 @@ export default function MainLayout() {
               {showSidebarText && <span>Admin</span>}
             </NavLink>
           )}
+          <span className="sidebar-section-label">Software Esterni</span>
           <a href="http://192.168.2.13/accounts/login/" target="_blank" rel="noopener noreferrer" className="sidebar-link">
             <span className="sidebar-link-icon"><AppIcon name="externalLink" /></span>
             {showSidebarText && <span>HiGest</span>}

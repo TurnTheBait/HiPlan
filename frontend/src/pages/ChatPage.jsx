@@ -335,11 +335,11 @@ export default function ChatPage() {
               fontFamily: 'inherit'
             }}
             rows={inputValue.split('\n').length > 4 ? 4 : inputValue.split('\n').length || 1}
-            placeholder="Scrivi un messaggio per l'assistente... (Ctrl+Invio per inviare)"
+            placeholder="Scrivi un messaggio per l'assistente... (Invio per inviare, Shift+Invio per a capo)"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+              if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 handleSendMessage(e);
               }
@@ -350,7 +350,7 @@ export default function ChatPage() {
             type="submit" 
             disabled={isLoading || !inputValue.trim()}
             className={`chat-send-btn ${inputValue.trim() && !isLoading ? 'active' : 'disabled'}`}
-            title="Invia messaggio (Ctrl+Invio)"
+            title="Invia messaggio (Invio)"
           >
             <Send size={18} style={{ marginLeft: '-2px', color: 'inherit' }} />
           </button>
