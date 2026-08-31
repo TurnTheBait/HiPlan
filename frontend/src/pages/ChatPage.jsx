@@ -114,7 +114,111 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="workspace-container" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 100px)' }}>
+    <>
+      <style>{`
+        .chat-page-container {
+          display: flex;
+          flex-direction: column;
+          height: calc(100vh - 100px);
+          position: relative;
+        }
+        .chat-message-row {
+          animation: fadeSlideUp 0.3s ease-out forwards;
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        @keyframes fadeSlideUp {
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .chat-bubble-ai {
+          background: var(--bg-secondary);
+          color: var(--text-primary);
+          padding: 16px 20px;
+          border-radius: 16px;
+          border-top-left-radius: 4px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+          border: 1px solid var(--border-subtle);
+          line-height: 1.6;
+          font-size: 0.95rem;
+          display: flex;
+          flex-direction: column;
+        }
+        .chat-bubble-user {
+          background: linear-gradient(135deg, var(--accent-500), var(--accent-600));
+          color: #fff;
+          padding: 16px 20px;
+          border-radius: 16px;
+          border-top-right-radius: 4px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+          line-height: 1.6;
+          font-size: 0.95rem;
+        }
+        .chat-avatar {
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .chat-copy-btn {
+          background: transparent;
+          border: none;
+          color: var(--text-secondary);
+          padding: 6px;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .chat-copy-btn:hover {
+          color: var(--accent-600);
+          background: rgba(0,0,0,0.05);
+        }
+        .dark .chat-copy-btn:hover {
+          background: rgba(255,255,255,0.1);
+        }
+        .chat-input-wrapper {
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: 24px;
+          padding: 12px;
+          display: flex;
+          gap: 12px;
+          align-items: flex-end;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+          transition: box-shadow 0.3s, border-color 0.3s;
+          margin-top: auto;
+        }
+        .chat-input-wrapper:focus-within {
+          border-color: var(--accent-500);
+          box-shadow: 0 4px 20px var(--accent-glow);
+        }
+        .chat-send-btn {
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          border: none;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s;
+          flex-shrink: 0;
+          margin-bottom: 2px;
+        }
+        .chat-send-btn.active {
+          background: linear-gradient(135deg, var(--accent-500), var(--accent-600));
+          color: #ffffff;
+          cursor: pointer;
+          box-shadow: 0 4px 12px var(--accent-glow);
+        }
+        .chat-send-btn.active:hover {
+          transform: scale(1.05);
+        }
+        .chat-send-btn.disabled {
+          background: var(--bg-tertiary);
+          color: var(--text-muted);
+          cursor: not-allowed;
+        }
+      `}</style>
+    <div className="workspace-container chat-page-container">
       <header className="workspace-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-color)' }}>
         <h2 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-primary)' }}>Chat</h2>
         <div className="header-actions">
@@ -135,6 +239,7 @@ export default function ChatPage() {
           {messages.map((msg) => (
             <div 
               key={msg.id} 
+              className="chat-message-row"
               style={{
                 alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
                 display: 'flex',
@@ -146,16 +251,16 @@ export default function ChatPage() {
               {/* Icona Mittente */}
               <div style={{ flexShrink: 0, marginTop: '4px' }}>
                 {msg.sender === 'user' ? (
-                  <div style={{ 
+                  <div className="chat-avatar" style={{ 
                     width: '36px', height: '36px', borderRadius: '8px', 
-                    backgroundColor: 'var(--primary-color, #2563eb)', color: '#ffffff', 
+                    background: 'linear-gradient(135deg, var(--accent-500), var(--accent-600))', color: '#ffffff', 
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontWeight: 'bold', fontSize: '1.1rem'
                   }}>
                     {user?.full_name?.[0]?.toUpperCase() || user?.username?.[0]?.toUpperCase() || '?'}
                   </div>
                 ) : (
-                  <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#fff', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                  <div className="chat-avatar" style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#fff', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                     <img src="/hiway-icon.png" alt="HiPlan AI" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
                   </div>
                 )}
@@ -163,26 +268,15 @@ export default function ChatPage() {
 
               {/* Bolla Messaggio */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '0' }}>
-                <div style={{
-                  backgroundColor: msg.sender === 'user' ? 'var(--primary-color, #3b82f6)' : 'var(--bg-secondary, #1e293b)',
-                  color: msg.sender === 'user' ? '#fff' : 'var(--text-primary, #f1f5f9)',
-                  padding: '14px 20px',
-                  borderRadius: '16px',
-                  borderTopRightRadius: msg.sender === 'user' ? '4px' : '16px',
-                  borderTopLeftRadius: msg.sender === 'user' ? '16px' : '4px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-                  lineHeight: '1.6',
-                  fontSize: '0.95rem',
-                  overflowWrap: 'break-word'
-                }}>
+                <div className={msg.sender === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}>
                   {msg.sender === 'ai' ? (
                     <div className="prose prose-sm dark:prose-invert" style={{ color: 'inherit', maxWidth: '100%' }}>
                       <ReactMarkdown 
                         remarkPlugins={[remarkGfm]}
                         components={{
                           table: ({node, ...props}) => <div style={{ overflowX: 'auto', marginBottom: '1rem' }}><table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.9rem' }} {...props} /></div>,
-                          th: ({node, ...props}) => <th style={{ border: '1px solid var(--border-color)', padding: '8px 12px', backgroundColor: 'rgba(0,0,0,0.04)', textAlign: 'left', fontWeight: '600' }} {...props} />,
-                          td: ({node, ...props}) => <td style={{ border: '1px solid var(--border-color)', padding: '8px 12px' }} {...props} />,
+                          th: ({node, ...props}) => <th style={{ border: '1px solid var(--border-subtle)', padding: '8px 12px', backgroundColor: 'rgba(0,0,0,0.04)', textAlign: 'left', fontWeight: '600' }} {...props} />,
+                          td: ({node, ...props}) => <td style={{ border: '1px solid var(--border-subtle)', padding: '8px 12px' }} {...props} />,
                           p: ({node, ...props}) => <p style={{ margin: '0 0 0.75rem 0' }} {...props} />,
                           ul: ({node, ...props}) => <ul style={{ margin: '0 0 0.75rem 0', paddingLeft: '1.5rem' }} {...props} />
                         }}
@@ -193,51 +287,38 @@ export default function ChatPage() {
                   ) : (
                     msg.text
                   )}
-                </div>
 
-                {/* Tasto Copia per le risposte dell'AI */}
-                {msg.sender === 'ai' && (
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-4px' }}>
-                    <button
-                      onClick={() => handleCopy(msg.text)}
-                      className="btn-icon"
-                      title="Copia risposta"
-                      style={{
-                        background: 'transparent',
-                        border: '1px solid var(--border-color)',
-                        color: 'var(--text-secondary)',
-                        cursor: 'pointer',
-                        padding: '6px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderRadius: '6px',
-                        backgroundColor: 'var(--bg-primary)',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                      }}
-                    >
-                      <Copy size={14} />
-                    </button>
-                  </div>
-                )}
+                  {/* Tasto Copia per le risposte dell'AI */}
+                  {msg.sender === 'ai' && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px', borderTop: '1px solid var(--border-subtle)', paddingTop: '8px' }}>
+                      <button
+                        onClick={() => handleCopy(msg.text)}
+                        className="chat-copy-btn"
+                        title="Copia risposta"
+                      >
+                        <Copy size={15} />
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))}
           {isLoading && (
-            <div style={{ alignSelf: 'flex-start', display: 'flex', gap: '12px' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#fff', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+            <div className="chat-message-row" style={{ alignSelf: 'flex-start', display: 'flex', gap: '12px' }}>
+              <div className="chat-avatar" style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#fff', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, marginTop: '4px' }}>
                 <img src="/hiway-icon.png" alt="HiPlan AI" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
               </div>
-              <div style={{ backgroundColor: 'var(--bg-secondary, #1e293b)', padding: '14px 20px', borderRadius: '16px', borderTopLeftRadius: '4px', color: 'var(--text-secondary, #94a3b8)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div className="chat-bubble-ai" style={{ color: 'var(--text-secondary, #94a3b8)', display: 'flex', alignItems: 'center', gap: '8px', flexDirection: 'row' }}>
                 <Bot size={18} className="animate-pulse" />
-                Sto analizzando la richiesta...
+                <span>Sto analizzando la richiesta...</span>
               </div>
             </div>
           )}
           <div ref={messagesEndRef} />
         </div>
 
-        <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '12px', marginTop: 'auto', backgroundColor: 'var(--bg-secondary)', padding: '12px', borderRadius: '24px', border: '1px solid var(--border-color)', alignItems: 'flex-end' }}>
+        <form onSubmit={handleSendMessage} className="chat-input-wrapper">
           <textarea
             style={{ 
               flex: 1, 
@@ -268,29 +349,15 @@ export default function ChatPage() {
           <button 
             type="submit" 
             disabled={isLoading || !inputValue.trim()}
-            style={{
-              width: '44px',
-              height: '44px',
-              borderRadius: '50%',
-              backgroundColor: inputValue.trim() ? 'var(--primary-color, #2563eb)' : 'var(--bg-tertiary, #cbd5e1)',
-              color: '#ffffff',
-              border: 'none',
-              cursor: inputValue.trim() && !isLoading ? 'pointer' : 'not-allowed',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'background-color 0.2s',
-              flexShrink: 0,
-              padding: 0,
-              marginBottom: '2px'
-            }}
+            className={`chat-send-btn ${inputValue.trim() && !isLoading ? 'active' : 'disabled'}`}
             title="Invia messaggio (Ctrl+Invio)"
           >
-            <Send size={18} style={{ marginLeft: '-2px', color: '#ffffff' }} />
+            <Send size={18} style={{ marginLeft: '-2px', color: 'inherit' }} />
           </button>
         </form>
 
       </div>
     </div>
+    </>
   );
 }
