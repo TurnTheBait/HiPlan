@@ -246,6 +246,16 @@ const paths = {
       <path d="M19 17v4h-4" />
     </>
   ),
+  grip: (
+    <>
+      <circle cx="9" cy="6" r="1" />
+      <circle cx="15" cy="6" r="1" />
+      <circle cx="9" cy="12" r="1" />
+      <circle cx="15" cy="12" r="1" />
+      <circle cx="9" cy="18" r="1" />
+      <circle cx="15" cy="18" r="1" />
+    </>
+  ),
 };
 
 export default function AppIcon({ name, size = 18, className = '', strokeWidth = 1.9, style = {} }) {

@@ -29,6 +29,15 @@ function fmtDateTime(dt) {
   return new Date(dt).toLocaleString('it-IT', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+function buildCommessaOptions(projects) {
+  return projects
+    .filter(p => p.status !== 'archived')
+    .map(p => ({
+      value: p.id,
+      label: p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name),
+    }));
+}
+
 function cleanActionLabel(value) {
   const label = String(value || 'Nota interna');
   const [first, ...rest] = label.split(' ');
@@ -244,8 +253,8 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
       const { data } = await api.post('/tickets', {
         title: form.title.trim(),
         description: form.description,
-        project_id: form.project_id === 'custom' ? null : (form.project_id || null),
-        custom_project_code: form.project_id === 'custom' ? form.custom_project_code.trim() : null,
+        project_id: form.project_id ? form.project_id : null,
+        custom_project_code: form.project_id ? null : (form.custom_project_code ? form.custom_project_code.trim() : null),
         responsible_id: form.responsible_id || null,
         priority: form.priority,
         assigned_to: form.assigned_to,
@@ -314,35 +323,17 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
           </div>
           <div className="tkt-field-row">
             <div className="tkt-field">
-              <label>Commessa</label>
-              <input
-                list="projects-list"
-                placeholder="Seleziona commessa (opzionale)"
-                value={(() => {
-                  if (form.project_id) {
-                    const p = projects.find(proj => proj.id === form.project_id);
-                    if (p) return p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name);
-                  }
-                  return form.custom_project_code || '';
-                })()}
-                onChange={e => {
-                  const val = e.target.value;
-                  const proj = projects.find(p => {
-                    const label = p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name);
-                    return label === val;
-                  });
-                  if (proj) {
-                    setForm(f => ({ ...f, project_id: proj.id, custom_project_code: '' }));
-                  } else {
-                    setForm(f => ({ ...f, project_id: '', custom_project_code: val }));
-                  }
+              <label>Commessa (opzionale)</label>
+              <SearchableCombobox
+                value={form.project_id || form.custom_project_code || ''}
+                onChange={(val, opt) => {
+                  if (opt) setForm(f => ({ ...f, project_id: opt.value, custom_project_code: '' }));
+                  else setForm(f => ({ ...f, project_id: '', custom_project_code: val }));
                 }}
+                options={buildCommessaOptions(projects)}
+                placeholder="Scrivi per cercare una commessa…"
+                allowCustom
               />
-              <datalist id="projects-list">
-                {projects.filter(p => p.status !== 'archived').map(p => (
-                  <option key={p.id} value={p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name)} />
-                ))}
-              </datalist>
             </div>
             <div className="tkt-field">
               <label>Priorità</label>
@@ -411,7 +402,7 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
   const [form, setForm] = useState({
     title: ticket.title,
     description: ticket.description || '',
-    project_id: ticket.project_id ? ticket.project_id : (ticket.custom_project_code ? 'custom' : ''),
+    project_id: ticket.project_id || '',
     custom_project_code: ticket.custom_project_code || '',
     responsible_id: ticket.responsible_id || '',
     priority: ticket.priority,
@@ -427,8 +418,8 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
     try {
       await api.patch(`/tickets/${ticket.id}`, {
         ...form,
-        project_id: form.project_id === 'custom' ? null : (form.project_id || null),
-        custom_project_code: form.project_id === 'custom' ? form.custom_project_code.trim() : null,
+        project_id: form.project_id ? form.project_id : null,
+        custom_project_code: form.project_id ? null : (form.custom_project_code ? form.custom_project_code.trim() : null),
         responsible_id: form.responsible_id || null
       });
       toast.success('Ticket aggiornato!');
@@ -460,20 +451,19 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
             <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
           <div className="tkt-field-row">
-            <div className="tkt-field">
-              <label>Commessa</label>
-              <select
-                value={form.project_id || ''}
-                onChange={e => setForm(f => ({ ...f, project_id: e.target.value, custom_project_code: '' }))}
-              >
-                <option value="">-- Seleziona (opzionale) --</option>
-                {projects.filter(p => p.status !== 'archived').map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name)}
-                  </option>
-                ))}
-              </select>
-            </div>
+              <div className="tkt-field">
+                <label>Commessa (opzionale)</label>
+                <SearchableCombobox
+                  value={form.project_id || form.custom_project_code || ''}
+                  onChange={(val, opt) => {
+                    if (opt) setForm(f => ({ ...f, project_id: opt.value, custom_project_code: '' }));
+                    else setForm(f => ({ ...f, project_id: '', custom_project_code: val }));
+                  }}
+                  options={buildCommessaOptions(projects)}
+                  placeholder="Scrivi per cercare una commessa…"
+                  allowCustom
+                />
+              </div>
             <div className="tkt-field">
               <label>Priorità</label>
               <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>

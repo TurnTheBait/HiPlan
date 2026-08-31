@@ -38,6 +38,9 @@ export default function AdminPage() {
   const [ticketPhases, setTicketPhases] = useState([]);
   const [newTicketPhase, setNewTicketPhase] = useState('');
   const [lastBackup, setLastBackup] = useState(null);
+  const [backups, setBackups] = useState([]);
+  const [restoringBackup, setRestoringBackup] = useState(null);
+  const [uploadingBackup, setUploadingBackup] = useState(false);
   const [emailLogs, setEmailLogs] = useState([]);
   const [scheduledEmails, setScheduledEmails] = useState([]);
   const [emailLogTab, setEmailLogTab] = useState('sent'); // 'sent' | 'scheduled'
@@ -161,6 +164,54 @@ export default function AdminPage() {
       setLastBackup(data.last_backup);
     } catch (e) {
       console.error('Errore caricamento stato backup:', e);
+    }
+    loadBackups();
+  }
+
+  async function loadBackups() {
+    try {
+      const { data } = await api.get('/settings/backup/list');
+      setBackups(Array.isArray(data.backups) ? data.backups : []);
+    } catch (e) {
+      console.error('Errore caricamento elenco backup:', e);
+    }
+  }
+
+  async function handleRestoreBackup(filename) {
+    if (!window.confirm(`Sei sicuro di voler ripristinare HiPlan dal backup "${filename}"? I dati attuali verranno sostituiti.`)) return;
+    try {
+      setRestoringBackup(filename);
+      const { data } = await api.post('/settings/backup/restore', { filename });
+      toast.success(data.message || 'Ripristino completato');
+      await loadBackups();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Errore durante il ripristino');
+    } finally {
+      setRestoringBackup(null);
+    }
+  }
+
+  async function handleRestoreUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!window.confirm(`Sei sicuro di voler ripristinare HiPlan dal file "${file.name}"? I dati attuali verranno sostituiti.`)) {
+      e.target.value = '';
+      return;
+    }
+    try {
+      setUploadingBackup(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      const { data } = await api.post('/settings/backup/restore/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      toast.success(data.message || 'Ripristino completato');
+      await loadBackups();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Errore durante il ripristino');
+    } finally {
+      setUploadingBackup(false);
+      e.target.value = '';
     }
   }
 
@@ -972,16 +1023,72 @@ export default function AdminPage() {
         {!collapsedSections.backup && (
           <div style={{ padding: '16px 20px', background: 'var(--bg-tertiary)', borderRadius: 8, marginTop: 16 }}>
             {lastBackup ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 14 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 14, marginBottom: 16 }}>
                 <div><strong>Ultimo backup completato:</strong> {new Date(lastBackup.date).toLocaleString()}</div>
                 <div><strong>Dimensione archivio:</strong> {lastBackup.size_mb} MB</div>
                 <div><strong>File:</strong> <code>{lastBackup.filename}</code></div>
                 <div style={{ marginTop: 8, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                  Il backup settimanale viene eseguito automaticamente ogni domenica notte. Include il database completo e tutti gli allegati.
+                  Il backup viene eseguito automaticamente ogni giorno alle 20:00 e conserva le ultime due settimane (14 backup). Include il database completo e tutti gli allegati.
                 </div>
               </div>
             ) : (
-              <div style={{ color: 'var(--text-muted)' }}>Nessun backup trovato nel sistema.</div>
+              <div style={{ color: 'var(--text-muted)', marginBottom: 16 }}>Nessun backup trovato nel sistema.</div>
+            )}
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+              <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <AppIcon name="upload" size={14} /> {uploadingBackup ? 'Ripristino in corso...' : 'Ripristina da file'}
+                <input
+                  type="file"
+                  accept=".zip"
+                  style={{ display: 'none' }}
+                  disabled={uploadingBackup}
+                  onChange={handleRestoreUpload}
+                />
+              </label>
+            </div>
+
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Backup disponibili</div>
+            {backups.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table className="backup-table">
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>File</th>
+                      <th>Dimensione</th>
+                      <th style={{ textAlign: 'right' }}>Azioni</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {backups.map((b, idx) => (
+                      <tr key={b.filename}>
+                        <td>
+                          {new Date(b.date).toLocaleString()}
+                          {idx === 0 && (
+                            <span style={{ marginLeft: 8, fontSize: '0.7rem', padding: '2px 6px', borderRadius: 999, background: 'rgba(99,102,241,0.15)', color: 'var(--accent-500, #6366f1)', fontWeight: 600 }}>
+                              Ultimo
+                            </span>
+                          )}
+                        </td>
+                        <td className="backup-file" title={b.filename}>{b.filename}</td>
+                        <td>{b.size_mb} MB</td>
+                        <td className="backup-actions">
+                          <button
+                            className="btn btn-danger btn-sm"
+                            disabled={restoringBackup === b.filename}
+                            onClick={() => handleRestoreBackup(b.filename)}
+                          >
+                            <AppIcon name="undo" size={14} /> {restoringBackup === b.filename ? 'Ripristino...' : 'Ripristina'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="backup-empty">Nessun archivio di backup presente.</div>
             )}
           </div>
         )}

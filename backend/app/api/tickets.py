@@ -264,12 +264,14 @@ async def update_ticket(
         ticket.title = data.title.strip()
     if data.description is not None:
         ticket.description = data.description
-    if data.project_id is not None:
-        ticket.project_id = data.project_id or None
+    # Usa exclude_unset per distinguere i campi inviati esplicitamente (anche con valore null = "rimuovi")
+    _payload = data.model_dump(exclude_unset=True)
+    if 'project_id' in _payload:
+        ticket.project_id = _payload.get('project_id') or None
         if ticket.project_id:
             ticket.custom_project_code = None
-    if data.custom_project_code is not None:
-        ticket.custom_project_code = data.custom_project_code or None
+    if 'custom_project_code' in _payload:
+        ticket.custom_project_code = _payload.get('custom_project_code') or None
         if ticket.custom_project_code:
             ticket.project_id = None
     if data.responsible_id is not None:

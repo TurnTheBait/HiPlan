@@ -44,3 +44,65 @@
   font-size: 0.75rem;
   color: var(--text-muted);
 }
+
+/* ─── Tabella backup eseguiti ─── */
+.backup-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.85rem;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+.backup-table thead th {
+  text-align: left;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-default);
+  font-weight: 600;
+}
+.backup-table tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+.backup-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.backup-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+.backup-table .backup-icon {
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+}
+.backup-table .backup-file {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.backup-table .backup-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.backup-empty {
+  padding: 20px 14px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  border: 1px dashed var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+}

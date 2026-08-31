@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,17 @@ import './NotesPage.css';
 const BACKEND_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
   : `http://${window.location.hostname}:8000`;
+
+const NOTES_ORDER_KEY = 'hiplan_notes_order';
+
+function loadSavedOrder() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(NOTES_ORDER_KEY) || '[]');
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+}
 
 export default function NotesPage() {
   const { user } = useAuth();
@@ -40,6 +51,12 @@ export default function NotesPage() {
   const [newSharedWith, setNewSharedWith] = useState([]);
 
   const [users, setUsers] = useState([]);
+
+  // Ordinamento e riordino personalizzato (drag & drop) delle note
+  const [sortMode, setSortMode] = useState(() => (loadSavedOrder().length ? 'custom' : 'created'));
+  const [customOrder, setCustomOrder] = useState(loadSavedOrder);
+  const [dragId, setDragId] = useState(null);
+  const [dropTarget, setDropTarget] = useState(null); // { id, pos: 'before' | 'after' }
 
   // Ref per l'editor visuale contentEditable e timeout autocalcolato
   const editorRef = useRef(null);
@@ -78,6 +95,12 @@ export default function NotesPage() {
     try {
       const { data } = await api.get('/notes');
       setNotes(data);
+      // Tieni l'ordine personalizzato allineato con tutte le note esistenti
+      setCustomOrder(prev => {
+        const allIds = data.map(n => n.id);
+        const merged = [...prev.filter(id => allIds.includes(id)), ...allIds.filter(id => !prev.includes(id))];
+        return merged;
+      });
     } catch {
       toast.error('Errore durante il caricamento dei blocchi note');
     } finally {
@@ -396,16 +419,52 @@ export default function NotesPage() {
   };
 
   // Formattazione visuale istantanea stile Notion (H1, H2, Bold, Check-list, ecc.)
+  function escapeHtmlText(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function getCurrentBlock() {
+    try {
+      return (document.queryCommandValue('formatBlock') || '').toLowerCase();
+    } catch {
+      return '';
+    }
+  }
+
+  function getSelectionClosest(selector) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    let node = sel.anchorNode;
+    if (!node) return null;
+    if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+    return (node && node.closest) ? node.closest(selector) : null;
+  }
+
+  function selectionIsInside(selector) {
+    return !!getSelectionClosest(selector);
+  }
+
+  function unwrapChecklistItem(item) {
+    const textEl = item.querySelector('.checklist-text');
+    const text = textEl ? textEl.textContent : item.textContent;
+    const p = document.createElement('p');
+    p.textContent = text;
+    if (item.parentNode) item.parentNode.replaceChild(p, item);
+  }
+
   function applyFormatting(formatType) {
     if (!editorRef.current) return;
     editorRef.current.focus();
 
     switch (formatType) {
       case 'h1':
-        document.execCommand('formatBlock', false, '<h1>');
+        document.execCommand('formatBlock', false, getCurrentBlock() === 'h1' ? '<p>' : '<h1>');
         break;
       case 'h2':
-        document.execCommand('formatBlock', false, '<h2>');
+        document.execCommand('formatBlock', false, getCurrentBlock() === 'h2' ? '<p>' : '<h2>');
         break;
       case 'bold':
         document.execCommand('bold', false, null);
@@ -417,38 +476,40 @@ export default function NotesPage() {
         document.execCommand('insertUnorderedList', false, null);
         break;
       case 'todo': {
+        // Se la selezione è già una check-list, la rimuove (toggle off) anziché annidarla
+        const existing = getSelectionClosest('.note-checklist-item');
+        if (existing) {
+          unwrapChecklistItem(existing);
+          break;
+        }
         const sel = window.getSelection();
-        const text = sel && sel.toString() ? sel.toString() : 'Attività da fare';
-        document.execCommand('insertHTML', false, `<div class="note-checklist-item" contenteditable="false"><input type="checkbox" class="note-checkbox" /> <span contenteditable="true" class="checklist-text">${text}</span></div><p><br></p>`);
+        const text = sel && sel.toString().trim() ? sel.toString() : 'Attività da fare';
+        document.execCommand('insertHTML', false, `<div class="note-checklist-item" contenteditable="false"><input type="checkbox" class="note-checkbox" /> <span contenteditable="true" class="checklist-text">${escapeHtmlText(text)}</span></div><p><br></p>`);
         break;
       }
       case 'quote':
-        document.execCommand('formatBlock', false, 'blockquote');
+        document.execCommand('formatBlock', false, getCurrentBlock() === 'blockquote' ? '<p>' : 'blockquote');
         break;
-      case 'code': {
-        const sel = window.getSelection();
-        const text = sel && sel.toString() ? sel.toString() : 'inserisci qui il codice';
-        document.execCommand('insertHTML', false, `<pre class="note-code-block"><code>${text}</code></pre><p><br></p>`);
+      case 'code':
+        // Non applicare se la selezione è già dentro un blocco codice (evita annidamenti)
+        if (selectionIsInside('.note-code-block')) return;
+        {
+          const sel = window.getSelection();
+          const text = sel && sel.toString() ? sel.toString() : 'inserisci qui il codice';
+          document.execCommand('insertHTML', false, `<pre class="note-code-block"><code>${escapeHtmlText(text)}</code></pre><p><br></p>`);
+        }
         break;
-      }
       case 'normal':
+        // Reset completo: toglie il blocco (es. H1/H2/quote), la formattazione inline e le liste
         document.execCommand('formatBlock', false, '<p>');
+        document.execCommand('removeFormat', false, null);
+        if (document.queryCommandState('insertUnorderedList')) document.execCommand('insertUnorderedList');
+        if (document.queryCommandState('insertOrderedList')) document.execCommand('insertOrderedList');
         break;
       default:
         return;
     }
     handleEditorInput();
-  }
-
-  // Estratto di testo pulito per la sidebar
-  function getCleanSnippet(htmlOrMarkdown) {
-    if (!htmlOrMarkdown) return 'Nessun testo...';
-    const clean = htmlOrMarkdown
-      .replace(/<[^>]*>?/gm, ' ')
-      .replace(/[#*`>-]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    return clean || 'Nessun testo...';
   }
 
   // Filtra note per tab e ricerca
@@ -467,6 +528,72 @@ export default function NotesPage() {
       return true;
     });
   }, [notes, activeTab, searchQuery, user]);
+
+  // Note ordinate in base al criterio selezionato (data / alfabetico / personalizzato)
+  const displayedNotes = useMemo(() => {
+    const list = [...filteredNotes];
+    if (sortMode === 'alpha') {
+      list.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'it', { sensitivity: 'base' }));
+    } else if (sortMode === 'created') {
+      list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    } else {
+      // Ordine personalizzato (drag & drop): note non ancora ordinate in fondo
+      list.sort((a, b) => {
+        const ia = customOrder.indexOf(a.id);
+        const ib = customOrder.indexOf(b.id);
+        if (ia === -1 && ib === -1) return 0;
+        if (ia === -1) return 1;
+        if (ib === -1) return -1;
+        return ia - ib;
+      });
+    }
+    return list;
+  }, [filteredNotes, sortMode, customOrder]);
+
+  // Gestione drag & drop per riordino personalizzato
+  function handleDragStart(e, id) {
+    setDragId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', id); } catch { /* noop */ }
+  }
+
+  function handleDragOver(e, targetId) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = e.currentTarget.getBoundingClientRect();
+    const before = (e.clientY - rect.top) < rect.height / 2;
+    setDropTarget({ id: targetId, pos: before ? 'before' : 'after' });
+  }
+
+  function handleDragEnd() {
+    setDragId(null);
+    setDropTarget(null);
+  }
+
+  function handleDrop(e, targetId) {
+    e.preventDefault();
+    const srcId = dragId || e.dataTransfer.getData('text/plain');
+    const rect = e.currentTarget.getBoundingClientRect();
+    const before = (e.clientY - rect.top) < rect.height / 2;
+    setDragId(null);
+    setDropTarget(null);
+    if (!srcId || srcId === targetId) return;
+    setCustomOrder(prev => {
+      const order = [...prev];
+      const allIds = notes.map(n => n.id);
+      for (const id of allIds) if (!order.includes(id)) order.push(id);
+      const from = order.indexOf(srcId);
+      let to = order.indexOf(targetId);
+      if (from === -1 || to === -1) return prev;
+      order.splice(from, 1);
+      if (from < to) to -= 1;
+      if (!before) to += 1;
+      order.splice(to, 0, srcId);
+      localStorage.setItem(NOTES_ORDER_KEY, JSON.stringify(order));
+      return order;
+    });
+    setSortMode('custom');
+  }
 
   // Formatta data in modo compatto
   function formatRelativeDate(dateStr) {
@@ -492,9 +619,16 @@ export default function NotesPage() {
       {/* SIDEBAR SINISTRA */}
       <aside className="notes-sidebar">
         <div className="notes-sidebar-top">
-          <div className="notes-sidebar-title">
-            <span>Le tue note</span>
-          </div>
+          <select
+            className="notes-sort-select"
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value)}
+            aria-label="Ordina note"
+          >
+            <option value="created">Data di creazione</option>
+            <option value="alpha">Alfabetico</option>
+            <option value="custom">Personalizzato (trascina)</option>
+          </select>
           <button
             className="btn btn-primary btn-sm"
             onClick={() => {
@@ -541,20 +675,20 @@ export default function NotesPage() {
         {/* TABS FILTRO */}
         <div className="notes-tabs">
           <button
-            className={`notes-tab-btn ${activeTab === 'all' ? 'active' : ''}`}
+            className={`notes-tab-btn notes-tab-btn--all ${activeTab === 'all' ? 'active' : ''}`}
             onClick={() => setActiveTab('all')}
           >
             Tutte ({notes.length})
           </button>
           <button
-            className={`notes-tab-btn ${activeTab === 'private' ? 'active' : ''}`}
+            className={`notes-tab-btn notes-tab-btn--private ${activeTab === 'private' ? 'active' : ''}`}
             onClick={() => setActiveTab('private')}
           >
             <AppIcon name="lock" size={14} />
             Private
           </button>
           <button
-            className={`notes-tab-btn ${activeTab === 'shared' ? 'active' : ''}`}
+            className={`notes-tab-btn notes-tab-btn--shared ${activeTab === 'shared' ? 'active' : ''}`}
             onClick={() => setActiveTab('shared')}
           >
             <AppIcon name="users" size={14} />
@@ -563,36 +697,48 @@ export default function NotesPage() {
         </div>
 
         {/* LISTA SCHEDE NOTE */}
-        <div className="notes-list">
-          {filteredNotes.length === 0 ? (
+        <div className={`notes-list notes-list--${activeTab}`}>
+          {displayedNotes.length === 0 ? (
             <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8125rem', padding: '32px 12px' }}>
               Nessun blocco note trovato.
             </div>
           ) : (
-            filteredNotes.map(note => {
+            displayedNotes.map(note => {
               const isSelected = note.id === activeNoteId;
               const isMine = note.owner_id === user?.id;
+              const showBefore = sortMode === 'custom' && dragId && dragId !== note.id && dropTarget?.id === note.id && dropTarget.pos === 'before';
+              const showAfter = sortMode === 'custom' && dragId && dragId !== note.id && dropTarget?.id === note.id && dropTarget.pos === 'after';
               return (
-                <div
-                  key={note.id}
-                  className={`note-card ${isSelected ? 'active' : ''}`}
-                  onClick={() => selectNote(note)}
-                >
-                  <div className="note-card-header">
-                    <span className="note-card-title">{note.title || 'Senza Titolo'}</span>
-                    <span className={`note-visibility-badge ${note.visibility === 'team' ? 'badge-shared' : note.visibility === 'selected' ? 'badge-selected' : 'badge-private'}`}>
-                      <AppIcon name={note.visibility === 'team' ? 'users' : note.visibility === 'selected' ? 'user-check' : 'lock'} size={12} />
-                      {note.visibility === 'team' ? 'Condiviso' : note.visibility === 'selected' ? 'Utenti Selezionati' : 'Privato'}
-                    </span>
+                <Fragment key={note.id}>
+                  {showBefore && <div className="note-drop-indicator" />}
+                  <div
+                    className={`note-card ${isSelected ? 'active' : ''} ${dragId === note.id ? 'dragging' : ''}`}
+                    draggable={sortMode === 'custom'}
+                    onDragStart={(e) => handleDragStart(e, note.id)}
+                    onDragOver={sortMode === 'custom' ? (e) => handleDragOver(e, note.id) : undefined}
+                    onDrop={sortMode === 'custom' ? (e) => handleDrop(e, note.id) : undefined}
+                    onDragEnd={handleDragEnd}
+                    onClick={() => selectNote(note)}
+                  >
+                    {sortMode === 'custom' && (
+                      <span className="note-drag-handle" title="Trascina per riordinare">
+                        <AppIcon name="grip" size={14} />
+                      </span>
+                    )}
+                    <div className="note-card-header">
+                      <span className="note-card-title">{note.title || 'Senza Titolo'}</span>
+                      <span className={`note-visibility-badge ${note.visibility === 'team' ? 'badge-shared' : note.visibility === 'selected' ? 'badge-selected' : 'badge-private'}`}>
+                        <AppIcon name={note.visibility === 'team' ? 'users' : note.visibility === 'selected' ? 'user-check' : 'lock'} size={12} />
+                        {note.visibility === 'team' ? 'Condiviso' : note.visibility === 'selected' ? 'Utenti Selezionati' : 'Privato'}
+                      </span>
+                    </div>
+                    <div className="note-card-meta">
+                      <span className="note-meta-owner"><AppIcon name="user" size={12} />{note.owner?.full_name || note.owner?.username || (isMine ? 'Tu' : 'Utente')}</span>
+                      <span>{formatRelativeDate(note.created_at)}</span>
+                    </div>
                   </div>
-                  <div className="note-card-snippet">
-                    {getCleanSnippet(note.content)}
-                  </div>
-                  <div className="note-card-meta">
-                    <span className="note-meta-owner"><AppIcon name="user" size={12} />{note.owner?.full_name || note.owner?.username || (isMine ? 'Tu' : 'Utente')}</span>
-                    <span>{formatRelativeDate(note.updated_at || note.created_at)}</span>
-                  </div>
-                </div>
+                  {showAfter && <div className="note-drop-indicator" />}
+                </Fragment>
               );
             })
           )}
@@ -737,15 +883,15 @@ export default function NotesPage() {
             <div className="notes-editor-scroll">
               {/* TOOLBAR DI FORMATTAZIONE STYLE NOTION */}
               <div className="notion-formatting-bar">
-                <button type="button" className="format-btn" onClick={() => applyFormatting('normal')} title="Testo normale (P)">P Normale</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('h1')} title="Titolo grande (H1)">H1 Titolo</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('h2')} title="Sottotitolo (H2)">H2 Sottotitolo</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('bold')} title="Grassetto"><strong>B</strong> Grassetto</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('italic')} title="Corsivo"><em>I</em> Corsivo</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('bullet')} title="Elenco puntato">• Elenco</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('todo')} title="Check-list interattiva"><AppIcon name="check" size={14} /> Check-list [ ]</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('quote')} title="Citazione">❝ Citazione</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('code')} title="Blocco Codice">⟨/⟩ Codice</button>
+                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('normal')} title="Testo normale (P)">P Normale</button>
+                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('h1')} title="Titolo grande (H1)">H1 Titolo</button>
+                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('h2')} title="Sottotitolo (H2)">H2 Sottotitolo</button>
+                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('bold')} title="Grassetto"><strong>B</strong> Grassetto</button>
+                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('italic')} title="Corsivo"><em>I</em> Corsivo</button>
+                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('bullet')} title="Elenco puntato">• Elenco</button>
+                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('todo')} title="Check-list interattiva"><AppIcon name="check" size={14} /> Check-list [ ]</button>
+                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('quote')} title="Citazione">❝ Citazione</button>
+                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('code')} title="Blocco Codice">⟨/⟩ Codice</button>
               </div>
 
               {/* CAMPO TITOLO */}

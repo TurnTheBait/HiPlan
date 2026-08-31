@@ -96,7 +96,7 @@ async def lifespan(app: FastAPI):
     from app.services.backup_service import run_backup
 
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(run_backup, 'cron', day_of_week='sun', hour=3, minute=0)
+    scheduler.add_job(run_backup, 'cron', hour=20, minute=0)
 
     # Scheduler: invia notifiche TODO regolarmente controllando la data e ora esatta
     async def run_todo_notifications():

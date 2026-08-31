@@ -1,9 +1,11 @@
 import json
+import os
 import uuid
+import tempfile
 from datetime import datetime, timedelta, timezone
 from typing import List
 # pyrefly: ignore [missing-import]
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 # pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
 # pyrefly: ignore [missing-import]
@@ -166,7 +168,13 @@ async def update_ticket_phases(
     await db.commit()
     return config.phases
 
-from app.services.backup_service import get_last_backup_info, run_backup
+from app.services.backup_service import (
+    BACKUP_DIR,
+    get_last_backup_info,
+    list_backups,
+    restore_backup_from_zip,
+    run_backup,
+)
 
 @router.get("/backup/status")
 async def get_backup_status(
@@ -191,6 +199,67 @@ async def trigger_manual_backup(
     
     info = get_last_backup_info()
     return {"message": "Backup completato con successo", "last_backup": info}
+
+
+@router.get("/backup/list")
+async def list_backup_files(
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin possono vedere i backup")
+    return {"backups": list_backups()}
+
+
+class RestoreBackupRequest(BaseModel):
+    filename: str
+
+
+@router.post("/backup/restore")
+async def restore_backup(
+    req: RestoreBackupRequest,
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin possono ripristinare i backup")
+
+    clean_name = os.path.basename(req.filename)
+    if not clean_name.startswith("backup_") or not clean_name.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Nome del backup non valido")
+
+    backup_path = os.path.join(BACKUP_DIR, clean_name)
+    if not os.path.exists(backup_path):
+        raise HTTPException(status_code=404, detail="Backup non trovato")
+
+    success, msg = await restore_backup_from_zip(backup_path)
+    if not success:
+        raise HTTPException(status_code=500, detail=msg)
+    return {"message": msg}
+
+
+@router.post("/backup/restore/upload")
+async def restore_backup_from_upload(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin possono ripristinare i backup")
+
+    if not file.filename or not file.filename.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Carica un file di backup in formato .zip")
+
+    content = await file.read()
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        success, msg = await restore_backup_from_zip(tmp_path)
+        if not success:
+            raise HTTPException(status_code=500, detail=msg)
+        return {"message": msg}
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 @router.get("/ticket_observers", response_model=List[str])
 async def get_ticket_observers(

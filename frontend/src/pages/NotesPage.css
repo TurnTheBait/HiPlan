@@ -30,15 +30,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-}
-
-.notes-sidebar-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
   gap: 8px;
+  margin-bottom: 16px;
 }
 
 .notes-search-wrapper {
@@ -72,7 +65,7 @@
 .notes-tabs {
   display: flex;
   gap: 6px;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   background: var(--bg-tertiary);
   padding: 4px;
   border-radius: var(--radius-md);
@@ -92,22 +85,100 @@
   white-space: nowrap;
 }
 .notes-tab-btn.active {
-  background: var(--accent-600);
   color: #fff;
-  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
+}
+.notes-tab-btn--all.active {
+  background: rgb(99, 102, 241);
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.35);
+}
+.notes-tab-btn--private.active {
+  background: rgb(59, 130, 246);
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.35);
+}
+.notes-tab-btn--shared.active {
+  background: rgb(16, 185, 129);
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
 }
 .notes-tab-btn:hover:not(.active) {
   color: var(--text-primary);
   background: var(--bg-hover);
 }
 
-.notes-list {
+/* Controlli di ordinamento */
+.notes-sort-select {
+  flex: 1;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  outline: none;
+}
+.notes-sort-select:focus {
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+.note-card[draggable="true"] {
+  cursor: grab;
+  position: relative;
+  padding-left: 30px;
+}
+.note-card.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+.note-drag-handle {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  display: flex;
+  cursor: grab;
+  opacity: 0.5;
+}
+.note-card:hover .note-drag-handle {
+  opacity: 1;
+}
+
+/* Linea indicatrice di dove verrà inserita la nota durante il drag & drop */
+.note-drop-indicator {
+  height: 2px;
+  margin: -4px 2px;
+  border-radius: 2px;
+  background: rgba(99, 102, 241, 0.8);
+  box-shadow: 0 0 6px rgba(99, 102, 241, 0.5);
+}
+
+ .notes-list {
   flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-right: 4px;
+  padding: 8px;
+  margin-top: 4px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+
+/* Sfondo del box appunti colorato in base alla sezione selezionata */
+.notes-list--all {
+  background: rgba(59, 130, 246, 0.09);
+  border-color: rgba(59, 130, 246, 0.22);
+}
+.notes-list--private {
+  background: rgba(246, 59, 59, 0.09);
+  border-color: rgba(246, 59, 59, 0.22);
+}
+.notes-list--shared {
+  background: rgba(16, 185, 129, 0.09);
+  border-color: rgba(16, 185, 129, 0.24);
 }
 
 /* Card della singola nota nella sidebar */
