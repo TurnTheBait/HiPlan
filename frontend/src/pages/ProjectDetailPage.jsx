@@ -18,17 +18,30 @@ import MultiDatePicker from '../components/ui/MultiDatePicker';
 import SearchableCombobox from '../components/ui/SearchableCombobox';
 import useWebSocket from '../hooks/useWebSocket';
 
-const DEPT_OPTIONS = [
+const departmentOptions = [
   { value: 'ufficio_tecnico', label: 'Ufficio Tecnico', color: '#3b82f6' },
-  { value: 'produzione', label: 'Produzione', color: '#10b981' },
-  { value: 'acquisti', label: 'Acquisti', color: '#f59e0b' },
+  { value: 'produzione', label: 'Produzione', color: '#f59e0b' },
+  { value: 'acquisti', label: 'Acquisti', color: '#10b981' },
+  { value: 'commerciale', label: 'Commerciale', color: '#ec4899' },
   { value: 'condivisa', label: 'Condivisa tra più reparti', color: '#8b5cf6' },
 ];
+
+const deptNameMap = {
+  ufficio_tecnico: 'Ufficio Tecnico',
+  produzione: 'Produzione',
+  acquisti: 'Acquisti',
+  commerciale: 'Commerciale',
+  condivisa: 'Condivisa'
+};
+
+const deptColorMap = departmentOptions.reduce((acc, d) => ({ ...acc, [d.value]: d.color }), {});
+
+const DEPT_OPTIONS = departmentOptions;
 
 const BACKEND_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
   : `http://${window.location.hostname}:8000`;
-const ALL_DEPTS = DEPT_OPTIONS.map(d => d.value);
+const ALL_DEPTS = departmentOptions.map(d => d.value);
 
 const PREDEFINED_WORKERS_DEFAULT = [];
 
@@ -699,7 +712,7 @@ export default function ProjectDetailPage() {
     const available = getAvailableTemplates();
     const initialFase = '__custom__';
     const initialDept = user?.department && user.department !== 'admin' ? user.department : 'ufficio_tecnico';
-    const initialColor = DEPT_OPTIONS.find(d => d.value === initialDept)?.color || '#3b82f6';
+    const initialColor = departmentOptions.find(d => d.value === initialDept)?.color || '#3b82f6';
 
     setEditingTask(null);
     setTaskModalTab('generale');
@@ -1655,11 +1668,27 @@ export default function ProjectDetailPage() {
                 <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
                   <button
                     className="btn btn-secondary"
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#10a37f', color: '#fff', borderColor: '#10a37f' }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#10a37f', color: '#fff', borderColor: '#10a37f', marginBottom: 8 }}
                     onClick={() => { setShowExportMenu(false); handleChatGPTAnalysis(); }}
                   >
                     <img src="/chatgpt-logo.png" style={{ width: 16, height: 16, filter: 'brightness(0) invert(1)' }} alt="ChatGPT" />
                     Analizza con ChatGPT
+                  </button>
+
+                  <button
+                    className="btn btn-secondary"
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'var(--accent-600)', color: '#fff', borderColor: 'var(--accent-600)' }}
+                    onClick={() => {
+                      setShowExportMenu(false);
+                      navigate('/chat', {
+                        state: {
+                          initialPrompt: `Analizza questa commessa: ${project.name}\nData inizio: ${project.start_date || 'N/A'}\nData fine: ${project.end_date || 'N/A'}\nStatus: ${project.status || 'N/A'}\nPuoi darmi un resoconto e segnalare eventuali criticità?`
+                        }
+                      });
+                    }}
+                  >
+                    <AppIcon name="robot" size={16} />
+                    Analizza con HiPlan AI
                   </button>
                 </div>
 
@@ -1857,7 +1886,7 @@ export default function ProjectDetailPage() {
                   boxShadow: 'var(--shadow-md)'
                 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>FILTRA PER REPARTO:</div>
-                  {DEPT_OPTIONS.map(dept => (
+                  {departmentOptions.map(dept => (
                     <label key={dept.value} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
                       <input
                         type="checkbox"
@@ -2091,7 +2120,7 @@ export default function ProjectDetailPage() {
                         {tableVisibleColumns.includes('reparto') && (
                           <td>
                             {task.department ? (() => {
-                              const dept = DEPT_OPTIONS.find(d => d.value === task.department);
+                              const dept = departmentOptions.find(d => d.value === task.department);
                               return (
                                 <span style={{
                                   display: 'inline-block', padding: '3px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 600,
@@ -2527,12 +2556,7 @@ export default function ProjectDetailPage() {
                       placeholder="Seleziona o digita una nuova fase..."
                       allowCustom={true}
                       groupBy={user?.role === 'admin' ? 'department' : undefined}
-                      groupLabels={{
-                        ufficio_tecnico: 'Ufficio Tecnico',
-                        produzione: 'Produzione',
-                        acquisti: 'Acquisti',
-                        condivisa: 'Condivisa tra più reparti'
-                      }}
+                      groupLabels={deptNameMap}
                       renderOption={(opt, searchStr) => (
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

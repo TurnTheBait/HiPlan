@@ -14,7 +14,7 @@ I ruoli applicativi sono:
 | `editor` | Creazione e aggiornamento dei dati operativi consentiti |
 | `viewer` | Consultazione e operazioni personali o collaborative autorizzate |
 
-Ogni utente può essere associato a un reparto: **Ufficio Tecnico**, **Produzione**, **Acquisti** oppure **Admin**. Ruolo e reparto sono concetti distinti: il ruolo determina i permessi, il reparto organizza il lavoro.
+Ogni utente può essere associato a un reparto: **Ufficio Tecnico**, **Produzione**, **Acquisti**, **Commerciale** oppure **Admin**. Ruolo e reparto sono concetti distinti: il ruolo determina i permessi, il reparto organizza il lavoro.
 
 Il primo account registrato riceve il ruolo di amministratore. L'installazione corrente crea inoltre un account amministrativo iniziale all'avvio: in produzione è indispensabile sostituirne immediatamente le credenziali predefinite.
 
@@ -27,8 +27,10 @@ Il menu laterale contiene:
 - **Calendario**: vista mensile delle attività.
 - **Blocchi Note**: documenti privati e condivisi.
 - **TODO**: attività personali o assegnate.
-- **Panoramica addetti**: sovrapposizioni e carico delle persone.
 - **Ticket**: richieste e conversazioni operative.
+- **HiPlan AI**: assistente virtuale intelligente per interrogare commesse e dati.
+- **Panoramica addetti**: carico e sovrapposizioni (visibile a tutti).
+- **Rilevatore Conflitti**: analisi proattiva di ritardi e conflitti (visibile agli editor e admin).
 - **Admin**: configurazione riservata agli amministratori.
 
 Nella parte inferiore sono disponibili le notifiche, la scelta del tema, il profilo e il logout. La pagina **Il mio profilo** permette di aggiornare i propri dati e gestire le ferie.
@@ -155,7 +157,7 @@ La campanella nella barra laterale consente di:
 - eliminarne una;
 - eliminare l'intero elenco.
 
-## 8. Calendario, addetti e ferie
+## 8. Calendario, addetti, ferie e intelligenza artificiale
 
 ### Calendario operativo
 
@@ -164,6 +166,14 @@ Il Calendario mostra le fasi sulle giornate del mese. È possibile filtrare per 
 ### Panoramica addetti
 
 Questa sezione identifica le giornate nelle quali la stessa persona risulta impegnata su più attività. Per ogni conflitto vengono mostrate le fasi e le commesse coinvolte.
+
+### Rilevatore Conflitti
+
+Il **Rilevatore Conflitti** (precedentemente *Agent*) è un sistema proattivo che analizza le commesse in background, segnalando automaticamente la mancata consuntivazione delle ore, ritardi rispetto al Gantt, dati mancanti o sovraccarichi critici di lavoro. Consente all'utente di passare rapidamente alla commessa in oggetto per risolvere l'anomalia.
+
+### HiPlan AI
+
+L'applicazione integra **HiPlan AI**, un assistente virtuale potenziato da modelli di Intelligenza Artificiale (Groq). Può rispondere a domande generiche, ma soprattutto è in grado di accedere in tempo reale ai dati di sistema (commesse, task, utenti) fornendo riepiloghi e analisi. Può essere avviato dal menù di esportazione all'interno di una singola commessa per avviare automaticamente un prompt precompilato. Supporta inoltre il salvataggio in cache delle chat e un rendering formattato delle risposte in Markdown.
 
 ### Ferie
 
@@ -218,7 +228,7 @@ Le note possono essere:
 - **private**, visibili al proprietario;
 - **condivise**, accessibili al team autorizzato.
 
-L'editor supporta formattazione visuale, titoli, enfasi, citazioni, codice e checklist. È possibile cercare le note, filtrarle per visibilità e aggiungere allegati.
+L'editor supporta formattazione visuale, titoli, enfasi, citazioni, codice e checklist. Grazie al layout a due colonne introdotto di recente, l'area di scrittura è separata dalla gestione degli allegati (sulla destra). È possibile caricare file trascinandoli ovunque all'interno della pagina (drag and drop) o cercare/filtrare le note in base alla loro visibilità.
 
 Le modifiche vengono salvate sul server; prima di uscire da una nota è comunque opportuno verificare l'indicatore di salvataggio.
 

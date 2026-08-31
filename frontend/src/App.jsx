@@ -15,6 +15,7 @@ import ReplanningAgentPage from './pages/ReplanningAgentPage';
 import ProfilePage from './pages/ProfilePage';
 import TicketsPage from './pages/TicketsPage';
 import TodoPage from './pages/TodoPage';
+import ChatPage from './pages/ChatPage';
 import './index.css';
 import './workspace-restyle.css';
 
@@ -76,6 +77,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route path="/chat" element={<ChatPage />} />
         <Route
           path="/admin"
           element={

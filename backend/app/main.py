@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api import (
     auth, users, projects, tasks, notes, export, 
     notifications, phase_templates, workload, vacations, 
-    tickets, task_collaboration, websockets, settings as api_settings, activity_logs, todos, email_logs, search, replanning
+    tickets, task_collaboration, websockets, settings as api_settings, activity_logs, todos, email_logs, search, replanning, chat
 )
 
 @asynccontextmanager
@@ -274,6 +274,7 @@ app.include_router(todos.router)
 app.include_router(email_logs.router, prefix="/api/admin/email-logs", tags=["Admin"])
 app.include_router(search.router)
 app.include_router(replanning.router)
+app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 
 @app.get("/api/health")
 async def health_check():

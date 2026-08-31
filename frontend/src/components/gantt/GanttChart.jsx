@@ -197,6 +197,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
           if (task.department === 'ufficio_tecnico') { color = '#3b82f6'; label = 'Ufficio Tecnico'; }
           else if (task.department === 'produzione') { color = '#10b981'; label = 'Produzione'; }
           else if (task.department === 'acquisti') { color = '#f59e0b'; label = 'Acquisti'; }
+          else if (task.department === 'commerciale') { color = '#ec4899'; label = 'Commerciale'; }
           return `<div style="display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:10px; font-size:11px; font-weight:600; background-color:${color}18; color:${color}; border:1px solid ${color}44; line-height:normal; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; vertical-align:middle;">${label}</div>`;
         }
       },
@@ -583,6 +584,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
           if (task.department === 'ufficio_tecnico') { color = '#3b82f6'; label = 'Ufficio Tecnico'; }
           else if (task.department === 'produzione') { color = '#10b981'; label = 'Produzione'; }
           else if (task.department === 'acquisti') { color = '#f59e0b'; label = 'Acquisti'; }
+          else if (task.department === 'commerciale') { color = '#ec4899'; label = 'Commerciale'; }
           return `<div style="display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:10px; font-size:11px; font-weight:600; background-color:${color}18; color:${color}; border:1px solid ${color}44; line-height:normal; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; vertical-align:middle;">${label}</div>`;
         }
       },

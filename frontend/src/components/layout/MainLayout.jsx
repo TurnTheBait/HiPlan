@@ -70,6 +70,12 @@ function AppIcon({ name, size = 19 }) {
         <path d="M2.5 10h19" />
       </>
     ),
+    alert: (
+      <>
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+        <path d="M12 9v4M12 17h.01" />
+      </>
+    ),
     calendar: (
       <>
         <rect x="3" y="5" width="18" height="16" rx="3" />
@@ -147,6 +153,9 @@ function AppIcon({ name, size = 19 }) {
         <line x1="16" y1="16" x2="16.01" y2="16" />
       </>
     ),
+    messageSquare: (
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    ),
   };
 
   return <svg {...commonProps}>{icons[name]}</svg>;
@@ -157,7 +166,7 @@ export default function MainLayout() {
   const { theme, cycleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('hiplan-sidebar-collapsed') === 'true');
+  const [collapsed, setCollapsed] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [agentSuggestionsCount, setAgentSuggestionsCount] = useState(0);
@@ -277,10 +286,11 @@ export default function MainLayout() {
       '/notes': { title: 'Blocchi Note', subtitle: 'Appunti e documenti condivisi' },
       '/todo': { title: 'TODO', subtitle: 'Priorità personali e di team' },
       '/conflicts': { title: 'Panoramica addetti', subtitle: 'Carichi e sovrapposizioni' },
-      '/replanning': { title: 'Agent', subtitle: 'Analisi e conflitti' },
+      '/replanning': { title: 'Rilevatore Conflitti', subtitle: 'Analisi e conflitti' },
       '/tickets': { title: 'Ticket', subtitle: 'Richieste e supporto operativo' },
       '/admin': { title: 'Amministrazione', subtitle: 'Utenti e configurazione' },
       '/me': { title: 'Il mio profilo', subtitle: 'Profilo, reparto e ferie' },
+      '/chat': { title: 'HiPlan AI', subtitle: 'Assistente Virtuale' },
     }[location.pathname] || { title: 'HiPlan', subtitle: 'Workspace operativo' };
 
   useEffect(() => {
@@ -289,11 +299,7 @@ export default function MainLayout() {
     document.querySelectorAll('.gantt_tooltip').forEach(t => t.remove());
   }, [location.pathname]);
 
-  function toggleSidebar() {
-    const next = !collapsed;
-    setCollapsed(next);
-    localStorage.setItem('hiplan-sidebar-collapsed', String(next));
-  }
+
 
   return (
     <div className={`app-layout ${collapsed ? 'sidebar-collapsed' : ''} ${mobileOpen ? 'sidebar-mobile-open' : ''}`}>
@@ -303,7 +309,7 @@ export default function MainLayout() {
         aria-label="Chiudi menu"
         onClick={() => setMobileOpen(false)}
       />
-      <aside className="sidebar">
+      <aside className="sidebar" onMouseEnter={() => setCollapsed(false)} onMouseLeave={() => setCollapsed(true)}>
         <div className="sidebar-header">
           <div
             className="sidebar-logo"
@@ -322,13 +328,10 @@ export default function MainLayout() {
               </div>
             )}
           </div>
-          <button className="sidebar-toggle" onClick={toggleSidebar} title={collapsed ? 'Espandi' : 'Comprimi'} aria-label={collapsed ? 'Espandi menu' : 'Comprimi menu'}>
-            <AppIcon name={collapsed ? 'chevronRight' : 'chevronLeft'} size={17} />
-          </button>
+
         </div>
 
         <nav className="sidebar-nav">
-          <span className="sidebar-section-label">Workspace</span>
           <NavLink to="/dashboard" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon"><AppIcon name="dashboard" /></span>
             {showSidebarText && <span>Dashboard</span>}
@@ -341,7 +344,6 @@ export default function MainLayout() {
             <span className="sidebar-link-icon"><AppIcon name="calendar" /></span>
             {showSidebarText && <span>Calendario</span>}
           </NavLink>
-          <span className="sidebar-section-label">Collaborazione</span>
           <NavLink to="/notes" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon"><AppIcon name="notes" /></span>
             {showSidebarText && <span>Blocchi Note</span>}
@@ -354,15 +356,18 @@ export default function MainLayout() {
             <span className="sidebar-link-icon"><AppIcon name="ticket" /></span>
             {showSidebarText && <span>Ticket</span>}
           </NavLink>
-          <span className="sidebar-section-label">Controllo</span>
+          <NavLink to="/chat" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon"><AppIcon name="robot" /></span>
+            {showSidebarText && <span>HiPlan AI</span>}
+          </NavLink>
           <NavLink to="/conflicts" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon"><AppIcon name="users" /></span>
             {showSidebarText && <span>Panoramica addetti</span>}
           </NavLink>
           {user?.role !== 'viewer' && (
             <NavLink to="/replanning" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-              <span className="sidebar-link-icon"><AppIcon name="robot" /></span>
-              {showSidebarText && <span>Agent</span>}
+              <span className="sidebar-link-icon"><AppIcon name="alert" /></span>
+              {showSidebarText && <span>Rilevatore Conflitti</span>}
               {agentSuggestionsCount > 0 && (
                 <span className="sidebar-badge">
                   {agentSuggestionsCount}
@@ -376,7 +381,6 @@ export default function MainLayout() {
               {showSidebarText && <span>Admin</span>}
             </NavLink>
           )}
-          <span className="sidebar-section-label">Software Esterni</span>
           <a href="http://192.168.2.13/accounts/login/" target="_blank" rel="noopener noreferrer" className="sidebar-link">
             <span className="sidebar-link-icon"><AppIcon name="externalLink" /></span>
             {showSidebarText && <span>HiGest</span>}

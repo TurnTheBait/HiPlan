@@ -879,94 +879,107 @@ export default function NotesPage() {
               </div>
             </div>
 
-            {/* AREA SCROLLABILE: FORMATTING BAR + TITOLO + CONTENUTO + ALLEGATI */}
-            <div className="notes-editor-scroll">
-              {/* TOOLBAR DI FORMATTAZIONE STYLE NOTION */}
-              <div className="notion-formatting-bar">
-                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('normal')} title="Testo normale (P)">P Normale</button>
-                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('h1')} title="Titolo grande (H1)">H1 Titolo</button>
-                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('h2')} title="Sottotitolo (H2)">H2 Sottotitolo</button>
-                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('bold')} title="Grassetto"><strong>B</strong> Grassetto</button>
-                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('italic')} title="Corsivo"><em>I</em> Corsivo</button>
-                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('bullet')} title="Elenco puntato">• Elenco</button>
-                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('todo')} title="Check-list interattiva"><AppIcon name="check" size={14} /> Check-list [ ]</button>
-                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('quote')} title="Citazione">❝ Citazione</button>
-                <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('code')} title="Blocco Codice">⟨/⟩ Codice</button>
-              </div>
-
-              {/* CAMPO TITOLO */}
-              <input
-                type="text"
-                className="note-title-input"
-                value={title}
-                onChange={handleTitleChange}
-                placeholder="Titolo del Blocco Note..."
-              />
-
-              {/* AREA TESTO VISUALE WYSIWYG CENTRALE */}
-              <div
-                ref={editorRef}
-                contentEditable
-                className="note-content-area"
-                onInput={handleEditorInput}
-                onClick={handleEditorClick}
-                onKeyDown={handleEditorKeyDown}
-                placeholder="Scrivi qui i tuoi appunti in stile Notion... Usa i pulsanti sopra per formattare con titoli, check-list e citazioni."
-                suppressContentEditableWarning
-              />
-
-              {/* ALLEGATI DELLA NOTA */}
-              {activeNote && (
-                <div
-                  style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border-default)', paddingBottom: 16 }}
-                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                  onDrop={handleDropAttachment}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <h4 style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)' }}>Allegati</h4>
-                    <div>
-                      <input
-                        type="file"
-                        id="note-attachment-upload"
-                        multiple
-                        style={{ display: 'none' }}
-                        onChange={handleUploadAttachment}
-                      />
-                      <label htmlFor="note-attachment-upload" className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
-                        + Aggiungi File
-                      </label>
-                    </div>
+            {/* AREA SCROLLABILE CON SUPPORTO DRAG & DROP GLOBALE */}
+            <div 
+              className="notes-editor-scroll"
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onDrop={handleDropAttachment}
+            >
+              <div style={{ display: 'flex', gap: '32px', minHeight: '100%' }}>
+                
+                {/* COLONNA SINISTRA: EDITOR TESTUALE */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                  {/* TOOLBAR DI FORMATTAZIONE STYLE NOTION */}
+                  <div className="notion-formatting-bar">
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('normal')} title="Testo normale (P)">P Normale</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('h1')} title="Titolo grande (H1)">H1 Titolo</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('h2')} title="Sottotitolo (H2)">H2 Sottotitolo</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('bold')} title="Grassetto"><strong>B</strong> Grassetto</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('italic')} title="Corsivo"><em>I</em> Corsivo</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('bullet')} title="Elenco puntato">• Elenco</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('todo')} title="Check-list interattiva"><AppIcon name="check" size={14} /> Check-list [ ]</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('quote')} title="Citazione">❝ Citazione</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('code')} title="Blocco Codice">⟨/⟩ Codice</button>
                   </div>
 
-                  {Array.isArray(activeNote.attachments) && activeNote.attachments.length > 0 ? (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      {activeNote.attachments.map((att, idx) => (
-                        <div key={idx} style={{
-                          display: 'flex', alignItems: 'center', gap: 8,
-                          padding: '4px 12px', background: 'var(--bg-secondary)',
-                          border: '1px solid var(--border-subtle)', borderRadius: 16, fontSize: 13
-                        }}>
-                          <a className="inline-detail-row" href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-500)', textDecoration: 'none' }}>
-                            <AppIcon name="paperclip" size={13} />{att.name}
-                          </a>
-                          <button
-                            onClick={() => handleDeleteAttachment(att.name)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: 0, fontSize: 14 }}
-                            title="Elimina allegato"
-                            aria-label="Elimina allegato"
-                          >
-                            <AppIcon name="close" size={13} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                      Nessun allegato presente
-                    </div>
-                  )}
+                  {/* CAMPO TITOLO */}
+                  <input
+                    type="text"
+                    className="note-title-input"
+                    value={title}
+                    onChange={handleTitleChange}
+                    placeholder="Titolo del Blocco Note..."
+                  />
+
+                  {/* AREA TESTO VISUALE WYSIWYG CENTRALE */}
+                  <div
+                    ref={editorRef}
+                    contentEditable
+                    className="note-content-area"
+                    onInput={handleEditorInput}
+                    onClick={handleEditorClick}
+                    onKeyDown={handleEditorKeyDown}
+                    placeholder="Scrivi qui i tuoi appunti in stile Notion... Usa i pulsanti sopra per formattare con titoli, check-list e citazioni."
+                    suppressContentEditableWarning
+                  />
                 </div>
-              )}
+
+                {/* COLONNA DESTRA: ALLEGATI */}
+                {activeNote && (
+                  <div style={{ width: '280px', flexShrink: 0, borderLeft: '1px solid var(--border-default)', paddingLeft: '24px', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                      <h4 style={{ margin: 0, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
+                        Allegati
+                      </h4>
+                      <div>
+                        <input
+                          type="file"
+                          id="note-attachment-upload"
+                          multiple
+                          style={{ display: 'none' }}
+                          onChange={handleUploadAttachment}
+                        />
+                        <label htmlFor="note-attachment-upload" className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', padding: '4px 8px', fontSize: '0.75rem' }}>
+                          + Aggiungi
+                        </label>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 16 }}>
+                      Puoi anche trascinare i file ovunque in questa pagina per allegarli.
+                    </div>
+
+                    {Array.isArray(activeNote.attachments) && activeNote.attachments.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {activeNote.attachments.map((att, idx) => (
+                          <div key={idx} style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '8px 12px', background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-subtle)', borderRadius: '8px', fontSize: '0.8rem'
+                          }}>
+                            <a className="inline-detail-row" href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-500)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '8px' }} title={att.name}>
+                              <AppIcon name="paperclip" size={13} style={{ flexShrink: 0 }} />
+                              <span style={{ marginLeft: 4 }}>{att.name}</span>
+                            </a>
+                            <button
+                              onClick={() => handleDeleteAttachment(att.name)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: '2px', fontSize: 14, flexShrink: 0 }}
+                              title="Elimina allegato"
+                              aria-label="Elimina allegato"
+                            >
+                              <AppIcon name="close" size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic', background: 'var(--bg-tertiary)', padding: '16px', borderRadius: '8px', textAlign: 'center', border: '1px dashed var(--border-subtle)' }}>
+                        Nessun allegato presente
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </>
         )}

@@ -125,12 +125,6 @@ const paths = {
       <path d="M8 9h2M14 9h2M8 13h2M14 13h2M8 17h2M14 17h2M3 21h18" />
     </>
   ),
-  alert: (
-    <>
-      <path d="M12 3 2.5 20h19Z" />
-      <path d="M12 9v5M12 17h.01" />
-    </>
-  ),
   gantt: (
     <>
       <path d="M4 5v14M4 19h17" />

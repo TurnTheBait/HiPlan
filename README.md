@@ -13,7 +13,7 @@ Il progetto usa un backend asincrono **FastAPI + SQLAlchemy** e una SPA **React 
 - Diagramma di Gantt interattivo basato su DHTMLX Gantt.
 - Dipendenze tra fasi `FS`, `SS`, `FF` e `SF`, con eventuale ritardo (`lag`).
 - Modalità di calcolo basate su date, giorni lavorativi e budget ore.
-- Template di fase predefiniti per Ufficio Tecnico, Produzione e Acquisti.
+- Template di fase predefiniti per Ufficio Tecnico, Produzione, Acquisti e Commerciale.
 - Checklist, commenti, menzioni e notifiche contestuali alla singola fase.
 - Allegati e note di commessa.
 - Registro attività delle modifiche rilevanti.
@@ -32,7 +32,9 @@ Il progetto usa un backend asincrono **FastAPI + SQLAlchemy** e una SPA **React 
 
 - TODO personali o assegnati, con scadenza, promemoria, allegati e notifiche email opzionali.
 - Ticket collegabili a una commessa, con responsabile, assegnatari, priorità, stati, conversazione e allegati.
-- Blocchi note privati o condivisi con editor visuale e allegati.
+- Blocchi note privati o condivisi con editor visuale, layout a due colonne e drag-and-drop per gli allegati.
+- **HiPlan AI**: assistente virtuale basato su LLM (Groq) in grado di analizzare i dati delle commesse e rispondere a domande di contesto.
+- **Rilevatore Conflitti**: sistema proattivo in background che individua ritardi, mancate consuntivazioni e anomalie.
 - Notifiche in-app e aggiornamenti in tempo reale tramite WebSocket.
 - Tema chiaro, scuro o sincronizzato con il sistema.
 
