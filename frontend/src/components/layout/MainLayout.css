@@ -352,8 +352,8 @@
 /* Main workspace and top bar */
 .main-content {
   display: flex;
-  width: calc(100vw - var(--sidebar-width));
-  max-width: calc(100vw - var(--sidebar-width));
+  width: calc(100% - var(--sidebar-width));
+  max-width: calc(100% - var(--sidebar-width));
   height: 100vh;
   min-width: 0;
   flex: 1;
@@ -364,8 +364,8 @@
 }
 
 .sidebar-collapsed .main-content {
-  width: calc(100vw - var(--sidebar-collapsed));
-  max-width: calc(100vw - var(--sidebar-collapsed));
+  width: calc(100% - var(--sidebar-collapsed));
+  max-width: calc(100% - var(--sidebar-collapsed));
   margin-left: var(--sidebar-collapsed);
 }
 

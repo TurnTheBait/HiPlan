@@ -156,6 +156,14 @@ function AppIcon({ name, size = 19 }) {
     messageSquare: (
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     ),
+    timeline: (
+      <>
+        <path d="M4 6h16M4 12h16M4 18h16" />
+        <circle cx="8" cy="6" r="2" fill="currentColor" stroke="none" />
+        <circle cx="15" cy="12" r="2" fill="currentColor" stroke="none" />
+        <circle cx="11" cy="18" r="2" fill="currentColor" stroke="none" />
+      </>
+    ),
   };
 
   return <svg {...commonProps}>{icons[name]}</svg>;
@@ -289,7 +297,8 @@ export default function MainLayout() {
     : {
       '/dashboard': { title: 'Dashboard', subtitle: 'Il tuo spazio di lavoro' },
       '/projects': { title: 'Commesse', subtitle: 'Pianificazione e avanzamento' },
-      '/calendar': { title: 'Calendario', subtitle: 'Attività e disponibilità' },
+      '/calendar': { title: 'Calendario Commesse', subtitle: 'Attività e disponibilità' },
+      '/personal-calendar': { title: 'Calendario personale', subtitle: 'I tuoi impegni e attività assegnate' },
       '/notes': { title: 'Blocchi Note', subtitle: 'Appunti e documenti condivisi' },
       '/todo': { title: 'TODO', subtitle: 'Priorità personali e di team' },
       '/conflicts': { title: 'Panoramica addetti', subtitle: 'Carichi e sovrapposizioni' },
@@ -356,8 +365,12 @@ export default function MainLayout() {
             {showSidebarText && <span>Commesse</span>}
           </NavLink>
           <NavLink to="/calendar" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon"><AppIcon name="timeline" /></span>
+            {showSidebarText && <span>Calendario Commesse</span>}
+          </NavLink>
+          <NavLink to="/personal-calendar" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon"><AppIcon name="calendar" /></span>
-            {showSidebarText && <span>Calendario</span>}
+            {showSidebarText && <span>Calendario Personale</span>}
           </NavLink>
           <span className="sidebar-section-label">Collaborazione</span>
           <NavLink to="/notes" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>

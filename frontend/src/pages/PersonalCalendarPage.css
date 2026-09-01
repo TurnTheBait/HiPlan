@@ -1,0 +1,154 @@
+.personal-calendar-page {
+  padding: 0px 24px 24px 24px;
+  max-width: 1400px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 auto;
+  height: calc(100vh - 100px);
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+.calendar-wrapper {
+  flex: 1;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* Override FullCalendar variables */
+.fc-theme-standard {
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: var(--bg-tertiary);
+  --fc-neutral-text-color: var(--text-secondary);
+  --fc-border-color: var(--border-subtle);
+
+  --fc-button-text-color: var(--text-primary);
+  --fc-button-bg-color: var(--bg-primary);
+  --fc-button-border-color: var(--border-default);
+  --fc-button-hover-bg-color: var(--bg-tertiary);
+  --fc-button-hover-border-color: var(--border-default);
+  --fc-button-active-bg-color: var(--accent-500);
+  --fc-button-active-border-color: var(--accent-500);
+  --fc-button-active-text-color: #fff;
+
+  --fc-event-bg-color: var(--accent-500);
+  --fc-event-border-color: var(--accent-500);
+  --fc-event-text-color: #fff;
+
+  --fc-today-bg-color: rgba(99, 102, 241, 0.08);
+  /* accent-500 with low opacity */
+}
+
+/* Event container override for sleek look */
+.fc-event {
+  border-radius: 4px;
+  border: none;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 2px 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+  cursor: pointer;
+}
+
+.fc-event:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.fc-daygrid-event-dot {
+  display: none;
+}
+
+.fc-timegrid-event {
+  border-radius: 4px;
+}
+
+.fc-toolbar-title {
+  font-size: 1.25rem !important;
+  font-weight: 700 !important;
+  color: var(--text-primary);
+}
+
+.fc-col-header-cell-cushion {
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  padding: 8px 4px;
+}
+
+/* Weekend red text in header */
+.fc-col-header-cell.fc-day-sat .fc-col-header-cell-cushion,
+.fc-col-header-cell.fc-day-sun .fc-col-header-cell-cushion {
+  color: #ef4444;
+}
+
+.fc-daygrid-day-number {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Custom Header / Filters */
+.calendar-filters-section {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.filter-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.filter-chip input[type="checkbox"] {
+  display: none;
+}
+
+.filter-chip:hover {
+  border-color: var(--border-hover);
+}
+
+.filter-chip.active {
+  background: color-mix(in srgb, var(--chip-color) 15%, transparent);
+  border-color: var(--chip-color);
+  color: var(--chip-color);
+}
+
+.filter-chip::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--chip-color);
+  opacity: 0.4;
+  transition: opacity 0.2s;
+}
+
+.filter-chip.active::before {
+  opacity: 1;
+}
+
+/* Modale */
+.calendar-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}

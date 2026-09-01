@@ -43,7 +43,9 @@ export default function CalendarPage() {
   const [currMonth, setCurrMonth] = useState(today.getMonth()); // 0-11
 
   // Controlli e filtri
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'timeline'
+  const [viewMode, setViewMode] = useState(() => {
+    return localStorage.getItem('hiplan-commesse-cal-view') || 'timeline';
+  });
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterWorker, setFilterWorker] = useState('all');
   const [filterDepartment, setFilterDepartment] = useState('all');
@@ -373,14 +375,20 @@ export default function CalendarPage() {
             <div className="calendar-view-toggle">
               <button
                 className={`calendar-view-btn ${viewMode === 'grid' ? 'active' : ''}`}
-                onClick={() => setViewMode('grid')}
+                onClick={() => {
+                  setViewMode('grid');
+                  localStorage.setItem('hiplan-commesse-cal-view', 'grid');
+                }}
               >
                 <AppIcon name="grid" size={15} />
                 Griglia mese
               </button>
               <button
                 className={`calendar-view-btn ${viewMode === 'timeline' ? 'active' : ''}`}
-                onClick={() => setViewMode('timeline')}
+                onClick={() => {
+                  setViewMode('timeline');
+                  localStorage.setItem('hiplan-commesse-cal-view', 'timeline');
+                }}
               >
                 <AppIcon name="timeline" size={15} />
                 Timeline
