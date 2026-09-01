@@ -114,10 +114,10 @@ export default function ProjectDetailPage() {
     return false;
   }, [user, project]);
 
-  // STATO PER COLONNE GANTT (leggiamo dal localStorage)
+  // STATO PER COLONNE GANTT (default: 'Attività' e 'Addetti')
   const [visibleColumns, setVisibleColumns] = useState(() => {
-    const saved = localStorage.getItem('ganttVisibleColumns');
-    return saved ? JSON.parse(saved) : ['start_date', 'end_date', 'event_date', 'duration', 'workers', 'department'];
+    const saved = localStorage.getItem('ganttVisibleColumns_v2');
+    return saved ? JSON.parse(saved) : ['workers'];
   });
   const [showColumnsMenu, setShowColumnsMenu] = useState(false);
 
@@ -1852,7 +1852,7 @@ export default function ProjectDetailPage() {
                             ? [...visibleColumns, col.id]
                             : visibleColumns.filter(c => c !== col.id);
                           setVisibleColumns(newCols);
-                          localStorage.setItem('ganttVisibleColumns', JSON.stringify(newCols));
+                          localStorage.setItem('ganttVisibleColumns_v2', JSON.stringify(newCols));
                         }}
                       />
                       {col.label}
@@ -3110,7 +3110,11 @@ export default function ProjectDetailPage() {
                           return (
                             <div
                               key={d.value}
-                              onClick={() => setTaskForm({ ...taskForm, department: d.value })}
+                              onClick={() => setTaskForm(prev => ({
+                                ...prev,
+                                department: d.value,
+                                color: d.color || prev.color || '#3b82f6'
+                              }))}
                               style={{
                                 padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer',
                                 background: isSelected ? (d.color + '22') : 'var(--bg-primary)',
@@ -3262,13 +3266,68 @@ export default function ProjectDetailPage() {
                   const isOverBudget = !isMilestone && roundedAssigned > roundedBudget;
 
                   return (
-                    <div className="modal-footer" style={{ padding: '16px 24px 16px', borderTop: '1px solid var(--border-default)', background: 'var(--bg-secondary)', margin: 0, flexShrink: 0 }}>
-                      <button type="button" className="btn btn-secondary" onClick={() => setShowTaskModal(false)}>
-                        Annulla
-                      </button>
-                      <button type="submit" className="btn btn-primary" disabled={isOverBudget}>
-                        {editingTask ? 'Salva Modifiche' : 'Aggiungi Fase'}
-                      </button>
+                    <div className="modal-footer" style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '16px 24px',
+                      borderTop: '1px solid var(--border-default)',
+                      background: 'var(--bg-secondary)',
+                      margin: 0,
+                      flexShrink: 0
+                    }}>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                        {editingTask && (user?.role === 'admin' || user?.role === 'editor') && (
+                          <>
+                            <button
+                              type="button"
+                              className="btn btn-danger"
+                              onClick={async () => {
+                                setShowTaskModal(false);
+                                await handleTaskDelete(editingTask.id);
+                              }}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                              title={isMilestone ? "Elimina milestone" : "Elimina fase"}
+                            >
+                              <AppIcon name="trash" size={15} />
+                              <span>{isMilestone ? 'Elimina Milestone' : 'Elimina Fase'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              className="btn"
+                              onClick={async () => {
+                                const success = await handleToggleTaskCompleted(editingTask, isTaskCompleted(editingTask));
+                                if (success) {
+                                  setShowTaskModal(false);
+                                }
+                              }}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                background: isTaskCompleted(editingTask) ? 'var(--bg-tertiary)' : '#10b981',
+                                color: isTaskCompleted(editingTask) ? 'var(--text-primary)' : '#ffffff',
+                                border: isTaskCompleted(editingTask) ? '1px solid var(--border-default)' : '1px solid #059669',
+                                fontWeight: 600
+                              }}
+                              title={isTaskCompleted(editingTask) ? "Riapri fase (segna in corso)" : "Segna come completata"}
+                            >
+                              <AppIcon name={isTaskCompleted(editingTask) ? "undo" : "check"} size={15} />
+                              <span>{isTaskCompleted(editingTask) ? 'Riapri Fase' : (isMilestone ? 'Completa Milestone' : 'Completa Fase')}</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                        <button type="button" className="btn btn-secondary" onClick={() => setShowTaskModal(false)}>
+                          Annulla
+                        </button>
+                        <button type="submit" className="btn btn-primary" disabled={isOverBudget}>
+                          {editingTask ? 'Salva Modifiche' : 'Aggiungi Fase'}
+                        </button>
+                      </div>
                     </div>
                   );
                 })()}

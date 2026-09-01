@@ -1125,18 +1125,19 @@ export default function AdminPage() {
         <div className="modal-overlay animate-fadeIn">
           <div className="modal" style={{ maxWidth: 850, width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-xl)', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{editingTemplate ? 'Modifica Fase Preimpostata' : 'Nuova Fase Preimpostata'}</h2>
+              <h2 style={{ fontSize: '1.4rem' }}>{editingTemplate ? 'Modifica Fase Preimpostata' : 'Nuova Fase Preimpostata'}</h2>
               <button className="btn-ghost btn-icon" type="button" onClick={() => setShowAddTemplateModal(false)} aria-label="Chiudi">
                 <AppIcon name="close" />
               </button>
             </div>
             <form onSubmit={handleSaveTemplate}>
-              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                 <div style={{ display: 'flex', gap: 16 }}>
                   <div className="input-group" style={{ flex: 1.6, minWidth: 0 }}>
-                    <label>Nome Fase di Lavorazione *</label>
+                    <label style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 6 }}>Nome Fase di Lavorazione *</label>
                     <input
                       className="input"
+                      style={{ fontSize: '0.95rem', height: 42 }}
                       value={templateForm.name}
                       onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
                       required
@@ -1145,11 +1146,19 @@ export default function AdminPage() {
                   </div>
 
                   <div className="input-group" style={{ flex: 1.2, minWidth: 0 }}>
-                    <label>Reparto di Assegnazione *</label>
+                    <label style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 6 }}>Reparto di Assegnazione *</label>
                     <select
                       className="input"
+                      style={{ fontSize: '0.95rem', height: 42 }}
                       value={templateForm.department}
-                      onChange={(e) => setTemplateForm({ ...templateForm, department: e.target.value })}
+                      onChange={(e) => {
+                        const newDept = e.target.value;
+                        setTemplateForm(prev => ({
+                          ...prev,
+                          department: newDept,
+                          default_color: DEPT_COLORS[newDept] || prev.default_color || '#3b82f6'
+                        }));
+                      }}
                     >
                       <option value="ufficio_tecnico">Ufficio Tecnico</option>
                       <option value="produzione">Produzione</option>
@@ -1159,14 +1168,15 @@ export default function AdminPage() {
                     </select>
                   </div>
                 </div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: -8, display: 'block' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: -10, display: 'block' }}>
                   Questa fase comparirà nel menu a tendina di tutti gli addetti del reparto selezionato.
                 </span>
 
                 <div className="input-group">
-                  <label>Modalità calcolo budget e pianificazione date:</label>
+                  <label style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 6 }}>Modalità calcolo budget e pianificazione date:</label>
                   <select
                     className="input"
+                    style={{ fontSize: '0.95rem', height: 42 }}
                     value={templateForm.default_budget_mode || 'start_days'}
                     onChange={(e) => {
                       const newMode = e.target.value;
@@ -1197,12 +1207,13 @@ export default function AdminPage() {
 
                 <div style={{ display: 'flex', gap: 16 }}>
                   <div className="input-group" style={{ flex: 1 }}>
-                    <label>Giorni Lavorativi Previsti</label>
+                    <label style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 6 }}>Giorni Lavorativi Previsti</label>
                     <input
                       type="number"
                       step="1"
                       min="0"
                       className="input"
+                      style={{ fontSize: '0.95rem', height: 42 }}
                       value={templateForm.default_days}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -1218,12 +1229,13 @@ export default function AdminPage() {
                     />
                   </div>
                   <div className="input-group" style={{ flex: 1 }}>
-                    <label>Ore Previste</label>
+                    <label style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 6 }}>Ore Previste</label>
                     <input
                       type="number"
                       step="0.5"
                       min="0"
                       className="input"
+                      style={{ fontSize: '0.95rem', height: 42 }}
                       value={templateForm.default_hours}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -1239,31 +1251,31 @@ export default function AdminPage() {
                     />
                   </div>
                   <div className="input-group" style={{ flex: 1 }}>
-                    <label>Colore sul Gantt</label>
+                    <label style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 6 }}>Colore sul Gantt</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
                       <input
                         type="color"
                         value={templateForm.default_color || '#3b82f6'}
                         onChange={(e) => setTemplateForm({ ...templateForm, default_color: e.target.value })}
-                        style={{ width: 44, height: 38, padding: 2, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--bg-tertiary)' }}
+                        style={{ width: 44, height: 42, padding: 2, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--bg-tertiary)' }}
                       />
                       <input
                         type="text"
                         className="input"
                         value={templateForm.default_color || '#3b82f6'}
                         onChange={(e) => setTemplateForm({ ...templateForm, default_color: e.target.value })}
-                        style={{ width: 110, fontFamily: 'monospace' }}
+                        style={{ width: 110, height: 42, fontSize: '0.95rem', fontFamily: 'monospace' }}
                         placeholder="#3b82f6"
                       />
                     </div>
                   </div>
                 </div>
               </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddTemplateModal(false)}>
+              <div className="modal-footer" style={{ marginTop: 20 }}>
+                <button type="button" className="btn btn-secondary" style={{ fontSize: '0.95rem', padding: '10px 22px' }} onClick={() => setShowAddTemplateModal(false)}>
                   Annulla
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="btn btn-primary" style={{ fontSize: '0.95rem', padding: '10px 22px' }}>
                   {editingTemplate ? 'Salva Modifiche' : 'Aggiungi Fase'}
                 </button>
               </div>
