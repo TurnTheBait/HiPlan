@@ -207,6 +207,65 @@ export default function ChatPage() {
           border-color: var(--accent-500);
           box-shadow: 0 4px 20px var(--accent-glow);
         }
+        .chat-markdown {
+          color: inherit;
+          max-width: 100%;
+          font-size: 0.95rem;
+          line-height: 1.6;
+        }
+        .chat-markdown p {
+          margin: 0 0 0.6rem 0;
+        }
+        .chat-markdown p:last-child {
+          margin-bottom: 0;
+        }
+        .chat-markdown h1, .chat-markdown h2, .chat-markdown h3, .chat-markdown h4 {
+          margin: 0.8rem 0 0.4rem 0;
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+        .chat-markdown h1:first-child, .chat-markdown h2:first-child, .chat-markdown h3:first-child, .chat-markdown h4:first-child {
+          margin-top: 0;
+        }
+        .chat-markdown ul, .chat-markdown ol {
+          margin: 0 0 0.6rem 0;
+          padding-left: 1.3rem;
+        }
+        .chat-markdown li {
+          margin-bottom: 0.35rem;
+          line-height: 1.5;
+        }
+        .chat-markdown li:last-child {
+          margin-bottom: 0;
+        }
+        .chat-markdown li > p {
+          margin: 0 0 0.25rem 0;
+        }
+        .chat-markdown li > ul, .chat-markdown li > ol {
+          margin-top: 0.25rem;
+          margin-bottom: 0.35rem;
+          padding-left: 1.2rem;
+        }
+        .chat-markdown strong {
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+        .chat-markdown code {
+          background: rgba(0,0,0,0.06);
+          padding: 2px 5px;
+          border-radius: 4px;
+          font-size: 0.85em;
+          font-family: monospace;
+        }
+        .dark .chat-markdown code {
+          background: rgba(255,255,255,0.1);
+        }
+        .chat-markdown blockquote {
+          border-left: 3px solid var(--accent-500);
+          margin: 0.6rem 0;
+          padding-left: 0.75rem;
+          color: var(--text-secondary);
+        }
         .chat-send-btn {
           width: 44px;
           height: 44px;
@@ -286,15 +345,13 @@ export default function ChatPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '0' }}>
                 <div className={msg.sender === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}>
                   {msg.sender === 'ai' ? (
-                    <div className="prose prose-sm dark:prose-invert" style={{ color: 'inherit', maxWidth: '100%' }}>
+                    <div className="chat-markdown">
                       <ReactMarkdown 
                         remarkPlugins={[remarkGfm]}
                         components={{
-                          table: ({node, ...props}) => <div style={{ overflowX: 'auto', marginBottom: '1rem' }}><table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.9rem' }} {...props} /></div>,
-                          th: ({node, ...props}) => <th style={{ border: '1px solid var(--border-subtle)', padding: '8px 12px', backgroundColor: 'rgba(0,0,0,0.04)', textAlign: 'left', fontWeight: '600' }} {...props} />,
-                          td: ({node, ...props}) => <td style={{ border: '1px solid var(--border-subtle)', padding: '8px 12px' }} {...props} />,
-                          p: ({node, ...props}) => <p style={{ margin: '0 0 0.75rem 0' }} {...props} />,
-                          ul: ({node, ...props}) => <ul style={{ margin: '0 0 0.75rem 0', paddingLeft: '1.5rem' }} {...props} />
+                          table: ({node, ...props}) => <div style={{ overflowX: 'auto', margin: '0.6rem 0 1rem 0' }}><table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.88rem' }} {...props} /></div>,
+                          th: ({node, ...props}) => <th style={{ border: '1px solid var(--border-subtle)', padding: '6px 10px', backgroundColor: 'rgba(0,0,0,0.04)', textAlign: 'left', fontWeight: '600' }} {...props} />,
+                          td: ({node, ...props}) => <td style={{ border: '1px solid var(--border-subtle)', padding: '6px 10px' }} {...props} />,
                         }}
                       >
                         {msg.text}

@@ -25,5 +25,5 @@ async def ask_chatbot(
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="Il messaggio non può essere vuoto.")
         
-    answer = await chat_service.get_response(request.message)
+    answer = await chat_service.get_response(request.message, current_user=current_user)
     return ChatResponse(response=answer)
