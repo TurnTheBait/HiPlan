@@ -54,7 +54,7 @@ class ChatService:
             inspector = inspect(self.engine)
             existing_tables = set(inspector.get_table_names())
             
-            to_ignore = ["activity_logs", "agent_logs", "email_logs", "replan_logs", "planning_runs"]
+            to_ignore = ["activity_logs", "agent_logs", "email_logs", "replan_logs", "planning_runs", "notes"]
             ignore_existing = [t for t in to_ignore if t in existing_tables]
 
             self._db = SQLDatabase(
@@ -74,7 +74,7 @@ class ChatService:
             
             def clean_sql(query_str: str) -> str:
                 # Estrae solo il codice SQL evitando testo allucinato o prefissi (es. "SQL Query:", "SQLQuery:")
-                q = str(query_str).strip()
+                q = query_str.strip()
                 if "```sql" in q:
                     q = q.split("```sql")[1].split("```")[0]
                 elif "```" in q:
@@ -195,7 +195,7 @@ class ChatService:
                 "  * Addetti assegnati alla fase: 'workers' (lista JSON di nomi/utenti) e 'worker_hours' (dict JSON {nome: ore})\n"
                 "  * Stato/Avanzamento: 'progress' (0.0 - 1.0), 'completed' (1=completato, 0=in corso)\n"
                 "  * Reparto: 'department'\n"
-                "- ALTRE TABELLE: 'users' (utenti/addetti), 'todos' (cose da fare), 'tickets' (ticket/segnalazioni), 'vacations' (ferie/assenze), 'notes' (note/appunti).\n"
+                "- ALTRE TABELLE: 'users' (utenti/addetti), 'todos' (cose da fare), 'tickets' (ticket/segnalazioni), 'vacations' (ferie/assenze).\n"
                 "- REGOLA DI RICERCA FLESSIBILE (MOLTO IMPORTANTE):\n"
                 "  * Quando cerchi una commessa, progetto, utente o fase per nome/codice (es. 'commessa1', 'commessa 1', 'COMM1', 'elena'), usa SEMPRE `LIKE '%...%' COLLATE NOCASE` o `LOWER(...) LIKE '%...'` e cerca sia in 'name' che in 'code' (es. `WHERE name LIKE '%1%' OR code LIKE '%1%' OR name LIKE '%commessa%' COLLATE NOCASE`). Mai usare uguaglianze rigide '=' che falliscono se ci sono spazi o maiuscole diverse.\n"
                 "  * Quando l'utente chiede una 'panoramica' o dettagli di una commessa, estrai i dati della commessa da 'projects' E le relative fasi da 'tasks' (facendo JOIN o query correlata su tasks.project_id = projects.id) per mostrare anche le fasi, le date e gli addetti.\n"
@@ -211,10 +211,8 @@ class ChatService:
                 "- Ritardo (Delay): quando la data di fine (end_date) di un task o progetto è minore di oggi e non è completato (completed=0).\n"
                 "- Dati mancanti: fai notare se mancano campi essenziali (NULL) o valori necessari a un calcolo.\n"
                 f"{suggestions_text}"
-                "REGOLE DI SICUREZZA DATI (CRITICO E INVALICABILE):\n"
-                f"{user_info}"
-                "- Le note (tabella notes) private (is_private=1) NON DEVONO MAI ESSERE RESTITUITE NE' LETTE A MENO CHE il loro 'user_id' non corrisponda esattamente all'ID dell'utente.\n"
-                "- Aggiungi SEMPRE alla clausola WHERE delle tue query sulle note questo filtro esatto: `(is_private=0 OR user_id='{current_user.id if current_user else 'NULL'}')`.\n\n"
+                "REGOLE DI SICUREZZA E PRIVACY DATI (CRITICO E INVALICABILE):\n"
+                "- Le note dell'applicazione contengono dati personali e sensibili: sono TOTALMENTE ESCLUSE e NON ACCESSIBILI dal chatbot. Se l'utente chiede informazioni su note o appunti personali, spiega cortesemente che per motivi di riservatezza e privacy le note non sono consultabili tramite l'assistente virtuale.\n\n"
                 f"Domanda dell'utente: {user_message}"
             )
             
