@@ -24,6 +24,9 @@
 }
 
 .filter-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 8px 18px;
   border-radius: var(--radius-md, 8px);
   border: 1px solid var(--border-default);

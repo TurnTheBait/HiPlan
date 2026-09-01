@@ -12,9 +12,14 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
-  const today = new Date();
-  const [timelineYear, setTimelineYear] = useState(today.getFullYear());
-  const [timelineMonth, setTimelineMonth] = useState(today.getMonth());
+  const [now, setNow] = useState(new Date());
+  const [timelineYear, setTimelineYear] = useState(now.getFullYear());
+  const [timelineMonth, setTimelineMonth] = useState(now.getMonth());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
   const [projects, setProjects] = useState([]);
   const [projectsWithTasks, setProjectsWithTasks] = useState([]);
   const [assignedTodos, setAssignedTodos] = useState([]);
@@ -140,15 +145,21 @@ export default function DashboardPage() {
     });
   }
 
+  const isPrivileged = user?.role === 'admin' || user?.role === 'editor';
+  const relevantProjects = isPrivileged
+    ? projects
+    : projects.filter(p => p.is_assigned || p.owner_id === user?.id || p.responsible_id === user?.id || p.responsible_username === user?.username);
+
   const stats = {
-    total: projects.length,
-    active: projects.filter((p) => p.status === 'active').length,
-    completed: projects.filter((p) => p.status === 'completed').length,
-    planning: projects.filter((p) => p.status === 'planning').length,
+    total: relevantProjects.length,
+    active: relevantProjects.filter((p) => p.status === 'active').length,
+    completed: relevantProjects.filter((p) => p.status === 'completed').length,
+    planning: relevantProjects.filter((p) => p.status === 'planning').length,
   };
 
-  const avgProgress = projects.length > 0
-    ? Math.round(projects.reduce((acc, p) => acc + (p.progress || 0), 0) / projects.length * 100)
+  const activeRelevantProjects = relevantProjects.filter((p) => p.status === 'active');
+  const avgProgress = activeRelevantProjects.length > 0
+    ? Math.round(activeRelevantProjects.reduce((acc, p) => acc + (p.progress || 0), 0) / activeRelevantProjects.length * 100)
     : 0;
 
   const timelineProjects = useMemo(() => {
@@ -163,12 +174,12 @@ export default function DashboardPage() {
     return <div className="loading-screen"><div className="spinner" /></div>;
   }
 
-  const todayLabel = today.toLocaleDateString('it-IT', {
+  const todayLabel = now.toLocaleDateString('it-IT', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
   });
-  const timeLabel = today.toLocaleTimeString('it-IT', {
+  const timeLabel = now.toLocaleTimeString('it-IT', {
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -378,7 +389,7 @@ export default function DashboardPage() {
               Vedi tutte <span aria-hidden="true">→</span>
             </button>
           </div>
-          {projects.length === 0 ? (
+          {relevantProjects.length === 0 ? (
             <div className="empty-state dashboard-empty-state">
               <div className="empty-state-icon">P</div>
               <h3>Nessuna commessa</h3>
@@ -389,7 +400,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="recent-projects dashboard-scroll-list">
-              {projects.filter(p => p.status !== 'archived').slice(0, 5).map((project) => (
+              {relevantProjects.filter(p => p.status !== 'archived').slice(0, 5).map((project) => (
                 <button
                   type="button"
                   key={project.id}

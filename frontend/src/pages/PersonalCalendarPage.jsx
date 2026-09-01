@@ -35,7 +35,7 @@ export default function PersonalCalendarPage() {
         if (parsed.vacation === undefined) parsed.vacation = true;
         if (parsed.holiday === undefined) parsed.holiday = true;
         return parsed;
-      } catch (e) {}
+      } catch (e) { }
     }
     return {
       personal: true,
@@ -64,7 +64,7 @@ export default function PersonalCalendarPage() {
   useEffect(() => {
     fetchEvents();
     fetchUsers();
-    
+
     // Observer for sidebar resize
     if (wrapperRef.current) {
       const resizeObserver = new ResizeObserver(() => {
@@ -109,21 +109,21 @@ export default function PersonalCalendarPage() {
   function handleDateSelect(selectInfo) {
     setModalMode('create');
     setSelectedEvent(null);
-    
+
     let startStr = selectInfo.startStr;
     if (!startStr.includes('T')) {
       // If selected from month view, it's just a date 'YYYY-MM-DD'. Default to 09:00
       startStr = startStr + 'T09:00';
     }
-    
+
     // Default to +1 hour
     const dStart = new Date(startStr);
     const dEnd = new Date(dStart.getTime() + 60 * 60 * 1000);
-    
+
     // Format to YYYY-MM-DDTHH:mm
     const formatLocal = (d) => {
       const pad = (n) => String(n).padStart(2, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     };
 
     setForm({
@@ -147,7 +147,7 @@ export default function PersonalCalendarPage() {
     if (type === 'personal') {
       setModalMode('edit');
       setSelectedEvent(ev);
-      
+
       let formEnd = ev.endStr ? ev.endStr.slice(0, 16) : ev.startStr.slice(0, 16);
       if (ev.allDay && ev.endStr) {
         const d = new Date(ev.endStr);
@@ -184,7 +184,7 @@ export default function PersonalCalendarPage() {
     try {
       let finalStart = ev.startStr;
       let finalEnd = ev.endStr || ev.startStr;
-      
+
       if (ev.allDay && ev.endStr) {
         const d = new Date(ev.endStr);
         d.setDate(d.getDate() - 1);
@@ -240,7 +240,7 @@ export default function PersonalCalendarPage() {
   async function deleteEvent() {
     if (!selectedEvent || selectedEvent.extendedProps.type !== 'personal') return;
     if (!window.confirm('Vuoi davvero eliminare questo evento?')) return;
-    
+
     try {
       await api.delete(`/calendar/events/${selectedEvent.extendedProps.real_id}`);
       toast.success('Evento eliminato');
@@ -279,7 +279,7 @@ export default function PersonalCalendarPage() {
   function renderViewModal() {
     if (!selectedEvent) return null;
     const { type, real_id, project_id } = selectedEvent.extendedProps;
-    
+
     return (
       <div className="calendar-modal-content">
         <div className="calendar-modal-header-badge" style={{ marginBottom: 12 }}>
@@ -299,7 +299,7 @@ export default function PersonalCalendarPage() {
             {type === 'holiday' && 'Festività Nazionale'}
           </span>
         </div>
-        
+
         <div className="calendar-modal-row">
           <span className="calendar-modal-label">Titolo</span>
           <span className="calendar-modal-val">{selectedEvent.title}</span>
@@ -350,7 +350,7 @@ export default function PersonalCalendarPage() {
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
           <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Chiudi</button>
-          
+
           {type === 'phase' && (
             <button className="btn btn-primary" onClick={() => navigate(`/projects/${project_id}`)}>Vai alla Commessa</button>
           )}
@@ -370,21 +370,21 @@ export default function PersonalCalendarPage() {
       <form onSubmit={saveEvent} className="calendar-modal-content">
         <div className="input-group">
           <label>Titolo Evento *</label>
-          <input 
-            className="input" 
-            value={form.title} 
-            onChange={e => setForm({...form, title: e.target.value})} 
-            required 
+          <input
+            className="input"
+            value={form.title}
+            onChange={e => setForm({ ...form, title: e.target.value })}
+            required
             placeholder="Riunione, Appuntamento, Ferie..."
           />
         </div>
 
         <div className="input-group">
           <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-            <input 
-              type="checkbox" 
-              checked={form.is_all_day} 
-              onChange={e => setForm({...form, is_all_day: e.target.checked})} 
+            <input
+              type="checkbox"
+              checked={form.is_all_day}
+              onChange={e => setForm({ ...form, is_all_day: e.target.checked })}
             />
             Tutto il giorno
           </label>
@@ -393,27 +393,27 @@ export default function PersonalCalendarPage() {
         <div style={{ display: 'flex', gap: 16 }}>
           <div className="input-group" style={{ flex: 1 }}>
             <label>Inizio *</label>
-            <input 
-              type={form.is_all_day ? 'date' : 'datetime-local'} 
-              className="input" 
-              value={form.is_all_day ? form.start_date.split('T')[0] : form.start_date} 
-              onChange={e => setForm({...form, start_date: e.target.value})} 
-              required 
+            <input
+              type={form.is_all_day ? 'date' : 'datetime-local'}
+              className="input"
+              value={form.is_all_day ? form.start_date.split('T')[0] : form.start_date}
+              onChange={e => setForm({ ...form, start_date: e.target.value })}
+              required
             />
           </div>
           <div className="input-group" style={{ flex: 1 }}>
             <label>Fine</label>
-            <input 
-              type={form.is_all_day ? 'date' : 'datetime-local'} 
-              className="input" 
-              value={form.end_date ? (form.is_all_day ? form.end_date.split('T')[0] : form.end_date) : ''} 
-              onChange={e => setForm({...form, end_date: e.target.value})} 
+            <input
+              type={form.is_all_day ? 'date' : 'datetime-local'}
+              className="input"
+              value={form.end_date ? (form.is_all_day ? form.end_date.split('T')[0] : form.end_date) : ''}
+              onChange={e => setForm({ ...form, end_date: e.target.value })}
             />
           </div>
         </div>
 
         <div className="input-group">
-          <label>Etichette Rapide / Colore</label>
+          <label>Etichette</label>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
             {[
               { label: 'Riunione', color: '#3b82f6' },
@@ -449,10 +449,10 @@ export default function PersonalCalendarPage() {
 
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Colore personalizzato:</span>
-            <input 
-              type="color" 
-              value={form.color} 
-              onChange={e => setForm({...form, color: e.target.value})} 
+            <input
+              type="color"
+              value={form.color}
+              onChange={e => setForm({ ...form, color: e.target.value })}
               style={{ width: 32, height: 32, padding: 0, cursor: 'pointer', borderRadius: 4, border: '1px solid var(--border-default)', background: 'var(--bg-tertiary)' }}
             />
           </div>
@@ -465,14 +465,14 @@ export default function PersonalCalendarPage() {
               const isSelected = form.shared_with.includes(u.username);
               return (
                 <label key={u.id} className={`filter-chip ${isSelected ? 'active' : ''}`} style={{ '--chip-color': '#10b981', margin: 0 }}>
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     checked={isSelected}
                     onChange={e => {
                       const checked = e.target.checked;
                       setForm(prev => ({
                         ...prev,
-                        shared_with: checked 
+                        shared_with: checked
                           ? [...prev.shared_with, u.username]
                           : prev.shared_with.filter(un => un !== u.username)
                       }));
@@ -488,11 +488,11 @@ export default function PersonalCalendarPage() {
 
         <div className="input-group">
           <label>Descrizione / Note</label>
-          <textarea 
-            className="input" 
+          <textarea
+            className="input"
             style={{ minHeight: 70, padding: '10px 14px' }}
-            value={form.description} 
-            onChange={e => setForm({...form, description: e.target.value})} 
+            value={form.description}
+            onChange={e => setForm({ ...form, description: e.target.value })}
           />
         </div>
 
@@ -500,7 +500,7 @@ export default function PersonalCalendarPage() {
           {modalMode === 'edit' ? (
             <button type="button" className="btn btn-danger" onClick={deleteEvent}>Elimina</button>
           ) : <div></div>}
-          
+
           <div style={{ display: 'flex', gap: 10 }}>
             <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Annulla</button>
             <button type="submit" className="btn btn-primary">Salva</button>
@@ -515,7 +515,7 @@ export default function PersonalCalendarPage() {
       {/* Header and Controls */}
       <div className="calendar-header-toolbar">
         <div className="calendar-controls-row">
-          
+
           <div className="calendar-nav-section">
             <h1 className="calendar-month-title">
               {currentDateTitle}
@@ -605,9 +605,9 @@ export default function PersonalCalendarPage() {
                 <AppIcon name="close" />
               </button>
             </div>
-            
+
             {modalMode === 'view' ? renderViewModal() : renderEditCreateModal()}
-            
+
           </div>
         </div>
       )}

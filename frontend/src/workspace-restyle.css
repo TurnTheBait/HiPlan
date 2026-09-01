@@ -127,10 +127,14 @@
 }
 
 .projects-command-stack .filter-chip {
-  min-height: 34px;
-  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 12px;
   border-radius: 9px;
   font-size: 0.71rem;
+  line-height: 1;
 }
 
 .projects-command-stack .hiway-search-bar .input {
@@ -241,8 +245,13 @@
 
 .projects-page .filter-chip,
 .replanning-page .filter-chip {
-  min-height: 34px;
-  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1;
+  height: 34px;
+  padding: 0 12px;
   border: 1px solid transparent;
   border-radius: 9px;
   background: transparent;
