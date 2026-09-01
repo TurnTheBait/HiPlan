@@ -31,13 +31,18 @@ export default function PersonalCalendarPage() {
     const saved = localStorage.getItem('hiplan-personal-cal-filters');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed.vacation === undefined) parsed.vacation = true;
+        if (parsed.holiday === undefined) parsed.holiday = true;
+        return parsed;
       } catch (e) {}
     }
     return {
       personal: true,
       phase: true,
-      todo: true
+      todo: true,
+      vacation: true,
+      holiday: true
     };
   });
 
@@ -281,7 +286,7 @@ export default function PersonalCalendarPage() {
           <span style={{
             padding: '4px 10px',
             borderRadius: 6,
-            background: type === 'personal' ? '#3b82f6' : type === 'phase' ? '#f59e0b' : type === 'todo' ? '#f97316' : '#8b5cf6',
+            background: type === 'personal' ? '#3b82f6' : type === 'phase' ? '#f59e0b' : type === 'todo' ? '#f97316' : type === 'vacation' ? '#ef4444' : type === 'holiday' ? '#10b981' : '#8b5cf6',
             color: '#fff',
             fontSize: '0.75rem',
             fontWeight: 700
@@ -290,6 +295,8 @@ export default function PersonalCalendarPage() {
             {type === 'phase' && 'Fase Commessa'}
             {type === 'todo' && 'Da Fare (TODO)'}
             {type === 'ticket' && 'Ticket Supporto'}
+            {type === 'vacation' && 'Ferie'}
+            {type === 'holiday' && 'Festività Nazionale'}
           </span>
         </div>
         
@@ -301,7 +308,21 @@ export default function PersonalCalendarPage() {
         <div className="calendar-modal-row">
           <span className="calendar-modal-label">Periodo</span>
           <span className="calendar-modal-val">
-            {new Date(selectedEvent.start).toLocaleDateString()} {selectedEvent.end && `- ${new Date(selectedEvent.end).toLocaleDateString()}`}
+            {(() => {
+              const startStr = new Date(selectedEvent.start).toLocaleDateString('it-IT');
+              let endStr = '';
+              if (selectedEvent.end) {
+                const endDate = new Date(selectedEvent.end);
+                if (selectedEvent.allDay) {
+                  endDate.setDate(endDate.getDate() - 1); // FullCalendar sets end exclusive for allDay
+                }
+                const endFormatted = endDate.toLocaleDateString('it-IT');
+                if (endFormatted !== startStr) {
+                  endStr = ` - ${endFormatted}`;
+                }
+              }
+              return startStr + endStr;
+            })()}
           </span>
         </div>
 
@@ -519,6 +540,14 @@ export default function PersonalCalendarPage() {
               <label className={`filter-chip ${visibleTypes.todo ? 'active' : ''}`} style={{ '--chip-color': '#f97316', margin: 0 }}>
                 <input type="checkbox" checked={visibleTypes.todo} onChange={() => toggleFilter('todo')} />
                 Todo
+              </label>
+              <label className={`filter-chip ${visibleTypes.vacation ? 'active' : ''}`} style={{ '--chip-color': '#ef4444', margin: 0 }}>
+                <input type="checkbox" checked={visibleTypes.vacation} onChange={() => toggleFilter('vacation')} />
+                Ferie
+              </label>
+              <label className={`filter-chip ${visibleTypes.holiday ? 'active' : ''}`} style={{ '--chip-color': '#10b981', margin: 0 }}>
+                <input type="checkbox" checked={visibleTypes.holiday} onChange={() => toggleFilter('holiday')} />
+                Festività
               </label>
             </div>
 

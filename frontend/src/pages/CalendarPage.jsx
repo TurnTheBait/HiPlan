@@ -160,7 +160,7 @@ export default function CalendarPage() {
   function nextMonth() {
     if (currMonth === 11) {
       setCurrMonth(0);
-      setCurrYear(y => y - 1);
+      setCurrYear(y => y + 1);
     } else {
       setCurrMonth(m => m + 1);
     }

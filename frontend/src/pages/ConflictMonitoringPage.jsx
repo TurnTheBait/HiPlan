@@ -55,6 +55,10 @@ export default function ConflictMonitoringPage() {
   const [usersList, setUsersList] = useState([]);
   const [addingVacation, setAddingVacation] = useState(false);
   const [newVacation, setNewVacation] = useState({ user_id: '', start_date: '', end_date: '', reason: '' });
+  
+  const [addingClosure, setAddingClosure] = useState(false);
+  const [newClosure, setNewClosure] = useState({ start_date: '', end_date: '', reason: 'Chiusura Aziendale' });
+  
   const [submittingVacation, setSubmittingVacation] = useState(false);
 
   // Search Slots State
@@ -68,6 +72,7 @@ export default function ConflictMonitoringPage() {
   const [searchResults, setSearchResults] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [visibleResultsCount, setVisibleResultsCount] = useState(10);
+  const [visibleVacationsCount, setVisibleVacationsCount] = useState(10);
 
   const navigate = useNavigate();
   const toast = useToast();
@@ -164,6 +169,35 @@ export default function ConflictMonitoringPage() {
       window.dispatchEvent(new Event('vacationsUpdated'));
     } catch (err) {
       toast.error('Errore durante l\'aggiunta delle ferie');
+    } finally {
+      setSubmittingVacation(false);
+    }
+  }
+
+  async function handleAddClosure(e) {
+    e.preventDefault();
+    if (!newClosure.start_date || !newClosure.end_date) {
+      toast.error('Compila tutte le date obbligatorie.');
+      return;
+    }
+    setSubmittingVacation(true);
+    try {
+      const res = await api.post(`/vacations/admin/company_closure`, {
+        start_date: newClosure.start_date,
+        end_date: newClosure.end_date,
+        reason: newClosure.reason
+      });
+      toast.success('Chiusura aziendale aggiunta per tutti gli addetti.');
+      if (res.data.recovery_items?.length > 0) {
+        toast.warning(`⚠️ ${res.data.recovery_items.length} fase/i con ore da recuperare rilevate in totale.`);
+      }
+      setAddingClosure(false);
+      setNewClosure({ start_date: '', end_date: '', reason: 'Chiusura Aziendale' });
+      loadVacations();
+      loadConflicts();
+      window.dispatchEvent(new Event('vacationsUpdated'));
+    } catch (err) {
+      toast.error('Errore durante l\'aggiunta della chiusura aziendale');
     } finally {
       setSubmittingVacation(false);
     }
@@ -565,16 +599,28 @@ export default function ConflictMonitoringPage() {
           </div>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
             {(user?.role === 'admin' || user?.role === 'editor') && (
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setAddingVacation(true);
-                  if (!isVacationsOpen) setIsVacationsOpen(true);
-                }}
-              >
-                + Aggiungi Ferie
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAddingClosure(true);
+                    if (!isVacationsOpen) setIsVacationsOpen(true);
+                  }}
+                >
+                  + Chiusura Aziendale
+                </button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAddingVacation(true);
+                    if (!isVacationsOpen) setIsVacationsOpen(true);
+                  }}
+                >
+                  + Aggiungi Ferie
+                </button>
+              </div>
             )}
             <div
               style={{ cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-secondary)' }}
@@ -613,7 +659,7 @@ export default function ConflictMonitoringPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {sortedVacations.map(v => (
+                      {sortedVacations.slice(0, visibleVacationsCount).map(v => (
                         <tr key={v.id} style={{ borderTop: '1px solid var(--border-default)' }}>
                           <td style={{ padding: '12px', fontWeight: 600 }}>{v.full_name || v.username}</td>
                           <td style={{ padding: '12px' }}>{formatDate(v.start_date)}</td>
@@ -630,6 +676,17 @@ export default function ConflictMonitoringPage() {
                     </tbody>
                   </table>
                 </div>
+                
+                {sortedVacations.length > visibleVacationsCount && (
+                  <div style={{ padding: '16px', textAlign: 'center', borderTop: '1px solid var(--border-default)' }}>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setVisibleVacationsCount(prev => prev + 10)}
+                    >
+                      Mostra altri 10 risultati
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -775,6 +832,64 @@ export default function ConflictMonitoringPage() {
                 </div>
                 <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' }}>
                   <button type="button" className="btn btn-secondary" onClick={() => setAddingVacation(false)}>
+                    Annulla
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={submittingVacation}>
+                    {submittingVacation ? 'Salvataggio...' : 'Conferma'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale Chiusura Aziendale */}
+      {addingClosure && (
+        <div className="modal-overlay">
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
+            <div className="modal-header">
+              <h2>Inserisci Chiusura Aziendale</h2>
+              <button className="btn-ghost btn-icon" onClick={() => setAddingClosure(false)}>
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <div className="modal-content">
+              <p style={{ marginBottom: '16px', color: 'var(--text-secondary)' }}>
+                Questa azione aggiungerà i giorni di ferie selezionati a <strong>tutti gli addetti</strong>.
+              </p>
+              <form onSubmit={handleAddClosure} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div className="form-group">
+                  <label>Data di Inizio *</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={newClosure.start_date}
+                    onChange={(e) => setNewClosure({ ...newClosure, start_date: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Data di Fine *</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={newClosure.end_date}
+                    onChange={(e) => setNewClosure({ ...newClosure, end_date: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Descrizione</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={newClosure.reason}
+                    onChange={(e) => setNewClosure({ ...newClosure, reason: e.target.value })}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setAddingClosure(false)}>
                     Annulla
                   </button>
                   <button type="submit" className="btn btn-primary" disabled={submittingVacation}>

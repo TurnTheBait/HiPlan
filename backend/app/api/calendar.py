@@ -118,6 +118,43 @@ async def get_all_events(
                 "display": "block"
             })
 
+    # 4. Ferie
+    from app.models.vacation import Vacation
+    res_vac = await db.execute(select(Vacation).where(Vacation.user_id == current_user.id))
+    vacations = res_vac.scalars().all()
+    for vac in vacations:
+        events.append({
+            "id": f"vac_{vac.id}",
+            "real_id": vac.id,
+            "title": f"Ferie: {vac.reason}" if vac.reason else "Ferie",
+            "start": vac.start_date.isoformat(),
+            "end": (vac.end_date + timedelta(days=1)).isoformat(),
+            "allDay": True,
+            "color": "#ef4444", # Red
+            "type": "vacation",
+            "display": "block"
+        })
+
+    # 5. Festività Nazionali
+    from app.utils.working_days import get_italian_holidays
+    from datetime import datetime
+    
+    current_year = datetime.now().year
+    for year in [current_year - 1, current_year, current_year + 1]:
+        hols = get_italian_holidays(year)
+        for h in hols:
+            events.append({
+                "id": f"hol_{h['date'].isoformat()}",
+                "real_id": h["date"].isoformat(),
+                "title": h["name"],
+                "start": h["date"].isoformat(),
+                "end": (h["date"] + timedelta(days=1)).isoformat(),
+                "allDay": True,
+                "color": "#10b981", # Emerald green
+                "type": "holiday",
+                "display": "block"
+            })
+
     return events
 
 

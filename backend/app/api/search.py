@@ -199,7 +199,7 @@ async def global_search(
     res_todos = await db.execute(query_todos)
     for t in res_todos.scalars().all():
         assignees = json.loads(t.assignees) if t.assignees else []
-        if current_user.role != UserRole.ADMIN and t.creator_id != current_user.id and current_user.id not in assignees:
+        if current_user.role != UserRole.ADMIN and t.creator_id != current_user.id and current_user.username not in assignees:
             continue
         results.append({
             "type": "todo",
@@ -208,6 +208,29 @@ async def global_search(
             "subtitle": "Task ToDo",
             "link": f"/todo?todoId={t.id}",
             "match_context": "Trovato in titolo, contenuto o allegati"
+        })
+
+    # --- CALENDAR EVENTS ---
+    from app.models.calendar_event import CalendarEvent
+    query_cal = select(CalendarEvent).where(
+        or_(
+            CalendarEvent.user_id == current_user.id,
+            CalendarEvent.shared_with.like(f'%"{current_user.username}"%')
+        ),
+        or_(
+            CalendarEvent.title.ilike(search_pattern),
+            CalendarEvent.description.ilike(search_pattern)
+        )
+    )
+    res_cal = await db.execute(query_cal)
+    for ce in res_cal.scalars().all():
+        results.append({
+            "type": "calendar_event",
+            "id": ce.id,
+            "title": ce.title,
+            "subtitle": "Evento Personale",
+            "link": "/personal-calendar",
+            "match_context": "Trovato in titolo o descrizione dell'evento"
         })
 
     return results

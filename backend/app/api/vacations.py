@@ -230,6 +230,58 @@ async def create_admin_vacation(user_id: str, data: VacationCreate, db: AsyncSes
     return {"ok": True, "id": vac.id, "recovery_items": recovery_items}
 
 
+@router.post("/admin/company_closure", status_code=201)
+async def create_company_closure(data: VacationCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role not in [UserRole.ADMIN, UserRole.EDITOR]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo admin/editor possono inserire chiusure aziendali")
+    if data.end_date < data.start_date:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="end_date must be >= start_date")
+    
+    users_res = await db.execute(select(User))
+    all_users = users_res.scalars().all()
+
+    created_ids = []
+    all_recovery_items = []
+    
+    for user in all_users:
+        vac = Vacation(user_id=user.id, start_date=data.start_date, end_date=data.end_date, reason=data.reason or "Chiusura Aziendale")
+        db.add(vac)
+        await db.commit()
+        await db.refresh(vac)
+        created_ids.append(vac.id)
+        
+        recovery_items = await _compute_recovery_for_user(db, user, vac)
+        all_recovery_items.extend(recovery_items)
+        
+        note = Notification(
+            user_id=user.id,
+            title="Chiusura Aziendale",
+            message=f"È stata inserita una chiusura aziendale dal {data.start_date} al {data.end_date}.",
+            type=NotificationType.UPDATE,
+        )
+        db.add(note)
+        
+        for item in recovery_items:
+            task_res = await db.execute(select(Task).where(Task.id == item["task_id"]))
+            task_obj = task_res.scalar_one_or_none()
+            if task_obj:
+                task_obj.has_vacation_conflict = 1
+
+    if all_recovery_items:
+        admins_res = await db.execute(select(User).where(User.role.in_([UserRole.ADMIN, UserRole.EDITOR])))
+        for admin_user in admins_res.scalars().all():
+            note_admin = Notification(
+                user_id=admin_user.id,
+                title="⚠️ Conflitti da Chiusura Aziendale",
+                message=f"La chiusura aziendale dal {data.start_date} al {data.end_date} ha generato {len(all_recovery_items)} possibili conflitti sulle fasi attive.",
+                type=NotificationType.UPDATE,
+            )
+            db.add(note_admin)
+            
+    await db.commit()
+    return {"ok": True, "created_count": len(created_ids), "recovery_items": all_recovery_items}
+
+
 @router.delete("/me/{vacation_id}")
 async def delete_my_vacation(vacation_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     result = await db.execute(select(Vacation).where(Vacation.id == vacation_id, Vacation.user_id == current_user.id))
