@@ -69,29 +69,42 @@ class ChatService:
             return "Errore: Chiave API Groq non configurata nel backend."
 
         try:
-            # Crea la catena per generare la query SQL
-            generate_query = create_sql_query_chain(self.llm, self.db)
+            # Crea la catena per generare la query SQL (k=100 per non troncare i risultati a 5)
+            generate_query = create_sql_query_chain(self.llm, self.db, k=100)
             
             def clean_sql(query_str: str) -> str:
-                # Estrae solo il codice SQL evitando testo allucinato dal modello
-                q = query_str.strip()
+                # Estrae solo il codice SQL evitando testo allucinato o prefissi (es. "SQL Query:", "SQLQuery:")
+                q = str(query_str).strip()
                 if "```sql" in q:
                     q = q.split("```sql")[1].split("```")[0]
                 elif "```" in q:
                     q = q.split("```")[1].split("```")[0]
                 
-                if "SQLQuery:" in q:
-                    q = q.split("SQLQuery:")[1]
+                # Cerca la query SELECT tramite regex per isolarla da qualsiasi testo introduttivo
+                match = re.search(r'(SELECT\b.+)', q, re.IGNORECASE | re.DOTALL)
+                if match:
+                    q = match.group(1)
+                    if ";" in q:
+                        q = q.split(";")[0]
                 
-                if ";" in q:
-                    q = q.split(";")[0] + ";"
-                    
-                return q.strip()
+                cleaned = q.strip()
+                logger.info(f"Query SQL generata dal chatbot: {cleaned}")
+                return cleaned
             
             clean_sql_runnable = RunnableLambda(clean_sql)
             
             # Crea lo strumento per eseguire la query
-            execute_query = QuerySQLDataBaseTool(db=self.db)
+            raw_execute_query = QuerySQLDataBaseTool(db=self.db)
+            def execute_and_log(sql_query: str) -> str:
+                try:
+                    res = raw_execute_query.invoke(sql_query)
+                    logger.info(f"Risultato SQL eseguito: {res}")
+                    return str(res)
+                except Exception as ex:
+                    logger.error(f"Errore durante l'esecuzione SQL '{sql_query}': {ex}")
+                    return f"Errore SQL: {ex}"
+
+            execute_query_runnable = RunnableLambda(execute_and_log)
             
             # Prompt finale per formulare la risposta in linguaggio naturale
             answer_prompt = PromptTemplate.from_template(
@@ -116,7 +129,7 @@ class ChatService:
             # Catena completa: Genera -> Esegui -> Rispondi
             chain = (
                 RunnablePassthrough.assign(query=generate_query | clean_sql_runnable).assign(
-                    result=itemgetter("query") | execute_query
+                    result=itemgetter("query") | execute_query_runnable
                 )
                 | answer_prompt
                 | self.llm
