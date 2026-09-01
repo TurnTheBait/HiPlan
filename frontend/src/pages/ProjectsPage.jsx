@@ -7,6 +7,30 @@ import AppIcon from '../components/ui/AppIcon';
 import './ProjectsPage.css';
 import { STATUS_LABELS_IT, STATUS_OPTIONS } from '../utils/statusLabels';
 
+const PROJECT_COLOR_PALETTE = [
+  '#185FA5', // Blu HiWay
+  '#0ea5e9', // Sky Blue
+  '#6366f1', // Indigo
+  '#8b5cf6', // Violet
+  '#ec4899', // Pink
+  '#f43f5e', // Rose
+  '#f97316', // Orange
+  '#10b981', // Emerald
+  '#14b8a6', // Teal
+  '#06b6d4', // Cyan
+  '#3b82f6', // Bright Blue
+  '#eab308', // Amber
+  '#d97706', // Warm Amber
+  '#84cc16', // Lime
+  '#a855f7', // Purple
+];
+
+let lastColorIndex = -1;
+function getNextProjectColor() {
+  lastColorIndex = (lastColorIndex + 1) % PROJECT_COLOR_PALETTE.length;
+  return PROJECT_COLOR_PALETTE[lastColorIndex];
+}
+
 export default function ProjectsPage() {
   const { user } = useAuth();
   const toast = useToast();
@@ -18,7 +42,9 @@ export default function ProjectsPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', code: '', client: '', color: '#185FA5', description: '', start_date: '', end_date: '', responsible_id: '', assigned_workers: [], status: 'planning' });
-  const [filter, setFilter] = useState('my_projects');
+  const [filter, setFilter] = useState(() => {
+    return (user?.role === 'admin' || user?.role === 'editor') ? 'all' : 'my_projects';
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [form, setForm] = useState({ name: '', code: '', client: '', color: '#185FA5', status: 'planning', description: '', start_date: '', end_date: '', responsible_id: '', assigned_workers: [] });
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -27,6 +53,28 @@ export default function ProjectsPage() {
   const [sortConfig, setSortConfig] = useState({ key: 'none', direction: 'asc' });
   const [showSortMenu, setShowSortMenu] = useState(false);
   const sortMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (user?.role === 'admin' || user?.role === 'editor') {
+      setFilter('all');
+    }
+  }, [user?.role]);
+
+  function openCreateModal() {
+    setForm({
+      name: '',
+      code: '',
+      client: '',
+      color: getNextProjectColor(),
+      status: 'planning',
+      description: '',
+      start_date: '',
+      end_date: '',
+      responsible_id: '',
+      assigned_workers: []
+    });
+    setShowModal(true);
+  }
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -64,16 +112,26 @@ export default function ProjectsPage() {
 
   async function handleCreate(e) {
     e.preventDefault();
+    const finalCode = form.code?.trim();
+    const finalClient = form.client?.trim();
+    const finalName = form.name?.trim() || finalCode;
+
+    if (!finalCode || !finalClient) {
+      toast.error('Codice Commessa e Cliente sono campi obbligatori');
+      return;
+    }
     try {
       await api.post('/projects', {
         ...form,
+        code: finalCode,
+        client: finalClient,
+        name: finalName,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
         responsible_id: form.responsible_id || null,
       });
       toast.success('Commessa creata con successo!');
       setShowModal(false);
-      setForm({ name: '', code: '', client: '', color: '#185FA5', status: 'planning', description: '', start_date: '', end_date: '', responsible_id: '', assigned_workers: [] });
       loadProjects();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Errore nella creazione');
@@ -111,8 +169,17 @@ export default function ProjectsPage() {
   async function handleEditSubmit(e) {
     e.preventDefault();
     if (!editingProject) return;
+    if (!editForm.code?.trim() || !editForm.client?.trim() || !editForm.name?.trim()) {
+      toast.error('Codice, Cliente e Titolo Commessa sono campi obbligatori');
+      return;
+    }
     try {
-      const payload = { ...editForm };
+      const payload = {
+        ...editForm,
+        code: editForm.code.trim(),
+        client: editForm.client.trim(),
+        name: editForm.name.trim(),
+      };
       if (payload.start_date === '') payload.start_date = null;
       if (payload.end_date === '') payload.end_date = null;
       if (payload.responsible_id === '') payload.responsible_id = null;
@@ -339,7 +406,7 @@ export default function ProjectsPage() {
             )}
           </div>
           {canCreate && (
-            <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+            <button className="btn btn-primary" onClick={openCreateModal}>
               <AppIcon name="plus" />
               Nuova commessa
             </button>
@@ -408,11 +475,13 @@ export default function ProjectsPage() {
               style={{ borderLeft: `4px solid ${project.color || '#185FA5'}` }}
             >
               <div className="project-card-header" style={{ alignItems: 'flex-start' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-                  <span className="project-card-code">
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px', flex: 1, minWidth: 0 }}>
+                  <span className="project-card-code" style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--accent-500)', letterSpacing: '0.02em' }}>
                     {project.code || 'UT-COMM'}
                   </span>
-                  {project.name && project.name !== project.code && <h3>{project.name}</h3>}
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
+                    {project.name || 'Senza Titolo'}
+                  </h3>
                 </div>
                 <span className={`badge badge-${project.status}`}>{STATUS_LABELS_IT[project.status] || project.status}</span>
               </div>
@@ -457,7 +526,7 @@ export default function ProjectsPage() {
                     >
                       <AppIcon name="edit" size={16} />
                     </button>
-                    {user?.role === 'admin' && (
+                    {(user?.role === 'admin' || user?.role === 'editor') && (
                       <button
                         className="btn-ghost btn-sm project-delete"
                         onClick={(e) => handleDelete(project.id, e)}
@@ -476,7 +545,7 @@ export default function ProjectsPage() {
 
       {showModal && (
         <div className="modal-overlay">
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal" style={{ maxWidth: 850, width: '100%' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Nuova Commessa</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowModal(false)} aria-label="Chiudi">
@@ -511,14 +580,13 @@ export default function ProjectsPage() {
 
               <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
                 <div className="input-group" style={{ flex: 2, minWidth: 0 }}>
-                  <label htmlFor="project-name">Nome Progetto / Commessa *</label>
+                  <label htmlFor="project-name">Nome Progetto / Titolo Commessa (opzionale)</label>
                   <input
                     id="project-name"
                     className="input"
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    required
-                    placeholder="es. Impianto linea automatica"
+                    placeholder="es. Impianto linea automatica (default: uguale al codice)"
                   />
                 </div>
                 <div className="input-group" style={{ flex: 1.5, minWidth: 0 }}>
@@ -640,7 +708,7 @@ export default function ProjectsPage() {
 
       {showEditModal && (
         <div className="modal-overlay">
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal" style={{ maxWidth: 850, width: '100%' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Modifica Dati Commessa</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowEditModal(false)} aria-label="Chiudi">
@@ -661,12 +729,13 @@ export default function ProjectsPage() {
                   />
                 </div>
                 <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="card-edit-client">Cliente</label>
+                  <label htmlFor="card-edit-client">Cliente *</label>
                   <input
                     id="card-edit-client"
                     className="input"
                     value={editForm.client}
                     onChange={(e) => setEditForm({ ...editForm, client: e.target.value })}
+                    required
                     placeholder="es. HiWay s.r.l."
                   />
                 </div>

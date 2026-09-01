@@ -212,6 +212,11 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     const mesiItaliani = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
     const giorniItaliani = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
     const dayCssFunc = function (date) {
+      const today = new Date();
+      const isToday = date.getFullYear() === today.getFullYear() &&
+                      date.getMonth() === today.getMonth() &&
+                      date.getDate() === today.getDate();
+      if (isToday) return "gantt_today_scale_cell";
       if (isWeekendOrHoliday(date)) return "gantt_weekend_scale_cell";
       return "";
     };
@@ -334,10 +339,12 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       return classes.join(" ");
     };
 
-    // Evidenziazione delle celle di intestazione per la data di oggi
-    gantt.templates.scale_cell_class = function (date) {
+    // Evidenziazione delle celle di intestazione per la data di oggi (funziona per giorno, settimana, mese, trimestre, anno)
+    gantt.templates.scale_cell_class = function (date, scale) {
       const today = new Date();
-      const cellEnd = gantt.date.add(date, 1, "day");
+      const unit = scale ? scale.unit : "day";
+      const step = (scale && scale.step) ? scale.step : 1;
+      const cellEnd = getCellEndDate(date, unit, step);
       if (date <= today && today < cellEnd) {
         return "gantt_today_scale_cell";
       }
@@ -756,18 +763,24 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
             try {
               const pos = gantt.posFromDate(mDate);
               if (typeof pos === 'number' && !isNaN(pos) && pos >= 0) {
+                const nextDay = gantt.date.add(mDate, 1, 'day');
+                const nextPos = gantt.posFromDate(nextDay);
+                const colWidth = (typeof nextPos === 'number' && !isNaN(nextPos) && nextPos > pos) ? (nextPos - pos) : (gantt.config.min_column_width || 38);
+                const centerPos = pos + Math.floor(colWidth / 2);
+
                 const formattedM = `${String(mDate.getDate()).padStart(2, '0')}/${String(mDate.getMonth() + 1).padStart(2, '0')}/${mDate.getFullYear()}`;
+                const markerColor = t.color || '#8b5cf6';
                 const markerDiv = document.createElement('div');
                 markerDiv.className = 'custom-project-marker custom-milestone-marker';
-                markerDiv.style.left = `${pos}px`;
+                markerDiv.style.left = `${centerPos}px`;
                 markerDiv.style.top = '0px';
                 markerDiv.style.height = `${totalRowsHeight}px`;
-                const markerColor = t.color || '#f59e0b';
-                markerDiv.style.borderLeft = `2px dashed ${markerColor}`;
-                markerDiv.title = `Evento: ${t.text || 'Milestone'} (${formattedM})`;
+                markerDiv.style.borderLeft = `2px solid ${markerColor}`;
+                markerDiv.title = `Milestone: ${t.text || 'Evento'} (${formattedM})`;
 
-                let taskTop = 4;
+                let taskTop = 22;
                 try {
+                  const rHeight = gantt.config.row_height || 44;
                   if (typeof gantt.getTaskTop === 'function') {
                     let topVal = gantt.getTaskTop(String(t.id));
                     if (typeof topVal !== 'number' || isNaN(topVal)) {
@@ -777,25 +790,28 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
                       topVal = gantt.getTaskTop(Number(t.id));
                     }
                     if (typeof topVal === 'number' && !isNaN(topVal)) {
-                      taskTop = topVal + 4;
+                      taskTop = topVal + Math.floor(rHeight / 2);
                     }
                   }
                 } catch (e) {
-                  taskTop = 4;
+                  taskTop = 22;
                 }
 
                 const badge = document.createElement('div');
-                badge.className = 'custom-marker-badge';
-                badge.style.border = `1px solid ${markerColor}`;
-                badge.style.color = markerColor;
-                badge.style.backgroundColor = 'var(--bg-primary, #ffffff)';
+                badge.className = 'custom-marker-badge custom-milestone-badge';
+                badge.style.backgroundColor = markerColor;
+                badge.style.color = '#ffffff';
+                badge.style.border = `1px solid rgba(255, 255, 255, 0.5)`;
+                badge.style.boxShadow = `0 2px 8px rgba(0, 0, 0, 0.25)`;
                 badge.style.setProperty('top', `${taskTop}px`, 'important');
-                badge.textContent = `📍 ${t.text || 'Evento'}`;
+                badge.style.setProperty('left', `0px`, 'important');
+                badge.style.setProperty('transform', `translate(-50%, -50%)`, 'important');
+                badge.textContent = `📍 ${t.text || 'Milestone'}`;
                 markerDiv.appendChild(badge);
 
                 gantt.$task_data.appendChild(markerDiv);
               }
-            } catch (e) { /* scala non ancora pronta */ }
+            } catch (e) { /* errore rendering marker milestone */ }
           }
         }
       });

@@ -16,6 +16,9 @@ import ActivityLogPanel from '../components/projects/ActivityLogModal';
 import AppIcon from '../components/ui/AppIcon';
 import MultiDatePicker from '../components/ui/MultiDatePicker';
 import SearchableCombobox from '../components/ui/SearchableCombobox';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Sparkles, Bot, RefreshCw, AlertTriangle, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import useWebSocket from '../hooks/useWebSocket';
 
 const departmentOptions = [
@@ -197,6 +200,75 @@ export default function ProjectDetailPage() {
   const [allVacations, setAllVacations] = useState([]);
   const [openTicketsCount, setOpenTicketsCount] = useState(0);
   const [isAlertsExpanded, setIsAlertsExpanded] = useState(false);
+
+  // Stato Analisi HiPlan AI per Commessa con persistenza in cache locale
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
+
+  const getCachedAnalysis = (projId) => {
+    try {
+      const cached = localStorage.getItem(`hiplan_ai_analysis_${projId}`);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (e) {
+      console.error('Errore lettura cache analisi AI:', e);
+    }
+    return null;
+  };
+
+  const handleRunAiAnalysis = async (forceRefresh = false) => {
+    if (!forceRefresh) {
+      const cached = getCachedAnalysis(id);
+      if (cached) {
+        setAiAnalysis(cached);
+        return;
+      }
+    }
+
+    setIsAiAnalyzing(true);
+    try {
+      const res = await api.post(`/projects/${id}/ai-analysis`);
+      if (res.data && res.data.success) {
+        const now = new Date();
+        const dataWithMeta = {
+          ...res.data,
+          generated_at: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          generated_date: now.toLocaleDateString('it-IT')
+        };
+        setAiAnalysis(dataWithMeta);
+        try {
+          localStorage.setItem(`hiplan_ai_analysis_${id}`, JSON.stringify(dataWithMeta));
+        } catch (e) {
+          console.error('Errore salvataggio cache analisi AI:', e);
+        }
+        addToast('Analisi HiPlan AI completata con successo', 'success');
+      }
+    } catch (err) {
+      console.error('Errore analisi AI:', err);
+      addToast(err?.response?.data?.detail || 'Errore durante l\'analisi AI della commessa', 'error');
+    } finally {
+      setIsAiAnalyzing(false);
+    }
+  };
+
+  // Caricamento immediato da cache o reset al cambio commessa
+  useEffect(() => {
+    const cached = getCachedAnalysis(id);
+    setAiAnalysis(cached);
+  }, [id]);
+
+  // Se apro la tab e non è ancora in cache, avvia l'analisi per la prima volta
+  useEffect(() => {
+    if (activeTab === 'ai_analysis' && !aiAnalysis && !isAiAnalyzing) {
+      const cached = getCachedAnalysis(id);
+      if (cached) {
+        setAiAnalysis(cached);
+      } else {
+        handleRunAiAnalysis(false);
+      }
+    }
+  }, [activeTab, id]);
 
   // Stato Modale Modifica Dati Commessa
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
@@ -1228,8 +1300,18 @@ export default function ProjectDetailPage() {
 
   async function handleSaveProject(e) {
     e.preventDefault();
+    if (!projectForm.code?.trim() || !projectForm.client?.trim() || !projectForm.name?.trim()) {
+      toast.error('Codice, Cliente e Titolo Commessa sono campi obbligatori');
+      return;
+    }
     try {
-      const { data } = await api.put(`/projects/${id}`, projectForm);
+      const payload = {
+        ...projectForm,
+        code: projectForm.code.trim(),
+        client: projectForm.client.trim(),
+        name: projectForm.name.trim(),
+      };
+      const { data } = await api.put(`/projects/${id}`, payload);
       setProject(prev => ({ ...prev, ...data }));
       setShowEditProjectModal(false);
       toast.success('Dati commessa aggiornati con successo!');
@@ -1492,7 +1574,7 @@ export default function ProjectDetailPage() {
                 <span className="commessa-client commessa-responsible" style={{ color: 'var(--text-secondary)' }}><AppIcon name="user" size={15} />{project.responsible_name}</span>
               </>
             )}
-            {project?.name && project.name !== project.code && (
+            {project?.name && (
               <>
                 <span style={{ color: 'var(--border-subtle)', fontSize: '1.2rem' }}>|</span>
                 <span className="commessa-title-in-box" style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '1.25rem' }}>{project.name}</span>
@@ -1546,6 +1628,20 @@ export default function ProjectDetailPage() {
             <span className="tab-badge tab-badge-danger">{delaysList.length}</span>
           </button>
         )}
+
+        <button
+          className={`ut-tab-btn ${activeTab === 'ai_analysis' ? 'active' : ''}`}
+          onClick={() => setActiveTab('ai_analysis')}
+          title="Analisi intelligente HiPlan AI e riprogrammazione"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+        >
+          <Sparkles size={16} />
+          Analisi AI
+        </button>
 
         {user?.role === 'admin' && (
           <button
@@ -2452,6 +2548,220 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
+      {/* TAB 5: ANALISI AI */}
+      {activeTab === 'ai_analysis' && (
+        <div className="animate-fadeIn">
+          <div
+            className="commessa-summary-card"
+            style={{
+              background: 'var(--bg-secondary)',
+              borderRadius: '16px',
+              border: '1px solid rgba(59, 130, 246, 0.35)',
+              boxShadow: '0 4px 20px rgba(59, 130, 246, 0.06)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            {/* Header del Box AI */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '20px 24px',
+                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(99, 102, 241, 0.04))',
+                borderBottom: '1px solid var(--border-subtle)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, var(--accent-500, #3b82f6), var(--accent-600, #2563eb))',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#fff',
+                    boxShadow: '0 2px 10px rgba(37, 99, 235, 0.3)'
+                  }}
+                >
+                  <Sparkles size={22} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--text-primary)', fontWeight: '700' }}>
+                      Analisi Commessa
+                    </h3>
+                    <span
+                      style={{
+                        background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+                        color: '#fff',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}
+                    >
+                      HiPlan AI
+                    </span>
+                  </div>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '13.5px', margin: '4px 0 0 0' }}>
+                    Verifica ritardi, sovrapposizioni, ferie, sovraccarichi multi-commessa e dati mancanti con consigli di riprogrammazione.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                className="btn btn-primary"
+                onClick={() => handleRunAiAnalysis(true)}
+                disabled={isAiAnalyzing}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '9px 18px',
+                  borderRadius: '10px',
+                  fontWeight: '600',
+                  fontSize: '13.5px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                }}
+              >
+                {isAiAnalyzing ? (
+                  <>
+                    <RefreshCw size={16} className="animate-spin" />
+                    Analisi in corso...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={16} />
+                    {aiAnalysis ? 'Rianalizza Commessa' : 'Avvia Analisi con AI'}
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Contenuto del Box AI */}
+            <div style={{ padding: '24px' }}>
+              {isAiAnalyzing ? (
+                <div style={{ textAlign: 'center', padding: '48px 20px' }}>
+                  <div
+                    style={{
+                      width: '54px',
+                      height: '54px',
+                      borderRadius: '50%',
+                      background: 'rgba(59, 130, 246, 0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 16px',
+                      color: 'var(--accent-500)'
+                    }}
+                  >
+                    <Bot size={30} className="animate-pulse" />
+                  </div>
+                  <h4 style={{ margin: '0 0 8px 0', color: 'var(--text-primary)', fontSize: '1.1rem' }}>
+                    Analisi intelligente in corso...
+                  </h4>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '14px', maxWidth: '520px', margin: '0 auto' }}>
+                    HiPlan AI sta esaminando le date della commessa, le fasi, le ferie e i carichi di lavoro degli addetti su tutte le commesse per individuare conflitti e suggerire le soluzioni ottimali.
+                  </p>
+                </div>
+              ) : aiAnalysis ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {/* Badge di stato */}
+                  <div
+                    style={{
+                      padding: '12px 16px',
+                      borderRadius: '10px',
+                      background: aiAnalysis.has_conflicts ? 'rgba(239, 68, 68, 0.08)' : 'rgba(16, 185, 129, 0.08)',
+                      border: `1px solid ${aiAnalysis.has_conflicts ? 'rgba(239, 68, 68, 0.25)' : 'rgba(16, 185, 129, 0.25)'}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      {aiAnalysis.has_conflicts ? (
+                        <AlertTriangle size={20} color="#ef4444" />
+                      ) : (
+                        <CheckCircle size={20} color="#10b981" />
+                      )}
+                      <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>
+                        {aiAnalysis.has_conflicts
+                          ? `Rilevati conflitti/sovraccarichi e dati da verificare`
+                          : 'Nessun conflitto rilevato: la commessa è pianificata regolarmente'}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                      Generato {aiAnalysis.generated_date ? `il ${aiAnalysis.generated_date} ` : ''}alle {aiAnalysis.generated_at || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+
+                  {/* Markdown Report Formattato */}
+                  <div
+                    className="chat-markdown"
+                    style={{
+                      background: 'var(--bg-primary)',
+                      padding: '20px',
+                      borderRadius: '12px',
+                      border: '1px solid var(--border-subtle)',
+                      lineHeight: '1.65',
+                      fontSize: '0.95rem'
+                    }}
+                  >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {aiAnalysis.analysis}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    textAlign: 'center',
+                    padding: '40px 20px',
+                    background: 'rgba(59, 130, 246, 0.02)',
+                    borderRadius: '12px',
+                    border: '1px dashed var(--border-color)'
+                  }}
+                >
+                  <div style={{ color: 'var(--accent-500)', marginBottom: '12px' }}>
+                    <Sparkles size={36} style={{ margin: '0 auto' }} />
+                  </div>
+                  <h4 style={{ margin: '0 0 6px 0', color: 'var(--text-primary)', fontSize: '1.1rem' }}>
+                    Vuoi analizzare questa commessa con l'Intelligenza Artificiale?
+                  </h4>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '14px', maxWidth: '600px', margin: '0 auto 20px' }}>
+                    HiPlan AI verificherà all'istante eventuali ritardi, conflitti con ferie, sovraccarichi degli addetti (incrociando anche le altre commesse) e ti fornirà consigli pratici di riprogrammazione.
+                  </p>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleRunAiAnalysis}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 22px',
+                      borderRadius: '10px',
+                      fontWeight: '600',
+                      fontSize: '14px'
+                    }}
+                  >
+                    <Sparkles size={18} />
+                    Avvia Analisi Intelligente
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODALE NUOVA / MODIFICA FASE (TASK MODAL) */}
       {showTaskModal && (
         <div className="modal-overlay">
@@ -2531,6 +2841,9 @@ export default function ProjectDetailPage() {
                       value={taskForm.faseSel === '__custom__' ? taskForm.customText : taskForm.faseSel}
                       onChange={(val, opt) => {
                         if (opt) {
+                          if (opt.default_budget_mode) {
+                            setBudgetMode(opt.default_budget_mode);
+                          }
                           const newDays = opt.default_days != null ? opt.default_days : taskForm.duration_days;
                           const newHours = opt.default_hours != null ? opt.default_hours : taskForm.planned_hours;
                           const sDate = taskForm.start_date || new Date().toISOString().split('T')[0];
@@ -3258,7 +3571,7 @@ export default function ProjectDetailPage() {
       {/* Modale Modifica Dati Commessa */}
       {showEditProjectModal && (
         <div className="modal-overlay">
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal" style={{ maxWidth: 850, width: '100%' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Modifica Dati Commessa</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowEditProjectModal(false)} aria-label="Chiudi">
@@ -3279,12 +3592,13 @@ export default function ProjectDetailPage() {
                   />
                 </div>
                 <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="edit-proj-client">Cliente</label>
+                  <label htmlFor="edit-proj-client">Cliente *</label>
                   <input
                     id="edit-proj-client"
                     className="input"
                     value={projectForm.client}
                     onChange={(e) => setProjectForm({ ...projectForm, client: e.target.value })}
+                    required
                     placeholder="es. HiWay s.r.l."
                   />
                 </div>
@@ -3420,13 +3734,34 @@ export default function ProjectDetailPage() {
                 />
               </div>
 
-              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 20 }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowEditProjectModal(false)}>
-                  Annulla
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Salva Modifiche
-                </button>
+              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 }}>
+                {(user?.role === 'admin' || user?.role === 'editor') ? (
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    onClick={async () => {
+                      if (!window.confirm(`Confermi l'eliminazione definitiva della commessa "${project?.name || project?.code}" e di tutte le sue fasi?`)) return;
+                      try {
+                        await api.delete(`/projects/${id}`);
+                        toast.success('Commessa eliminata');
+                        navigate('/projects');
+                      } catch {
+                        toast.error("Errore nell'eliminazione della commessa");
+                      }
+                    }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#ef4444', color: '#fff' }}
+                  >
+                    <AppIcon name="trash" size={14} /> Elimina Commessa
+                  </button>
+                ) : <div />}
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowEditProjectModal(false)}>
+                    Annulla
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    Salva Modifiche
+                  </button>
+                </div>
               </div>
             </form>
           </div>

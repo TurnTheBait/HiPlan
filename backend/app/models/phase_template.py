@@ -13,3 +13,4 @@ class PhaseTemplate(Base, TimestampMixin):
     is_custom = Column(Boolean, default=False, nullable=False)
     default_days = Column(Integer, nullable=True)
     default_hours = Column(Float, nullable=True)
+    default_budget_mode = Column(String(50), default="start_days", nullable=True)

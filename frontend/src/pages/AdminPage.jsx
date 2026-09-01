@@ -19,6 +19,16 @@ const DEPT_COLORS = {
   condivisa: '#8b5cf6'
 };
 
+const BUDGET_MODE_SHORT_LABELS = {
+  start_days: 'Data Inizio / Giorni',
+  start_hours: 'Data Inizio / Ore',
+  start_end: 'Data Inizio / Fine',
+  end_days: 'Data Fine / Giorni',
+  end_hours: 'Data Fine / Ore',
+  start_days_hours: 'Inizio / Giorni / Ore',
+  end_days_hours: 'Fine / Giorni / Ore',
+};
+
 export default function AdminPage() {
   const toast = useToast();
   const [users, setUsers] = useState([]);
@@ -32,6 +42,7 @@ export default function AdminPage() {
     default_color: '#3b82f6',
     default_days: '',
     default_hours: '',
+    default_budget_mode: 'start_days',
   });
   const [globalBannerForm, setGlobalBannerForm] = useState({ text: '', type: 'info', duration_hours: 24, isManualDate: false, manualDate: '' });
   const [globalBanners, setGlobalBanners] = useState([]);
@@ -366,7 +377,7 @@ export default function AdminPage() {
       }
       setShowAddTemplateModal(false);
       setEditingTemplate(null);
-      setTemplateForm({ name: '', department: 'ufficio_tecnico', default_color: '#3b82f6', default_days: '', default_hours: '' });
+      setTemplateForm({ name: '', department: 'ufficio_tecnico', default_color: '#3b82f6', default_days: '', default_hours: '', default_budget_mode: 'start_days' });
       loadPhaseTemplates();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Errore durante il salvataggio della fase');
@@ -392,6 +403,7 @@ export default function AdminPage() {
       default_color: tpl.default_color || '#3b82f6',
       default_days: tpl.default_days != null ? tpl.default_days : '',
       default_hours: tpl.default_hours != null ? tpl.default_hours : '',
+      default_budget_mode: tpl.default_budget_mode || 'start_days',
     });
     setShowAddTemplateModal(true);
   }
@@ -404,6 +416,7 @@ export default function AdminPage() {
       default_color: DEPT_COLORS[filterDept] || '#3b82f6',
       default_days: '',
       default_hours: '',
+      default_budget_mode: 'start_days',
     });
     setShowAddTemplateModal(true);
   }
@@ -764,6 +777,7 @@ export default function AdminPage() {
                   <th>Nome Fase / Lavorazione</th>
                   <th>Reparto Assegnato</th>
                   <th>Colore Predefinito</th>
+                  <th>Modalità / Budget</th>
                   <th>Tipo</th>
                   <th style={{ width: 120 }}>Azioni</th>
                 </tr>
@@ -771,7 +785,7 @@ export default function AdminPage() {
               <tbody>
                 {phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'condivisa').length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-muted)' }}>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-muted)' }}>
                       Nessuna fase preimpostata per il filtro selezionato.
                     </td>
                   </tr>
@@ -793,6 +807,16 @@ export default function AdminPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'monospace', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                           <span style={{ display: 'inline-block', width: 22, height: 22, borderRadius: 6, background: tpl.default_color || '#3b82f6', border: '1px solid var(--border-default)' }} />
                           {tpl.default_color || '#3b82f6'}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '0.82rem', color: 'var(--text-primary)' }}>
+                          <span style={{ fontWeight: 600 }}>{tpl.default_days != null ? `${tpl.default_days} gg` : '-'}</span>
+                          <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>·</span>
+                          <span style={{ fontWeight: 600, color: 'var(--accent-600)' }}>{tpl.default_hours != null ? `${tpl.default_hours}h` : '-'}</span>
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                          {BUDGET_MODE_SHORT_LABELS[tpl.default_budget_mode || 'start_days'] || tpl.default_budget_mode}
                         </div>
                       </td>
                       <td>
@@ -1099,7 +1123,7 @@ export default function AdminPage() {
       {/* MODALE AGGIUNTA/MODIFICA TEMPLATE */}
       {showAddTemplateModal && (
         <div className="modal-overlay animate-fadeIn">
-          <div className="modal" style={{ maxWidth: 650, background: 'var(--bg-secondary)', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-xl)' }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal" style={{ maxWidth: 850, width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-xl)', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{editingTemplate ? 'Modifica Fase Preimpostata' : 'Nuova Fase Preimpostata'}</h2>
               <button className="btn-ghost btn-icon" type="button" onClick={() => setShowAddTemplateModal(false)} aria-label="Chiudi">
@@ -1107,37 +1131,71 @@ export default function AdminPage() {
               </button>
             </div>
             <form onSubmit={handleSaveTemplate}>
-              <div className="modal-body">
-                <div className="input-group">
-                  <label>Nome Fase di Lavorazione *</label>
-                  <input
-                    className="input"
-                    value={templateForm.name}
-                    onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
-                    required
-                    placeholder="es. Progettazione elettrica avanzata"
-                  />
-                </div>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  <div className="input-group" style={{ flex: 1.6, minWidth: 0 }}>
+                    <label>Nome Fase di Lavorazione *</label>
+                    <input
+                      className="input"
+                      value={templateForm.name}
+                      onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
+                      required
+                      placeholder="es. Progettazione elettrica avanzata"
+                    />
+                  </div>
 
-                <div className="input-group" style={{ marginTop: 14 }}>
-                  <label>Reparto di Assegnazione *</label>
+                  <div className="input-group" style={{ flex: 1.2, minWidth: 0 }}>
+                    <label>Reparto di Assegnazione *</label>
+                    <select
+                      className="input"
+                      value={templateForm.department}
+                      onChange={(e) => setTemplateForm({ ...templateForm, department: e.target.value })}
+                    >
+                      <option value="ufficio_tecnico">Ufficio Tecnico</option>
+                      <option value="produzione">Produzione</option>
+                      <option value="acquisti">Acquisti</option>
+                      <option value="commerciale">Commerciale</option>
+                      <option value="condivisa">Condivisa tra più reparti</option>
+                    </select>
+                  </div>
+                </div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: -8, display: 'block' }}>
+                  Questa fase comparirà nel menu a tendina di tutti gli addetti del reparto selezionato.
+                </span>
+
+                <div className="input-group">
+                  <label>Modalità calcolo budget e pianificazione date:</label>
                   <select
                     className="input"
-                    value={templateForm.department}
-                    onChange={(e) => setTemplateForm({ ...templateForm, department: e.target.value })}
+                    value={templateForm.default_budget_mode || 'start_days'}
+                    onChange={(e) => {
+                      const newMode = e.target.value;
+                      setTemplateForm(prev => {
+                        let next = { ...prev, default_budget_mode: newMode };
+                        if (newMode === 'start_days' || newMode === 'end_days') {
+                          if (next.default_days && !next.default_hours) {
+                            next.default_hours = Number(next.default_days) * 8;
+                          }
+                        } else if (newMode === 'start_hours' || newMode === 'end_hours') {
+                          if (next.default_hours && !next.default_days) {
+                            next.default_days = Math.max(1, Math.ceil(Number(next.default_hours) / 8));
+                          }
+                        }
+                        return next;
+                      });
+                    }}
                   >
-                    <option value="ufficio_tecnico">Ufficio Tecnico</option>
-                    <option value="produzione">Produzione</option>
-                    <option value="acquisti">Acquisti</option>
-                    <option value="commerciale">Commerciale</option>
-                    <option value="condivisa">Condivisa tra più reparti</option>
+                    <option value="start_days">Data Inizio / Giorni (calcola data fine escludendo sab/dom e festivi, ore = giorni×8)</option>
+                    <option value="start_hours">Data Inizio / Ore (calcola data fine escludendo sab/dom e festivi, giorni = ore/8)</option>
+                    <option value="start_end">Data Inizio / Data Fine (calcola giorni lavorativi ed ore escludendo sab/dom e festivi)</option>
+                    <option value="end_days">Data Fine / Giorni (calcola data inizio a ritroso escludendo sab/dom e festivi)</option>
+                    <option value="end_hours">Data Fine / Ore (calcola data inizio a ritroso escludendo sab/dom e festivi)</option>
+                    <option value="start_days_hours">Data Inizio / Giorni / Ore (es. 24h spalmate su 10 gg escludendo sab/dom e festivi)</option>
+                    <option value="end_days_hours">Data Fine / Giorni / Ore (es. 24h spalmate a ritroso su 10 gg escludendo sab/dom e festivi)</option>
                   </select>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
-                    Questa fase comparirà nel menu a tendina di tutti gli addetti del reparto selezionato.
-                  </span>
                 </div>
 
-                <div style={{ display: 'flex', gap: 16, marginTop: 14 }}>
+                <div style={{ display: 'flex', gap: 16 }}>
                   <div className="input-group" style={{ flex: 1 }}>
                     <label>Giorni Lavorativi Previsti</label>
                     <input
@@ -1146,7 +1204,16 @@ export default function AdminPage() {
                       min="0"
                       className="input"
                       value={templateForm.default_days}
-                      onChange={(e) => setTemplateForm({ ...templateForm, default_days: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setTemplateForm(prev => {
+                          const next = { ...prev, default_days: val };
+                          if ((prev.default_budget_mode === 'start_days' || prev.default_budget_mode === 'end_days') && val !== '') {
+                            next.default_hours = Number(val) * 8;
+                          }
+                          return next;
+                        });
+                      }}
                       placeholder="es. 3"
                     />
                   </div>
@@ -1158,29 +1225,37 @@ export default function AdminPage() {
                       min="0"
                       className="input"
                       value={templateForm.default_hours}
-                      onChange={(e) => setTemplateForm({ ...templateForm, default_hours: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setTemplateForm(prev => {
+                          const next = { ...prev, default_hours: val };
+                          if ((prev.default_budget_mode === 'start_hours' || prev.default_budget_mode === 'end_hours') && val !== '') {
+                            next.default_days = Math.max(1, Math.ceil(Number(val) / 8));
+                          }
+                          return next;
+                        });
+                      }}
                       placeholder="es. 24"
                     />
                   </div>
-                </div>
-
-                <div className="input-group" style={{ marginTop: 14 }}>
-                  <label>Colore Predefinito sul Gantt</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
-                    <input
-                      type="color"
-                      value={templateForm.default_color || '#3b82f6'}
-                      onChange={(e) => setTemplateForm({ ...templateForm, default_color: e.target.value })}
-                      style={{ width: 44, height: 38, padding: 2, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--bg-tertiary)' }}
-                    />
-                    <input
-                      type="text"
-                      className="input"
-                      value={templateForm.default_color || '#3b82f6'}
-                      onChange={(e) => setTemplateForm({ ...templateForm, default_color: e.target.value })}
-                      style={{ width: 110, fontFamily: 'monospace' }}
-                      placeholder="#3b82f6"
-                    />
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Colore sul Gantt</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                      <input
+                        type="color"
+                        value={templateForm.default_color || '#3b82f6'}
+                        onChange={(e) => setTemplateForm({ ...templateForm, default_color: e.target.value })}
+                        style={{ width: 44, height: 38, padding: 2, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--bg-tertiary)' }}
+                      />
+                      <input
+                        type="text"
+                        className="input"
+                        value={templateForm.default_color || '#3b82f6'}
+                        onChange={(e) => setTemplateForm({ ...templateForm, default_color: e.target.value })}
+                        style={{ width: 110, fontFamily: 'monospace' }}
+                        placeholder="#3b82f6"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

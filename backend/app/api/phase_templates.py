@@ -21,6 +21,7 @@ class PhaseTemplateCreate(BaseModel):
     is_custom: bool = False
     default_days: Optional[int] = None
     default_hours: Optional[float] = None
+    default_budget_mode: Optional[str] = "start_days"
 
 
 class PhaseTemplateUpdate(BaseModel):
@@ -29,6 +30,7 @@ class PhaseTemplateUpdate(BaseModel):
     default_color: Optional[str] = None
     default_days: Optional[int] = None
     default_hours: Optional[float] = None
+    default_budget_mode: Optional[str] = None
 
 
 @router.get("")
@@ -53,6 +55,7 @@ async def list_phase_templates(
             "is_custom": t.is_custom,
             "default_days": t.default_days,
             "default_hours": t.default_hours,
+            "default_budget_mode": t.default_budget_mode or "start_days",
             "created_at": t.created_at.isoformat() if t.created_at else None,
         }
         for t in templates
@@ -79,6 +82,12 @@ async def create_phase_template(
     if existing:
         if data.default_color:
             existing.default_color = data.default_color
+        if data.default_budget_mode:
+            existing.default_budget_mode = data.default_budget_mode
+        if data.default_days is not None:
+            existing.default_days = data.default_days
+        if data.default_hours is not None:
+            existing.default_hours = data.default_hours
         await db.commit()
         await db.refresh(existing)
         return {
@@ -89,6 +98,7 @@ async def create_phase_template(
             "is_custom": existing.is_custom,
             "default_days": existing.default_days,
             "default_hours": existing.default_hours,
+            "default_budget_mode": existing.default_budget_mode or "start_days",
         }
 
     template = PhaseTemplate(
@@ -98,6 +108,7 @@ async def create_phase_template(
         is_custom=data.is_custom,
         default_days=data.default_days,
         default_hours=data.default_hours,
+        default_budget_mode=data.default_budget_mode or "start_days",
     )
     db.add(template)
     await db.commit()
@@ -110,6 +121,7 @@ async def create_phase_template(
         "is_custom": template.is_custom,
         "default_days": template.default_days,
         "default_hours": template.default_hours,
+        "default_budget_mode": template.default_budget_mode or "start_days",
     }
 
 
@@ -135,6 +147,8 @@ async def update_phase_template(
         template.default_days = data.default_days
     if hasattr(data, 'default_hours'):
         template.default_hours = data.default_hours
+    if data.default_budget_mode is not None:
+        template.default_budget_mode = data.default_budget_mode
 
     await db.commit()
     await db.refresh(template)
@@ -146,6 +160,7 @@ async def update_phase_template(
         "is_custom": template.is_custom,
         "default_days": template.default_days,
         "default_hours": template.default_hours,
+        "default_budget_mode": template.default_budget_mode or "start_days",
     }
 
 

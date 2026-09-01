@@ -302,8 +302,21 @@
 
 .custom-project-marker.custom-milestone-marker {
   width: 2px !important;
-  border-left: 2px dashed #f59e0b !important;
-  /* Colore di default opzionale, sovrascritto inline */
+  z-index: 12 !important;
+}
+
+.custom-project-marker.custom-milestone-marker .custom-marker-badge {
+  position: absolute !important;
+  left: 0 !important;
+  transform: translate(-50%, -50%) !important;
+  padding: 3px 9px !important;
+  border-radius: 12px !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+  pointer-events: auto !important;
+  letter-spacing: 0.02em !important;
 }
 
 .gantt_marker.gantt-project-start-marker .gantt_marker_content,
@@ -339,18 +352,57 @@
   right: 6px !important;
 }
 
-/* Evidenziazione colonna/cella del giorno/settimana/mese/trimestre di oggi nella timeline (solo sfondo, senza linea blu verticale) */
+/* Evidenziazione colonna/cella del giorno/settimana/mese/trimestre di oggi nella timeline */
 .gantt_today_cell {
-  background-color: var(--timeline-today-bg) !important;
-  box-shadow: inset 3px 0 0 var(--timeline-today-line) !important;
+  background-color: var(--timeline-today-bg, rgba(2, 132, 199, 0.10)) !important;
+  box-shadow: none !important;
 }
 
-/* Evidenziazione nell'intestazione della scala temporale per oggi/settimana/mese/trimestre corrente (solo sfondo e testo evidenziato) */
+[data-theme="dark"] .gantt_today_cell {
+  background-color: rgba(56, 189, 248, 0.14) !important;
+}
+
+/* Evidenziazione marcata nell'intestazione della scala temporale per oggi/settimana/mese/trimestre corrente */
 .gantt_today_scale_cell {
-  background-color: var(--timeline-today-header) !important;
-  color: var(--accent-700) !important;
+  background-color: var(--timeline-today-header, rgba(2, 132, 199, 0.18)) !important;
+  color: var(--accent-700, #0369a1) !important;
   font-weight: 800 !important;
-  box-shadow: inset 3px 0 0 var(--timeline-today-line) !important;
+  box-shadow: none !important;
+}
+
+[data-theme="dark"] .gantt_today_scale_cell {
+  background-color: rgba(56, 189, 248, 0.22) !important;
+  color: #38bdf8 !important;
+}
+
+/* Evidenziazione nell'intestazione della scala temporale per sabato, domenica e festivi */
+.gantt_weekend_scale_cell {
+  background-color: var(--danger-bg) !important;
+  color: var(--danger) !important;
+  font-weight: 700 !important;
+}
+
+.gantt_weekend_scale_cell.gantt_today_scale_cell {
+  background-color: color-mix(in srgb, var(--timeline-today-header, rgba(2, 132, 199, 0.18)) 62%, var(--danger-bg)) !important;
+  color: var(--accent-700, #0369a1) !important;
+}
+
+/* Evidenziazione colonna nella timeline per sabato, domenica e festivi (pattern rigato e leggero tint) */
+.gantt_weekend_cell {
+  background: repeating-linear-gradient(-45deg,
+      var(--timeline-weekend-bg),
+      var(--timeline-weekend-bg) 6px,
+      var(--timeline-weekend-stripe) 6px,
+      var(--timeline-weekend-stripe) 12px) !important;
+}
+
+.gantt_weekend_cell.gantt_today_cell {
+  background: repeating-linear-gradient(-45deg,
+      var(--timeline-today-bg, rgba(2, 132, 199, 0.10)),
+      var(--timeline-today-bg, rgba(2, 132, 199, 0.10)) 6px,
+      var(--timeline-weekend-stripe) 6px,
+      var(--timeline-weekend-stripe) 12px) !important;
+  box-shadow: none !important;
 }
 
 /* Evidenziazione nell'intestazione della scala temporale per sabato, domenica e festivi */
@@ -380,7 +432,9 @@
       var(--timeline-today-bg) 6px,
       var(--timeline-weekend-stripe) 6px,
       var(--timeline-weekend-stripe) 12px) !important;
-  box-shadow: inset 3px 0 0 var(--timeline-today-line) !important;
+  border-left: 2px solid var(--timeline-today-line) !important;
+  border-right: 2px solid var(--timeline-today-line) !important;
+  box-shadow: none !important;
 }
 
 /* Allineamento al centro per le celle dell'header con scale multiple */

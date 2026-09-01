@@ -94,11 +94,20 @@ async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
 
 async def create_project(db: AsyncSession, data: ProjectCreate, owner: User) -> Project:
     import json
+    project_code = (data.code or "").strip() if data.code else None
+    project_name = (data.name or "").strip() or project_code or "Nuova Commessa"
+    project_client = (data.client or "").strip() if data.client else None
+
     project = Project(
-        name=data.name or "", code=data.code, client=data.client, color=data.color or "#185FA5",
+        name=project_name,
+        code=project_code,
+        client=project_client,
+        color=data.color or "#185FA5",
         description=data.description,
-        start_date=data.start_date, end_date=data.end_date,
-        status=data.status, owner_id=owner.id,
+        start_date=data.start_date,
+        end_date=data.end_date,
+        status=data.status,
+        owner_id=owner.id,
         responsible_id=data.responsible_id if data.responsible_id else None,
         assigned_workers=json.dumps(data.assigned_workers) if data.assigned_workers else "[]",
     )
@@ -115,8 +124,11 @@ async def create_project(db: AsyncSession, data: ProjectCreate, owner: User) -> 
     db.add(log)
     
     await db.commit()
-    await db.refresh(project, ["responsible"])
-    return project
+    
+    result = await db.execute(
+        select(Project).options(selectinload(Project.responsible)).where(Project.id == project.id)
+    )
+    return result.scalar_one()
 
 
 async def get_project(db: AsyncSession, project_id: str, user: User) -> Project:
@@ -163,8 +175,8 @@ async def update_project(db: AsyncSession, project_id: str, data: ProjectUpdate,
 
 async def delete_project(db: AsyncSession, project_id: str, user: User):
     project = await get_project(db, project_id, user)
-    if user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'amministratore può eliminare le commesse")
+    if user.role not in (UserRole.ADMIN, UserRole.EDITOR):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo admin ed editor possono eliminare le commesse")
     await db.delete(project)
     await db.commit()
 

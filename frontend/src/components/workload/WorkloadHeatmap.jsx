@@ -14,6 +14,7 @@ export default function WorkloadHeatmap() {
   const { user } = useAuth();
   const [heatmapData, setHeatmapData] = useState({});
   const [loading, setLoading] = useState(true);
+  const [isWorkloadOpen, setIsWorkloadOpen] = useState(false);
   const [leftColWidth, setLeftColWidth] = useState(200);
   const [expandedUsers, setExpandedUsers] = useState({});
   const [viewMode, setViewMode] = useState('day');
@@ -221,135 +222,159 @@ export default function WorkloadHeatmap() {
 
   return (
     <div className="workload-heatmap-container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+      <div 
+        style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          marginBottom: isWorkloadOpen ? 16 : 0,
+          cursor: 'pointer',
+          userSelect: 'none'
+        }}
+        onClick={() => setIsWorkloadOpen(!isWorkloadOpen)}
+      >
         <div>
-          <h3 style={{ margin: 0 }}>Pianificazione Carichi di Lavoro</h3>
+          <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AppIcon name="users" size={18} />
+            Pianificazione Carichi di Lavoro
+          </h3>
           <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
             {dataMode === 'planned' ? 'Panoramica ore assegnate nelle fasi dei vari progetti (ore previste, non a consuntivo)' : dataMode === 'actual' ? 'Panoramica ore effettivamente registrate (consuntivate) dagli addetti' : 'Panoramica ore consuntivate rispetto alle previste (Consuntivate / Previste)'}
           </span>
         </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={scrollToToday}
-            title="Centra la tabella sulla data di oggi"
-            style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
-          >
-            <AppIcon name="calendar" size={15} />
-            Oggi
-          </button>
-          <select
-            className="input"
-            value={dataMode}
-            onChange={e => setDataMode(e.target.value)}
-            style={{ minWidth: 100, padding: '4px 8px', fontSize: '0.75rem' }}
-          >
-            <option value="both">Consuntivate / Pianificate</option>
-            <option value="planned">Solo Ore Pianificate</option>
-            <option value="actual">Solo Ore Consuntivate</option>
-          </select>
-          <select
-            className="input"
-            value={viewMode}
-            onChange={(e) => setViewMode(e.target.value)}
-            style={{ width: 200, padding: '4px 8px', fontSize: '0.75rem' }}
-          >
-            <option value="day">Per Giorno</option>
-            <option value="week">Per Settimana</option>
-            <option value="month">Per Mese</option>
-          </select>
-          <div style={{ position: 'relative' }} ref={exportMenuRef}>
-            <button
-              className="btn btn-primary btn-sm"
-              style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
-              onClick={() => setShowExportMenu(!showExportMenu)}
-            >
-              <AppIcon name="download" size={14} />
-            </button>
-            {showExportMenu && (
-              <div style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: 8, background: 'var(--bg-secondary)',
-                border: '1px solid var(--border-default)', borderRadius: 12, padding: 16, width: 320,
-                boxShadow: '0 10px 25px rgba(0,0,0,0.2)', zIndex: 9999
-              }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>Esporta Carichi di Lavoro</div>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+          {isWorkloadOpen && (
+            <>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={scrollToToday}
+                title="Centra la tabella sulla data di oggi"
+                style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <AppIcon name="calendar" size={15} />
+                Oggi
+              </button>
+              <select
+                className="input"
+                value={dataMode}
+                onChange={e => setDataMode(e.target.value)}
+                style={{ minWidth: 100, padding: '4px 8px', fontSize: '0.75rem' }}
+              >
+                <option value="both">Consuntivate / Pianificate</option>
+                <option value="planned">Solo Ore Pianificate</option>
+                <option value="actual">Solo Ore Consuntivate</option>
+              </select>
+              <select
+                className="input"
+                value={viewMode}
+                onChange={(e) => setViewMode(e.target.value)}
+                style={{ width: 200, padding: '4px 8px', fontSize: '0.75rem' }}
+              >
+                <option value="day">Per Giorno</option>
+                <option value="week">Per Settimana</option>
+                <option value="month">Per Mese</option>
+              </select>
+              <div style={{ position: 'relative' }} ref={exportMenuRef}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                >
+                  <AppIcon name="download" size={14} />
+                </button>
+                {showExportMenu && (
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: 8, background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-default)', borderRadius: 12, padding: 16, width: 320,
+                    boxShadow: '0 10px 25px rgba(0,0,0,0.2)', zIndex: 9999
+                  }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>Esporta Carichi di Lavoro</div>
 
-                <div style={{ borderTop: '1px solid var(--border-default)', marginTop: 10, paddingTop: 12 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Formato:
+                    <div style={{ borderTop: '1px solid var(--border-default)', marginTop: 10, paddingTop: 12 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Formato:
+                      </div>
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <label style={{
+                          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                          background: exportFormat === 'pdf' ? 'rgba(239, 68, 68, 0.15)' : 'var(--bg-tertiary)',
+                          border: exportFormat === 'pdf' ? '2px solid #ef4444' : '1px solid var(--border-default)',
+                          color: exportFormat === 'pdf' ? '#ef4444' : 'var(--text-secondary)',
+                        }}>
+                          <input
+                            type="radio"
+                            name="exportFormat"
+                            value="pdf"
+                            checked={exportFormat === 'pdf'}
+                            onChange={() => setExportFormat('pdf')}
+                            style={{ display: 'none' }}
+                          />
+                          <AppIcon name="download" size={14} /> PDF
+                        </label>
+                        <label style={{
+                          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                          background: exportFormat === 'excel' ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-tertiary)',
+                          border: exportFormat === 'excel' ? '2px solid #10b981' : '1px solid var(--border-default)',
+                          color: exportFormat === 'excel' ? '#10b981' : 'var(--text-secondary)',
+                        }}>
+                          <input
+                            type="radio"
+                            name="exportFormat"
+                            value="excel"
+                            checked={exportFormat === 'excel'}
+                            onChange={() => setExportFormat('excel')}
+                            style={{ display: 'none' }}
+                          />
+                          <AppIcon name="download" size={14} /> Excel
+                        </label>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#10a37f', color: '#fff', borderColor: '#10a37f' }}
+                        onClick={() => { setShowExportMenu(false); handleChatGPTAnalysis(); }}
+                      >
+                        <img src="/chatgpt-logo.png" style={{ width: 16, height: 16, filter: 'brightness(0) invert(1)' }} alt="ChatGPT" />
+                        Analizza con ChatGPT
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ flex: 1 }}
+                        onClick={() => setShowExportMenu(false)}
+                      >
+                        Annulla
+                      </button>
+                      <button
+                        className="btn btn-primary"
+                        style={{ flex: 1 }}
+                        onClick={() => handleExport(exportFormat)}
+                      >
+                        Export {exportFormat.toUpperCase()}
+                      </button>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <label style={{
-                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
-                      background: exportFormat === 'pdf' ? 'rgba(239, 68, 68, 0.15)' : 'var(--bg-tertiary)',
-                      border: exportFormat === 'pdf' ? '2px solid #ef4444' : '1px solid var(--border-default)',
-                      color: exportFormat === 'pdf' ? '#ef4444' : 'var(--text-secondary)',
-                    }}>
-                      <input
-                        type="radio"
-                        name="exportFormat"
-                        value="pdf"
-                        checked={exportFormat === 'pdf'}
-                        onChange={() => setExportFormat('pdf')}
-                        style={{ display: 'none' }}
-                      />
-                      <AppIcon name="download" size={14} /> PDF
-                    </label>
-                    <label style={{
-                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
-                      background: exportFormat === 'excel' ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-tertiary)',
-                      border: exportFormat === 'excel' ? '2px solid #10b981' : '1px solid var(--border-default)',
-                      color: exportFormat === 'excel' ? '#10b981' : 'var(--text-secondary)',
-                    }}>
-                      <input
-                        type="radio"
-                        name="exportFormat"
-                        value="excel"
-                        checked={exportFormat === 'excel'}
-                        onChange={() => setExportFormat('excel')}
-                        style={{ display: 'none' }}
-                      />
-                      <AppIcon name="download" size={14} /> Excel
-                    </label>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
-                  <button
-                    className="btn btn-secondary"
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#10a37f', color: '#fff', borderColor: '#10a37f' }}
-                    onClick={() => { setShowExportMenu(false); handleChatGPTAnalysis(); }}
-                  >
-                    <img src="/chatgpt-logo.png" style={{ width: 16, height: 16, filter: 'brightness(0) invert(1)' }} alt="ChatGPT" />
-                    Analizza con ChatGPT
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                  <button
-                    className="btn btn-secondary"
-                    style={{ flex: 1 }}
-                    onClick={() => setShowExportMenu(false)}
-                  >
-                    Annulla
-                  </button>
-                  <button
-                    className="btn btn-primary"
-                    style={{ flex: 1 }}
-                    onClick={() => handleExport(exportFormat)}
-                  >
-                    Export {exportFormat.toUpperCase()}
-                  </button>
-                </div>
+                )}
               </div>
-            )}
+            </>
+          )}
+          <div 
+            style={{ cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-secondary)' }}
+            onClick={() => setIsWorkloadOpen(!isWorkloadOpen)}
+          >
+            <AppIcon name={isWorkloadOpen ? "chevronUp" : "chevronDown"} size={20} />
           </div>
         </div>
       </div>
 
-      <div className="heatmap-grid" ref={gridRef} style={{ gridTemplateColumns: `${leftColWidth}px repeat(` + columns.length + ', 90px)' }}>
+      {isWorkloadOpen && (
+        <div className="heatmap-grid" ref={gridRef} style={{ gridTemplateColumns: `${leftColWidth}px repeat(` + columns.length + ', 90px)' }}>
 
         {/* Header (Columns) */}
         <div className="heatmap-header-cell sticky-col sticky-header-col" style={{ position: 'relative' }}>
@@ -914,6 +939,7 @@ export default function WorkloadHeatmap() {
           );
         })}
       </div>
+      )}
 
       {/* Modale Dettagli Giorno (Visualizzazione al click) */}
       {dayDetails && (

@@ -307,3 +307,17 @@ async def delete_project_attachment(
     project.attachments = json.dumps(new_attachments)
     await db.commit()
     return {"status": "ok"}
+
+
+@router.post("/{project_id}/ai-analysis")
+async def get_project_ai_analysis(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.project_ai_service import analyze_project_ai
+    result = await analyze_project_ai(db, project_id, current_user)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Errore durante l'analisi AI"))
+    return result
+
