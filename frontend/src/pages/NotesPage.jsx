@@ -742,9 +742,12 @@ export default function NotesPage() {
                     )}
                     <div className="note-card-header">
                       <span className="note-card-title">{note.title || 'Senza Titolo'}</span>
-                      <span className={`note-visibility-badge ${note.visibility === 'team' ? 'badge-shared' : note.visibility === 'selected' ? 'badge-selected' : 'badge-private'}`}>
-                        <AppIcon name={note.visibility === 'team' ? 'users' : note.visibility === 'selected' ? 'user-check' : 'lock'} size={12} />
-                        {note.visibility === 'team' ? 'Condiviso' : note.visibility === 'selected' ? 'Utenti Selezionati' : 'Privato'}
+                      <span 
+                        className={`note-visibility-badge ${note.visibility === 'team' ? 'badge-shared' : note.visibility === 'selected' ? 'badge-selected' : 'badge-private'}`}
+                        title={note.visibility === 'team' ? 'Condiviso' : note.visibility === 'selected' ? 'Utenti Selezionati' : 'Privato'}
+                        style={{ padding: '4px 6px' }}
+                      >
+                        <AppIcon name={note.visibility === 'team' ? 'users' : note.visibility === 'selected' ? 'user-check' : 'lock'} size={14} />
                       </span>
                     </div>
                     <div className="note-card-meta">

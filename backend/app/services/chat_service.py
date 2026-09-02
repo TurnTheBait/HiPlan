@@ -54,7 +54,7 @@ class ChatService:
             inspector = inspect(self.engine)
             existing_tables = set(inspector.get_table_names())
             
-            to_ignore = ["activity_logs", "agent_logs", "email_logs", "replan_logs", "planning_runs", "notes"]
+            to_ignore = ["activity_logs", "agent_logs", "email_logs", "replan_logs", "planning_runs", "notes", "todos", "calendar_events"]
             ignore_existing = [t for t in to_ignore if t in existing_tables]
 
             self._db = SQLDatabase(
@@ -207,8 +207,6 @@ class ChatService:
                 "  * Username: 'username', Nome completo: 'full_name', Email: 'email', Ruolo: 'role' (admin, editor, viewer), Reparto: 'department', Attivo: 'is_active'\n"
                 "- TABELLA 'vacations' (Ferie / Assenze / Permessi):\n"
                 "  * Utente: 'user_id' (collegato a users.id), Inizio/Fine: 'start_date', 'end_date', Motivo: 'reason'\n"
-                "- TABELLA 'todos' (Cose da fare / To-Do personali):\n"
-                "  * Utente: 'user_id', Titolo: 'title', Completato: 'completed' (1=fatto, 0=da fare), Scadenza: 'due_date', Priorità: 'priority'\n"
                 "- TABELLA 'tickets' (Ticket di assistenza / Segnalazioni):\n"
                 "  * Titolo: 'title', Descrizione: 'description', Commessa collegata: 'project_id', Creatore: 'author_id', Responsabile: 'responsible_id', Assegnati: 'assigned_to' (lista JSON di username), Stato: 'status' ('Da gestire', 'In attesa del cliente', 'Completato'), Priorità: 'priority' ('low', 'medium', 'high')\n"
                 "- TABELLA 'ticket_replies' (Risposte / Conversazioni nei Ticket):\n"

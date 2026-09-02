@@ -170,7 +170,12 @@ async def global_search(
         
     # --- NOTES ---
     query_notes = select(Note).where(
-        or_(Note.owner_id == current_user.id, Note.is_shared == True),
+        or_(
+            Note.owner_id == current_user.id, 
+            Note.is_shared == True,
+            Note.visibility == 'team',
+            Note.shared_with.like(f'%"{current_user.username}"%')
+        ),
         or_(
             Note.title.ilike(search_pattern),
             Note.content.ilike(search_pattern),

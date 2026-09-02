@@ -249,14 +249,15 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  line-height: 1;
+  line-height: normal;
   height: 34px;
-  padding: 0 12px;
+  margin: 0;
+  box-sizing: border-box;
   border: 1px solid transparent;
   border-radius: 9px;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 0.71rem;
+  font-size: 0.75rem;
   font-weight: 650;
 }
 
