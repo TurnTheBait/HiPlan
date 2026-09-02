@@ -7,6 +7,7 @@ import './AdminPage.css';
 const DEPT_LABELS = {
   ufficio_tecnico: 'Ufficio Tecnico',
   produzione: 'Produzione',
+  amministrazione: 'Amministrazione',
   acquisti: 'Acquisti',
   commerciale: 'Commerciale',
   condivisa: 'Condivisa tra più reparti'
@@ -14,6 +15,7 @@ const DEPT_LABELS = {
 const DEPT_COLORS = {
   ufficio_tecnico: '#3b82f6',
   produzione: '#f59e0b',
+  amministrazione: '#64748b',
   acquisti: '#10b981',
   commerciale: '#ec4899',
   condivisa: '#8b5cf6'
@@ -693,6 +695,7 @@ export default function AdminPage() {
                           <option value="">— Nessun reparto —</option>
                           <option value="ufficio_tecnico">Ufficio Tecnico</option>
                           <option value="produzione">Produzione</option>
+                          <option value="amministrazione">Amministrazione</option>
                           <option value="acquisti">Acquisti</option>
                           <option value="commerciale">Commerciale</option>
                           <option value="admin">Admin</option>
@@ -750,6 +753,7 @@ export default function AdminPage() {
                   <option value="all">Tutti i reparti ({phaseTemplates.length})</option>
                   <option value="ufficio_tecnico">Ufficio Tecnico ({phaseTemplates.filter(t => t.department === 'ufficio_tecnico').length})</option>
                   <option value="produzione">Produzione ({phaseTemplates.filter(t => t.department === 'produzione').length})</option>
+                  <option value="amministrazione">Amministrazione ({phaseTemplates.filter(t => t.department === 'amministrazione').length})</option>
                   <option value="acquisti">Acquisti ({phaseTemplates.filter(t => t.department === 'acquisti').length})</option>
                   <option value="commerciale">Commerciale ({phaseTemplates.filter(t => t.department === 'commerciale').length})</option>
                   <option value="condivisa">Condivisa tra più reparti ({phaseTemplates.filter(t => t.department === 'condivisa').length})</option>
@@ -1162,6 +1166,7 @@ export default function AdminPage() {
                     >
                       <option value="ufficio_tecnico">Ufficio Tecnico</option>
                       <option value="produzione">Produzione</option>
+                      <option value="amministrazione">Amministrazione</option>
                       <option value="acquisti">Acquisti</option>
                       <option value="commerciale">Commerciale</option>
                       <option value="condivisa">Condivisa tra più reparti</option>
@@ -1365,6 +1370,7 @@ export default function AdminPage() {
                     >
                       <option value="ufficio_tecnico">Ufficio Tecnico</option>
                       <option value="produzione">Produzione</option>
+                      <option value="amministrazione">Amministrazione</option>
                       <option value="acquisti">Acquisti</option>
                       <option value="commerciale">Commerciale</option>
                       <option value="admin">Admin</option>

@@ -64,6 +64,9 @@ async def lifespan(app: FastAPI):
                 ("Attesa consegna materiali", "acquisti", "#64748b"),
                 ("Controllo arrivo merce e smistamento", "acquisti", "#10b981"),
                 ("Sollecito fornitori per ritardi", "acquisti", "#e11d48"),
+                # Amministrazione
+                ("Fatturazione", "amministrazione", "#64748b"),
+                ("Gestione pagamenti", "amministrazione", "#475569"),
             ]
             for name, dept, col in default_templates:
                 session.add(PhaseTemplate(name=name, department=dept, default_color=col, is_custom=False))

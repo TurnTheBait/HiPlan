@@ -15,6 +15,7 @@ DEPARTMENT_LABELS = {
     "produzione": "Produzione",
     "acquisti": "Acquisti",
     "commerciale": "Commerciale",
+    "amministrazione": "Amministrazione",
     "admin": "Admin",
 }
 

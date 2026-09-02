@@ -183,6 +183,7 @@ export default function ProfilePage() {
             <div className="stat-value" style={{ fontSize: 14 }}>
               {user?.department === 'ufficio_tecnico' ? 'Ufficio Tecnico' :
                 user?.department === 'produzione' ? 'Produzione' :
+                  user?.department === 'amministrazione' ? 'Amministrazione' :
                   user?.department === 'acquisti' ? 'Acquisti' :
                     user?.department === 'admin' ? 'Admin' :
                       (user?.department || 'Nessuno')}

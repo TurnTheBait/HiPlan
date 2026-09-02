@@ -176,7 +176,8 @@ export default function ReplanningAgentPage() {
             options={[
               { label: 'Ufficio Tecnico', value: 'ufficio_tecnico' },
               { label: 'Acquisti', value: 'acquisti' },
-              { label: 'Produzione', value: 'produzione' }
+              { label: 'Produzione', value: 'produzione' },
+              { label: 'Amministrazione', value: 'amministrazione' }
             ]}
             style={{ minWidth: 200, flex: 1, maxWidth: 300 }}
           />

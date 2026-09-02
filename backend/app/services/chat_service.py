@@ -166,7 +166,7 @@ class ChatService:
                     users_res = await session.execute(select(User).where(User.is_active == True))
                     real_users = users_res.scalars().all()
                     if real_users:
-                        u_entries = [f"{u.full_name or u.username} (username: {u.username}, reparto: {u.department or 'generale'})" for u in real_users]
+                        u_entries = [f"{u.full_name or u.username} (username: {u.username}, email: {u.email}, reparto: {u.department or 'generale'})" for u in real_users]
                         users_list_str = "\nADDETTI REALI DEL SISTEMA (Usa SOLO questi nomi, non inventare colleghi fittizi):\n- " + "\n- ".join(u_entries) + "\n"
             except Exception as e_sugg:
                 logger.warning(f"Impossibile recuperare i suggerimenti/utenti per la chat: {e_sugg}")

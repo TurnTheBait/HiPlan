@@ -357,6 +357,7 @@ export default function CalendarPage() {
               <option value="all">Tutti i reparti</option>
               <option value="ufficio_tecnico">Ufficio Tecnico</option>
               <option value="produzione">Produzione</option>
+              <option value="amministrazione">Amministrazione</option>
               <option value="acquisti">Acquisti</option>
             </select>
 

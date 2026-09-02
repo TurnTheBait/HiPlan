@@ -24,6 +24,7 @@ import useWebSocket from '../hooks/useWebSocket';
 const departmentOptions = [
   { value: 'ufficio_tecnico', label: 'Ufficio Tecnico', color: '#3b82f6' },
   { value: 'produzione', label: 'Produzione', color: '#f59e0b' },
+  { value: 'amministrazione', label: 'Amministrazione', color: '#64748b' },
   { value: 'acquisti', label: 'Acquisti', color: '#10b981' },
   { value: 'commerciale', label: 'Commerciale', color: '#ec4899' },
   { value: 'condivisa', label: 'Condivisa tra più reparti', color: '#8b5cf6' },
@@ -32,6 +33,7 @@ const departmentOptions = [
 const deptNameMap = {
   ufficio_tecnico: 'Ufficio Tecnico',
   produzione: 'Produzione',
+  amministrazione: 'Amministrazione',
   acquisti: 'Acquisti',
   commerciale: 'Commerciale',
   condivisa: 'Condivisa'
@@ -2765,7 +2767,7 @@ export default function ProjectDetailPage() {
       {/* MODALE NUOVA / MODIFICA FASE (TASK MODAL) */}
       {showTaskModal && (
         <div className="modal-overlay">
-          <div className="modal task-editor-modal" style={{ maxWidth: 900, minHeight: '85vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal task-editor-modal" style={{ maxWidth: 1100, minHeight: '85vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{editingTask ? 'Dettagli Fase Lavorazione' : 'Nuova Fase Lavorazione'}</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowTaskModal(false)} aria-label="Chiudi" style={{ marginRight: '-45px' }}>
