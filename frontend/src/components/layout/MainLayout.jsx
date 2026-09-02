@@ -368,10 +368,6 @@ export default function MainLayout() {
             <span className="sidebar-link-icon"><AppIcon name="timeline" /></span>
             {showSidebarText && <span>Calendario Commesse</span>}
           </NavLink>
-          <NavLink to="/personal-calendar" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            <span className="sidebar-link-icon"><AppIcon name="calendar" /></span>
-            {showSidebarText && <span>Calendario Personale</span>}
-          </NavLink>
           <span className="sidebar-section-label">Collaborazione</span>
           <NavLink to="/notes" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon"><AppIcon name="notes" /></span>
@@ -384,6 +380,10 @@ export default function MainLayout() {
           <NavLink to="/tickets" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon"><AppIcon name="ticket" /></span>
             {showSidebarText && <span>Ticket</span>}
+          </NavLink>
+          <NavLink to="/personal-calendar" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon"><AppIcon name="calendar" /></span>
+            {showSidebarText && <span>Calendario Personale</span>}
           </NavLink>
           <NavLink to="/chat" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon"><AppIcon name="robot" /></span>

@@ -499,13 +499,28 @@ export default function NotesPage() {
           document.execCommand('insertHTML', false, `<pre class="note-code-block"><code>${escapeHtmlText(text)}</code></pre><p><br></p>`);
         }
         break;
-      case 'normal':
-        // Reset completo: toglie il blocco (es. H1/H2/quote), la formattazione inline e le liste
+      case 'normal': {
+        // Se siamo dentro una checklist, la rimuoviamo
+        const checklistItem = getSelectionClosest('.note-checklist-item');
+        if (checklistItem) unwrapChecklistItem(checklistItem);
+
+        // Se siamo dentro un blocco di codice, lo rimuoviamo
+        const codeBlock = getSelectionClosest('.note-code-block');
+        if (codeBlock) {
+           const p = document.createElement('p');
+           p.textContent = codeBlock.textContent;
+           if (codeBlock.parentNode) codeBlock.parentNode.replaceChild(p, codeBlock);
+        }
+
+        // Se l'utente non ha selezionato testo ma è solo in un paragrafo, 
+        // rimuovere il grassetto/corsivo potrebbe richiedere di selezionare tutto il nodo.
+        // Eseguiamo il reset standard fornito dal browser:
         document.execCommand('formatBlock', false, '<p>');
         document.execCommand('removeFormat', false, null);
         if (document.queryCommandState('insertUnorderedList')) document.execCommand('insertUnorderedList');
         if (document.queryCommandState('insertOrderedList')) document.execCommand('insertOrderedList');
         break;
+      }
       default:
         return;
     }
@@ -900,6 +915,7 @@ export default function NotesPage() {
                     <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('todo')} title="Check-list interattiva"><AppIcon name="check" size={14} /> Check-list [ ]</button>
                     <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('quote')} title="Citazione">❝ Citazione</button>
                     <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('code')} title="Blocco Codice">⟨/⟩ Codice</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('normal')} title="Rimuovi ogni formattazione">Nessuna formattazione</button>
                   </div>
 
                   {/* CAMPO TITOLO */}

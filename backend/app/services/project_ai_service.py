@@ -183,7 +183,7 @@ async def analyze_project_ai(db: AsyncSession, project_id: str, current_user: Us
         "3. Se ci sono conflitti/sovraccarichi/ritardi:\n"
         "   - Spiega con chiarezza l'origine del problema.\n"
         "   - Fornisci proposte di RIPROGRAMMAZIONE concrete e applicabili: indica le date esatte libere in cui spostare le fasi o i colleghi reali dello stesso reparto a cui affidare parte delle ore, rispettando il limite delle 8h/giorno e le date della commessa madre.\n"
-        "4. Se NON ci sono problemi o conflitti, dai un riscontro positivo sintetico confermando che la pianificazione è solida ed equilibrata.\n"
+        "4. Se NON ci sono problemi o conflitti, dai un semplice e brevissimo riscontro positivo (es. 'Nessun conflitto rilevato'). NON inventare MAI azioni consigliate generiche (es. 'Continuare a monitorare', 'Verificare periodicamente').\n"
         "5. STILE E STRUTTURA DEL REPORT (FONDAMENTALE):\n"
         "   - Vai dritto al punto! Niente saluti ('Buongiorno') né formule di cortesia finali ('Resto a disposizione').\n"
         "   - Organizza la risposta esattamente in queste tre sezioni chiare con intestazioni H3 Markdown (###):\n"
