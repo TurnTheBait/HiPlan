@@ -807,66 +807,93 @@ export default function NotesPage() {
                     type="button"
                     className={`visibility-btn-interactive ${visibility === 'team' ? 'badge-shared' : visibility === 'selected' ? 'badge-selected' : 'badge-private'}`}
                     onClick={() => {
-                      if (activeNote.owner_id === user?.id) {
+                      if (activeNote.owner_id === user?.id || visibility === 'selected' || visibility === 'team') {
                         setShowVisibilityMenu(!showVisibilityMenu);
                       }
                     }}
-                    title={activeNote.owner_id === user?.id ? "Clicca per modificare la visibilità del blocco note" : "Solo l'autore può modificare la visibilità"}
-                    style={{ cursor: activeNote.owner_id === user?.id ? 'pointer' : 'default', opacity: activeNote.owner_id === user?.id ? 1 : 0.8 }}
+                    title={activeNote.owner_id === user?.id ? "Clicca per modificare la visibilità del blocco note" : "Clicca per vedere chi ha accesso"}
+                    style={{ cursor: (activeNote.owner_id === user?.id || visibility === 'selected' || visibility === 'team') ? 'pointer' : 'default', opacity: activeNote.owner_id === user?.id ? 1 : 0.8 }}
                   >
                     <AppIcon name={visibility === 'team' ? 'users' : visibility === 'selected' ? 'user-check' : 'lock'} size={14} />
                     {visibility === 'team' ? 'Condiviso' : visibility === 'selected' ? 'Utenti Selezionati' : 'Privato'}
-                    {activeNote.owner_id === user?.id && <AppIcon name="chevronDown" size={12} />}
+                    {(activeNote.owner_id === user?.id || visibility === 'selected' || visibility === 'team') && <AppIcon name="chevronDown" size={12} />}
                   </button>
 
-                  {showVisibilityMenu && activeNote.owner_id === user?.id && (
+                  {showVisibilityMenu && (
                     <div className="visibility-menu-popup">
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>
-                        IMPOSTAZIONI VISIBILITÀ
-                      </div>
-                      <div
-                        className={`visibility-option ${visibility === 'private' ? 'selected' : ''}`}
-                        onClick={() => handleToggleVisibility('private')}
-                      >
-                        <AppIcon name="lock" size={18} />
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>File Privato</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Visibile solo al tuo account personale</div>
-                        </div>
-                      </div>
-                      <div
-                        className={`visibility-option ${visibility === 'team' ? 'selected' : ''}`}
-                        onClick={() => handleToggleVisibility('team')}
-                        style={{ marginTop: 6 }}
-                      >
-                        <AppIcon name="users" size={18} />
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>In Condivisione</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Accessibile in lettura a tutto il team</div>
-                        </div>
-                      </div>
-                      <div
-                        className={`visibility-option ${visibility === 'selected' ? 'selected' : ''}`}
-                        onClick={() => handleToggleVisibility('selected', sharedWith)}
-                        style={{ marginTop: 6 }}
-                      >
-                        <AppIcon name="user-check" size={18} />
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>Utenti Selezionati</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Solo gli utenti scelti possono leggere</div>
-                        </div>
-                      </div>
-                      {visibility === 'selected' && (
-                        <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border-subtle)', marginTop: 8 }}>
-                          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>SELEZIONA UTENTI</div>
-                          <AssigneeInput
-                            selected={sharedWith}
-                            onChange={(newShared) => {
-                              setSharedWith(newShared);
-                              handleToggleVisibility('selected', newShared);
-                            }}
-                            users={users}
-                          />
+                      {activeNote.owner_id === user?.id ? (
+                        <>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>
+                            IMPOSTAZIONI VISIBILITÀ
+                          </div>
+                          <div
+                            className={`visibility-option ${visibility === 'private' ? 'selected' : ''}`}
+                            onClick={() => handleToggleVisibility('private')}
+                          >
+                            <AppIcon name="lock" size={18} />
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>File Privato</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Visibile solo al tuo account personale</div>
+                            </div>
+                          </div>
+                          <div
+                            className={`visibility-option ${visibility === 'team' ? 'selected' : ''}`}
+                            onClick={() => handleToggleVisibility('team')}
+                            style={{ marginTop: 6 }}
+                          >
+                            <AppIcon name="users" size={18} />
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>In Condivisione</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Accessibile in lettura a tutto il team</div>
+                            </div>
+                          </div>
+                          <div
+                            className={`visibility-option ${visibility === 'selected' ? 'selected' : ''}`}
+                            onClick={() => handleToggleVisibility('selected', sharedWith)}
+                            style={{ marginTop: 6 }}
+                          >
+                            <AppIcon name="user-check" size={18} />
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>Utenti Selezionati</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Solo gli utenti scelti possono leggere</div>
+                            </div>
+                          </div>
+                          {visibility === 'selected' && (
+                            <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border-subtle)', marginTop: 8 }}>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>SELEZIONA UTENTI</div>
+                              <AssigneeInput
+                                selected={sharedWith}
+                                onChange={(newShared) => {
+                                  setSharedWith(newShared);
+                                  handleToggleVisibility('selected', newShared);
+                                }}
+                                users={users}
+                              />
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div style={{ padding: '8px 12px' }}>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10 }}>CONDIVISO CON</div>
+                          {visibility === 'team' ? (
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <AppIcon name="users" size={14} /> Tutto il team
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {sharedWith.length > 0 ? sharedWith.map(u => {
+                                const matchedUser = users.find(userObj => userObj.username === u);
+                                return (
+                                  <div key={u} style={{ fontSize: '0.85rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <AppIcon name="user" size={14} />
+                                    {matchedUser ? (matchedUser.full_name || matchedUser.username) : u}
+                                  </div>
+                                );
+                              }) : (
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Nessun utente specifico</div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
