@@ -397,6 +397,109 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
   );
 }
 
+/* ─── Ticket Calendar Modal ─── */
+function TicketCalendarModal({ ticket, onClose, users, currentUser }) {
+  const [form, setForm] = useState(() => {
+    const defaultShared = new Set();
+    defaultShared.add(currentUser.username);
+    if (ticket.responsible_id) {
+      const resp = users.find(u => String(u.id) === String(ticket.responsible_id));
+      if (resp) defaultShared.add(resp.username);
+    }
+    if (Array.isArray(ticket.assigned_to)) {
+      ticket.assigned_to.forEach(u => defaultShared.add(u));
+    }
+
+    return {
+      date: new Date().toISOString().slice(0, 10),
+      time: '09:00',
+      shared_with: Array.from(defaultShared)
+    };
+  });
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const start = new Date(`${form.date}T${form.time}:00`);
+      const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 ora di durata default
+      await api.post('/calendar/events', {
+        title: `Ticket: ${ticket.title}`,
+        description: ticket.description || '',
+        start_date: start.toISOString(),
+        end_date: end.toISOString(),
+        is_all_day: false,
+        color: '#6366f1', // Indigo
+        shared_with: form.shared_with,
+        reminder_type: 'none'
+      });
+      toast.success('Promemoria aggiunto al calendario');
+      onClose();
+    } catch (err) {
+      toast.error('Errore durante la creazione del promemoria');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function toggleSharedWith(username) {
+    setForm(prev => {
+      const isSelected = prev.shared_with.includes(username);
+      if (isSelected) return { ...prev, shared_with: prev.shared_with.filter(u => u !== username) };
+      return { ...prev, shared_with: [...prev.shared_with, username] };
+    });
+  }
+
+  return (
+    <div className="tickets-modal-overlay">
+      <div className="tickets-modal" style={{ maxWidth: 600 }}>
+        <div className="tickets-modal-header">
+          <h2 className="tickets-modal-title">Aggiungi al calendario</h2>
+          <button type="button" className="tickets-modal-close" onClick={onClose} aria-label="Chiudi"><AppIcon name="close" /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="tickets-modal-body">
+          <div className="tkt-field-row">
+            <div className="tkt-field">
+              <label>Data</label>
+              <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} required />
+            </div>
+            <div className="tkt-field">
+              <label>Ora</label>
+              <input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} required />
+            </div>
+          </div>
+          <div className="tkt-field">
+            <label>Condividi con (Opzionale)</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+              {users.map(u => {
+                const isActive = form.shared_with.includes(u.username);
+                return (
+                  <label key={u.id} className={`filter-chip ${isActive ? 'active' : ''}`} style={{ '--chip-color': '#1281ffff', margin: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={isActive}
+                      onChange={() => toggleSharedWith(u.username)}
+                    />
+                    {u.full_name || u.username}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+          <div className="tkt-modal-footer">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onClose} disabled={saving}>Annulla</button>
+            <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
+              {saving ? 'Salvataggio...' : 'Aggiungi'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Edit Ticket Modal ─── */
 function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentUser }) {
   const [form, setForm] = useState({
@@ -451,19 +554,19 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
             <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
           <div className="tkt-field-row">
-              <div className="tkt-field">
-                <label>Commessa (opzionale)</label>
-                <SearchableCombobox
-                  value={form.project_id || form.custom_project_code || ''}
-                  onChange={(val, opt) => {
-                    if (opt) setForm(f => ({ ...f, project_id: opt.value, custom_project_code: '' }));
-                    else setForm(f => ({ ...f, project_id: '', custom_project_code: val }));
-                  }}
-                  options={buildCommessaOptions(projects)}
-                  placeholder="Scrivi per cercare una commessa…"
-                  allowCustom
-                />
-              </div>
+            <div className="tkt-field">
+              <label>Commessa (opzionale)</label>
+              <SearchableCombobox
+                value={form.project_id || form.custom_project_code || ''}
+                onChange={(val, opt) => {
+                  if (opt) setForm(f => ({ ...f, project_id: opt.value, custom_project_code: '' }));
+                  else setForm(f => ({ ...f, project_id: '', custom_project_code: val }));
+                }}
+                options={buildCommessaOptions(projects)}
+                placeholder="Scrivi per cercare una commessa…"
+                allowCustom
+              />
+            </div>
             <div className="tkt-field">
               <label>Priorità</label>
               <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
@@ -677,10 +780,19 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
     }
   }
 
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
   const ticketAtts = Array.isArray(ticket.attachments) ? ticket.attachments : [];
 
   return (
     <div className="tickets-detail">
+      {showCalendarModal && (
+        <TicketCalendarModal
+          ticket={ticket}
+          currentUser={currentUser}
+          onClose={() => setShowCalendarModal(false)}
+          users={users}
+        />
+      )}
       {showEdit && (
         <EditTicketModal
           ticket={ticket}
@@ -699,7 +811,9 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
           <div className="ticket-detail-actions">
             {canEdit && (
               <>
-
+                <button className="btn btn-ghost btn-icon" onClick={() => setShowCalendarModal(true)} title="Aggiungi reminder in calendario personale" aria-label="Aggiungi al calendario">
+                  <AppIcon name="calendar" size={16} />
+                </button>
                 <button className="btn btn-ghost btn-icon" onClick={() => setShowEdit(true)} title="Modifica" aria-label="Modifica ticket">
                   <AppIcon name="edit" size={16} />
                 </button>

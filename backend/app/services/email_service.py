@@ -2,7 +2,7 @@
 Servizio email asincrono per le notifiche dei TODO.
 Usa aiosmtplib per inviare email tramite SMTP aziendale.
 """
-from datetime import date
+from datetime import date, datetime
 import logging
 from typing import List, Optional
 
@@ -132,3 +132,47 @@ async def send_todo_notification_email(
     body_text = f"{intro}\n\nTODO: {todo_title}\n{todo_content or ''}"
 
     return await send_email(to_addresses, subject, body_html, body_text)
+
+
+async def send_calendar_reminder_email(
+    to_addresses: List[str],
+    event_title: str,
+    event_description: Optional[str],
+    event_start_date: datetime,
+    creator_name: str,
+) -> bool:
+    """Invia la email di promemoria per un evento del calendario."""
+    subject = f"HiPlan - Promemoria Evento: {event_title}"
+    intro = f"Promemoria per l'evento creato da <strong>{creator_name}</strong>."
+
+    content_html = f"<p style='white-space: pre-wrap; margin-top: 12px;'>{event_description}</p>" if event_description else ""
+    date_html = f"<p style='margin-top: 12px; font-size: 0.9rem; color: #2563eb;'><strong>📅 Data e Ora:</strong> {event_start_date.strftime('%d/%m/%Y %H:%M')}</p>"
+
+    body_html = f"""
+    <html><body style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f9fafb; margin: 0; padding: 40px 20px;">
+        <div style="max-width: 650px; margin: auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); overflow: hidden;">
+            <div style="background: linear-gradient(135deg, #185FA5, #2563eb); padding: 24px 32px;">
+                <h1 style="margin: 0; font-size: 1.5rem; font-weight: 600; letter-spacing: 0.5px; color: #ffffff;">HiPlan</h1>
+            </div>
+            <div style="padding: 24px 32px 32px 32px;">
+                <p style="font-size: 1.05rem; line-height: 1.6; margin-top: 0; margin-bottom: 8px;">{intro}</p>
+                <div style="background: #f8fafc; border-left: 5px solid #2563eb; border-radius: 6px; padding: 24px; margin: 12px 0;">
+                    <h2 style="margin: 0 0 12px 0; font-size: 1.3rem; color: #0f172a;">{event_title}</h2>
+                    {content_html}
+                    {date_html}
+                </div>
+                <p style="color: #64748b; font-size: 0.9rem; border-top: 1px solid #e2e8f0; padding-top: 24px;">Accedi a HiPlan per visualizzare il dettaglio nel tuo calendario.</p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 24px; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #64748b; line-height: 1.5; text-align: justify;">
+                <p style="margin: 0 0 12px 0; font-weight: bold; text-align: center; color: #475569;">
+                    ⚠️ Questa è un'email generata automaticamente, si prega di non rispondere.
+                </p>
+            </div>
+        </div>
+    </body></html>
+    """
+
+    body_text = f"{intro}\n\nEvento: {event_title}\nData: {event_start_date.strftime('%d/%m/%Y %H:%M')}\n{event_description or ''}"
+
+    return await send_email(to_addresses, subject, body_html, body_text)
+

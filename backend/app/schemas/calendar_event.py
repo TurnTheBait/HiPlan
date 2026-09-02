@@ -12,6 +12,8 @@ class CalendarEventBase(BaseModel):
     is_all_day: bool = False
     color: str = "#3b82f6"
     shared_with: Optional[list[str]] = []
+    reminder_type: str = "none"
+    reminder_time: Optional[datetime] = None
 
 
 class CalendarEventCreate(CalendarEventBase):
@@ -26,8 +28,11 @@ class CalendarEventUpdate(BaseModel):
     is_all_day: Optional[bool] = None
     color: Optional[str] = None
     shared_with: Optional[list[str]] = None
+    reminder_type: Optional[str] = None
+    reminder_time: Optional[datetime] = None
 
 
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel, ConfigDict, field_validator
 import json
 

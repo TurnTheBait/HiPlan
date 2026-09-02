@@ -52,16 +52,22 @@ async def get_all_events(
             shared = json.loads(ev.shared_with) if ev.shared_with else []
         except:
             shared = []
+            
+        is_ticket = ev.title.startswith("[Ticket] ") or ev.title.startswith("Ticket: ")
+        display_title = ev.title
+        if ev.title.startswith("[Ticket] "):
+            display_title = ev.title.replace("[Ticket] ", "Ticket: ", 1)
+            
         events.append({
             "id": f"cal_{ev.id}",
             "real_id": ev.id,
-            "title": ev.title,
+            "title": display_title,
             "description": ev.description,
             "start": ev.start_date.isoformat(),
             "end": (ev.end_date + timedelta(days=1)).isoformat() if ev.is_all_day else ev.end_date.isoformat(),
             "allDay": ev.is_all_day,
             "color": ev.color,
-            "type": "personal",
+            "type": "ticket" if is_ticket else "personal",
             "shared_with": shared
         })
 
@@ -172,7 +178,10 @@ async def create_calendar_event(
         end_date=event_in.end_date,
         is_all_day=event_in.is_all_day,
         color=event_in.color,
-        shared_with=json.dumps(event_in.shared_with) if event_in.shared_with else "[]"
+        shared_with=json.dumps(event_in.shared_with) if event_in.shared_with else "[]",
+        reminder_type=event_in.reminder_type,
+        reminder_time=event_in.reminder_time,
+        reminder_sent=False
     )
     db.add(ev)
     await db.commit()
@@ -206,6 +215,8 @@ async def update_calendar_event(
             ev.shared_with = json.dumps(value) if value else "[]"
         else:
             setattr(ev, field, value)
+            if field in ("reminder_type", "reminder_time"):
+                ev.reminder_sent = False
         
     await db.commit()
     await db.refresh(ev)

@@ -17,5 +17,9 @@ class CalendarEvent(Base, TimestampMixin):
     is_all_day = Column(Boolean, default=False, nullable=False)
     color = Column(String(50), default="#3b82f6", nullable=False)
     shared_with = Column(Text, default="[]", nullable=False)
+    
+    reminder_type = Column(String(50), default="none", nullable=False)
+    reminder_time = Column(DateTime, nullable=True)
+    reminder_sent = Column(Boolean, default=False, nullable=False)
 
     user = relationship("User")

@@ -34,6 +34,7 @@ export default function PersonalCalendarPage() {
         const parsed = JSON.parse(saved);
         if (parsed.vacation === undefined) parsed.vacation = true;
         if (parsed.holiday === undefined) parsed.holiday = true;
+        if (parsed.ticket === undefined) parsed.ticket = true;
         return parsed;
       } catch (e) { }
     }
@@ -41,6 +42,7 @@ export default function PersonalCalendarPage() {
       personal: true,
       phase: true,
       todo: true,
+      ticket: true,
       vacation: true,
       holiday: true
     };
@@ -58,7 +60,9 @@ export default function PersonalCalendarPage() {
     end_date: '',
     is_all_day: false,
     color: '#3b82f6',
-    shared_with: []
+    shared_with: [],
+    reminder_type: 'none',
+    reminder_time: ''
   });
 
   useEffect(() => {
@@ -133,7 +137,9 @@ export default function PersonalCalendarPage() {
       end_date: formatLocal(dEnd),
       is_all_day: false,
       color: '#3b82f6',
-      shared_with: []
+      shared_with: [],
+      reminder_type: 'none',
+      reminder_time: ''
     });
     setShowModal(true);
     const calendarApi = selectInfo.view.calendar;
@@ -163,7 +169,9 @@ export default function PersonalCalendarPage() {
         end_date: formEnd,
         is_all_day: ev.allDay,
         color: ev.backgroundColor,
-        shared_with: ev.extendedProps.shared_with || []
+        shared_with: ev.extendedProps.shared_with || [],
+        reminder_type: ev.extendedProps.reminder_type || 'none',
+        reminder_time: ev.extendedProps.reminder_time ? ev.extendedProps.reminder_time.slice(0, 16) : ''
       });
       setShowModal(true);
     } else {
@@ -215,18 +223,33 @@ export default function PersonalCalendarPage() {
         finalEnd = finalEnd.split('T')[0];
       }
 
+      let computedReminderTime = null;
+      if (form.reminder_type === 'day_before') {
+        const d = new Date(form.start_date);
+        d.setDate(d.getDate() - 1);
+        computedReminderTime = d.toISOString();
+      } else if (form.reminder_type === 'week_before') {
+        const d = new Date(form.start_date);
+        d.setDate(d.getDate() - 7);
+        computedReminderTime = d.toISOString();
+      } else if (form.reminder_type === 'custom') {
+        computedReminderTime = form.reminder_time ? new Date(form.reminder_time).toISOString() : null;
+      }
+
       if (modalMode === 'create') {
         await api.post('/calendar/events', {
           ...form,
           start_date: finalStart,
-          end_date: finalEnd
+          end_date: finalEnd,
+          reminder_time: computedReminderTime
         });
         toast.success('Evento creato');
       } else if (modalMode === 'edit') {
         await api.put(`/calendar/events/${selectedEvent.extendedProps.real_id}`, {
           ...form,
           start_date: finalStart,
-          end_date: finalEnd
+          end_date: finalEnd,
+          reminder_time: computedReminderTime
         });
         toast.success('Evento aggiornato');
       }
@@ -418,9 +441,9 @@ export default function PersonalCalendarPage() {
             {[
               { label: 'Riunione', color: '#3b82f6' },
               { label: 'Visita Medica', color: '#10b981' },
-              { label: 'Ferie', color: '#f59e0b' },
               { label: 'Permesso', color: '#8b5cf6' },
               { label: 'Fiera', color: '#ec4899' },
+              { label: 'Manutenzione', color: '#f59e0b' },
               { label: 'Trasferta', color: '#ef4444' },
               { label: 'Altro', color: '#64748b' }
             ].map(preset => (
@@ -487,6 +510,37 @@ export default function PersonalCalendarPage() {
         </div>
 
         <div className="input-group">
+          <label>Promemoria (Notifica Email)</label>
+          <div style={{ display: 'flex', gap: 16 }}>
+            <select
+              className="input"
+              value={form.reminder_type}
+              onChange={e => setForm({ ...form, reminder_type: e.target.value })}
+              style={{ flex: 1 }}
+            >
+              <option value="none">Nessuno</option>
+              <option value="day_before">Il giorno prima</option>
+              <option value="week_before">Una settimana prima</option>
+              <option value="custom">Personalizzato</option>
+            </select>
+
+            {form.reminder_type === 'custom' && (
+              <input
+                type="datetime-local"
+                className="input"
+                value={form.reminder_time}
+                onChange={e => setForm({ ...form, reminder_time: e.target.value })}
+                required={form.reminder_type === 'custom'}
+                style={{ flex: 1 }}
+              />
+            )}
+          </div>
+          <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
+            Invia un'email di promemoria a te e alle persone con cui hai condiviso l'evento.
+          </span>
+        </div>
+
+        <div className="input-group">
           <label>Descrizione / Note</label>
           <textarea
             className="input"
@@ -541,6 +595,10 @@ export default function PersonalCalendarPage() {
                 <input type="checkbox" checked={visibleTypes.todo} onChange={() => toggleFilter('todo')} />
                 Todo
               </label>
+              <label className={`filter-chip ${visibleTypes.ticket ? 'active' : ''}`} style={{ '--chip-color': '#6366f1', margin: 0 }}>
+                <input type="checkbox" checked={visibleTypes.ticket} onChange={() => toggleFilter('ticket')} />
+                Ticket
+              </label>
               <label className={`filter-chip ${visibleTypes.vacation ? 'active' : ''}`} style={{ '--chip-color': '#ef4444', margin: 0 }}>
                 <input type="checkbox" checked={visibleTypes.vacation} onChange={() => toggleFilter('vacation')} />
                 Ferie
@@ -584,6 +642,7 @@ export default function PersonalCalendarPage() {
           firstDay={1}
           hiddenDays={[]}
           events={filteredEvents}
+          eventDisplay="block"
           select={handleDateSelect}
           eventClick={handleEventClick}
           eventDrop={handleEventDrop}
@@ -594,7 +653,7 @@ export default function PersonalCalendarPage() {
 
       {showModal && (
         <div className="modal-overlay animate-fadeIn">
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 800, width: '100%', padding: 28, maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 950, width: '100%', padding: 28, maxHeight: '90vh', overflowY: 'auto' }}>
             <div className="modal-header">
               <h2>
                 {modalMode === 'create' && 'Nuovo Evento Personale'}

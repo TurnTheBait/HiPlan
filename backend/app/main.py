@@ -220,9 +220,68 @@ async def lifespan(app: FastAPI):
 
             await session.commit()
 
+    async def run_calendar_notifications():
+        from app.models.base import AsyncSessionLocal
+        from app.models.calendar_event import CalendarEvent
+        from app.models.user import User
+        from app.services.email_service import send_calendar_reminder_email
+        import json
+        from datetime import datetime
+        # pyrefly: ignore [missing-import]
+        from sqlalchemy import select, or_
+
+        now = datetime.now()
+
+        async with AsyncSessionLocal() as session:
+            # Eventi da notificare
+            events_to_notify = await session.execute(
+                select(CalendarEvent).where(
+                    CalendarEvent.reminder_sent == False,
+                    CalendarEvent.reminder_type != "none",
+                    CalendarEvent.reminder_time <= now
+                )
+            )
+            for ev in events_to_notify.scalars().all():
+                ev.reminder_sent = True
+                
+                # Trova utenti a cui notificare: autore + condivisi
+                try:
+                    shared = json.loads(ev.shared_with) if ev.shared_with else []
+                except:
+                    shared = []
+                
+                users_res = await session.execute(
+                    select(User).where(
+                        or_(
+                            User.id == ev.user_id,
+                            User.username.in_(shared)
+                        ),
+                        User.is_active == True
+                    )
+                )
+                users_list = users_res.scalars().all()
+                emails = [u.email for u in users_list if u.email]
+                
+                creator = next((u for u in users_list if u.id == ev.user_id), None)
+                if not creator:
+                    creator_res = await session.execute(select(User).where(User.id == ev.user_id))
+                    creator = creator_res.scalar_one_or_none()
+
+                if emails:
+                    await send_calendar_reminder_email(
+                        to_addresses=emails,
+                        event_title=ev.title,
+                        event_description=ev.description,
+                        event_start_date=ev.start_date,
+                        creator_name=creator.full_name or creator.username if creator else "HiPlan"
+                    )
+
+            await session.commit()
+
     scheduler.add_job(run_todo_notifications, 'interval', minutes=5)
+    scheduler.add_job(run_calendar_notifications, 'interval', minutes=5)
     scheduler.start()
-    print("[INIT] Scheduler avviato (controllo TODO ogni 5 minuti)")
+    print("[INIT] Scheduler avviato (controllo TODO ed Eventi ogni 5 minuti)")
 
     yield
     await engine.dispose()
