@@ -507,9 +507,9 @@ export default function NotesPage() {
         // Se siamo dentro un blocco di codice, lo rimuoviamo
         const codeBlock = getSelectionClosest('.note-code-block');
         if (codeBlock) {
-           const p = document.createElement('p');
-           p.textContent = codeBlock.textContent;
-           if (codeBlock.parentNode) codeBlock.parentNode.replaceChild(p, codeBlock);
+          const p = document.createElement('p');
+          p.textContent = codeBlock.textContent;
+          if (codeBlock.parentNode) codeBlock.parentNode.replaceChild(p, codeBlock);
         }
 
         // Se l'utente non ha selezionato testo ma è solo in un paragrafo, 
@@ -742,7 +742,7 @@ export default function NotesPage() {
                     )}
                     <div className="note-card-header">
                       <span className="note-card-title">{note.title || 'Senza Titolo'}</span>
-                      <span 
+                      <span
                         className={`note-visibility-badge ${note.visibility === 'team' ? 'badge-shared' : note.visibility === 'selected' ? 'badge-selected' : 'badge-private'}`}
                         title={note.visibility === 'team' ? 'Condiviso' : note.visibility === 'selected' ? 'Utenti Selezionati' : 'Privato'}
                         style={{ padding: '4px 6px' }}
@@ -770,7 +770,7 @@ export default function NotesPage() {
             <span className="empty-state-icon"><AppIcon name="notes" size={28} /></span>
             <h3 style={{ fontSize: '1.25rem', color: 'var(--text-primary)', marginBottom: '8px' }}>Seleziona o crea un blocco note</h3>
             <p style={{ maxWidth: 400, marginBottom: '24px', lineHeight: 1.5 }}>
-              Scrivi appunti, specifiche di commessa o check-list con formattazione visuale in stile Notion. Puoi decidere in qualsiasi momento se mantenere il file privato o condividerlo con il resto del team.
+              Scrivi appunti, specifiche di commessa o check-list. Puoi decidere in qualsiasi momento se mantenere il file privato o condividerlo con il resto del team.
             </p>
             <button
               className="btn btn-primary"
@@ -925,13 +925,13 @@ export default function NotesPage() {
             </div>
 
             {/* AREA SCROLLABILE CON SUPPORTO DRAG & DROP GLOBALE */}
-            <div 
+            <div
               className="notes-editor-scroll"
               onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
               onDrop={handleDropAttachment}
             >
               <div style={{ display: 'flex', gap: '32px', minHeight: '100%' }}>
-                
+
                 {/* COLONNA SINISTRA: EDITOR TESTUALE */}
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                   {/* TOOLBAR DI FORMATTAZIONE STYLE NOTION */}
@@ -965,7 +965,7 @@ export default function NotesPage() {
                     onInput={handleEditorInput}
                     onClick={handleEditorClick}
                     onKeyDown={handleEditorKeyDown}
-                    placeholder="Scrivi qui i tuoi appunti in stile Notion... Usa i pulsanti sopra per formattare con titoli, check-list e citazioni."
+                    placeholder="Scrivi qui i tuoi appunti... Usa i pulsanti sopra per formattare con titoli, check-list e citazioni."
                     suppressContentEditableWarning
                   />
                 </div>
