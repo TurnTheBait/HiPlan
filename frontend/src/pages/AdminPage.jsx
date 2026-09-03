@@ -709,7 +709,7 @@ export default function AdminPage() {
                 border: '1px dashed var(--border-default)'
               }}>
                 <div className="spinner" style={{ margin: '0 auto 12px' }} />
-                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>L'intelligenza artificiale sta analizzando il database...</div>
+                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>HiPlan AI sta analizzando...</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Elaborazione commesse attive, calcolo carichi addetti e individuazione criticità</div>
               </div>
             ) : aiReportData?.report ? (

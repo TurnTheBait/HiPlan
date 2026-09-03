@@ -8,7 +8,8 @@ Il progetto usa un backend asincrono **FastAPI + SQLAlchemy** e una SPA **React 
 
 ### Commesse e pianificazione
 
-- Anagrafica commesse con codice, cliente, responsabile, addetti, stato, colore e intervallo temporale.
+- Anagrafica commesse con codice, cliente, tipologia contrattuale (**Standard**, **ATEX**, **Alimentare** o combinata), responsabile, addetti, stato, colore e intervallo temporale.
+- Modal spazioso a due colonne per creazione e modifica rapida dei dati e delle risorse.
 - Fasi e milestone organizzabili in gerarchia, con reparto, priorità, date e colore.
 - Diagramma di Gantt interattivo basato su DHTMLX Gantt.
 - Dipendenze tra fasi `FS`, `SS`, `FF` e `SF`, con eventuale ritardo (`lag`).
@@ -33,7 +34,10 @@ Il progetto usa un backend asincrono **FastAPI + SQLAlchemy** e una SPA **React 
 - TODO personali o assegnati, con scadenza, promemoria, allegati e notifiche email opzionali.
 - Ticket collegabili a una commessa, con responsabile, assegnatari, priorità, stati, conversazione e allegati.
 - Blocchi note privati o condivisi con editor visuale, layout a due colonne e drag-and-drop per gli allegati.
-- **HiPlan AI**: assistente virtuale basato su LLM (Groq) in grado di analizzare i dati delle commesse e rispondere a domande di contesto.
+- **HiPlan AI**: suite avanzata di Intelligenza Artificiale basata su LLM:
+  - **Analisi Operativa Commessa**: audit in tempo reale, calcolo avanzamento effettivo coerente, verifiche di conformità normativa (ATEX 2014/34/UE e MOCA/HACCP) e tabelle di riprogrammazione oraria nominative (senza consigli generalisti o futili).
+  - **Reportistica Esecutiva Admin**: resoconto strategico per la direzione aziendale con indicatori KPI e analisi carichi.
+  - **Assistente Virtuale (Chatbot)**: motore Text-to-SQL con self-correction loop e tool per scadenze, bilanciamento del team e morning briefing.
 - **Rilevatore Conflitti**: sistema proattivo in background che individua ritardi, mancate consuntivazioni e anomalie.
 - Notifiche in-app e aggiornamenti in tempo reale tramite WebSocket.
 - Tema chiaro, scuro o sincronizzato con il sistema.

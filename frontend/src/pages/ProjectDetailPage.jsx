@@ -2948,7 +2948,7 @@ export default function ProjectDetailPage() {
                     <Sparkles size={36} style={{ margin: '0 auto' }} />
                   </div>
                   <h4 style={{ margin: '0 0 6px 0', color: 'var(--text-primary)', fontSize: '1.1rem' }}>
-                    Vuoi analizzare questa commessa con l'Intelligenza Artificiale?
+                    Vuoi analizzare questa commessa con HiPlan AI?
                   </h4>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '14px', maxWidth: '600px', margin: '0 auto 20px' }}>
                     HiPlan AI verificherà all'istante eventuali ritardi, conflitti con ferie, sovraccarichi degli addetti (incrociando anche le altre commesse) e ti fornirà consigli pratici di riprogrammazione.

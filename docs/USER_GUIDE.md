@@ -52,36 +52,37 @@ La Dashboard mostra:
 
 ## 4. Commesse
 
-### Creazione
+### Creazione e Modifica
 
-Dalla pagina **Commesse**, selezionare **Nuova Commessa** e compilare i dati necessari:
+Dalla pagina **Commesse**, selezionare **Nuova Commessa** (oppure cliccare su *Modifica Commessa* dalla scheda di dettaglio). Il popup moderno a due colonne consente una gestione spaziosa e ordinata:
 
-- nome e codice;
-- cliente;
-- colore identificativo;
-- descrizione;
-- data di inizio e fine;
-- stato;
-- responsabile;
-- addetti di commessa.
+- **Colonna sinistra**: Codice e Cliente, Titolo commessa, Data di Inizio e Fine, Colore identificativo e Stato (*In Pianificazione*, *In Corso*, *Completata*, *Archiviata*), Referente e Note/Descrizione.
+- **Colonna destra**:
+  - **Tipologia Commessa**:
+    - **Standard**: commessa ordinaria senza vincoli normativi speciali (selezionata automaticamente se non vi sono altri flag attivi).
+    - **ATEX**: per apparecchiature destinate ad atmosfere potenzialmente esplosive soggette a direttiva ATEX e certificazioni di conformità.
+    - **Alimentare**: per commesse destinate all'industria alimentare soggette a idoneità MOCA (materiali a contatto con alimenti) e protocolli igienico-sanitari.
+    - *Nota*: le tipologie **ATEX** e **Alimentare** possono essere selezionate contemporaneamente per commesse ibride complesse.
+  - **Addetti della Commessa**: selezione multipla rapida con badge e ricerca istantanea delle risorse del team.
 
-Il cliente è attualmente un campo della commessa, non un'anagrafica separata.
+Le etichette di tipologia (*Standard*, *ATEX*, *Alimentare*) compaiono con badge dedicati nelle tessere della schermata principale e nella scheda di dettaglio.
 
 ### Filtri ed export
 
-L'elenco consente di filtrare e cercare le commesse. La vista personale include i progetti nei quali l'utente è responsabile o assegnato alla commessa o a una fase.
+L'elenco consente di filtrare per stato e cercare per testo. La vista personale include i progetti nei quali l'utente è responsabile o assegnato alla commessa o a una fase.
 
 È possibile selezionare più commesse ed esportarne l'elenco in PDF o Excel.
 
 ### Dettaglio della commessa
 
-La scheda contiene più aree:
+La scheda contiene più aree operative:
 
-- **Gantt**: pianificazione temporale e dipendenze;
+- **Gantt**: pianificazione temporale interattiva, avanzamenti e dipendenze tra fasi;
+- **Analisi Commessa - HiPlan AI**: audit intelligente della commessa che verifica all'istante ritardi, sovrapposizioni, conflitti con ferie e conformità normativa (ATEX/MOCA). Riporta la percentuale reale di avanzamento e suggerisce riprogrammazioni nominative e orarie precise;
 - **Commessa**: informazioni generali e riepiloghi;
-- **Note e allegati**: documentazione collegata;
-- **Alert**: elementi che richiedono attenzione;
-- **Registro attività**: cronologia delle azioni rilevanti.
+- **Note e allegati**: documentazione e file caricati;
+- **Alert**: elementi critici che richiedono attenzione;
+- **Registro attività**: cronologia completa e tracciabilità delle modifiche.
 
 Dal dettaglio è possibile modificare i dati generali, caricare allegati ed esportare sezioni selezionate in PDF o Excel.
 
@@ -171,9 +172,21 @@ Questa sezione identifica le giornate nelle quali la stessa persona risulta impe
 
 Il **Rilevatore Conflitti** (precedentemente *Agent*) è un sistema proattivo che analizza le commesse in background, segnalando automaticamente la mancata consuntivazione delle ore, ritardi rispetto al Gantt, dati mancanti o sovraccarichi critici di lavoro. Consente all'utente di passare rapidamente alla commessa in oggetto per risolvere l'anomalia.
 
-### HiPlan AI
+### HiPlan AI (Assistente Virtuale e Reportistica)
 
-L'applicazione integra **HiPlan AI**, un assistente virtuale potenziato da modelli di Intelligenza Artificiale (Groq). Può rispondere a domande generiche, ma soprattutto è in grado di accedere in tempo reale ai dati di sistema (commesse, task, utenti) fornendo riepiloghi e analisi. Può essere avviato dal menù di esportazione all'interno di una singola commessa per avviare automaticamente un prompt precompilato. Supporta inoltre il salvataggio in cache delle chat e un rendering formattato delle risposte in Markdown.
+L'applicazione integra una suite completa di Intelligenza Artificiale progettata per ottimizzare la pianificazione:
+
+1. **Assistente Virtuale (Chatbot)**:
+   - Accessibile dalla barra laterale (**HiPlan AI**), permette di interrogare il sistema in linguaggio naturale.
+   - Fornisce tabelle e statistiche in tempo reale su commesse attive, carichi di lavoro, scadenze imminenti e ticket.
+   - Riconosce la tipologia delle commesse (*"Quali commesse sono ATEX o alimentari?"*, *"Mostrami le commesse standard del cliente Alfa"*).
+   - Offre tool rapidi come il **Morning Briefing** personalizzato con le attività urgenti della giornata e le prossime scadenze.
+   - Fornisce consigli operativi e chiari senza formule generaliste o superflue.
+
+2. **Reportistica Esecutiva Direzionale (Pannello Admin)**:
+   - Riservato agli amministratori, genera un resoconto strategico ad alto impatto sullo stato complessivo dell'azienda.
+   - Mostra KPI sintetici con le commesse attive, in pianificazione, fasi aperte, addetti coinvolti e scadenze a 7 giorni.
+   - Analizza la concentrazione dei carichi di lavoro, evidenzia criticità e ritardi reali e formula raccomandazioni decisionali mirate e nominative (es. riassegnazione carichi tra colleghi dello stesso reparto).
 
 ### Ferie
 

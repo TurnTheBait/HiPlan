@@ -96,3 +96,44 @@ async def test_project_members(client: AsyncClient, auth_headers: dict):
     # Remove member
     res = await client.delete(f"/api/projects/{proj_id}/members/test_user_id", headers=auth_headers)
     assert res.status_code in [200, 404]
+
+@pytest.mark.asyncio
+async def test_project_tipologia_create_and_update(client: AsyncClient, auth_headers: dict):
+    # 1. Create project with ATEX and Alimentare flags
+    res = await client.post(
+        "/api/projects",
+        headers=auth_headers,
+        json={
+            "name": "Progetto Speciale",
+            "code": "SPEC-01",
+            "is_atex": True,
+            "is_alimentare": True,
+            "status": "active"
+        }
+    )
+    assert res.status_code == 201
+    data = res.json()
+    assert data["is_atex"] is True
+    assert data["is_alimentare"] is True
+    proj_id = data["id"]
+
+    # 2. Retrieve project and verify flags persisted
+    get_res = await client.get(f"/api/projects/{proj_id}", headers=auth_headers)
+    assert get_res.status_code == 200
+    get_data = get_res.json()
+    assert get_data["is_atex"] is True
+    assert get_data["is_alimentare"] is True
+
+    # 3. Update to Standard (both false)
+    put_res = await client.put(
+        f"/api/projects/{proj_id}",
+        headers=auth_headers,
+        json={
+            "is_atex": False,
+            "is_alimentare": False
+        }
+    )
+    assert put_res.status_code == 200
+    put_data = put_res.json()
+    assert put_data["is_atex"] is False
+    assert put_data["is_alimentare"] is False
