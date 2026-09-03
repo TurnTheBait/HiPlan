@@ -24,12 +24,13 @@ const parseDateSafe = (d) => {
 
 export { isWeekendOrHoliday };
 
-export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onNewTask, visibleColumns = ['workers'], readOnly, projectStartDate, projectEndDate }) {
+export default function GanttChart({ projectId, tasks, links, onTaskUpdate, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onNewTask, visibleColumns = ['workers'], readOnly, projectStartDate, projectEndDate }) {
 
   const containerRef = useRef(null);
   const initialized = useRef(false);
   const initialScrollDone = useRef(false);
   const markerIdsRef = useRef([]);
+  const projectIdRef = useRef(projectId);
   const projectStartDateRef = useRef(projectStartDate);
   const projectEndDateRef = useRef(projectEndDate);
   const drawCustomMarkersRef = useRef(null);
@@ -41,6 +42,30 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
   const onLinkDeleteRef = useRef(onLinkDelete);
   const onEditTaskRef = useRef(onEditTask);
   const onNewTaskRef = useRef(onNewTask);
+  const isRestoringSort = useRef(false);
+
+  const getSortStorageKey = () => `gantt_sort_state_${projectIdRef.current || 'global'}`;
+
+  const getSortState = () => {
+    try {
+      const raw = localStorage.getItem(getSortStorageKey());
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const saveSortState = (state) => {
+    try {
+      localStorage.setItem(getSortStorageKey(), JSON.stringify(state));
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    projectIdRef.current = projectId;
+  }, [projectId]);
 
   useEffect(() => {
     projectStartDateRef.current = projectStartDate;
@@ -91,6 +116,7 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     gantt.config.drag_progress = false;
     gantt.config.open_tree_initially = true;
     gantt.config.order_branch = true;
+    gantt.config.order_branch_free = true;
     gantt.config.show_progress = true;
     gantt.config.sort = true;
     gantt.config.scroll_on_click = false;
@@ -466,6 +492,43 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
         onLinkDeleteRef.current(id, false);
       }
       return false;
+    });
+
+    // Cache ordinamento per colonna (click intestazione)
+    gantt.attachEvent("onAfterSort", (field, desc) => {
+      if (isRestoringSort.current) return;
+      if (typeof field === 'string') {
+        saveSortState({
+          type: 'column',
+          column: field,
+          desc: Boolean(desc)
+        });
+      }
+    });
+
+    // Cache ordinamento manuale delle righe (drag and drop)
+    const saveManualRowOrder = () => {
+      if (isRestoringSort.current) return;
+      const order = [];
+      if (gantt.eachTask) {
+        gantt.eachTask(t => {
+          order.push(String(t.id));
+        });
+      }
+      if (order.length > 0) {
+        saveSortState({
+          type: 'manual',
+          order
+        });
+      }
+    };
+
+    gantt.attachEvent("onRowDragEnd", () => {
+      setTimeout(saveManualRowOrder, 60);
+    });
+
+    gantt.attachEvent("onAfterTaskMove", () => {
+      setTimeout(saveManualRowOrder, 60);
     });
 
     const handleResize = () => {
@@ -848,13 +911,35 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
       return true;
     });
 
-    const sortedTaskList = [...taskList].sort((a, b) => {
-      const da = new Date(a.start_date ? String(a.start_date).split(' ')[0] : '1970-01-01');
-      const db = new Date(b.start_date ? String(b.start_date).split(' ')[0] : '1970-01-01');
-      if (da < db) return -1;
-      if (da > db) return 1;
-      return (a.id || 0) - (b.id || 0);
-    });
+    const sortState = getSortState();
+
+    const sortedTaskList = [...taskList];
+    if (sortState && sortState.type === 'manual' && Array.isArray(sortState.order) && sortState.order.length > 0) {
+      const orderMap = new Map();
+      sortState.order.forEach((id, idx) => orderMap.set(String(id), idx));
+      sortedTaskList.sort((a, b) => {
+        const hasA = orderMap.has(String(a.id));
+        const hasB = orderMap.has(String(b.id));
+        if (hasA && hasB) {
+          return orderMap.get(String(a.id)) - orderMap.get(String(b.id));
+        }
+        if (hasA) return -1;
+        if (hasB) return 1;
+        const da = new Date(a.start_date ? String(a.start_date).split(' ')[0] : '1970-01-01');
+        const db = new Date(b.start_date ? String(b.start_date).split(' ')[0] : '1970-01-01');
+        if (da < db) return -1;
+        if (da > db) return 1;
+        return (a.id || 0) - (b.id || 0);
+      });
+    } else {
+      sortedTaskList.sort((a, b) => {
+        const da = new Date(a.start_date ? String(a.start_date).split(' ')[0] : '1970-01-01');
+        const db = new Date(b.start_date ? String(b.start_date).split(' ')[0] : '1970-01-01');
+        if (da < db) return -1;
+        if (da > db) return 1;
+        return (a.id || 0) - (b.id || 0);
+      });
+    }
 
     let minDate = parseDateSafe(projectStartDateRef.current) || new Date();
     let maxDate = parseDateSafe(projectEndDateRef.current) || new Date(minDate.getTime() + 30 * 86400000);
@@ -930,7 +1015,19 @@ export default function GanttChart({ tasks, links, onTaskUpdate, onTaskCreate, o
     });
     window.__programmaticLinkDelete = false;
 
-    gantt.sort("start_date", false);
+    isRestoringSort.current = true;
+    if (sortState && sortState.type === 'column' && sortState.column) {
+      try {
+        gantt.sort(sortState.column, sortState.desc);
+      } catch (e) {
+        gantt.sort("start_date", false);
+      }
+    } else if (sortState && sortState.type === 'manual') {
+      // L'ordine manuale delle righe è già stato applicato in fase di caricamento dei dati
+    } else {
+      gantt.sort("start_date", false);
+    }
+    isRestoringSort.current = false;
     drawCustomMarkers();
 
     try {

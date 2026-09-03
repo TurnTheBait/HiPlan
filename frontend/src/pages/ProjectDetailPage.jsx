@@ -2033,6 +2033,7 @@ export default function ProjectDetailPage() {
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, width: '100%', maxWidth: '100%' }}>
           <div className="gantt-wrapper">
             <GanttChart
+              projectId={id}
               tasks={ganttData.tasks.filter(t => {
                 if (t.department && !activeDepartments.includes(t.department)) return false;
                 if (phaseFilter === 'task' && t.type === 'milestone') return false;
