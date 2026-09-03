@@ -24,7 +24,7 @@ const parseDateSafe = (d) => {
 
 export { isWeekendOrHoliday };
 
-export default function GanttChart({ projectId, tasks, links, onTaskUpdate, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onNewTask, visibleColumns = ['workers'], readOnly, projectStartDate, projectEndDate }) {
+export default function GanttChart({ projectId, sortResetKey, tasks, links, onTaskUpdate, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onNewTask, visibleColumns = ['workers'], readOnly, projectStartDate, projectEndDate }) {
 
   const containerRef = useRef(null);
   const initialized = useRef(false);
@@ -82,6 +82,20 @@ export default function GanttChart({ projectId, tasks, links, onTaskUpdate, onTa
     onEditTaskRef.current = onEditTask;
     onNewTaskRef.current = onNewTask;
   });
+
+  useEffect(() => {
+    if (!sortResetKey || !initialized.current) return;
+    try {
+      localStorage.removeItem(getSortStorageKey());
+    } catch (e) { /* ignore */ }
+    isRestoringSort.current = true;
+    try {
+      gantt.sort("start_date", false);
+      gantt.render();
+      if (drawCustomMarkersRef.current) drawCustomMarkersRef.current();
+    } catch (e) { /* ignore */ }
+    isRestoringSort.current = false;
+  }, [sortResetKey]);
 
   useEffect(() => {
     if (!containerRef.current || initialized.current) return;

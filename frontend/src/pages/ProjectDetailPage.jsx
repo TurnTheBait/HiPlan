@@ -48,6 +48,22 @@ const BACKEND_URL = import.meta.env.VITE_API_URL
   : `http://${window.location.hostname}:8000`;
 const ALL_DEPTS = departmentOptions.map(d => d.value);
 
+const GANTT_ALL_COLUMNS = [
+  { id: 'start_date', label: 'Inizio' },
+  { id: 'end_date', label: 'Fine' },
+  { id: 'event_date', label: 'Data Evento' },
+  { id: 'duration', label: 'Durata' },
+  { id: 'progress', label: 'Progresso' },
+  { id: 'priority', label: 'Priorità' },
+  { id: 'workers', label: 'Addetti' },
+  { id: 'department', label: 'Reparto' }
+];
+
+const ALL_PHASE_TYPES = [
+  { id: 'task', label: 'Lavorazioni' },
+  { id: 'milestone', label: 'Eventi (Milestone)' }
+];
+
 const PREDEFINED_WORKERS_DEFAULT = [];
 
 export default function ProjectDetailPage() {
@@ -116,17 +132,47 @@ export default function ProjectDetailPage() {
     return false;
   }, [user, project]);
 
-  // STATO PER COLONNE GANTT (default: 'Attività' e 'Addetti')
+  // STATO PER COLONNE GANTT (default: 'Attività' e 'Addetti', persistito in cache)
   const [visibleColumns, setVisibleColumns] = useState(() => {
-    const saved = localStorage.getItem('ganttVisibleColumns_v2');
-    return saved ? JSON.parse(saved) : ['workers'];
+    try {
+      const saved = localStorage.getItem(`gantt_visible_cols_${id}`) || localStorage.getItem('ganttVisibleColumns_v2');
+      return saved ? JSON.parse(saved) : ['workers'];
+    } catch {
+      return ['workers'];
+    }
   });
   const [showColumnsMenu, setShowColumnsMenu] = useState(false);
 
-  // STATO PER FILTRO TIPO FASE
-  const [phaseFilter, setPhaseFilter] = useState('all'); // 'all', 'task', 'milestone'
+  useEffect(() => {
+    if (!id) return;
+    try {
+      localStorage.setItem(`gantt_visible_cols_${id}`, JSON.stringify(visibleColumns));
+      localStorage.setItem('ganttVisibleColumns_v2', JSON.stringify(visibleColumns));
+    } catch (e) { /* ignore */ }
+  }, [id, visibleColumns]);
+
+  // STATO PER FILTRO TIPO FASE (multiselezione persistita in cache fino a reset)
+  const [phaseTypes, setPhaseTypes] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`gantt_phase_types_${id}`);
+      if (saved) return JSON.parse(saved);
+      const old = localStorage.getItem(`gantt_phase_filter_${id}`);
+      if (old === 'task') return ['task'];
+      if (old === 'milestone') return ['milestone'];
+      return ['task', 'milestone'];
+    } catch {
+      return ['task', 'milestone'];
+    }
+  });
   const [showPhaseFilterMenu, setShowPhaseFilterMenu] = useState(false);
   const [linkToDelete, setLinkToDelete] = useState(null);
+
+  useEffect(() => {
+    if (!id) return;
+    try {
+      localStorage.setItem(`gantt_phase_types_${id}`, JSON.stringify(phaseTypes));
+    } catch (e) { /* ignore */ }
+  }, [id, phaseTypes]);
 
   // STATO PER COLONNE TABELLA FASI
   const [tableVisibleColumns, setTableVisibleColumns] = useState(() => {
@@ -160,14 +206,94 @@ export default function ProjectDetailPage() {
   }
 
   const [showDeptMenu, setShowDeptMenu] = useState(false);
-  const [activeDepartments, setActiveDepartments] = useState(ALL_DEPTS);
+  // STATO PER FILTRO REPARTI (persistito in cache fino a reset)
+  const [activeDepartments, setActiveDepartments] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`gantt_active_depts_${id}`);
+      return saved ? JSON.parse(saved) : ALL_DEPTS;
+    } catch {
+      return ALL_DEPTS;
+    }
+  });
+
+  useEffect(() => {
+    if (!id) return;
+    try {
+      localStorage.setItem(`gantt_active_depts_${id}`, JSON.stringify(activeDepartments));
+    } catch (e) { /* ignore */ }
+  }, [id, activeDepartments]);
+
   const [showWorkerMenu, setShowWorkerMenu] = useState(false);
-  const [activeWorkers, setActiveWorkers] = useState([]); // empty means all
+  // STATO PER FILTRO ADDETTI (persistito in cache fino a reset)
+  const [activeWorkers, setActiveWorkers] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`gantt_active_workers_${id}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    if (!id) return;
+    try {
+      localStorage.setItem(`gantt_active_workers_${id}`, JSON.stringify(activeWorkers));
+    } catch (e) { /* ignore */ }
+  }, [id, activeWorkers]);
+
   const [viewMode, setViewMode] = useState('day');
-  const [activeTab, setActiveTab] = useState(() => {
+  const [ganttResetKey, setGanttResetKey] = useState(0);
+
+  const handleResetGanttFiltersAndSort = () => {
+    // 1. Colonne predefinite: solo attività ed addetti
+    setVisibleColumns(['workers']);
+    try {
+      localStorage.setItem(`gantt_visible_cols_${id}`, JSON.stringify(['workers']));
+      localStorage.setItem('ganttVisibleColumns_v2', JSON.stringify(['workers']));
+    } catch (e) { /* ignore */ }
+
+    // 2. Tipo fase: tutte le fasi
+    setPhaseTypes(['task', 'milestone']);
+    try {
+      localStorage.setItem(`gantt_phase_types_${id}`, JSON.stringify(['task', 'milestone']));
+      localStorage.removeItem(`gantt_phase_filter_${id}`);
+    } catch (e) { /* ignore */ }
+
+    // 3. Addetti: nessun addetto selezionato (tutti visibili)
+    setActiveWorkers([]);
+    try {
+      localStorage.setItem(`gantt_active_workers_${id}`, JSON.stringify([]));
+    } catch (e) { /* ignore */ }
+
+    // 4. Reparti: tutti i reparti
+    setActiveDepartments(ALL_DEPTS);
+    try {
+      localStorage.setItem(`gantt_active_depts_${id}`, JSON.stringify(ALL_DEPTS));
+    } catch (e) { /* ignore */ }
+
+    // 5. Rimuove l'ordinamento in cache (per data inizio predefinita)
+    try {
+      localStorage.removeItem(`gantt_sort_state_${id}`);
+      localStorage.removeItem('gantt_sort_state_global');
+    } catch (e) { /* ignore */ }
+
+    // 6. Notifica GanttChart per forzare riordino per data inizio
+    setGanttResetKey(prev => prev + 1);
+
+    // Chiude tutti i menu a tendina
+    setShowColumnsMenu(false);
+    setShowPhaseFilterMenu(false);
+    setShowWorkerMenu(false);
+    setShowDeptMenu(false);
+
+    toast.success('Filtri e ordinamento reimpostati ai valori predefiniti');
+  };
+
+  const activeTabDefault = () => {
     const params = new URLSearchParams(window.location.search);
     return params.get('tab') || 'gantt';
-  });
+  };
+  const [activeTab, setActiveTab] = useState(activeTabDefault);
 
   // Stato Modale Nuova / Modifica Fase
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -1821,45 +1947,64 @@ export default function ProjectDetailPage() {
           {activeTab === 'gantt' && (
             <div style={{ position: 'relative' }}>
               <button
+                type="button"
                 className="btn btn-secondary"
-                style={{ fontSize: '12px' }}
-                onClick={() => setShowColumnsMenu(!showColumnsMenu)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
+                onClick={handleResetGanttFiltersAndSort}
+                title="Reimposta tutti i filtri e l'ordinamento ai valori predefiniti"
+              >
+                <AppIcon name="undo" size={14} />
+                Reimposta
+              </button>
+            </div>
+          )}
+
+          {activeTab === 'gantt' && (
+            <div style={{ position: 'relative' }}>
+              <button
+                className="btn btn-secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
+                onClick={() => {
+                  setShowColumnsMenu(!showColumnsMenu);
+                  setShowPhaseFilterMenu(false); setShowWorkerMenu(false); setShowDeptMenu(false);
+                }}
               >
                 <AppIcon name="columns" />
                 Colonne
+                {(visibleColumns.length !== 1 || visibleColumns[0] !== 'workers') && (
+                  <span style={{ background: '#6366f1', color: '#fff', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px' }}>
+                    {visibleColumns.length}
+                  </span>
+                )}
               </button>
 
               {showColumnsMenu && (
                 <div className="action-popover" style={{
                   position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-default)',
-                  borderRadius: 8, padding: 10, zIndex: 100, minWidth: 200, boxShadow: 'var(--shadow-md)'
+                  borderRadius: 10, padding: 12, zIndex: 200, minWidth: 200, boxShadow: 'var(--shadow-md)'
                 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>MOSTRA/NASCONDI:</div>
-                  {[
-                    { id: 'start_date', label: 'Inizio' },
-                    { id: 'end_date', label: 'Fine' },
-                    { id: 'event_date', label: 'Data Evento' },
-                    { id: 'duration', label: 'Durata' },
-                    { id: 'progress', label: 'Progresso' },
-                    { id: 'priority', label: 'Priorità' },
-                    { id: 'workers', label: 'Addetti' },
-                    { id: 'department', label: 'Reparto' }
-                  ].map(col => (
-                    <label key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
-                      <input
-                        type="checkbox"
-                        checked={visibleColumns.includes(col.id)}
-                        onChange={(e) => {
-                          const newCols = e.target.checked
-                            ? [...visibleColumns, col.id]
-                            : visibleColumns.filter(c => c !== col.id);
-                          setVisibleColumns(newCols);
-                          localStorage.setItem('ganttVisibleColumns_v2', JSON.stringify(newCols));
-                        }}
-                      />
-                      {col.label}
-                    </label>
-                  ))}
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MOSTRA/NASCONDI:</div>
+                  <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                    {GANTT_ALL_COLUMNS.map(col => (
+                      <label key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+                        <input
+                          type="checkbox"
+                          checked={visibleColumns.includes(col.id)}
+                          onChange={(e) => {
+                            const newCols = e.target.checked
+                              ? [...visibleColumns, col.id]
+                              : visibleColumns.filter(c => c !== col.id);
+                            setVisibleColumns(newCols);
+                          }}
+                        />
+                        {col.label}
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 8, paddingTop: 8, display: 'flex', gap: 8 }}>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setVisibleColumns(GANTT_ALL_COLUMNS.map(c => c.id))} style={{ flex: 1, fontSize: 11 }}>Tutti</button>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setVisibleColumns([])} style={{ flex: 1, fontSize: 11 }}>Nessuno</button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1874,7 +2019,7 @@ export default function ProjectDetailPage() {
               >
                 <AppIcon name="filter" />
                 Tipo Fase
-                {phaseFilter !== 'all' && (
+                {phaseTypes.length === 1 && (
                   <span style={{ background: '#6366f1', color: '#fff', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px' }}>
                     1
                   </span>
@@ -1887,28 +2032,32 @@ export default function ProjectDetailPage() {
                   borderRadius: 10, padding: 12, zIndex: 200, minWidth: 200,
                   boxShadow: 'var(--shadow-md)'
                 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MOSTRA:</div>
-                  {[
-                    { value: 'all', label: 'Tutte le fasi' },
-                    { value: 'task', label: 'Solo Lavorazioni' },
-                    { value: 'milestone', label: 'Solo Eventi (Milestone)' }
-                  ].map(opt => (
-                    <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
-                      <input
-                        type="radio"
-                        name="phaseFilter"
-                        checked={phaseFilter === opt.value}
-                        onChange={() => setPhaseFilter(opt.value)}
-                      />
-                      {opt.label}
-                    </label>
-                  ))}
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MOSTRA TIPO FASE:</div>
+                  <div>
+                    {ALL_PHASE_TYPES.map(opt => (
+                      <label key={opt.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+                        <input
+                          type="checkbox"
+                          checked={phaseTypes.includes(opt.id)}
+                          onChange={(e) => {
+                            setPhaseTypes(e.target.checked
+                              ? [...phaseTypes, opt.id]
+                              : phaseTypes.filter(x => x !== opt.id)
+                            );
+                          }}
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 8, paddingTop: 8, display: 'flex', gap: 8 }}>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setPhaseTypes(['task', 'milestone'])} style={{ flex: 1, fontSize: 11 }}>Tutti</button>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setPhaseTypes([])} style={{ flex: 1, fontSize: 11 }}>Nessuno</button>
+                  </div>
                 </div>
               )}
             </div>
           )}
-
-
 
           {activeTab === 'gantt' && (
             <div style={{ position: 'relative' }}>
@@ -1919,7 +2068,7 @@ export default function ProjectDetailPage() {
               >
                 <AppIcon name="users" />
                 Addetto
-                {activeWorkers.length > 0 && (
+                {activeWorkers.length > 0 && activeWorkers.length < predefinedWorkers.length && (
                   <span style={{ background: '#6366f1', color: '#fff', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px' }}>
                     {activeWorkers.length}
                   </span>
@@ -1933,7 +2082,7 @@ export default function ProjectDetailPage() {
                   boxShadow: 'var(--shadow-md)'
                 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>FILTRA PER ADDETTO:</div>
-                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
                     {[...predefinedWorkers].sort((a, b) => a === user?.username ? -1 : b === user?.username ? 1 : a.localeCompare(b)).map(w => (
                       <label key={w} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
                         <input
@@ -1951,7 +2100,8 @@ export default function ProjectDetailPage() {
                     ))}
                   </div>
                   <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 8, paddingTop: 8, display: 'flex', gap: 8 }}>
-                    <button className="btn btn-sm btn-secondary" onClick={() => setActiveWorkers([])} style={{ flex: 1, fontSize: 11 }}>Tutti</button>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setActiveWorkers([...predefinedWorkers])} style={{ flex: 1, fontSize: 11 }}>Tutti</button>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setActiveWorkers([])} style={{ flex: 1, fontSize: 11 }}>Nessuno</button>
                   </div>
                 </div>
               )}
@@ -1970,7 +2120,7 @@ export default function ProjectDetailPage() {
               >
                 <AppIcon name="building" />
                 Reparto
-                {activeDepartments.length < ALL_DEPTS.length && (
+                {activeDepartments.length > 0 && activeDepartments.length < ALL_DEPTS.length && (
                   <span style={{ background: '#6366f1', color: '#fff', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px' }}>
                     {activeDepartments.length}/{ALL_DEPTS.length}
                   </span>
@@ -1984,25 +2134,27 @@ export default function ProjectDetailPage() {
                   boxShadow: 'var(--shadow-md)'
                 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>FILTRA PER REPARTO:</div>
-                  {departmentOptions.map(dept => (
-                    <label key={dept.value} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
-                      <input
-                        type="checkbox"
-                        checked={activeDepartments.includes(dept.value)}
-                        onChange={(e) => {
-                          setActiveDepartments(e.target.checked
-                            ? [...activeDepartments, dept.value]
-                            : activeDepartments.filter(d => d !== dept.value)
-                          );
-                        }}
-                      />
-                      <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: dept.color, flexShrink: 0 }} />
-                      {dept.label}
-                    </label>
-                  ))}
+                  <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                    {departmentOptions.map(dept => (
+                      <label key={dept.value} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+                        <input
+                          type="checkbox"
+                          checked={activeDepartments.includes(dept.value)}
+                          onChange={(e) => {
+                            setActiveDepartments(e.target.checked
+                              ? [...activeDepartments, dept.value]
+                              : activeDepartments.filter(d => d !== dept.value)
+                            );
+                          }}
+                        />
+                        <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: dept.color, flexShrink: 0 }} />
+                        {dept.label}
+                      </label>
+                    ))}
+                  </div>
                   <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 8, paddingTop: 8, display: 'flex', gap: 8 }}>
-                    <button className="btn btn-sm btn-secondary" onClick={() => setActiveDepartments(ALL_DEPTS)} style={{ flex: 1, fontSize: 11 }}>Tutti</button>
-                    <button className="btn btn-sm btn-secondary" onClick={() => setActiveDepartments([])} style={{ flex: 1, fontSize: 11 }}>Nessuno</button>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setActiveDepartments(ALL_DEPTS)} style={{ flex: 1, fontSize: 11 }}>Tutti</button>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setActiveDepartments([])} style={{ flex: 1, fontSize: 11 }}>Nessuno</button>
                   </div>
                 </div>
               )}
@@ -2034,10 +2186,19 @@ export default function ProjectDetailPage() {
           <div className="gantt-wrapper">
             <GanttChart
               projectId={id}
+              sortResetKey={ganttResetKey}
               tasks={ganttData.tasks.filter(t => {
-                if (t.department && !activeDepartments.includes(t.department)) return false;
-                if (phaseFilter === 'task' && t.type === 'milestone') return false;
-                if (phaseFilter === 'milestone' && t.type !== 'milestone') return false;
+                // Per addetto e reparto se non ci sono selezioni mostra tutto
+                if (activeDepartments.length > 0 && t.department && !activeDepartments.includes(t.department)) return false;
+
+                // Tipo fase (multiselezione): se vuoto o entrambe selezionate mostra tutto
+                if (phaseTypes.length > 0 && phaseTypes.length < 2) {
+                  const isMs = t.type === 'milestone';
+                  if (isMs && !phaseTypes.includes('milestone')) return false;
+                  if (!isMs && !phaseTypes.includes('task')) return false;
+                }
+
+                // Per addetto se non ci sono selezioni mostra tutto
                 if (activeWorkers.length > 0) {
                   if (!t.workers || !t.workers.some(w => activeWorkers.includes(w))) return false;
                 }
