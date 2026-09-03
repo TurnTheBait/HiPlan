@@ -89,8 +89,8 @@ async def lifespan(app: FastAPI):
             await session.commit()
             print("[INIT] Creato utente admin predefinito (username: admin / password: admin)")
         else:
-            if not verify_password("admin", admin_user.hashed_password):
-                admin_user.hashed_password = hash_password("admin")
+            if not verify_password("admin", str(admin_user.hashed_password)): # type: ignore
+                admin_user.hashed_password = hash_password("admin") # type: ignore
                 await session.commit()
                 print("[INIT] Password utente admin sincronizzata a 'admin'")
 
@@ -134,9 +134,9 @@ async def lifespan(app: FastAPI):
                 )
             )
             for todo in todos_notify.scalars().all():
-                todo.notify_sent = True
+                todo.notify_sent = True # type: ignore
                 try:
-                    assignees = json.loads(todo.assignees) if todo.assignees else []
+                    assignees = json.loads(str(todo.assignees)) if todo.assignees else []
                 except Exception:
                     assignees = []
 
@@ -159,15 +159,15 @@ async def lifespan(app: FastAPI):
                     emails = [u.email for u in users_list if u.email]
                     # Aggiungi email default admin se configurata e non già presente
                     if default_notification_email and default_notification_email not in emails:
-                        emails.append(default_notification_email)
+                        emails.append(default_notification_email) # type: ignore
                     creator_res = await session.execute(select(User).where(User.id == todo.creator_id))
                     creator = creator_res.scalar_one_or_none()
                     if emails:
                         await send_todo_notification_email(
-                            to_addresses=emails,
-                            todo_title=todo.title,
-                            todo_content=todo.content,
-                            creator_name=creator.full_name or creator.username if creator else "HiPlan",
+                            to_addresses=emails, # type: ignore
+                            todo_title=str(todo.title),
+                            todo_content=str(todo.content) if todo.content else None,
+                            creator_name=str(creator.full_name or creator.username) if creator else "HiPlan",
                             notify_type="notification",
                         )
 
@@ -184,9 +184,9 @@ async def lifespan(app: FastAPI):
                 )
             )
             for todo in todos_due.scalars().all():
-                todo.due_reminder_sent = True
+                todo.due_reminder_sent = True # type: ignore
                 try:
-                    assignees = json.loads(todo.assignees) if todo.assignees else []
+                    assignees = json.loads(str(todo.assignees)) if todo.assignees else []
                 except Exception:
                     assignees = []
 
@@ -209,15 +209,15 @@ async def lifespan(app: FastAPI):
                     emails = [u.email for u in users_list if u.email]
                     # Aggiungi email default admin se configurata e non già presente
                     if default_notification_email and default_notification_email not in emails:
-                        emails.append(default_notification_email)
+                        emails.append(default_notification_email) # type: ignore
                     creator_res = await session.execute(select(User).where(User.id == todo.creator_id))
                     creator = creator_res.scalar_one_or_none()
                     if emails:
                         await send_todo_notification_email(
-                            to_addresses=emails,
-                            todo_title=todo.title,
-                            todo_content=todo.content,
-                            creator_name=creator.full_name or creator.username if creator else "HiPlan",
+                            to_addresses=emails, # type: ignore
+                            todo_title=str(todo.title),
+                            todo_content=str(todo.content) if todo.content else None,
+                            creator_name=str(creator.full_name or creator.username) if creator else "HiPlan",
                             notify_type="due_reminder",
                         )
 
@@ -245,11 +245,11 @@ async def lifespan(app: FastAPI):
                 )
             )
             for ev in events_to_notify.scalars().all():
-                ev.reminder_sent = True
+                ev.reminder_sent = True # type: ignore
                 
                 # Trova utenti a cui notificare: autore + condivisi
                 try:
-                    shared = json.loads(ev.shared_with) if ev.shared_with else []
+                    shared = json.loads(str(ev.shared_with)) if ev.shared_with else []
                 except:
                     shared = []
                 
@@ -272,11 +272,11 @@ async def lifespan(app: FastAPI):
 
                 if emails:
                     await send_calendar_reminder_email(
-                        to_addresses=emails,
-                        event_title=ev.title,
-                        event_description=ev.description,
-                        event_start_date=ev.start_date,
-                        creator_name=creator.full_name or creator.username if creator else "HiPlan"
+                        to_addresses=emails, # type: ignore
+                        event_title=str(ev.title),
+                        event_description=str(ev.description) if ev.description else None,
+                        event_start_date=ev.start_date, # type: ignore
+                        creator_name=str(creator.full_name or creator.username) if creator else "HiPlan"
                     )
 
             await session.commit()

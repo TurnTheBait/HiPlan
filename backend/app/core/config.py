@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     # AI
     GEMINI_API_KEY: str = ""
     GROQ_API_KEY: str = ""
+    COHERE_API_KEY: str = ""
 
     @property
     def cors_origins_list(self) -> List[str]:

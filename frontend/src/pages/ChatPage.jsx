@@ -43,7 +43,7 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom();
     localStorage.setItem('hiplan-chat-messages', JSON.stringify(messages));
-  }, [messages]);
+  }, [messages, isLoading]);
 
   const handleResetChat = () => {
     const initialMsg = [
@@ -88,9 +88,16 @@ export default function ChatPage() {
     };
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
+    const recentHistory = messages
+      .filter((m) => m.text && !m.text.startsWith('Ciao!'))
+      .slice(-6)
+      .map((m) => ({ sender: m.sender, text: m.text }));
 
     try {
-      const response = await api.post('/chat', { message: userMessage.text });
+      const response = await api.post('/chat', {
+        message: userMessage.text,
+        history: recentHistory,
+      });
       const aiMessage = {
         id: Date.now() + 1,
         sender: 'ai',

@@ -9,8 +9,7 @@ from langchain_community.utilities import SQLDatabase
 from langchain_groq import ChatGroq
 # pyrefly: ignore [missing-import]
 from langchain.chains import create_sql_query_chain
-# pyrefly: ignore [missing-import]
-from langchain_community.tools.sql_database.tool import QuerySQLDataBaseTool
+
 # pyrefly: ignore [missing-import]
 from langchain_core.prompts import PromptTemplate
 # pyrefly: ignore [missing-import]
@@ -37,14 +36,42 @@ class ChatService:
         self.engine = create_engine(self.sync_db_url)
         self._db = None
         
-        if not settings.GROQ_API_KEY:
-            self.llm = None
-        else:
-            self.llm = ChatGroq(
+        primary_llm = None
+        if settings.GROQ_API_KEY:
+            primary_llm = ChatGroq(
                 model="openai/gpt-oss-120b", 
                 groq_api_key=settings.GROQ_API_KEY,
                 temperature=0
             )
+
+        fallbacks: list = []
+        if settings.GEMINI_API_KEY:
+            # pyrefly: ignore [missing-import]
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            fallbacks.append(ChatGoogleGenerativeAI(
+                model="gemini-3.6-flash",
+                google_api_key=settings.GEMINI_API_KEY,
+                temperature=0,
+                max_retries=1
+            ))
+            
+        if settings.COHERE_API_KEY:
+            # pyrefly: ignore [missing-import]
+            from langchain_cohere import ChatCohere
+            fallbacks.append(ChatCohere(
+                model="command-r-plus",
+                cohere_api_key=settings.COHERE_API_KEY,
+                temperature=0
+            ))
+            
+        if primary_llm and fallbacks:
+            self.llm = primary_llm.with_fallbacks(fallbacks)
+        elif primary_llm:
+            self.llm = primary_llm
+        elif fallbacks:
+            self.llm = fallbacks[0].with_fallbacks(fallbacks[1:]) if len(fallbacks) > 1 else fallbacks[0]
+        else:
+            self.llm = None
 
     @property
     def db(self):
@@ -64,183 +91,295 @@ class ChatService:
             )
         return self._db
 
-    async def get_response(self, user_message: str, current_user=None) -> str:
+    def _classify_intent(self, user_message: str) -> str:
+        m = user_message.strip().lower()
+        
+        # 1. Chat generica / Saluti / Aiuto / Ringraziamenti
+        greetings = ["ciao", "salve", "buongiorno", "buonasera", "buondi", "buondì", "hey", "hello", "buon pomeriggio"]
+        if m in greetings or (any(m.startswith(g) for g in greetings) and len(m.split()) <= 4):
+            return "chat"
+        if any(k in m for k in ["chi sei", "cosa puoi fare", "cosa sai fare", "come ti chiami", "come funzioni", "come puoi aiutarmi", "istruzioni"]):
+            return "chat"
+        if m in ["grazie", "grazie mille", "ok grazie", "perfetto", "ottimo", "grazie!", "ricevuto", "chiudi", "basta"]:
+            return "chat"
+
+        # 2. Conflitti, allarmi, sovraccarichi, ritardi, replanning o email di avviso anomalie
+        alarm_keywords = [
+            "conflitt", "sovraccaric", "allarm", "ritard", "mancat", "consuntiv",
+            "riprogramm", "replan", "segnalazion", "alert", "problemi di carico",
+            "criticit", "sovrapposiz"
+        ]
+        is_alarm = any(k in m for k in alarm_keywords)
+        is_email = any(k in m for k in ["mail", "email", "bozza", "scrivi", "comunica", "avvisa", "avvisalo", "avvisare"])
+
+        if is_alarm or (is_email and any(k in m for k in ["responsabile", "problem", "avvis", "programmazion", "commess"])):
+            return "alarms"
+
+        # 3. Default: interrogazione database via SQL
+        return "sql"
+
+    async def get_response(self, user_message: str, current_user=None, history=None) -> str:
         if not self.llm:
-            return "Errore: Chiave API Groq non configurata nel backend."
+            return "Errore: Chiave API AI non configurata nel backend."
+
+        today_str = date.today().strftime('%d/%m/%Y (%Y-%m-%d)')
+        intent = self._classify_intent(user_message)
+        logger.info(f"Chatbot Router: messaggio '{user_message}' classificato come INTENT '{intent}'")
+
+        # Formatta la cronologia recente della chat per mantenere il contesto delle domande di follow-up
+        history_context = ""
+        if history:
+            h_lines = []
+            for h in history[-4:]:
+                s = "Utente" if h.get("sender") == "user" else "Assistente"
+                t = (h.get("text") or "").strip()
+                if len(t) > 280:
+                    t = t[:280] + "..."
+                h_lines.append(f"{s}: {t}")
+            if h_lines:
+                history_context = "CRONOLOGIA RECENTE DELLA CHAT:\n" + "\n".join(h_lines) + "\n\n"
 
         try:
-            # Crea la catena per generare la query SQL (k=100 per non troncare i risultati a 5)
-            generate_query = create_sql_query_chain(self.llm, self.db, k=100)
+            # ==========================================
+            # PATH 1: CHAT GENERICA / SALUTI (Ultra-veloce, ~200 token)
+            # ==========================================
+            if intent == "chat":
+                chat_prompt = PromptTemplate.from_template(
+                    "Sei l'assistente virtuale ufficiale di HiPlan, la piattaforma aziendale di gestione commesse, pianificazione Gantt e controllo carichi di lavoro.\n"
+                    "Rispondi in modo cortese, professionale, accogliente e chiaro in italiano.\n"
+                    "Se l'utente saluta o chiede chi sei/cosa puoi fare, riassumi brevemente che puoi:\n"
+                    "- Fornire dettagli, fasi di lavoro, date e avanzamento delle commesse\n"
+                    "- Rilevare conflitti di calendario, ferie concomitanti, ritardi e sovraccarichi degli addetti\n"
+                    "- Suggerire soluzioni di riprogrammazione operativa (replanning)\n"
+                    "- Consultare e filtrare ticket di assistenza e supporto\n"
+                    "- Redigere bozze di comunicazioni ed email operative basate sui dati reali\n\n"
+                    "Messaggio dell'utente: {message}\n\n"
+                    "Risposta:"
+                )
+                chat_chain = chat_prompt | self.llm | StrOutputParser()
+                res = await chat_chain.ainvoke({"message": user_message})
+                return res.strip()
+
+            # ==========================================
+            # PATH 2: ALLARMI, CONFLITTI, REPLANNING & BOZZE EMAIL (Latenza ~1s, no SQL)
+            # ==========================================
+            if intent == "alarms":
+                suggestions_text = "Nessuna anomalia o conflitto rilevato al momento."
+                users_list_str = ""
+                try:
+                    from app.models.base import AsyncSessionLocal
+                    from app.models.user import User
+                    from app.services.replanning_service import get_replanning_suggestions
+                    async with AsyncSessionLocal() as session:
+                        # Segnalazioni replanning in tempo reale
+                        suggestions = await get_replanning_suggestions(session, current_user)
+                        if suggestions:
+                            type_labels = {
+                                "missing_data": "Dati incompleti",
+                                "zero_hours": "Mancata consuntivazione",
+                                "vacation_conflict": "Conflitto con ferie",
+                                "overload_conflict": "Sovraccarico lavorativo",
+                                "delay_conflict": "Fase in ritardo",
+                                "project_end_exceeded": "Scadenza commessa superata",
+                            }
+                            lines = []
+                            for s in suggestions[:30]:
+                                raw_type = s.get("type", "")
+                                h_type = type_labels.get(raw_type, raw_type.replace("_", " ").capitalize())
+                                reason = s.get("reason", "")
+                                p_name = s.get("project_name", "")
+                                t_name = s.get("task_name", "")
+                                w = s.get("worker", "")
+                                d = s.get("date", "")
+                                lines.append(f"- [{h_type}] {reason} (Commessa: {p_name}, Fase: {t_name}, Data: {d}, Addetto: {w})")
+                            suggestions_text = "\n".join(lines)
+                        
+                        # Addetti reali
+                        users_res = await session.execute(select(User).where(User.is_active == True))
+                        real_users = users_res.scalars().all()
+                        if real_users:
+                            u_entries = [f"{u.full_name or u.username} (email: {u.email or 'N/D'}, reparto: {u.department or 'generale'})" for u in real_users]
+                            users_list_str = "- " + "\n- ".join(u_entries)
+                except Exception as e_sugg:
+                    logger.warning(f"Errore recupero segnalazioni/utenti per path alarms: {e_sugg}")
+
+                alarms_prompt = PromptTemplate.from_template(
+                    "Sei l'assistente virtuale di HiPlan, esperto di gestione commesse e pianificazione Gantt.\n"
+                    "Data di oggi: {today_str}\n\n"
+                    "{history_context}"
+                    "ADDETTI REALI DEL SISTEMA:\n{users_list_str}\n\n"
+                    "SEGNALAZIONI ATTIVE DI SISTEMA (CONFLITTI, SOVRACCARICHI, RITARDI, MANCATE CONSUNTIVAZIONI):\n{suggestions_text}\n\n"
+                    "REGOLE E ISTRUZIONI OPERATIVE:\n"
+                    "1. DIVIETO ASSOLUTO DI TERMINI TECNICI O DA PROGRAMMATORE:\n"
+                    "   * Non usare MAI espressioni in codice o in snake_case (come 'missing_data', 'zero_hours', 'vacation_conflict', 'overload_conflict', 'delay_conflict', ecc.).\n"
+                    "   * Usa sempre e solo un linguaggio discorsivo, naturale e professionale da ufficio (es. 'Dati incompleti', 'Mancata consuntivazione delle ore', 'Conflitto con ferie programmate', 'Sovraccarico lavorativo', 'Ritardo di pianificazione').\n"
+                    "2. Se l'utente chiede una EMAIL o COMUNICAZIONE:\n"
+                    "   * Redigi una bozza formale, chiara e pronta all'uso (includi 'Oggetto:' e il corpo dell'email ben strutturato con punti elenco o tabelle discorsive).\n"
+                    "   * Riporta con precisione le commesse, le fasi, i colleghi coinvolti e le date dei problemi emersi.\n"
+                    "3. Se l'utente chiede CONSIGLI DI RIPROGRAMMAZIONE o ANALISI:\n"
+                    "   * Fai riferimento SOLO agli addetti reali del sistema. NON inventare mai colleghi o nomi fittizi.\n"
+                    "   * Parla in modo operativo: 'Assegna la fase anche all'addetto X', 'Posticipa la fase al giorno Y'. Non usare termini da database ('aggiorna la colonna').\n"
+                    "4. Se non ci sono segnalazioni attive, spiegalo con chiarezza e positività.\n"
+                    "5. Sii chiaro, completo e collaborativo nelle spiegazioni.\n\n"
+                    "Richiesta dell'utente: {message}\n\n"
+                    "Risposta:"
+                )
+                alarms_chain = alarms_prompt | self.llm | StrOutputParser()
+                res = await alarms_chain.ainvoke({
+                    "today_str": today_str,
+                    "history_context": history_context,
+                    "users_list_str": users_list_str,
+                    "suggestions_text": suggestions_text,
+                    "message": user_message
+                })
+                return res.strip()
+
+            # ==========================================
+            # PATH 3: QUERY SQL SUL DATABASE (Tabelle, date, statistiche, filtri)
+            # ==========================================
+            user_id = str(current_user.id) if current_user else ""
+            username = str(current_user.username) if current_user else ""
+            user_role = str(getattr(current_user.role, 'value', current_user.role)).upper() if (current_user and hasattr(current_user, 'role')) else ""
+            
+            is_admin = (user_role == "ADMIN")
+            is_observer = False
+            try:
+                import json
+                from app.models.base import AsyncSessionLocal
+                from app.models.setting import Setting
+                async with AsyncSessionLocal() as session:
+                    res_obs = await session.execute(select(Setting).where(Setting.key == "ticket_observers"))
+                    setting_obs = res_obs.scalar_one_or_none()
+                    if setting_obs and setting_obs.value:
+                        obs_list = json.loads(str(setting_obs.value))
+                        if username in obs_list:
+                            is_observer = True
+            except Exception as e_obs:
+                logger.warning(f"Errore lettura osservatori ticket: {e_obs}")
+
+            has_full_ticket_access = (is_admin or is_observer)
+            if has_full_ticket_access:
+                ticket_permission_rule = (
+                    f"- REGOLA PERMESSI TICKET PER L'UTENTE CORRENTE (username: '{username}', ruolo: '{user_role}'):\n"
+                    f"  * L'utente è AMMINISTRATORE o OSSERVATORE: HA ACCESSO A TUTTI I TICKET del sistema senza alcuna restrizione di visibilità."
+                )
+            else:
+                ticket_permission_rule = (
+                    f"- REGOLA PERMESSI TICKET PER L'UTENTE CORRENTE (username: '{username}', ID: '{user_id}', ruolo: '{user_role}'):\n"
+                    f"  * L'utente NON è amministratore né osservatore. HA ACCESSO ESCLUSIVAMENTE ai ticket in cui è direttamente coinvolto:\n"
+                    f"    1. Creatore / Autore (tickets.author_id = '{user_id}')\n"
+                    f"    2. Responsabile / Referente (tickets.responsible_id = '{user_id}')\n"
+                    f"    3. Assegnato (tickets.assigned_to LIKE '%{username}%')\n"
+                    f"  * Nelle query SQL sui ticket per questo utente DEVI SEMPRE APPLICARE IL FILTRO DI SICUREZZA:\n"
+                    f"    `AND (tickets.author_id = '{user_id}' OR tickets.responsible_id = '{user_id}' OR tickets.assigned_to LIKE '%{username}%')`"
+                )
+
+            sql_query_template = """Sei un esperto SQLite per il database aziendale di HiPlan.
+Data odierna: {today_str}
+
+Genera SOLO ed ESCLUSIVAMENTE la query SQL SQLite corretta per rispondere alla richiesta (massimo {top_k} risultati).
+Non aggiungere spiegazioni, commenti, apici markdown o testo oltre alla query SQL.
+
+REGOLE CRITICHE SUI DATI E PERMESSI:
+{ticket_permission_rule}
+- Tabella 'tickets':
+  * La colonna 'status' contiene ESCLUSIVAMENTE uno di questi tre valori in MAIUSCOLO: 'DA_GESTIRE', 'IN_ATTESA', 'COMPLETATO'.
+  * Ticket 'aperti' / 'attivi' / 'da risolvere' / 'in corso': usa SEMPRE `status IN ('DA_GESTIRE', 'IN_ATTESA')` oppure `status != 'COMPLETATO'`. MAI cercare 'open' o 'aperto'!
+  * Ticket 'chiusi' / 'completati': usa `status = 'COMPLETATO'`.
+  * Per panoramiche o elenchi di ticket, fai una LEFT JOIN con 'projects' (su tickets.project_id = projects.id) per estrarre anche il nome della commessa ('projects.name').
+- Tabella 'projects':
+  * 'status' è uno tra: 'PLANNING', 'ACTIVE', 'COMPLETED', 'ARCHIVED'.
+- Tabella 'tasks' (fasi delle commesse):
+  * 'project_id' è collegato a 'projects.id'.
+  * Se l'utente fa una domanda di follow-up (es. 'dammi anche le loro fasi', 'mostrami le fasi', ecc.), unisci 'tasks' con 'projects' per estrarre le fasi delle commesse discusse.
+- Tabella 'users':
+  * 'role' è uno tra: 'ADMIN', 'EDITOR', 'VIEWER'.
+- Per ricerche testuali usa `LIKE '%...%' COLLATE NOCASE` o `LOWER(...)`.
+- Non interrogare la tabella 'notes' per motivi di privacy.
+
+{history_context}Schema database:
+{table_info}
+
+Domanda dell'utente: {input}
+SQLQuery:"""
+
+            sql_query_prompt = PromptTemplate(
+                input_variables=["input", "table_info", "top_k"],
+                partial_variables={
+                    "today_str": today_str,
+                    "ticket_permission_rule": ticket_permission_rule,
+                    "history_context": history_context
+                },
+                template=sql_query_template
+            )
+
+            generate_query = create_sql_query_chain(self.llm, self.db, prompt=sql_query_prompt, k=100)
             
             def clean_sql(query_str: str) -> str:
-                # Estrae solo il codice SQL evitando testo allucinato o prefissi (es. "SQL Query:", "SQLQuery:")
                 q = query_str.strip()
                 if "```sql" in q:
                     q = q.split("```sql")[1].split("```")[0]
                 elif "```" in q:
                     q = q.split("```")[1].split("```")[0]
-                
-                # Cerca la query SELECT tramite regex per isolarla da qualsiasi testo introduttivo
+                if "SQLQuery:" in q:
+                    q = q.split("SQLQuery:")[1]
                 match = re.search(r'(SELECT\b.+)', q, re.IGNORECASE | re.DOTALL)
                 if match:
                     q = match.group(1)
-                    if ";" in q:
-                        q = q.split(";")[0]
-                
+                if ";" in q:
+                    q = q.split(";")[0]
                 cleaned = q.strip()
-                logger.info(f"Query SQL generata dal chatbot: {cleaned}")
+                logger.info(f"Query SQL generata: {cleaned}")
                 return cleaned
             
             clean_sql_runnable = RunnableLambda(clean_sql)
             
-            # Crea lo strumento per eseguire la query
-            raw_execute_query = QuerySQLDataBaseTool(db=self.db)
             def execute_and_log(sql_query: str) -> str:
                 try:
-                    res = raw_execute_query.invoke(sql_query)
-                    logger.info(f"Risultato SQL eseguito: {res}")
+                    res = self.db.run(sql_query)
+                    logger.info(f"Risultato SQL: {res}")
                     return str(res)
                 except Exception as ex:
-                    logger.error(f"Errore durante l'esecuzione SQL '{sql_query}': {ex}")
+                    logger.error(f"Errore esecuzione SQL '{sql_query}': {ex}")
                     return f"Errore SQL: {ex}"
 
             execute_query_runnable = RunnableLambda(execute_and_log)
             
-            # Prompt finale per formulare la risposta in linguaggio naturale
             answer_prompt = PromptTemplate.from_template(
-                "Dati i seguenti risultati estratti dal database e il contesto fornito, rispondi alla domanda dell'utente in italiano in modo chiaro, pratico e professionale.\n"
-                "Se nel contesto della domanda sono elencate 'SEGNALAZIONI ATTIVE DI SISTEMA', utilizzale prioritariamente per rispondere a domande su sovraccarichi, conflitti, ferie, ritardi o mancate consuntivazioni.\n"
-                "Se l'utente chiede consigli o proposte di RIPROGRAMMAZIONE/RISOLUZIONE di fasi o sovraccarichi:\n"
-                "  * DIVIETO ASSOLUTO DI INVENTARE NOMI FITTIZI (es. Marco Rossi, Mario, Lucia). Fai riferimento SOLO ed ESCLUSIVAMENTE agli addetti reali registrati nel sistema.\n"
-                "  * DIVIETO DI LINGUAGGIO DA DATABASE: non dire MAI 'aggiorna la colonna workers' o 'modifica il campo'. Parla in modo operativo: 'Assegna la fase anche all'addetto X', 'Modifica la durata della fase', ecc.\n"
-                "  * DISPONIBILITÀ ESATTA: indica con precisione le date di calendario (es. 'dal 7 all'11 settembre') in cui l'addetto è effettivamente libero (0 ore o ore parziali e nessuna ferie) per recuperare o svolgere le ore necessarie.\n"
-                "  * Rispetta i vincoli di inizio/fine della commessa padre e verifica che gli slot proposti siano realmente liberi da ferie e sotto le 8h/giorno.\n"
-                "  * NESSUN CONSIGLIO GENERALISTA: Se non ci sono problemi o non hai risultati utili, non inventare 'azioni consigliate' generiche (es. 'monitorare la situazione').\n"
-                "Se la ricerca non ha prodotto risultati (es. liste vuote o nessun record) indicalo chiaramente e semplicemente, dicendo che non ci sono dati corrispondenti.\n"
-                "IMPORTANTE: L'utente finale è un addetto aziendale non tecnico. "
-                "NON usare MAI parole come 'query', 'sql', 'database' o 'esecuzione SQL'. "
-                "NON menzionare MAI nomi di campi tecnici (come id, is_active, workers, status ecc.) né ID numerici o UUID. "
-                "Traduci tutto in linguaggio umano (es. al posto di is_active usa 'attivo', al posto di id usa il nome della commessa/persona). "
-                "Formatta le date in modo naturale e ometti informazioni inutili per un utente normale.\n"
-                "REGOLA FONDAMENTALE STILISTICA E FORMATTAZIONE: Vai dritto al punto! NON usare MAI saluti (es. Buongiorno, Ciao) all'inizio, e NON usare MAI formule di chiusura (es. Resto a disposizione, Cordiali saluti, ecc.). Inizia direttamente con i fatti. Usa Markdown pulito, lineare e compatto: elenchi puntati/numerati chiari con grassetti per nomi di commesse, fasi, addetti e date, senza interlinee o spaziature disordinate.\n\n"
-                "Domanda: {question}\n"
-                "Dati grezzi estratti (da non menzionare mai come 'query' o 'risultato SQL'): {result}\n\n"
-                "Risposta finale:"
+                "Sei l'assistente virtuale ufficiale di HiPlan, amichevole, professionale ed esperto di pianificazione.\n"
+                "Rispondi alla richiesta dell'utente in italiano in modo chiaro, discorsivo ed esauriente, basandoti sui dati estratti dal database.\n\n"
+                "LINEE GUIDA PER LA RISPOSTA:\n"
+                "1. TONO PROFESSIONALE E DISCORSIVO:\n"
+                "   * NON limitarti a stampare una tabella secca o un elenco senza testo!\n"
+                "   * Introduci sempre i risultati con una breve frase naturale di presentazione.\n"
+                "   * Quando presenti dati strutturati (come commesse, fasi o ticket), usa tabelle o elenchi puntati curati in Markdown, con grassetti per nomi, date e stati.\n"
+                "   * Concludi con un commento di sintesi o una disponibilità ad approfondire se utile.\n"
+                "2. CONTINUITÀ CONVERSAZIONALE:\n"
+                "   * Se la domanda dell'utente fa riferimento al contesto precedente (es. 'dammi anche le loro fasi', 'approfondisci', 'chi se ne occupa?'), rispondi ricollegandoti chiaramente all'argomento precedente.\n"
+                "3. TRADUZIONE CODICI:\n"
+                "   * Stato ticket: 'DA_GESTIRE' -> 'Da gestire', 'IN_ATTESA' -> 'In attesa del cliente', 'COMPLETATO' -> 'Completato'.\n"
+                "   * Priorità: 'LOW' -> 'Bassa', 'MEDIUM' -> 'Media', 'HIGH' -> 'Alta'.\n"
+                "   * Stato commesse: 'PLANNING' -> 'In pianificazione', 'ACTIVE' -> 'Attiva', 'COMPLETED' -> 'Completata', 'ARCHIVED' -> 'Archiviata'.\n"
+                "4. Non usare termini informatici da database (mai 'query', 'sql', 'tabella db', ID tecnici numerici o UUID).\n"
+                "5. Se non ci sono record corrispondenti, spiega con gentilezza e chiarezza cosa hai cercato e che al momento non risultano elementi registrati.\n\n"
+                "{history_context}"
+                "Domanda dell'utente: {question}\n"
+                "Dati estratti dal sistema: {result}\n\n"
+                "Risposta completa e naturale:"
             )
             
-            # Catena completa: Genera -> Esegui -> Rispondi
+            answer_prompt_bound = answer_prompt.partial(history_context=history_context)
+            
             chain = (
                 RunnablePassthrough.assign(query=generate_query | clean_sql_runnable).assign(
                     result=itemgetter("query") | execute_query_runnable
                 )
-                | answer_prompt
+                | answer_prompt_bound
                 | self.llm
                 | StrOutputParser()
             )
-            
-            today_str = date.today().strftime('%d/%m/%Y (%Y-%m-%d)')
-            
-            # Recupera in tempo reale le segnalazioni avanzate di replanning e l'elenco degli addetti reali
-            suggestions_text = ""
-            users_list_str = ""
-            try:
-                from app.models.base import AsyncSessionLocal
-                from app.models.user import User
-                from app.services.replanning_service import get_replanning_suggestions
-                async with AsyncSessionLocal() as session:
-                    # 1. Suggerimenti
-                    suggestions = await get_replanning_suggestions(session, current_user)
-                    if suggestions:
-                        lines = []
-                        for s in suggestions[:30]:
-                            s_type = s.get("type", "")
-                            reason = s.get("reason", "")
-                            p_name = s.get("project_name", "")
-                            t_name = s.get("task_name", "")
-                            w = s.get("worker", "")
-                            d = s.get("date", "")
-                            lines.append(f"- [{s_type}] {reason} (Commessa: {p_name}, Fase: {t_name}, Data: {d}, Addetto: {w})")
-                        suggestions_text = "\nSEGNALAZIONI ATTIVE DI SISTEMA (SOVRACCARICHI, CONFLITTI, RITARDI, MANCATE CONSUNTIVAZIONI):\n" + "\n".join(lines) + "\n"
-                    
-                    # 2. Utenti reali
-                    users_res = await session.execute(select(User).where(User.is_active == True))
-                    real_users = users_res.scalars().all()
-                    if real_users:
-                        u_entries = [f"{u.full_name or u.username} (username: {u.username}, email: {u.email}, reparto: {u.department or 'generale'})" for u in real_users]
-                        users_list_str = "\nADDETTI REALI DEL SISTEMA (Usa SOLO questi nomi, non inventare colleghi fittizi):\n- " + "\n- ".join(u_entries) + "\n"
-            except Exception as e_sugg:
-                logger.warning(f"Impossibile recuperare i suggerimenti/utenti per la chat: {e_sugg}")
 
-            user_info = ""
-            if current_user:
-                user_role = getattr(current_user.role, 'value', current_user.role) if hasattr(current_user, 'role') else ''
-                user_info = f"L'utente che interroga il db ha ID '{current_user.id}' e ruolo '{user_role}'. "
-
-            domain_context = (
-                "Contesto aziendale e regole database (SQLite):\n"
-                f"- Data odierna del sistema: {today_str}\n"
-                f"{users_list_str}"
-                "- TABELLA 'projects' (Commesse / Progetti):\n"
-                "  * Nome / Titolo commessa: colonna 'name'\n"
-                "  * Codice commessa: colonna 'code'\n"
-                "  * Cliente: colonna 'client'\n"
-                "  * Stato: colonna 'status' ('planning', 'active', 'completed', 'archived')\n"
-                "  * Date: 'start_date', 'end_date'\n"
-                "  * Responsabile: 'responsible_id' (collegato a users.id)\n"
-                "  * Addetti commessa: colonna 'assigned_workers' (lista JSON di nomi)\n"
-                "  * Descrizione e note: 'description', 'notes'\n"
-                "- TABELLA 'tasks' (Fasi / Compiti delle Commesse):\n"
-                "  * Nome fase: colonna 'text'\n"
-                "  * Commessa di appartenenza: 'project_id' (collegato a projects.id)\n"
-                "  * Date: 'start_date', 'end_date', 'duration'\n"
-                "  * Ore pianificate: 'planned_hours'\n"
-                "  * Addetti assegnati alla fase: 'workers' (lista JSON di nomi/utenti) e 'worker_hours' (dict JSON {nome: ore})\n"
-                "  * Stato/Avanzamento: 'progress' (0.0 - 1.0), 'completed' (1=completato, 0=in corso)\n"
-                "  * Reparto: 'department'\n"
-                "- TABELLA 'phase_templates' (Fasi Preimpostate / Modelli di Fase / Fasi Predefinite / Fasi Creabili):\n"
-                "  * Contiene tutte le fasi di lavoro predefinite/preimpostate che gli utenti possono creare o inserire nelle commesse.\n"
-                "  * Nome della fase preimpostata: colonna 'name'\n"
-                "  * Reparto di appartenenza: colonna 'department' (ufficio_tecnico, produzione, acquisti, condivisa)\n"
-                "  * Giorni predefiniti / Ore predefinite: 'default_days', 'default_hours'\n"
-                "  * Colore predefinito: 'default_color'\n"
-                "- TABELLA 'users' (Utenti / Dipendenti / Addetti):\n"
-                "  * Username: 'username', Nome completo: 'full_name', Email: 'email', Ruolo: 'role' (admin, editor, viewer), Reparto: 'department', Attivo: 'is_active'\n"
-                "- TABELLA 'vacations' (Ferie / Assenze / Permessi):\n"
-                "  * Utente: 'user_id' (collegato a users.id), Inizio/Fine: 'start_date', 'end_date', Motivo: 'reason'\n"
-                "- TABELLA 'tickets' (Ticket di assistenza / Segnalazioni):\n"
-                "  * Titolo: 'title', Descrizione: 'description', Commessa collegata: 'project_id', Creatore: 'author_id', Responsabile: 'responsible_id', Assegnati: 'assigned_to' (lista JSON di username), Stato: 'status' ('Da gestire', 'In attesa del cliente', 'Completato'), Priorità: 'priority' ('low', 'medium', 'high')\n"
-                "- TABELLA 'ticket_replies' (Risposte / Conversazioni nei Ticket):\n"
-                "  * Ticket: 'ticket_id', Autore: 'user_id', Messaggio: 'message', Data: 'created_at'\n"
-                "- TABELLA 'task_comments' (Commenti sulle Fasi):\n"
-                "  * Fase: 'task_id', Autore: 'author_id', Testo: 'content', Data: 'created_at'\n"
-                "- TABELLA 'task_checklist_items' (Checklist / Sotto-attività delle Fasi):\n"
-                "  * Fase: 'task_id', Descrizione: 'text', Completato: 'is_completed' (1=fatto, 0=in corso)\n"
-                "- TABELLA 'project_members' (Membri assegnati al Team di una Commessa):\n"
-                "  * Commessa: 'project_id', Utente: 'user_id', Ruolo nel progetto: 'role' (manager, member, viewer)\n"
-                "- TABELLA 'links' (Dipendenze e collegamenti Gantt tra fasi):\n"
-                "  * Commessa: 'project_id', Fase origine: 'source' (task_id), Fase destinazione: 'target' (task_id), Tipo: 'type'\n"
-                "- REGOLA DI RICERCA FLESSIBILE (MOLTO IMPORTANTE):\n"
-                "  * Quando l'utente chiede 'fasi preimpostate', 'fasi predefinite', 'modelli di fase', o 'possibili fasi che si possono creare', INTERROGA LA TABELLA 'phase_templates'!\n"
-                "  * Quando cerchi una commessa, progetto, utente o fase per nome/codice (es. 'commessa1', 'commessa 1', 'COMM1', 'elena'), usa SEMPRE `LIKE '%...%' COLLATE NOCASE` o `LOWER(...) LIKE '%...'` e cerca sia in 'name' che in 'code' (es. `WHERE name LIKE '%1%' OR code LIKE '%1%' OR name LIKE '%commessa%' COLLATE NOCASE`). Mai usare uguaglianze rigide '=' che falliscono se ci sono spazi o maiuscole diverse.\n"
-                "  * Quando l'utente chiede una 'panoramica' o dettagli di una commessa, estrai i dati della commessa da 'projects' E le relative fasi da 'tasks' (facendo JOIN o query correlata su tasks.project_id = projects.id) per mostrare anche le fasi, le date e gli addetti.\n"
-                "- REGOLE DI RIPROGRAMMAZIONE (REPLANNING & AIUTO DECISIONALE):\n"
-                "  * Quando ti viene chiesto aiuto per riprogrammare o risolvere conflitti/sovraccarichi, valuta le fasi di tutte le commesse e i carichi di lavoro.\n"
-                "  * MAI USARE NOMI DI PERSONE INVENTATI: usa SOLO i colleghi reali indicati nella lista ADDETTI REALI DEL SISTEMA.\n"
-                "  * MAI USARE TERMINI DA DATABASE ('aggiorna la colonna workers'): usa indicazioni operative e colloquiali comprensibili da personale d'ufficio.\n"
-                "  * INDICA I GIORNI ESATTI DI DISPONIBILITÀ: calcola e indica con chiarezza i giorni specifici di calendario in cui l'addetto (o il collega sostituto) è libero (senza ferie e senza altre fasi concomitanti che superino le 8h/giorno).\n"
-                "  * PRESTA MASSIMA ATTENZIONE alle date di inizio e fine della Commessa ('start_date' ed 'end_date' di 'projects'): le fasi riprogrammate devono restare all'interno della durata della commessa, oppure segnala chiaramente che la scadenza della commessa andrà posticipata.\n"
-                "- Conflitto: ferie e ore assegnate nello stesso giorno, OPPURE più fasi con totale ore > 8h in un giorno lavorativo.\n"
-                "- Sovraccarico: quando un utente ha pianificate (in una o più fasi) più di 8h in un giorno lavorativo.\n"
-                "- Mancata consuntivazione: quando un utente aveva ore pianificate in un giorno passato ma non risultano consuntivate/registrate.\n"
-                "- Ritardo (Delay): quando la data di fine (end_date) di un task o progetto è minore di oggi e non è completato (completed=0).\n"
-                "- Dati mancanti: fai notare se mancano campi essenziali (NULL) o valori necessari a un calcolo.\n"
-                f"{suggestions_text}"
-                "REGOLE DI SICUREZZA E PRIVACY DATI (CRITICO E INVALICABILE):\n"
-                "- Le note dell'applicazione contengono dati personali e sensibili: sono TOTALMENTE ESCLUSE e NON ACCESSIBILI dal chatbot. Se l'utente chiede informazioni su note o appunti personali, spiega cortesemente che per motivi di riservatezza e privacy le note non sono consultabili tramite l'assistente virtuale.\n\n"
-                f"Domanda dell'utente: {user_message}"
-            )
-            
-            response = chain.invoke({"question": domain_context})
+            response = await chain.ainvoke({"question": user_message})
             return response.strip()
             
         except Exception as e:
