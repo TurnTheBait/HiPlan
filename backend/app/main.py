@@ -281,10 +281,22 @@ async def lifespan(app: FastAPI):
 
             await session.commit()
 
+    # Scheduler: Generazione report AI giornaliero alle ore 7:00
+    async def run_daily_ai_report():
+        try:
+            from app.models.base import AsyncSessionLocal
+            from app.services.chat_service import chat_service
+            async with AsyncSessionLocal() as session:
+                await chat_service.generate_admin_report(session)
+                print("[SCHEDULER] Report AI giornaliero delle ore 07:00 generato con successo.")
+        except Exception as e:
+            print(f"[SCHEDULER] Errore generazione report AI ore 07:00: {e}")
+
+    scheduler.add_job(run_daily_ai_report, 'cron', hour=7, minute=0)
     scheduler.add_job(run_todo_notifications, 'interval', minutes=5)
     scheduler.add_job(run_calendar_notifications, 'interval', minutes=5)
     scheduler.start()
-    print("[INIT] Scheduler avviato (controllo TODO ed Eventi ogni 5 minuti)")
+    print("[INIT] Scheduler avviato (Report AI ore 07:00, controllo TODO ed Eventi ogni 5 minuti)")
 
     yield
     await engine.dispose()

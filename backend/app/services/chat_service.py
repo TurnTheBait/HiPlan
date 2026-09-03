@@ -387,4 +387,195 @@ SQLQuery:"""
             error_msg = str(e)
             return f"Si è verificato un errore durante l'elaborazione della tua richiesta: {error_msg}"
 
+    async def generate_admin_report(self, db) -> dict:
+        import json
+        from datetime import date, datetime, timedelta
+        from sqlalchemy import select
+        from app.models.project import Project, ProjectStatus
+        from app.models.task import Task
+        from app.models.user import User
+
+        today = date.today()
+        today_str = today.strftime("%d/%m/%Y")
+
+        # 1. Carica progetti non eliminati
+        res_proj = await db.execute(select(Project).where(Project.deleted_at.is_(None)))
+        projects = res_proj.scalars().all()
+
+        # 2. Carica task
+        res_tasks = await db.execute(select(Task))
+        tasks = res_tasks.scalars().all()
+
+        # 3. Carica utenti attivi
+        res_users = await db.execute(select(User).where(User.is_active.is_(True)))
+        users = res_users.scalars().all()
+
+        # Calcolo KPI
+        total_projects = len(projects)
+        active_projects = [p for p in projects if p.status == ProjectStatus.ACTIVE]
+        planning_projects = [p for p in projects if p.status == ProjectStatus.PLANNING]
+        completed_projects = [p for p in projects if p.status == ProjectStatus.COMPLETED]
+        archived_projects = [p for p in projects if p.status == ProjectStatus.ARCHIVED]
+
+        total_tasks = len(tasks)
+        completed_tasks = [t for t in tasks if t.completed == 1 or (t.progress is not None and t.progress >= 1.0)]
+        active_tasks = [t for t in tasks if t not in completed_tasks]
+
+        overdue_tasks = []
+        upcoming_tasks = []
+        for t in active_tasks:
+            if t.end_date:
+                if t.end_date < today:
+                    overdue_tasks.append(t)
+                elif t.end_date <= today + timedelta(days=7):
+                    upcoming_tasks.append(t)
+
+        # Mappatura task per progetto
+        proj_map = {str(p.id): p for p in projects}
+
+        # Statistiche per addetto
+        worker_stats = {}
+        for t in tasks:
+            w_list = []
+            if t.workers:
+                try:
+                    w_list = json.loads(t.workers) if isinstance(t.workers, str) else t.workers
+                except Exception:
+                    w_list = [t.workers] if isinstance(t.workers, str) else []
+            if isinstance(w_list, list):
+                for w in w_list:
+                    if not w or not str(w).strip():
+                        continue
+                    w_name = str(w).strip()
+                    if w_name not in worker_stats:
+                        worker_stats[w_name] = {"total": 0, "completed": 0, "active": 0, "overdue": 0}
+                    worker_stats[w_name]["total"] += 1
+                    if t.completed == 1 or (t.progress is not None and t.progress >= 1.0):
+                        worker_stats[w_name]["completed"] += 1
+                    else:
+                        worker_stats[w_name]["active"] += 1
+                        if t.end_date and t.end_date < today:
+                            worker_stats[w_name]["overdue"] += 1
+
+        # Genera testi di riepilogo dati
+        active_proj_lines = []
+        for p in active_projects:
+            p_tasks = [t for t in tasks if str(t.project_id) == str(p.id)]
+            p_done = [t for t in p_tasks if t.completed == 1 or (t.progress is not None and t.progress >= 1.0)]
+            p_pct = int((len(p_done) / len(p_tasks) * 100)) if p_tasks else 0
+            end_str = p.end_date.strftime("%d/%m/%Y") if p.end_date else "N/D"
+            active_proj_lines.append(f"- **{p.name}** ({p.code or 'No Code'}) | Cliente: {p.client or 'Interno'} | Scadenza: {end_str} | Fasi: {len(p_done)}/{len(p_tasks)} ({p_pct}%)")
+
+        if not active_proj_lines:
+            active_proj_text = "Nessuna commessa attiva al momento."
+        else:
+            active_proj_text = "\n".join(active_proj_lines)
+
+        # Dettaglio ritardi
+        overdue_lines = []
+        for t in overdue_tasks[:15]:
+            proj = proj_map.get(str(t.project_id))
+            p_name = proj.name if proj and proj.name else "Commessa sconosciuta"
+            w_str = t.workers or "Non assegnato"
+            overdue_lines.append(f"- *{t.text}* (Commessa: **{p_name}**) | Scaduta il: {t.end_date.strftime('%d/%m/%Y')} | Addetti: {w_str}")
+        
+        overdue_text = "\n".join(overdue_lines) if overdue_lines else "Nessuna attività scaduta in ritardo."
+
+        # Distribuzione addetti
+        worker_lines = []
+        sorted_workers = sorted(worker_stats.items(), key=lambda x: x[1]["active"], reverse=True)
+        for w_name, s in sorted_workers:
+            worker_lines.append(f"- **{w_name}**: {s['active']} attive in corso, {s['completed']} completate, {s['overdue']} in ritardo (Totale: {s['total']})")
+        
+        worker_text = "\n".join(worker_lines) if worker_lines else "Nessun addetto attualmente assegnato a fasi di commessa."
+
+        # Scadenze prossimi 7 giorni
+        upcoming_lines = []
+        for t in upcoming_tasks[:15]:
+            proj = proj_map.get(str(t.project_id))
+            p_name = proj.name if proj and proj.name else "Commessa sconosciuta"
+            w_str = t.workers or "Non assegnato"
+            upcoming_lines.append(f"- *{t.text}* (Commessa: **{p_name}**) | Scadenza: {t.end_date.strftime('%d/%m/%Y')} | Addetti: {w_str}")
+        upcoming_text = "\n".join(upcoming_lines) if upcoming_lines else "Nessuna scadenza critica nei prossimi 7 giorni."
+
+        # Tentativo chiamata LLM
+        report_markdown = ""
+        if self.llm:
+            try:
+                system_prompt = (
+                    f"Sei un Senior Project Management AI Consultant per la piattaforma HiPlan.\n"
+                    f"Oggi è il {today_str}.\n"
+                    f"Genera un Resoconto Esecutivo chiaro, professionale, completo e altamente azionabile per la direzione aziendale e gli amministratori.\n\n"
+                    f"DATI AGGIORNATI DEL SISTEMA:\n"
+                    f"- Commesse Totali: {total_projects} (Attive: {len(active_projects)}, In Pianificazione: {len(planning_projects)}, Completate: {len(completed_projects)}, Archiviate: {len(archived_projects)})\n"
+                    f"- Fasi / Attività Totali: {total_tasks} (Completate: {len(completed_tasks)}, In Corso: {len(active_tasks)}, In Ritardo: {len(overdue_tasks)})\n"
+                    f"- Scadenze nei prossimi 7 giorni: {len(upcoming_tasks)}\n\n"
+                    f"COMMESSE ATTIVE:\n{active_proj_text}\n\n"
+                    f"ATTIVITÀ SCADUTE O IN RITARDO:\n{overdue_text}\n\n"
+                    f"CARICO ADDETTI:\n{worker_text}\n\n"
+                    f"SCADENZE IMMINENTI (PROSSIMI 7 GIORNI):\n{upcoming_text}\n\n"
+                    f"ISTRUZIONI RIGOROSE:\n"
+                    f"Formatta il testo in Markdown pulito ed elegante. Non inserire preamboli come 'Ecco il report' o saluti.\n"
+                    f"Usa esattamente questa struttura:\n"
+                    f"# 📑 Resoconto Esecutivo: Stato Commesse & Addetti ({today_str})\n\n"
+                    f"### 1. 📊 Sintesi Esecutiva & Stato Commesse\n"
+                    f"Descrivi la situazione complessiva con tono professionale, mettendo in evidenza avanzamento e stato delle commesse attive.\n\n"
+                    f"### 2. 👥 Analisi Carico di Lavoro & Distribuzione Addetti\n"
+                    f"Evidenzia la concentrazione dei carichi: chi è maggiormente occupato, chi ha task in ritardo e come bilanciare le risorse.\n\n"
+                    f"### 3. ⚠️ Criticità, Ritardi & Scadenze Imminenti\n"
+                    f"Analizza le attività in ritardo e quelle che scadono a breve termine, indicando possibili colli di bottiglia o rischi di consegna.\n\n"
+                    f"### 4. 💡 Raccomandazioni Strategiche & Operative\n"
+                    f"Fornisci 3-4 punti pratici e operativi per gli amministratori e project manager per ottimizzare la pianificazione.\n"
+                )
+                response = await self.llm.ainvoke(system_prompt)
+                content = getattr(response, "content", response)
+                if isinstance(content, str):
+                    report_markdown = content
+                elif isinstance(content, list):
+                    report_markdown = "\n".join(str(c) for c in content)
+                else:
+                    report_markdown = str(content)
+            except Exception as e:
+                logger.error(f"Errore nella generazione report con LLM: {e}")
+
+        # Fallback se LLM non disponibile o fallito
+        if not report_markdown:
+            report_markdown = (
+                f"# 📑 Resoconto Esecutivo: Stato Commesse & Addetti ({today_str})\n\n"
+                f"### 1. 📊 Sintesi Esecutiva & Stato Commesse\n"
+                f"Nel sistema risultano registrate **{total_projects} commesse complessive**, di cui **{len(active_projects)} attive**, "
+                f"**{len(planning_projects)} in fase di pianificazione** e **{len(completed_projects)} completate**.\n\n"
+                f"**Stato delle commesse attive:**\n"
+                f"{active_proj_text}\n\n"
+                f"### 2. 👥 Analisi Carico di Lavoro & Distribuzione Addetti\n"
+                f"Gli addetti coinvolti nelle attività sono **{len(worker_stats)}**. Di seguito il riepilogo del carico di ciascun membro del team:\n\n"
+                f"{worker_text}\n\n"
+                f"### 3. ⚠️ Criticità, Ritardi & Scadenze Imminenti\n"
+                f"Attualmente si registrano **{len(overdue_tasks)} attività in ritardo** rispetto alla data di oggi e **{len(upcoming_tasks)} attività in scadenza nei prossimi 7 giorni**.\n\n"
+                f"**Attività in ritardo:**\n{overdue_text}\n\n"
+                f"**Scadenze nei prossimi 7 giorni:**\n{upcoming_text}\n\n"
+                f"### 4. 💡 Raccomandazioni Strategiche & Operative\n"
+                f"- **Riequilibrio carichi**: verificare la disponibilità degli addetti con il maggior numero di attività aperte per evitare sovraccarichi.\n"
+                f"- **Priorità alle fasi scadute**: intervenire con solleciti o riprogrammazione sulle {len(overdue_tasks)} attività in ritardo.\n"
+                f"- **Monitoraggio ravvicinato**: verificare l'avanzamento delle {len(upcoming_tasks)} fasi con consegna programmata entro i prossimi 7 giorni."
+            )
+
+        final_report = str(report_markdown).strip()
+        return {
+            "report": final_report,
+            "kpis": {
+                "total_projects": total_projects,
+                "active_projects": len(active_projects),
+                "planning_projects": len(planning_projects),
+                "completed_projects": len(completed_projects),
+                "total_tasks": total_tasks,
+                "active_tasks": len(active_tasks),
+                "overdue_tasks": len(overdue_tasks),
+                "total_workers": len(worker_stats),
+                "upcoming_deadlines_count": len(upcoming_tasks)
+            },
+            "generated_at": datetime.now().strftime("%d/%m/%Y alle %H:%M"),
+            "generated_timestamp": int(datetime.now().timestamp() * 1000)
+        }
+
 chat_service = ChatService()

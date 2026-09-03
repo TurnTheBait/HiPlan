@@ -106,3 +106,58 @@
   border-radius: 10px;
   background: var(--bg-secondary);
 }
+
+/* ─── Box Reportistica AI ─── */
+.ai-report-markdown {
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+.ai-report-markdown h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-top: 0;
+  margin-bottom: 14px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 8px;
+}
+.ai-report-markdown h2,
+.ai-report-markdown h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-top: 18px;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+}
+.ai-report-markdown p {
+  margin-bottom: 12px;
+}
+.ai-report-markdown ul,
+.ai-report-markdown ol {
+  margin-left: 20px;
+  margin-bottom: 14px;
+}
+.ai-report-markdown li {
+  margin-bottom: 6px;
+}
+.ai-report-markdown strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.ai-report-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+}
+.ai-report-markdown th,
+.ai-report-markdown td {
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  text-align: left;
+}
+.ai-report-markdown th {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+}
+

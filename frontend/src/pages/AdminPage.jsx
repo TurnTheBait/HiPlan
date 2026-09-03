@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import api from '../api/client';
 import { useToast } from '../context/ToastContext';
 import AppIcon from '../components/ui/AppIcon';
@@ -69,7 +71,7 @@ export default function AdminPage() {
   const [showAdminColumnsMenu, setShowAdminColumnsMenu] = useState(false);
   const [managingUser, setManagingUser] = useState(null);
   const [newPassword, setNewPassword] = useState('');
-  
+
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [newUserForm, setNewUserForm] = useState({
     username: '',
@@ -80,7 +82,40 @@ export default function AdminPage() {
     department: 'ufficio_tecnico'
   });
 
+  function isReportExpired(data) {
+    if (!data) return true;
+    let ts = data.generated_timestamp;
+    if (!ts && data.generated_at) {
+      const match = data.generated_at.match(/(\d{2})\/(\d{2})\/(\d{4})\s+alle\s+(\d{2}):(\d{2})/);
+      if (match) {
+        const [, d, m, y, h, min] = match;
+        ts = new Date(Number(y), Number(m) - 1, Number(d), Number(h), Number(min)).getTime();
+      }
+    }
+    if (!ts) return true;
+
+    const now = new Date();
+    // Cutoff delle ore 07:00 di oggi
+    const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 7, 0, 0, 0);
+    if (now.getTime() < cutoff.getTime()) {
+      // Se sono prima delle 7:00 del mattino, il cutoff è ieri alle 07:00
+      cutoff.setDate(cutoff.getDate() - 1);
+    }
+    return ts < cutoff.getTime();
+  }
+
+  const [aiReportData, setAiReportData] = useState(() => {
+    try {
+      const cached = localStorage.getItem('admin_ai_report_cache');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [aiReportLoading, setAiReportLoading] = useState(false);
+
   const [collapsedSections, setCollapsedSections] = useState({
+    aiReport: true, // Di default compresso mostrando solo i KPI come in Immagine 2
     annunci: true,
     users: true,
     templates: true,
@@ -94,6 +129,40 @@ export default function AdminPage() {
     setCollapsedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
+  async function fetchAiReport(showToast = true) {
+    if (aiReportLoading) return;
+    setAiReportLoading(true);
+    try {
+      const res = await api.post('/chat/admin-report');
+      const dataWithTs = {
+        ...res.data,
+        generated_timestamp: res.data.generated_timestamp || Date.now()
+      };
+      setAiReportData(dataWithTs);
+      try {
+        localStorage.setItem('admin_ai_report_cache', JSON.stringify(dataWithTs));
+      } catch (e) {
+        console.error("Cache error", e);
+      }
+      if (showToast) {
+        toast.success("Report AI aggiornato con successo!");
+      }
+    } catch (err) {
+      console.error("Errore generazione report AI:", err);
+      if (showToast) {
+        toast.error(err.response?.data?.detail || "Errore nella generazione del report AI");
+      }
+    } finally {
+      setAiReportLoading(false);
+    }
+  }
+
+  function copyAiReport() {
+    if (!aiReportData?.report) return;
+    navigator.clipboard.writeText(aiReportData.report);
+    toast.success("Report copiato negli appunti!");
+  }
+
   function toggleAdminColumn(col) {
     setAdminVisibleColumns(prev => {
       const next = prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col];
@@ -104,7 +173,21 @@ export default function AdminPage() {
 
   useEffect(() => {
     loadData();
+    // Controllo aggiornamento report alle 7:00
+    if (isReportExpired(aiReportData)) {
+      fetchAiReport(false);
+    }
   }, []);
+
+  useEffect(() => {
+    // Controllo periodico ogni minuto se si sono superate le 07:00 per aggiornamento automatico
+    const interval = setInterval(() => {
+      if (isReportExpired(aiReportData)) {
+        fetchAiReport(false);
+      }
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [aiReportData]);
 
   async function handleCreateUser(e) {
     e.preventDefault();
@@ -488,6 +571,194 @@ export default function AdminPage() {
 
   return (
     <div className="admin-page animate-fadeIn">
+
+      {/* SEZIONE REPORTISTICA AI */}
+      <div className={`admin-section-card ${collapsedSections.aiReport ? 'is-collapsed' : ''}`} style={{
+        marginBottom: 30,
+        background: 'linear-gradient(135deg, var(--bg-card) 0%, rgba(99, 102, 241, 0.04) 100%)',
+        border: '1px solid var(--border-default)',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+          <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('aiReport')}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 30,
+                  height: 30,
+                  borderRadius: 8,
+                  background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                  color: '#fff',
+                  boxShadow: '0 2px 6px rgba(99, 102, 241, 0.3)'
+                }}>
+                  <AppIcon name="robot" size={17} />
+                </span>
+                Reportistica & Analisi AI
+              </h2>
+            </div>
+            <p className="admin-section-desc">Resoconto intelligente dello stato attuale di commesse, avanzamento e carico addetti salvato in cache.</p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+            {aiReportData && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={(e) => { e.stopPropagation(); copyAiReport(); }}
+                title="Copia report negli appunti"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
+              >
+                <AppIcon name="copy" size={13} />
+                Copia
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={aiReportLoading}
+              onClick={(e) => { e.stopPropagation(); fetchAiReport(true); }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: '12px',
+                background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                borderColor: '#4f46e5'
+              }}
+            >
+              <AppIcon name={aiReportLoading ? "spinner" : "refresh"} size={13} className={aiReportLoading ? "spin" : ""} />
+              {aiReportLoading ? "Analisi in corso..." : (aiReportData ? "Aggiorna Report" : "Genera Report")}
+            </button>
+            <div style={{ cursor: 'pointer', color: 'var(--text-muted)', marginLeft: 6 }} onClick={() => toggleSection('aiReport')}>
+              <AppIcon name={collapsedSections.aiReport ? 'chevronDown' : 'chevronUp'} size={18} />
+            </div>
+          </div>
+        </div>
+
+        {/* KPI Cards: sempre visibili anche a sezione compressa (esattamente come in Immagine 2) */}
+        {aiReportData?.kpis && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+            gap: 12,
+            marginTop: 18,
+            marginBottom: collapsedSections.aiReport ? 0 : 16
+          }}>
+            <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Commesse Attive</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#6366f1', marginTop: 2 }}>{aiReportData.kpis.active_projects}</div>
+            </div>
+            <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>In Pianificazione</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#f59e0b', marginTop: 2 }}>{aiReportData.kpis.planning_projects}</div>
+            </div>
+            <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Fasi in Corso</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#3b82f6', marginTop: 2 }}>{aiReportData.kpis.active_tasks}</div>
+            </div>
+            <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Fasi in Ritardo</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: aiReportData.kpis.overdue_tasks > 0 ? '#ef4444' : '#10b981', marginTop: 2 }}>{aiReportData.kpis.overdue_tasks}</div>
+            </div>
+            <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Addetti Coinvolti</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>{aiReportData.kpis.total_workers}</div>
+            </div>
+            <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Scadenze a 7gg</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#ec4899', marginTop: 2 }}>{aiReportData.kpis.upcoming_deadlines_count}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Dettaglio del report: mostrato solo se espanso */}
+        {!collapsedSections.aiReport && (
+          <div className="admin-section-content" style={{ marginTop: 14 }}>
+            {/* Timestamp bar */}
+            {aiReportData?.generated_at && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '7px 14px',
+                background: 'rgba(99, 102, 241, 0.06)',
+                borderRadius: 6,
+                border: '1px solid rgba(99, 102, 241, 0.18)',
+                marginBottom: 14,
+                fontSize: '11.5px',
+                color: 'var(--text-secondary)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <AppIcon name="clock" size={13} />
+                  <span>Report generato il <strong>{aiReportData.generated_at}</strong> (aggiornato ogni giorno alle ore 07:00)</span>
+                </div>
+              </div>
+            )}
+
+            {/* Report Content */}
+            {aiReportLoading ? (
+              <div style={{
+                padding: '36px 20px',
+                textAlign: 'center',
+                background: 'var(--bg-secondary)',
+                borderRadius: 10,
+                border: '1px dashed var(--border-default)'
+              }}>
+                <div className="spinner" style={{ margin: '0 auto 12px' }} />
+                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>L'intelligenza artificiale sta analizzando il database...</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Elaborazione commesse attive, calcolo carichi addetti e individuazione criticità</div>
+              </div>
+            ) : aiReportData?.report ? (
+              <div className="ai-report-markdown" style={{
+                padding: '18px 22px',
+                background: 'var(--bg-secondary)',
+                borderRadius: 10,
+                border: '1px solid var(--border-subtle)',
+                lineHeight: 1.65,
+                fontSize: '13.5px',
+                color: 'var(--text-primary)'
+              }}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {aiReportData.report}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              <div style={{
+                padding: '30px 20px',
+                textAlign: 'center',
+                background: 'var(--bg-secondary)',
+                borderRadius: 10,
+                border: '1px dashed var(--border-default)'
+              }}>
+                <AppIcon name="robot" size={28} style={{ color: '#6366f1', marginBottom: 8 }} />
+                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>Nessun report dettagliato in cache</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, marginBottom: 16 }}>
+                  Clicca sul pulsante qui sotto per avviare l'analisi dello stato delle commesse e degli addetti.
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => fetchAiReport(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                    borderColor: '#4f46e5'
+                  }}
+                >
+                  <AppIcon name="sparkles" size={14} />
+                  Genera Report Esecutivo AI
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* SEZIONE BACHECA AZIENDALE */}
       <div className={`admin-section-card ${collapsedSections.annunci ? 'is-collapsed' : ''}`} style={{ marginBottom: 30 }}>
@@ -1310,7 +1581,7 @@ export default function AdminPage() {
                     placeholder="es. mario.rossi"
                   />
                 </div>
-                
+
                 <div className="input-group" style={{ marginTop: 14 }}>
                   <label>Email *</label>
                   <input
@@ -1359,7 +1630,7 @@ export default function AdminPage() {
                       <option value="admin">Admin (Completo)</option>
                     </select>
                   </div>
-                  
+
                   <div className="input-group" style={{ flex: 1 }}>
                     <label>Reparto *</label>
                     <select
