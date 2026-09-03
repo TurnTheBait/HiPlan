@@ -16,6 +16,8 @@ class ProjectCreate(BaseModel):
     status: ProjectStatus = ProjectStatus.PLANNING
     responsible_id: Optional[str] = None
     assigned_workers: List[str] = []
+    is_atex: bool = False
+    is_alimentare: bool = False
 
 
 class ProjectUpdate(BaseModel):
@@ -30,6 +32,8 @@ class ProjectUpdate(BaseModel):
     status: Optional[ProjectStatus] = None
     responsible_id: Optional[str] = None
     assigned_workers: Optional[List[str]] = None
+    is_atex: Optional[bool] = None
+    is_alimentare: Optional[bool] = None
 
 
 class MemberAdd(BaseModel):
@@ -64,6 +68,8 @@ class ProjectOut(BaseModel):
     responsible_username: Optional[str] = None
     responsible_name: Optional[str] = None
     assigned_workers: List[str] = []
+    is_atex: bool = False
+    is_alimentare: bool = False
     attachments: List[dict] = []
     is_assigned: bool = False
     created_at: Optional[datetime] = None

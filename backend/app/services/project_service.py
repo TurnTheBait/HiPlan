@@ -93,6 +93,8 @@ async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
             task_count=task_count, member_count=worker_count,
             progress=round(avg_progress, 2),
             attachments=attachments_list,
+            is_atex=bool(getattr(p, 'is_atex', False) or False),
+            is_alimentare=bool(getattr(p, 'is_alimentare', False) or False),
         )
         output.append(out)
     return output
@@ -116,6 +118,8 @@ async def create_project(db: AsyncSession, data: ProjectCreate, owner: User) -> 
         owner_id=owner.id,
         responsible_id=data.responsible_id if data.responsible_id else None,
         assigned_workers=json.dumps(data.assigned_workers) if data.assigned_workers else "[]",
+        is_atex=bool(data.is_atex),
+        is_alimentare=bool(data.is_alimentare),
     )
     db.add(project)
     await db.flush()

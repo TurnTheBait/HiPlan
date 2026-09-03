@@ -98,6 +98,8 @@ async def create_project(
         responsible_name=project.responsible.full_name if project.responsible else (project.responsible.username if project.responsible else None),
         assigned_workers=assigned_workers_list,
         is_assigned=(current_user.id == project.owner_id or current_user.id == project.responsible_id or current_user.username in assigned_workers_list),
+        is_atex=bool(getattr(project, 'is_atex', False) or False),
+        is_alimentare=bool(getattr(project, 'is_alimentare', False) or False),
         attachments=attachments_list,
         created_at=project.created_at, updated_at=project.updated_at,
     )
@@ -165,6 +167,8 @@ async def get_project(
         responsible_name=project.responsible.full_name if project.responsible else (project.responsible.username if project.responsible else None),
         assigned_workers=assigned_workers_list,
         is_assigned=is_assigned,
+        is_atex=bool(getattr(project, 'is_atex', False) or False),
+        is_alimentare=bool(getattr(project, 'is_alimentare', False) or False),
         attachments=attachments_list,
         created_at=project.created_at, updated_at=project.updated_at,
         members=members,
@@ -209,6 +213,8 @@ async def update_project(
         responsible_name=project.responsible.full_name if project.responsible else (project.responsible.username if project.responsible else None),
         assigned_workers=assigned_workers_list,
         is_assigned=(current_user.id == project.owner_id or current_user.id == project.responsible_id or current_user.username in assigned_workers_list),
+        is_atex=bool(getattr(project, 'is_atex', False) or False),
+        is_alimentare=bool(getattr(project, 'is_alimentare', False) or False),
         attachments=attachments_list,
         created_at=project.created_at, updated_at=project.updated_at,
     )

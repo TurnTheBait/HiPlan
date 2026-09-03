@@ -521,6 +521,39 @@ textarea.input {
 .badge-high { background: var(--warning-bg); color: var(--priority-high); }
 .badge-critical { background: var(--danger-bg); color: var(--priority-critical); }
 
+.badge-atex {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+.dark .badge-atex {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.badge-alimentare {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.dark .badge-alimentare {
+  background: rgba(16, 185, 129, 0.22);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.badge-standard {
+  background: var(--bg-tertiary, #f1f5f9);
+  color: var(--text-secondary, #64748b);
+  border: 1px solid var(--border-subtle, #e2e8f0);
+}
+.dark .badge-standard {
+  background: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
 /* ======================================
    MODAL
    ====================================== */

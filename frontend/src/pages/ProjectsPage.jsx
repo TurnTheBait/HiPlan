@@ -42,12 +42,12 @@ export default function ProjectsPage() {
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
-  const [editForm, setEditForm] = useState({ name: '', code: '', client: '', color: '#185FA5', description: '', start_date: '', end_date: '', responsible_id: '', assigned_workers: [], status: 'planning' });
+  const [editForm, setEditForm] = useState({ name: '', code: '', client: '', color: '#185FA5', description: '', start_date: '', end_date: '', responsible_id: '', assigned_workers: [], status: 'planning', is_atex: false, is_alimentare: false });
   const [filter, setFilter] = useState(() => {
     return (user?.role === 'admin' || user?.role === 'editor') ? 'all' : 'my_projects';
   });
   const [searchQuery, setSearchQuery] = useState('');
-  const [form, setForm] = useState({ name: '', code: '', client: '', color: '#185FA5', status: 'planning', description: '', start_date: '', end_date: '', responsible_id: '', assigned_workers: [] });
+  const [form, setForm] = useState({ name: '', code: '', client: '', color: '#185FA5', status: 'planning', description: '', start_date: '', end_date: '', responsible_id: '', assigned_workers: [], is_atex: false, is_alimentare: false });
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exportFormat, setExportFormat] = useState('pdf');
   const exportMenuRef = useRef(null);
@@ -77,7 +77,9 @@ export default function ProjectsPage() {
       start_date: '',
       end_date: '',
       responsible_id: '',
-      assigned_workers: []
+      assigned_workers: [],
+      is_atex: false,
+      is_alimentare: false
     });
     setShowModal(true);
   }
@@ -151,6 +153,8 @@ export default function ProjectsPage() {
         start_date: form.start_date || null,
         end_date: form.end_date || null,
         responsible_id: form.responsible_id || null,
+        is_atex: Boolean(form.is_atex),
+        is_alimentare: Boolean(form.is_alimentare),
       });
       toast.success('Commessa creata con successo!');
       setShowModal(false);
@@ -219,6 +223,8 @@ export default function ProjectsPage() {
       responsible_id: project.responsible_id || '',
       assigned_workers: Array.isArray(project.assigned_workers) ? [...project.assigned_workers] : [],
       status: project.status || 'planning',
+      is_atex: Boolean(project.is_atex),
+      is_alimentare: Boolean(project.is_alimentare),
     });
     setShowEditModal(true);
   }
@@ -236,6 +242,8 @@ export default function ProjectsPage() {
         code: editForm.code.trim(),
         client: editForm.client.trim(),
         name: editForm.name.trim(),
+        is_atex: Boolean(editForm.is_atex),
+        is_alimentare: Boolean(editForm.is_alimentare),
       };
       if (payload.start_date === '') payload.start_date = null;
       if (payload.end_date === '') payload.end_date = null;
@@ -570,15 +578,34 @@ export default function ProjectsPage() {
               style={{ borderLeft: `4px solid ${project.color || '#185FA5'}` }}
             >
               <div className="project-card-header" style={{ alignItems: 'flex-start' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px', flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px', flex: 1, minWidth: 0 }}>
                   <span className="project-card-code" style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--accent-500)', letterSpacing: '0.02em' }}>
                     {project.code || 'UT-COMM'}
                   </span>
-                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
+                  <h3 style={{ margin: '2px 0 0 0', fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
                     {project.name || 'Senza Titolo'}
                   </h3>
                 </div>
                 <span className={`badge badge-${project.status}`}>{STATUS_LABELS_IT[project.status] || project.status}</span>
+              </div>
+
+              {/* Riga dedicata indicatori tipologia commessa: affiancati a piena larghezza con bordi arrotondati pill e spaziatura compatta */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: -6, marginBottom: -4, marginLeft: -4, flexWrap: 'nowrap' }}>
+                {project.is_atex && (
+                  <span className="badge badge-atex" title="Conforme Direttiva ATEX">
+                    ATEX
+                  </span>
+                )}
+                {project.is_alimentare && (
+                  <span className="badge badge-alimentare" title="Conforme Settore Alimentare / Food Grade">
+                    Alimentare
+                  </span>
+                )}
+                {!project.is_atex && !project.is_alimentare && (
+                  <span className="badge badge-standard">
+                    Standard
+                  </span>
+                )}
               </div>
               <div className="project-card-meta">
                 <AppIcon name="building" size={14} />
@@ -640,157 +667,288 @@ export default function ProjectsPage() {
 
       {showModal && (
         <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: 850, width: '100%' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
+          <div className="modal" style={{ maxWidth: 1200, width: '95vw', maxHeight: '92vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header" style={{ marginBottom: 16 }}>
               <h2>Nuova Commessa</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowModal(false)} aria-label="Chiudi">
                 <AppIcon name="close" />
               </button>
             </div>
             <form onSubmit={handleCreate}>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="project-code">Codice Commessa *</label>
-                  <input
-                    id="project-code"
-                    className="input"
-                    value={form.code}
-                    onChange={(e) => setForm({ ...form, code: e.target.value })}
-                    required
-                    placeholder="es. UT-2026-001"
-                  />
-                </div>
-                <div className="input-group" style={{ flex: 2, minWidth: 0 }}>
-                  <label htmlFor="project-client">Cliente *</label>
-                  <input
-                    id="project-client"
-                    className="input"
-                    value={form.client}
-                    onChange={(e) => setForm({ ...form, client: e.target.value })}
-                    required
-                    placeholder="es. Ferrari S.p.A."
-                  />
-                </div>
-              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: 32, alignItems: 'start' }}>
+                {/* COLONNA SINISTRA: Dati Commessa e Pianificazione */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="project-code">Codice Commessa *</label>
+                      <input
+                        id="project-code"
+                        className="input"
+                        value={form.code}
+                        onChange={(e) => setForm({ ...form, code: e.target.value })}
+                        required
+                        placeholder="es. UT-2026-001"
+                      />
+                    </div>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="project-client">Cliente *</label>
+                      <input
+                        id="project-client"
+                        className="input"
+                        value={form.client}
+                        onChange={(e) => setForm({ ...form, client: e.target.value })}
+                        required
+                        placeholder="es. Ferrari S.p.A."
+                      />
+                    </div>
+                  </div>
 
-              <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-                <div className="input-group" style={{ flex: 2, minWidth: 0 }}>
-                  <label htmlFor="project-name">Nome Progetto / Titolo Commessa (opzionale)</label>
-                  <input
-                    id="project-name"
-                    className="input"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    placeholder="es. Impianto linea automatica (default: uguale al codice)"
-                  />
-                </div>
-                <div className="input-group" style={{ flex: 1.5, minWidth: 0 }}>
-                  <label htmlFor="project-status">Stato Iniziale</label>
-                  <select
-                    id="project-status"
-                    className="input"
-                    value={form.status}
-                    onChange={(e) => setForm({ ...form, status: e.target.value })}
-                  >
-                    {STATUS_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="input-group" style={{ flex: 0.8, minWidth: 0 }}>
-                  <label htmlFor="project-color">Colore</label>
-                  <input
-                    id="project-color"
-                    type="color"
-                    className="input"
-                    style={{ height: 38, padding: 2, flexShrink: 0 }}
-                    value={form.color}
-                    onChange={(e) => setForm({ ...form, color: e.target.value })}
-                  />
-                </div>
-              </div>
+                  <div className="input-group">
+                    <label htmlFor="project-name">Nome Progetto / Titolo Commessa (opzionale)</label>
+                    <input
+                      id="project-name"
+                      className="input"
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      placeholder="es. Impianto linea automatica (default: uguale al codice)"
+                    />
+                  </div>
 
-              <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="project-responsible">Referente di Commessa</label>
-                  <select
-                    id="project-responsible"
-                    className="input"
-                    value={form.responsible_id || ''}
-                    onChange={(e) => setForm({ ...form, responsible_id: e.target.value })}
-                  >
-                    <option value=""></option>
-                    {usersList.map(u => (
-                      <option key={u.id} value={u.id}>{u.full_name || u.username} ({u.username})</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="project-start">Data Inizio</label>
+                      <input
+                        id="project-start"
+                        type="date"
+                        className="input"
+                        value={form.start_date}
+                        onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+                      />
+                    </div>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="project-end">Data Fine Prevista</label>
+                      <input
+                        id="project-end"
+                        type="date"
+                        className="input"
+                        value={form.end_date}
+                        onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+                      />
+                    </div>
+                  </div>
 
-              <div className="input-group" style={{ marginTop: 16 }}>
-                <label>Addetti della Commessa (Multi-selezione)</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                  {usersList.map(u => {
-                    const selected = (form.assigned_workers || []).includes(u.username);
-                    return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => toggleWorkerSelection(u.username, false)}
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="project-color">Colore</label>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                          id="project-color"
+                          type="color"
+                          value={form.color}
+                          onChange={(e) => setForm({ ...form, color: e.target.value })}
+                          style={{ width: 44, height: 38, padding: 2, borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', cursor: 'pointer', flexShrink: 0 }}
+                        />
+                        <input
+                          className="input"
+                          value={form.color}
+                          onChange={(e) => setForm({ ...form, color: e.target.value })}
+                          placeholder="#185FA5"
+                          style={{ flex: 1, minWidth: 0 }}
+                        />
+                      </div>
+                    </div>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="project-status">Stato Iniziale</label>
+                      <select
+                        id="project-status"
+                        className="input"
+                        value={form.status}
+                        onChange={(e) => setForm({ ...form, status: e.target.value })}
+                      >
+                        {STATUS_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="input-group">
+                    <label htmlFor="project-responsible">Referente di Commessa</label>
+                    <select
+                      id="project-responsible"
+                      className="input"
+                      value={form.responsible_id || ''}
+                      onChange={(e) => setForm({ ...form, responsible_id: e.target.value })}
+                    >
+                      <option value="">-- Nessun referente predefinito --</option>
+                      {usersList.map(u => (
+                        <option key={u.id} value={u.id}>{u.full_name || u.username} ({u.username})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="input-group">
+                    <label htmlFor="project-desc">Note e Specifiche Tecniche</label>
+                    <textarea
+                      id="project-desc"
+                      className="input"
+                      rows={3}
+                      value={form.description}
+                      onChange={(e) => setForm({ ...form, description: e.target.value })}
+                      placeholder="Descrizione, note del cliente..."
+                      style={{ resize: 'vertical' }}
+                    />
+                  </div>
+                </div>
+
+                {/* COLONNA DESTRA: Tipologia e Team */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {/* Tipologia Commessa */}
+                  <div className="input-group">
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
+                      <span style={{ fontWeight: 600 }}>Tipologia Commessa</span>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        ATEX e Alimentare selezionabili insieme
+                      </span>
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(125px, 1fr))', gap: 8, marginTop: 4 }}>
+                      {/* Opzione STANDARD */}
+                      <div
+                        onClick={() => setForm({ ...form, is_atex: false, is_alimentare: false })}
                         style={{
-                          padding: '6px 12px',
-                          borderRadius: 20,
-                          border: selected ? '2px solid #3b82f6' : '1px solid var(--border-color)',
-                          background: selected ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-tertiary)',
-                          color: selected ? '#60a5fa' : 'var(--text-secondary)',
-                          fontSize: 13,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 10,
                           cursor: 'pointer',
-                          fontWeight: selected ? 600 : 400
+                          border: (!form.is_atex && !form.is_alimentare) ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                          background: (!form.is_atex && !form.is_alimentare) ? 'rgba(59, 130, 246, 0.12)' : 'var(--bg-tertiary)',
+                          color: (!form.is_atex && !form.is_alimentare) ? '#2563eb' : 'var(--text-primary)',
+                          transition: 'all 0.15s ease',
+                          userSelect: 'none'
                         }}
                       >
-                        {selected ? '✓ ' : '+ '}{u.full_name || u.username}
-                      </button>
-                    );
-                  })}
+                        <input
+                          type="radio"
+                          checked={!form.is_atex && !form.is_alimentare}
+                          onChange={() => setForm({ ...form, is_atex: false, is_alimentare: false })}
+                          style={{ accentColor: '#3b82f6', cursor: 'pointer' }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>Standard</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Nessun vincolo spec.</div>
+                        </div>
+                      </div>
+
+                      {/* Opzione ATEX */}
+                      <div
+                        onClick={() => setForm({ ...form, is_atex: !form.is_atex })}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          cursor: 'pointer',
+                          border: form.is_atex ? '2px solid #f59e0b' : '1px solid var(--border-color)',
+                          background: form.is_atex ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-tertiary)',
+                          color: form.is_atex ? '#d97706' : 'var(--text-primary)',
+                          transition: 'all 0.15s ease',
+                          userSelect: 'none'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(form.is_atex)}
+                          onChange={(e) => setForm({ ...form, is_atex: e.target.checked })}
+                          style={{ accentColor: '#f59e0b', cursor: 'pointer' }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>ATEX</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Rischio esplosione</div>
+                        </div>
+                      </div>
+
+                      {/* Opzione ALIMENTARE */}
+                      <div
+                        onClick={() => setForm({ ...form, is_alimentare: !form.is_alimentare })}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          cursor: 'pointer',
+                          border: form.is_alimentare ? '2px solid #10b981' : '1px solid var(--border-color)',
+                          background: form.is_alimentare ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-tertiary)',
+                          color: form.is_alimentare ? '#059669' : 'var(--text-primary)',
+                          transition: 'all 0.15s ease',
+                          userSelect: 'none'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(form.is_alimentare)}
+                          onChange={(e) => setForm({ ...form, is_alimentare: e.target.checked })}
+                          style={{ accentColor: '#10b981', cursor: 'pointer' }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>Alimentare</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Settore Food Grade</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Addetti della Commessa */}
+                  <div className="input-group">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <label style={{ margin: 0 }}>Addetti della Commessa (Multi-selezione)</label>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        {form.assigned_workers?.length || 0} selezionati
+                      </span>
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                      padding: 12,
+                      borderRadius: 10,
+                      border: '1px solid var(--border-color)',
+                      background: 'var(--bg-tertiary)',
+                      maxHeight: 250,
+                      overflowY: 'auto'
+                    }}>
+                      {usersList.map(u => {
+                        const selected = (form.assigned_workers || []).includes(u.username);
+                        return (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => toggleWorkerSelection(u.username, false)}
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: 20,
+                              border: selected ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                              background: selected ? 'rgba(59, 130, 246, 0.18)' : 'var(--bg-primary)',
+                              color: selected ? '#2563eb' : 'var(--text-secondary)',
+                              fontSize: 12.5,
+                              cursor: 'pointer',
+                              fontWeight: selected ? 600 : 400,
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            {selected ? '✓ ' : '+ '}{u.full_name || u.username}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="input-group" style={{ marginTop: 16 }}>
-                <label htmlFor="project-desc">Note e Specifiche Tecniche</label>
-                <textarea
-                  id="project-desc"
-                  className="input"
-                  rows="2"
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Descrizione, note del cliente..."
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="project-start">Data inizio</label>
-                  <input
-                    id="project-start"
-                    type="date"
-                    className="input"
-                    value={form.start_date}
-                    onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-                  />
-                </div>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="project-end">Data fine prevista</label>
-                  <input
-                    id="project-end"
-                    type="date"
-                    className="input"
-                    value={form.end_date}
-                    onChange={(e) => setForm({ ...form, end_date: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="modal-footer">
+              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
                   Annulla
                 </button>
@@ -803,168 +961,291 @@ export default function ProjectsPage() {
 
       {showEditModal && (
         <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: 850, width: '100%' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
+          <div className="modal" style={{ maxWidth: 1200, width: '95vw', maxHeight: '92vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header" style={{ marginBottom: 16 }}>
               <h2>Modifica Dati Commessa</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowEditModal(false)} aria-label="Chiudi">
                 <AppIcon name="close" />
               </button>
             </div>
             <form onSubmit={handleEditSubmit}>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="card-edit-code">Codice Commessa *</label>
-                  <input
-                    id="card-edit-code"
-                    className="input"
-                    value={editForm.code}
-                    onChange={(e) => setEditForm({ ...editForm, code: e.target.value })}
-                    required
-                    placeholder="es. UT-COMM"
-                  />
-                </div>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="card-edit-client">Cliente *</label>
-                  <input
-                    id="card-edit-client"
-                    className="input"
-                    value={editForm.client}
-                    onChange={(e) => setEditForm({ ...editForm, client: e.target.value })}
-                    required
-                    placeholder="es. HiWay s.r.l."
-                  />
-                </div>
-              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: 32, alignItems: 'start' }}>
+                {/* COLONNA SINISTRA: Informazioni Principali, Tempistiche e Note */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="card-edit-code">Codice Commessa *</label>
+                      <input
+                        id="card-edit-code"
+                        className="input"
+                        value={editForm.code}
+                        onChange={(e) => setEditForm({ ...editForm, code: e.target.value })}
+                        required
+                        placeholder="es. UT-COMM"
+                      />
+                    </div>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="card-edit-client">Cliente *</label>
+                      <input
+                        id="card-edit-client"
+                        className="input"
+                        value={editForm.client}
+                        onChange={(e) => setEditForm({ ...editForm, client: e.target.value })}
+                        required
+                        placeholder="es. HiWay s.r.l."
+                      />
+                    </div>
+                  </div>
 
-              <div className="input-group">
-                <label htmlFor="card-edit-name">Titolo Commessa *</label>
-                <input
-                  id="card-edit-name"
-                  className="input"
-                  value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  required
-                  placeholder="es. Lancio ERP e HiPlan Q3"
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="card-edit-start">Data di Inizio</label>
-                  <input
-                    id="card-edit-start"
-                    type="date"
-                    className="input"
-                    value={editForm.start_date}
-                    onChange={(e) => setEditForm({ ...editForm, start_date: e.target.value })}
-                  />
-                </div>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="card-edit-end">Data di Fine</label>
-                  <input
-                    id="card-edit-end"
-                    type="date"
-                    className="input"
-                    value={editForm.end_date}
-                    onChange={(e) => setEditForm({ ...editForm, end_date: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="card-edit-color">Colore Identificativo</label>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div className="input-group">
+                    <label htmlFor="card-edit-name">Titolo Commessa *</label>
                     <input
-                      id="card-edit-color"
-                      type="color"
-                      value={editForm.color}
-                      onChange={(e) => setEditForm({ ...editForm, color: e.target.value })}
-                      style={{ width: 44, height: 38, padding: 2, borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', cursor: 'pointer', flexShrink: 0 }}
-                    />
-                    <input
+                      id="card-edit-name"
                       className="input"
-                      value={editForm.color}
-                      onChange={(e) => setEditForm({ ...editForm, color: e.target.value })}
-                      placeholder="#185FA5"
-                      style={{ flex: 1, minWidth: 0 }}
+                      value={editForm.name}
+                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                      required
+                      placeholder="es. Lancio ERP e HiPlan Q3"
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="card-edit-start">Data di Inizio</label>
+                      <input
+                        id="card-edit-start"
+                        type="date"
+                        className="input"
+                        value={editForm.start_date}
+                        onChange={(e) => setEditForm({ ...editForm, start_date: e.target.value })}
+                      />
+                    </div>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="card-edit-end">Data di Fine</label>
+                      <input
+                        id="card-edit-end"
+                        type="date"
+                        className="input"
+                        value={editForm.end_date}
+                        onChange={(e) => setEditForm({ ...editForm, end_date: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="card-edit-color">Colore Identificativo</label>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                          id="card-edit-color"
+                          type="color"
+                          value={editForm.color}
+                          onChange={(e) => setEditForm({ ...editForm, color: e.target.value })}
+                          style={{ width: 44, height: 38, padding: 2, borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', cursor: 'pointer', flexShrink: 0 }}
+                        />
+                        <input
+                          className="input"
+                          value={editForm.color}
+                          onChange={(e) => setEditForm({ ...editForm, color: e.target.value })}
+                          placeholder="#185FA5"
+                          style={{ flex: 1, minWidth: 0 }}
+                        />
+                      </div>
+                    </div>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="card-edit-status">Stato Commessa</label>
+                      <select
+                        id="card-edit-status"
+                        className="input"
+                        value={editForm.status}
+                        onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                      >
+                        {STATUS_OPTIONS.map(opt => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="input-group">
+                    <label htmlFor="card-edit-responsible">Referente di Commessa</label>
+                    <select
+                      id="card-edit-responsible"
+                      className="input"
+                      value={editForm.responsible_id || ''}
+                      onChange={(e) => setEditForm({ ...editForm, responsible_id: e.target.value })}
+                    >
+                      <option value="">-- Nessun referente predefinito --</option>
+                      {usersList.map(u => (
+                        <option key={u.id} value={u.id}>{u.full_name || u.username} ({u.username})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="input-group">
+                    <label htmlFor="card-edit-desc">Descrizione / Note</label>
+                    <textarea
+                      id="card-edit-desc"
+                      className="input"
+                      rows={3}
+                      value={editForm.description}
+                      onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                      placeholder="Dettagli e note della commessa..."
+                      style={{ resize: 'vertical' }}
                     />
                   </div>
                 </div>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="card-edit-status">Stato Commessa</label>
-                  <select
-                    id="card-edit-status"
-                    className="input"
-                    value={editForm.status}
-                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                  >
-                    {STATUS_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
 
-              <div className="input-group">
-                <label htmlFor="card-edit-responsible">Referente di Commessa</label>
-                <select
-                  id="card-edit-responsible"
-                  className="input"
-                  value={editForm.responsible_id || ''}
-                  onChange={(e) => setEditForm({ ...editForm, responsible_id: e.target.value })}
-                >
-                  <option value=""></option>
-                  {usersList.map(u => (
-                    <option key={u.id} value={u.id}>{u.full_name || u.username} ({u.username})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="input-group">
-                <label>Addetti della Commessa (Multi-selezione)</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                  {usersList.map(u => {
-                    const selected = (editForm.assigned_workers || []).includes(u.username);
-                    return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => toggleWorkerSelection(u.username, true)}
+                {/* COLONNA DESTRA: Tipologia Commessa e Addetti Team */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {/* Tipologia Commessa */}
+                  <div className="input-group">
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
+                      <span style={{ fontWeight: 600 }}>Tipologia Commessa</span>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        ATEX e Alimentare selezionabili insieme
+                      </span>
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(125px, 1fr))', gap: 8, marginTop: 4 }}>
+                      {/* Opzione STANDARD */}
+                      <div
+                        onClick={() => setEditForm({ ...editForm, is_atex: false, is_alimentare: false })}
                         style={{
-                          padding: '6px 12px',
-                          borderRadius: 20,
-                          border: selected ? '2px solid #3b82f6' : '1px solid var(--border-color)',
-                          background: selected ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-tertiary)',
-                          color: selected ? '#60a5fa' : 'var(--text-secondary)',
-                          fontSize: 13,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 10,
                           cursor: 'pointer',
-                          fontWeight: selected ? 600 : 400
+                          border: (!editForm.is_atex && !editForm.is_alimentare) ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                          background: (!editForm.is_atex && !editForm.is_alimentare) ? 'rgba(59, 130, 246, 0.12)' : 'var(--bg-tertiary)',
+                          color: (!editForm.is_atex && !editForm.is_alimentare) ? '#2563eb' : 'var(--text-primary)',
+                          transition: 'all 0.15s ease',
+                          userSelect: 'none'
                         }}
                       >
-                        {selected ? '✓ ' : '+ '}{u.full_name || u.username}
-                      </button>
-                    );
-                  })}
+                        <input
+                          type="radio"
+                          checked={!editForm.is_atex && !editForm.is_alimentare}
+                          onChange={() => setEditForm({ ...editForm, is_atex: false, is_alimentare: false })}
+                          style={{ accentColor: '#3b82f6', cursor: 'pointer' }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>Standard</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Nessun vincolo spec.</div>
+                        </div>
+                      </div>
+
+                      {/* Opzione ATEX */}
+                      <div
+                        onClick={() => setEditForm({ ...editForm, is_atex: !editForm.is_atex })}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          cursor: 'pointer',
+                          border: editForm.is_atex ? '2px solid #f59e0b' : '1px solid var(--border-color)',
+                          background: editForm.is_atex ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-tertiary)',
+                          color: editForm.is_atex ? '#d97706' : 'var(--text-primary)',
+                          transition: 'all 0.15s ease',
+                          userSelect: 'none'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(editForm.is_atex)}
+                          onChange={(e) => setEditForm({ ...editForm, is_atex: e.target.checked })}
+                          style={{ accentColor: '#f59e0b', cursor: 'pointer' }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>ATEX</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Rischio esplosione</div>
+                        </div>
+                      </div>
+
+                      {/* Opzione ALIMENTARE */}
+                      <div
+                        onClick={() => setEditForm({ ...editForm, is_alimentare: !editForm.is_alimentare })}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          cursor: 'pointer',
+                          border: editForm.is_alimentare ? '2px solid #10b981' : '1px solid var(--border-color)',
+                          background: editForm.is_alimentare ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-tertiary)',
+                          color: editForm.is_alimentare ? '#059669' : 'var(--text-primary)',
+                          transition: 'all 0.15s ease',
+                          userSelect: 'none'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(editForm.is_alimentare)}
+                          onChange={(e) => setEditForm({ ...editForm, is_alimentare: e.target.checked })}
+                          style={{ accentColor: '#10b981', cursor: 'pointer' }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>Alimentare</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Settore Food Grade</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Addetti della Commessa */}
+                  <div className="input-group">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <label style={{ margin: 0 }}>Addetti della Commessa (Multi-selezione)</label>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        {editForm.assigned_workers?.length || 0} selezionati
+                      </span>
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                      padding: 12,
+                      borderRadius: 10,
+                      border: '1px solid var(--border-color)',
+                      background: 'var(--bg-tertiary)',
+                      maxHeight: 250,
+                      overflowY: 'auto'
+                    }}>
+                      {usersList.map(u => {
+                        const selected = (editForm.assigned_workers || []).includes(u.username);
+                        return (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => toggleWorkerSelection(u.username, true)}
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: 20,
+                              border: selected ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                              background: selected ? 'rgba(59, 130, 246, 0.18)' : 'var(--bg-primary)',
+                              color: selected ? '#2563eb' : 'var(--text-secondary)',
+                              fontSize: 12.5,
+                              cursor: 'pointer',
+                              fontWeight: selected ? 600 : 400,
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            {selected ? '✓ ' : '+ '}{u.full_name || u.username}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="input-group">
-                <label htmlFor="card-edit-desc">Descrizione / Note</label>
-                <textarea
-                  id="card-edit-desc"
-                  className="input"
-                  rows={3}
-                  value={editForm.description}
-                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                  placeholder="Dettagli e obiettivo della commessa..."
-                  style={{ resize: 'vertical' }}
-                />
-              </div>
-
-              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 20 }}>
+              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>
                   Annulla
                 </button>

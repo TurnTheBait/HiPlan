@@ -116,7 +116,28 @@ async def analyze_project_ai(db: AsyncSession, project_id: str, current_user: Us
             except:
                 pass
 
-    # 6. Prepara il sommario testuale delle fasi della commessa
+    # 6. Calcolo avanzamento commessa coerente con la dashboard
+    progress_tasks = [
+        t for t in project.tasks 
+        if getattr(t, 'type', None) != TaskType.PROJECT 
+        and getattr(t, 'type', None) != TaskType.MILESTONE 
+        and 'milestone' not in str(getattr(t, 'type', '')).lower()
+    ]
+    tot_prog_tasks = len(progress_tasks)
+    def _norm_prog(p_val):
+        if p_val is None:
+            return 0
+        try:
+            v = float(p_val)
+            return round(v * 100) if 0 < v <= 1.0 else round(v)
+        except (ValueError, TypeError):
+            return 0
+
+    tot_prog_sum = sum(_norm_prog(getattr(t, 'progress', 0)) for t in progress_tasks)
+    project_progress_pct = round(tot_prog_sum / tot_prog_tasks) if tot_prog_tasks > 0 else 0
+    completed_tasks_count = sum(1 for t in progress_tasks if getattr(t, 'completed', 0) == 1 or _norm_prog(getattr(t, 'progress', 0)) >= 100)
+
+    # Prepara il sommario testuale delle fasi della commessa
     tasks_summary_lines = []
     for t in project.tasks:
         if t.type == TaskType.PROJECT:
@@ -124,8 +145,10 @@ async def analyze_project_ai(db: AsyncSession, project_id: str, current_user: Us
         st_date = t.start_date.strftime('%d/%m/%Y') if t.start_date else 'N/D'
         en_date = t.end_date.strftime('%d/%m/%Y') if t.end_date else 'N/D'
         workers_str = t.workers or '[]'
-        status_str = "Completato" if t.completed == 1 else f"In corso ({int((t.progress or 0)*100)}%)"
-        is_delayed = bool(t.end_date and t.end_date < today and t.completed == 0)
+        t_prog = _norm_prog(getattr(t, 'progress', 0))
+        is_completed = (getattr(t, 'completed', 0) == 1 or t_prog >= 100)
+        status_str = "Completata (100%)" if is_completed else f"In corso ({t_prog}%)"
+        is_delayed = bool(t.end_date and t.end_date < today and not is_completed)
         delay_tag = " [IN RITARDO SULLA SCADENZA]" if is_delayed else ""
         tasks_summary_lines.append(
             f"- Fase: '{t.text}' | Dal: {st_date} Al: {en_date} ({t.duration} gg) | Ore: {t.planned_hours}h | Addetti: {workers_str} | Stato: {status_str}{delay_tag}"
@@ -146,15 +169,27 @@ async def analyze_project_ai(db: AsyncSession, project_id: str, current_user: Us
 
     missing_summary = "\n".join([f"- {m}" for m in missing_data]) if missing_data else "Nessun dato essenziale mancante."
 
-    # 8. Genera l'analisi con LLM Groq
+    # Tipologia commessa (Standard, ATEX, Alimentare)
+    is_atex = bool(getattr(project, 'is_atex', False))
+    is_alimentare = bool(getattr(project, 'is_alimentare', False))
+    tipi = []
+    if is_atex:
+        tipi.append("ATEX (Rischio atmosfere esplosive / Componenti antideflagranti / Direttiva ATEX)")
+    if is_alimentare:
+        tipi.append("Alimentare (Settore Food Grade / Materiali MOCA / Igiene alimentare)")
+    project_tipologia = " + ".join(tipi) if tipi else "Standard (Nessun vincolo normativo ATEX o Alimentare)"
+    tipologia_short = " + ".join(["ATEX" if is_atex else "", "Alimentare" if is_alimentare else ""]).strip(" +") or "Standard"
+
+    # 8. Genera analisi LLM con Groq
     if not settings.GROQ_API_KEY:
-        # Fallback senza API key
         return {
             "success": True,
-            "has_conflicts": len(filtered_suggestions) > 0 or len(missing_data) > 0,
-            "conflict_count": len(filtered_suggestions),
-            "missing_count": len(missing_data),
-            "analysis": f"**Riepilogo Rapido Commessa {project.name}**\n\n- Conflitti rilevati: {len(filtered_suggestions)}\n- Dati mancanti: {len(missing_data)}\n\nConfigura la chiave GROQ_API_KEY nel backend per ottenere suggerimenti di riprogrammazione approfonditi."
+            "project_id": project_id,
+            "project_name": project.name,
+            "is_atex": is_atex,
+            "is_alimentare": is_alimentare,
+            "tipologia": tipologia_short,
+            "analysis": f"**Riepilogo Rapido Commessa {project.name}**\n\n- Tipologia: **{project_tipologia}**\n- Avanzamento: **{project_progress_pct}%**\n- Conflitti rilevati: {len(filtered_suggestions)}\n- Dati mancanti: {len(missing_data)}\n\nConfigura la chiave GROQ_API_KEY nel backend per ottenere suggerimenti di riprogrammazione approfonditi."
         }
 
     llm = ChatGroq(
@@ -169,6 +204,8 @@ async def analyze_project_ai(db: AsyncSession, project_id: str, current_user: Us
         "- Codice: {project_code}\n"
         "- Nome: {project_name}\n"
         "- Cliente: {project_client}\n"
+        "- Tipologia Commessa: {project_tipologia}\n"
+        "- Avanzamento Reale Commessa: {project_progress_pct}% (Fasi concluse al 100%: {completed_tasks_count}/{tot_prog_tasks})\n"
         "- Date Commessa: Inizio {project_start_date} - Fine {project_end_date}\n"
         "- Responsabile: {project_responsible}\n"
         "- Addetti assegnati alla commessa: {project_workers}\n\n"
@@ -178,13 +215,18 @@ async def analyze_project_ai(db: AsyncSession, project_id: str, current_user: Us
         "DATA DI OGGI: {today_str}\n"
         "ADDETTI REALI DISPONIBILI NELL'ORGANICO:\n{users_list_str}\n\n"
         "ISTRUZIONI PER L'ANALISI (IMPORTANTE E VINCOLANTE):\n"
-        "1. Escludi categoricamente l'analisi della mancata consuntivazione (non menzionarla mai).\n"
+        "1. STATO AVANZAMENTO (FONDAMENTALE):\n"
+        "   - L'avanzamento reale complessivo della commessa è esattamente **{project_progress_pct}%**. Nello Stato Generale della commessa riporta sempre questa percentuale reale (es. se è 70%, non scrivere 0%! Se è 17%, scrivi 17%, se è 97%, scrivi 97%).\n"
+        "   - Escludi categoricamente l'analisi della mancata consuntivazione (non menzionarla mai).\n"
         "2. Valuta con precisione: ritardi su scadenze, sovrapposizioni, ferie/assenze degli addetti, sovraccarichi oltre le 8h/giorno (anche dovuti ad altre commesse) e dati mancanti.\n"
-        "3. Se ci sono conflitti/sovraccarichi/ritardi:\n"
-        "   - Spiega con chiarezza l'origine del problema.\n"
-        "   - Fornisci proposte di RIPROGRAMMAZIONE concrete e applicabili: indica le date esatte libere in cui spostare le fasi o i colleghi reali dello stesso reparto a cui affidare parte delle ore, rispettando il limite delle 8h/giorno e le date della commessa madre.\n"
-        "4. Se NON ci sono problemi o conflitti, dai un semplice e brevissimo riscontro positivo (es. 'Nessun conflitto rilevato'). NON inventare MAI azioni consigliate generiche (es. 'Continuare a monitorare', 'Verificare periodicamente').\n"
-        "5. STILE E STRUTTURA DEL REPORT (FONDAMENTALE):\n"
+        "3. DIVIETO ASSOLUTO DI CONSIGLI GENERALISTI O BANALI:\n"
+        "   - È SEVERAMENTE VIETATO dare consigli generici o di buon senso (es. 'monitorare attentamente', 'fare riunioni di coordinamento', 'verificare l'avanzamento', 'prestare attenzione alle scadenze', 'ottimizzare la comunicazione', 'sollecitare i fornitori').\n"
+        "   - Ogni proposta nella sezione 3 deve essere CIRCOSTANZIATA, TECNICA E PUNTUALE: indica esattamente quale fase, quale data specifica (gg/mm/aaaa) e quale addetto (nome e cognome dall'organico reale) coinvolgere per risolvere il collo di bottiglia.\n"
+        "4. GESTIONE DEI CASI SENZA PROBLEMI:\n"
+        "   - Se la commessa NON presenta conflitti, ritardi, assenze sovrapposte o dati mancanti, NON inventare MAI raccomandazioni fittizie o suggerimenti di contorno. Nella sezione 3 scrivi UNICAMENTE e asciuttamente: 'Nessuna azione di riprogrammazione necessaria. Il piano rispetta i vincoli operativi, i carichi di lavoro e le scadenze concordate.'\n"
+        "5. TIPOLOGIA COMMESSA ({project_tipologia}):\n"
+        "   - Tieni conto della tipologia specificata: se la commessa è ATEX o Alimentare, evidenzia brevemente nello Stato Generale e nei suggerimenti le necessarie attenzioni normative (es. certificazioni componenti antideflagranti per ATEX, idoneità al contatto alimentare MOCA e standard igienici per Alimentare).\n"
+        "6. STILE E STRUTTURA DEL REPORT (FONDAMENTALE):\n"
         "   - Vai dritto al punto! Niente saluti ('Buongiorno') né formule di cortesia finali ('Resto a disposizione').\n"
         "   - Organizza la risposta esattamente in queste tre sezioni chiare con intestazioni H3 Markdown (###):\n"
         "     ### 1. Stato Generale Commessa\n"
@@ -201,6 +243,10 @@ async def analyze_project_ai(db: AsyncSession, project_id: str, current_user: Us
             "project_code": project.code or "N/D",
             "project_name": project.name,
             "project_client": project.client or "N/D",
+            "project_tipologia": project_tipologia,
+            "project_progress_pct": project_progress_pct,
+            "completed_tasks_count": completed_tasks_count,
+            "tot_prog_tasks": tot_prog_tasks,
             "project_start_date": project.start_date.strftime('%d/%m/%Y') if project.start_date else "Non definita",
             "project_end_date": project.end_date.strftime('%d/%m/%Y') if project.end_date else "Non definita",
             "project_responsible": project.responsible.full_name if project.responsible else (project.responsible.username if project.responsible else "Non assegnato"),
@@ -217,6 +263,9 @@ async def analyze_project_ai(db: AsyncSession, project_id: str, current_user: Us
             "has_conflicts": len(filtered_suggestions) > 0 or len(missing_data) > 0,
             "conflict_count": len(filtered_suggestions),
             "missing_count": len(missing_data),
+            "is_atex": is_atex,
+            "is_alimentare": is_alimentare,
+            "tipologia": tipologia_short,
             "analysis": response_text.strip()
         }
     except Exception as e:

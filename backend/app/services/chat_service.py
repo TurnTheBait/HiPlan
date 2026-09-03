@@ -290,8 +290,8 @@ class ChatService:
             today = date.today()
             lines = [
                 f"Ecco la panoramica aggiornata dello stato delle commesse aziendali ({len(projects)} commesse registrate):\n",
-                "| Stato | Codice | Commessa | Cliente | Scadenza | Avanzamento | Fasi (Compl./Tot) |",
-                "| :---: | :--- | :--- | :--- | :---: | :---: | :---: |"
+                "| Stato | Tipologia | Codice | Commessa | Cliente | Scadenza | Avanzamento | Fasi (Compl./Tot) |",
+                "| :---: | :---: | :--- | :--- | :--- | :---: | :---: | :---: |"
             ]
             
             overdue_p = 0
@@ -324,9 +324,17 @@ class ChatService:
                 else:
                     st_badge = "🟡 Pianificazione"
                     
+                # Tipologia commessa: Standard, ATEX, Alimentare (o entrambe)
+                tipi = []
+                if getattr(p, 'is_atex', False):
+                    tipi.append("⚡ ATEX")
+                if getattr(p, 'is_alimentare', False):
+                    tipi.append("🌾 Alimentare")
+                tipo_str = " + ".join(tipi) if tipi else "Standard"
+                
                 client_str = str(p.client or "-")
                 p_code_link = f"[**{p.code or '-'}**](/projects/{p.id})"
-                lines.append(f"| {st_badge} | {p_code_link} | {p.name} | {client_str} | {end_str} | {avg_prog}% | {compl_t}/{tot_t} |")
+                lines.append(f"| {st_badge} | {tipo_str} | {p_code_link} | {p.name} | {client_str} | {end_str} | {avg_prog}% | {compl_t}/{tot_t} |")
                 
             lines.append("\n---")
             if overdue_p > 0:
@@ -417,7 +425,14 @@ class ChatService:
         
         async with AsyncSessionLocal() as session:
             stmt = (
-                select(Task, Project.name.label("proj_name"), Project.code.label("proj_code"), Project.id.label("proj_id"))
+                select(
+                    Task,
+                    Project.name.label("proj_name"),
+                    Project.code.label("proj_code"),
+                    Project.id.label("proj_id"),
+                    Project.is_atex,
+                    Project.is_alimentare
+                )
                 .join(Project, Task.project_id == Project.id)
                 .where(
                     Project.deleted_at.is_(None),
@@ -429,11 +444,17 @@ class ChatService:
             rows = res.all()
             
             upcoming = []
-            for t, p_name, p_code, p_id in rows:
+            for t, p_name, p_code, p_id, p_atex, p_alim in rows:
                 raw_end = getattr(t, 'end_date', None)
                 end_d: date | None = raw_end.date() if (raw_end and hasattr(raw_end, 'date')) else raw_end
                 if end_d and today <= end_d <= cutoff:
-                    upcoming.append((t, str(p_name or ""), str(p_code or ""), str(p_id), (end_d - today).days))
+                    tipi = []
+                    if p_atex:
+                        tipi.append("ATEX")
+                    if p_alim:
+                        tipi.append("Alimentare")
+                    tipo_str = " + ".join(tipi) if tipi else "Standard"
+                    upcoming.append((t, str(p_name or ""), str(p_code or ""), str(p_id), (end_d - today).days, tipo_str))
                     
             if not upcoming:
                 return f"Non risultano fasi in scadenza nei prossimi {days} giorni nelle commesse attive."
@@ -442,11 +463,11 @@ class ChatService:
             
             lines = [
                 f"Ecco le attività con consegna o scadenza programmata nei prossimi **{days} giorni** ({len(upcoming)} fasi individuate):\n",
-                "| Scadenza | Tra (gg) | Fase / Attività | Commessa | Addetti | Avanzamento |",
-                "| :---: | :---: | :--- | :--- | :--- | :---: |"
+                "| Scadenza | Tra (gg) | Tipologia | Fase / Attività | Commessa | Addetti | Avanzamento |",
+                "| :---: | :---: | :---: | :--- | :--- | :--- | :---: |"
             ]
             
-            for t_obj, p_name_str, p_code_str, p_id_str, days_left in upcoming:
+            for t_obj, p_name_str, p_code_str, p_id_str, days_left, tipo_str in upcoming:
                 p_label = f"[**{p_code_str}**](/projects/{p_id_str}) - {p_name_str}" if p_code_str else f"[**{p_name_str}**](/projects/{p_id_str})"
                 raw_end = getattr(t_obj, 'end_date', None)
                 end_d_val = raw_end.date() if (raw_end and hasattr(raw_end, 'date')) else raw_end
@@ -458,10 +479,15 @@ class ChatService:
                 days_badge = "🔴 Oggi" if days_left == 0 else f"🟡 {days_left} gg" if days_left <= 3 else f"{days_left} gg"
                 
                 task_text = str(getattr(t_obj, 'text', 'Attività'))
-                lines.append(f"| {d_str} | {days_badge} | **{task_text}** | {p_label} | {w_str} | {prog} |")
+                lines.append(f"| {d_str} | {days_badge} | {tipo_str} | **{task_text}** | {p_label} | {w_str} | {prog} |")
                 
             lines.append("\n---")
-            lines.append("💡 **Azione consigliata:** Dai la priorità alle fasi con consegna a meno di 3 giorni e verifica la disponibilità delle risorse per evitare slittamenti a cascata sul diagramma di Gantt.")
+            if upcoming:
+                first_t = upcoming[0]
+                first_end = first_t[0].end_date.strftime('%d/%m/%Y') if first_t[0].end_date else 'a breve'
+                lines.append(f"💡 **Azione consigliata:** Presidiare con priorità la fase **{first_t[3]}** ({first_t[1] or first_t[2]}), in consegna il {first_end} (assegnata a: {first_t[5]}).")
+            else:
+                lines.append("💡 **Azione consigliata:** Nessuna scadenza critica immediata; il cronoprogramma è regolare.")
             return "\n".join(lines)
 
     async def _tool_get_budget_and_hours(self) -> str:
@@ -555,7 +581,14 @@ class ChatService:
         async with AsyncSessionLocal() as session:
             # 1. Attività personali
             stmt = (
-                select(Task, Project.name.label("proj_name"), Project.code.label("proj_code"), Project.id.label("proj_id"))
+                select(
+                    Task,
+                    Project.name.label("proj_name"),
+                    Project.code.label("proj_code"),
+                    Project.id.label("proj_id"),
+                    Project.is_atex,
+                    Project.is_alimentare
+                )
                 .join(Project, Task.project_id == Project.id)
                 .where(Project.deleted_at.is_(None))
             )
@@ -565,7 +598,7 @@ class ChatService:
             my_urgent_tasks = []
             my_overdue = 0
             
-            for t, p_name, p_code, p_id in all_tasks:
+            for t, p_name, p_code, p_id, p_atex, p_alim in all_tasks:
                 workers_list = [w.lower() for w in parse_clean_workers(getattr(t, 'workers', None))]
                 is_my = (
                     (username and username.lower() in workers_list)
@@ -579,7 +612,13 @@ class ChatService:
                         if end_d < today:
                             my_overdue += 1
                         elif end_d <= cutoff_48h:
-                            my_urgent_tasks.append((t, p_code, p_name, str(p_id), (end_d - today).days))
+                            tipi = []
+                            if p_atex:
+                                tipi.append("ATEX")
+                            if p_alim:
+                                tipi.append("Alimentare")
+                            tipo_tag = f" [{ ' + '.join(tipi) }]" if tipi else ""
+                            my_urgent_tasks.append((t, p_code, p_name, str(p_id), (end_d - today).days, tipo_tag))
                             
             # 2. Ferie del personale
             from app.models.user import User
@@ -940,6 +979,12 @@ DIZIONARIO DEL DOMINIO E REGOLE CRITICHE SULLE TABELLE:
 1. Tabella 'projects' (Commesse):
    * REGOLA FONDAMENTALE: Le commesse eliminate sono soft-deleted. DEVI SEMPRE INCLUDERE `WHERE projects.deleted_at IS NULL` (o `AND projects.deleted_at IS NULL`).
    * 'status' ha valori: 'PLANNING' (in pianificazione), 'ACTIVE' (attiva/in corso), 'COMPLETED' (completata), 'ARCHIVED' (archiviata).
+   * TIPOLOGIA COMMESSA: I campi booleani `is_atex` (1 se atex, 0 altrimenti) e `is_alimentare` (1 se alimentare, 0 altrimenti) definiscono la tipologia della commessa.
+     Se `is_atex = 0 AND is_alimentare = 0`, la commessa è 'Standard'.
+     Una commessa può essere sia 'ATEX' (`is_atex = 1`) che 'Alimentare' (`is_alimentare = 1`), oppure entrambe contemporaneamente.
+     Per cercare commesse ATEX usa `WHERE is_atex = 1`.
+     Per cercare commesse Alimentare usa `WHERE is_alimentare = 1`.
+     Per cercare commesse Standard usa `WHERE (is_atex = 0 OR is_atex IS NULL) AND (is_alimentare = 0 OR is_alimentare IS NULL)`.
 2. Tabella 'tasks' (Fasi / Attività delle commesse):
    * 'project_id' collega la fase a 'projects.id'.
    * 'workers' è un campo testo contenente i nomi o username degli addetti (es. 'mario, luigi'). Per cercare per addetto usa `t.workers LIKE '%{username}%'`.
@@ -953,7 +998,11 @@ DIZIONARIO DEL DOMINIO E REGOLE CRITICHE SULLE TABELLE:
 
 ESEMPI DI QUERY SQL CORRETTE (FEW-SHOT EXAMPLES):
 - Domanda: "Quali sono le commesse attive del cliente Alfa?"
-  SQL: SELECT p.code, p.name, p.client, p.start_date, p.end_date, p.status FROM projects p WHERE p.deleted_at IS NULL AND p.status = 'ACTIVE' AND p.client LIKE '%Alfa%' COLLATE NOCASE;
+  SQL: SELECT p.code, p.name, p.client, p.start_date, p.end_date, p.status, p.is_atex, p.is_alimentare FROM projects p WHERE p.deleted_at IS NULL AND p.status = 'ACTIVE' AND p.client LIKE '%Alfa%' COLLATE NOCASE;
+- Domanda: "Quali sono le commesse ATEX o alimentari?"
+  SQL: SELECT p.code, p.name, p.client, p.is_atex, p.is_alimentare, p.status FROM projects p WHERE p.deleted_at IS NULL AND (p.is_atex = 1 OR p.is_alimentare = 1);
+- Domanda: "Mostrami le commesse standard"
+  SQL: SELECT p.code, p.name, p.client, p.status FROM projects p WHERE p.deleted_at IS NULL AND (p.is_atex = 0 OR p.is_atex IS NULL) AND (p.is_alimentare = 0 OR p.is_alimentare IS NULL);
 - Domanda: "Quali fasi scadono questo mese?"
   SQL: SELECT t.text, p.name AS project_name, t.end_date, t.progress, t.workers FROM tasks t JOIN projects p ON t.project_id = p.id WHERE p.deleted_at IS NULL AND t.completed = 0 AND strftime('%Y-%m', t.end_date) = strftime('%Y-%m', 'now');
 - Domanda: "Quali attività sono assegnate all'utente connesso?"
@@ -1047,10 +1096,10 @@ SQLQuery:"""
                 "   * 🟡 In scadenza ravvicinata / In pianificazione\n"
                 "   * 🔴 In ritardo / Criticità\n"
                 "   * 🔵 In lavorazione / Attiva\n"
-                "3. CONCLUSIONE OPERATIVA:\n"
+                "3. CONCLUSIONE OPERATIVA (NESSUN CONSIGLIO GENERALISTA):\n"
                 "   * Al termine della risposta aggiungi SEMPRE un separatore e un consiglio pratico breve:\n"
                 "     ---\n"
-                "     💡 **Azione consigliata:** [1-2 righe di raccomandazione operativa o passo successivo suggerito]\n"
+                "     💡 **Azione consigliata:** [Raccomandazione PUNTUALE e NOMINATIVA citando date, commesse o persone specifiche. NON dare MAI consigli banali o generalisti come 'verificare', 'monitorare', 'fare attenzione', 'sollecitare'. Se tutto è regolare scrivi semplicemente che la situazione è allineata.]\n"
                 "4. TRADUZIONE CODICI:\n"
                 "   * Non mostrare ID numerici o valori grezzi ('ACTIVE' -> 'Attiva', 'HIGH' -> 'Alta', 'DA_GESTIRE' -> 'Da gestire').\n\n"
                 "{history_context}"
@@ -1088,7 +1137,7 @@ SQLQuery:"""
         from datetime import date, datetime, timedelta
         from sqlalchemy import select
         from app.models.project import Project, ProjectStatus
-        from app.models.task import Task
+        from app.models.task import Task, TaskType
         from app.models.user import User
 
         today = date.today()
@@ -1113,9 +1162,24 @@ SQLQuery:"""
         completed_projects = [p for p in projects if p.status == ProjectStatus.COMPLETED]
         archived_projects = [p for p in projects if p.status == ProjectStatus.ARCHIVED]
 
-        total_tasks = len(tasks)
-        completed_tasks = [t for t in tasks if t.completed == 1 or (t.progress is not None and t.progress >= 1.0)]
-        active_tasks = [t for t in tasks if t not in completed_tasks]
+        total_atex = len([p for p in projects if getattr(p, 'is_atex', False)])
+        total_alimentare = len([p for p in projects if getattr(p, 'is_alimentare', False)])
+        total_standard = len([p for p in projects if not getattr(p, 'is_atex', False) and not getattr(p, 'is_alimentare', False)])
+
+        # Task operativi (escludendo contenitori di commessa e milestone)
+        operative_tasks = [
+            t for t in tasks 
+            if getattr(t, 'type', None) != TaskType.PROJECT 
+            and getattr(t, 'type', None) != TaskType.MILESTONE 
+            and 'milestone' not in str(getattr(t, 'type', '')).lower()
+        ]
+        total_tasks = len(operative_tasks)
+        completed_tasks = [
+            t for t in operative_tasks 
+            if getattr(t, 'completed', 0) == 1 or normalize_progress(getattr(t, 'progress', 0)) >= 100
+        ]
+        active_tasks = [t for t in operative_tasks if t not in completed_tasks]
+        avg_global_progress = round(sum(normalize_progress(getattr(t, 'progress', 0)) for t in operative_tasks) / len(operative_tasks)) if operative_tasks else 0
 
         overdue_tasks = []
         upcoming_tasks = []
@@ -1129,9 +1193,9 @@ SQLQuery:"""
         # Mappatura task per progetto
         proj_map = {str(p.id): p for p in projects}
 
-        # Statistiche per addetto
+        # Statistiche per addetto (su task operativi)
         worker_stats = {}
-        for t in tasks:
+        for t in operative_tasks:
             w_list = []
             if t.workers:
                 try:
@@ -1146,21 +1210,37 @@ SQLQuery:"""
                     if w_name not in worker_stats:
                         worker_stats[w_name] = {"total": 0, "completed": 0, "active": 0, "overdue": 0}
                     worker_stats[w_name]["total"] += 1
-                    if t.completed == 1 or (t.progress is not None and t.progress >= 1.0):
+                    if getattr(t, 'completed', 0) == 1 or normalize_progress(getattr(t, 'progress', 0)) >= 100:
                         worker_stats[w_name]["completed"] += 1
                     else:
                         worker_stats[w_name]["active"] += 1
                         if t.end_date and t.end_date < today:
                             worker_stats[w_name]["overdue"] += 1
 
-        # Genera testi di riepilogo dati
+        # Genera testi di riepilogo dati con avanzamento effettivo e coerente al frontend
         active_proj_lines = []
         for p in active_projects:
-            p_tasks = [t for t in tasks if str(t.project_id) == str(p.id)]
-            p_done = [t for t in p_tasks if t.completed == 1 or (t.progress is not None and t.progress >= 1.0)]
-            p_pct = int((len(p_done) / len(p_tasks) * 100)) if p_tasks else 0
+            p_tasks = [
+                t for t in tasks 
+                if str(t.project_id) == str(p.id)
+                and getattr(t, 'type', None) != TaskType.PROJECT 
+                and getattr(t, 'type', None) != TaskType.MILESTONE 
+                and 'milestone' not in str(getattr(t, 'type', '')).lower()
+            ]
+            tot_p_tasks = len(p_tasks)
+            p_done = [t for t in p_tasks if getattr(t, 'completed', 0) == 1 or normalize_progress(getattr(t, 'progress', 0)) >= 100]
+            tot_prog = sum(normalize_progress(getattr(t, 'progress', 0)) for t in p_tasks)
+            avg_prog = round(tot_prog / tot_p_tasks) if tot_p_tasks > 0 else 0
             end_str = p.end_date.strftime("%d/%m/%Y") if p.end_date else "N/D"
-            active_proj_lines.append(f"- **{p.name}** ({p.code or 'No Code'}) | Cliente: {p.client or 'Interno'} | Scadenza: {end_str} | Fasi: {len(p_done)}/{len(p_tasks)} ({p_pct}%)")
+            tipi = []
+            if getattr(p, 'is_atex', False):
+                tipi.append("ATEX")
+            if getattr(p, 'is_alimentare', False):
+                tipi.append("Alimentare")
+            tipo_tag = f"[{' + '.join(tipi)}]" if tipi else "[Standard]"
+            active_proj_lines.append(
+                f"- **{p.name}** ({p.code or 'No Code'}) | Cliente: {p.client or 'Interno'} | Tipologia: **{tipo_tag}** | Scadenza: {end_str} | Avanzamento commessa: **{avg_prog}%** (Fasi operative: {tot_p_tasks}, di cui concluse al 100%: {len(p_done)})"
+            )
 
         if not active_proj_lines:
             active_proj_text = "Nessuna commessa attiva al momento."
@@ -1204,24 +1284,35 @@ SQLQuery:"""
                     f"Genera un Resoconto Esecutivo chiaro, professionale, completo e altamente azionabile per la direzione aziendale e gli amministratori.\n\n"
                     f"DATI AGGIORNATI DEL SISTEMA:\n"
                     f"- Commesse Totali: {total_projects} (Attive: {len(active_projects)}, In Pianificazione: {len(planning_projects)}, Completate: {len(completed_projects)}, Archiviate: {len(archived_projects)})\n"
-                    f"- Fasi / Attività Totali: {total_tasks} (Completate: {len(completed_tasks)}, In Corso: {len(active_tasks)}, In Ritardo: {len(overdue_tasks)})\n"
+                    f"- Ripartizione Tipologie Commessa: Standard: {total_standard}, ATEX (Rischio esplosione): {total_atex}, Alimentare (Food Grade): {total_alimentare}\n"
+                    f"- Fasi Operative Totali: {total_tasks} (Avanzamento medio ponderato: {avg_global_progress}%, Fasi 100% completate: {len(completed_tasks)}, Fasi in lavorazione: {len(active_tasks)}, In Ritardo: {len(overdue_tasks)})\n"
                     f"- Scadenze nei prossimi 7 giorni: {len(upcoming_tasks)}\n\n"
-                    f"COMMESSE ATTIVE:\n{active_proj_text}\n\n"
+                    f"COMMESSE ATTIVE CON STATO AVANZAMENTO REALE:\n{active_proj_text}\n\n"
                     f"ATTIVITÀ SCADUTE O IN RITARDO:\n{overdue_text}\n\n"
                     f"CARICO ADDETTI:\n{worker_text}\n\n"
                     f"SCADENZE IMMINENTI (PROSSIMI 7 GIORNI):\n{upcoming_text}\n\n"
-                    f"ISTRUZIONI RIGOROSE:\n"
-                    f"Formatta il testo in Markdown pulito ed elegante. Non inserire preamboli come 'Ecco il report' o saluti.\n"
+                    f"ISTRUZIONI RIGOROSE E VINCOLANTI:\n"
+                    f"1. PRECISIONE ASSOLUTA SULL'AVANZAMENTO E STATO DI COMPLETAMENTO:\n"
+                    f"   - Riporta FEDELMENTE la percentuale reale di avanzamento specificata per ciascuna commessa ('Avanzamento commessa: X%'). Per esempio, se una commessa indica 70%, DEVI scrivere 70%, NON 0%! Se indica 97%, riporta 97%, se indica 17%, riporta 17%.\n"
+                    f"   - È SEVERAMENTE VIETATO calcolare l'avanzamento dividendo le fasi al 100% per il totale: le fasi in corso possiedono percentuali parziali già calcolate nel valore complessivo della commessa.\n"
+                    f"   - Puoi specificare a completamento il numero di fasi chiuse al 100% (es. 'COMM1 è al 97% con 5 fasi su 6 concluse al 100%', oppure 'COMM2 è al 70% sulla fase attualmente in lavorazione').\n"
+                    f"2. DIVIETO ASSOLUTO DI CONSIGLI GENERALISTI O DI BUON SENSO:\n"
+                    f"   - NON usare MAI formule ovvie, generiche o vaghe come: 'monitorare attentamente', 'fare riunioni di coordinamento', 'verificare periodicamente', 'prestare attenzione alle scadenze', 'sollecitare gli addetti', 'ottimizzare la comunicazione'.\n"
+                    f"   - Nella sezione '4. 💡 Raccomandazioni Strategiche & Operative', OGNI punto DEVE essere PUNTUALE, NOMINATIVO E CIRCOSTANZIATO: cita per nome la commessa, la fase esatta o l'addetto sovraccarico, specificando l'azione decisionale precisa.\n"
+                    f"   - Se NON vi sono ritardi o criticità rilevanti nei dati, NON inventare raccomandazioni di facciata: scrivi semplicemente 'Nessuna misura correttiva d'emergenza necessaria. I carichi operativi e le scadenze a breve risultano presidiati regolarmente.'\n"
+                    f"3. FORMATTAZIONE:\n"
+                    f"   - Formatta in Markdown pulito ed elegante, senza preamboli né saluti.\n"
+                    f"   - Nel resoconto tieni in debito conto la tipologia normativa delle commesse (Standard, ATEX per atmosfere potenzialmente esplosive, Alimentare per settore igienico/food grade), sottolineando l'importanza delle certificazioni e dei collaudi specifici.\n"
                     f"Usa esattamente questa struttura:\n"
                     f"# 📑 Resoconto Esecutivo: Stato Commesse & Addetti ({today_str})\n\n"
                     f"### 1. 📊 Sintesi Esecutiva & Stato Commesse\n"
-                    f"Descrivi la situazione complessiva con tono professionale, mettendo in evidenza avanzamento e stato delle commesse attive.\n\n"
+                    f"Descrivi la situazione complessiva con tono professionale, evidenziando avanzamento, ripartizione delle tipologie (Standard, ATEX, Alimentare) e stato delle commesse attive.\n\n"
                     f"### 2. 👥 Analisi Carico di Lavoro & Distribuzione Addetti\n"
                     f"Evidenzia la concentrazione dei carichi: chi è maggiormente occupato, chi ha task in ritardo e come bilanciare le risorse.\n\n"
                     f"### 3. ⚠️ Criticità, Ritardi & Scadenze Imminenti\n"
-                    f"Analizza le attività in ritardo e quelle che scadono a breve termine, indicando possibili colli di bottiglia o rischi di consegna.\n\n"
+                    f"Analizza le attività in ritardo e quelle che scadono a breve termine, indicando possibili colli di bottiglia o rischi di consegna (con particolare attenzione ai vincoli tecnici delle commesse speciali ATEX / Alimentare).\n\n"
                     f"### 4. 💡 Raccomandazioni Strategiche & Operative\n"
-                    f"Fornisci 3-4 punti pratici e operativi per gli amministratori e project manager per ottimizzare la pianificazione.\n"
+                    f"Fornisci 2-3 raccomandazioni concrete, nominative e azionabili (no frasi generiche).\n"
                 )
                 response = await self.llm.ainvoke(system_prompt)
                 content = getattr(response, "content", response)
@@ -1234,13 +1325,37 @@ SQLQuery:"""
             except Exception as e:
                 logger.error(f"Errore nella generazione report con LLM: {e}")
 
+        # Fallback raccomandazioni specifiche e concrete (no consigli generalisti)
+        rec_bullets = []
+        if overdue_tasks:
+            for ot in overdue_tasks[:2]:
+                pr = proj_map.get(str(ot.project_id))
+                pr_label = f"**{pr.name}** ({pr.code or ''})" if pr else "Commessa"
+                w_str = ot.workers or "non assegnato"
+                rec_bullets.append(f"- **Riprogrammazione immediata**: ridefinire data utile per la fase *{ot.text}* ({pr_label}), scaduta il {ot.end_date.strftime('%d/%m/%Y')} e in carico a {w_str}.")
+        if sorted_workers and sorted_workers[0][1]["active"] >= 3:
+            bw, bs = sorted_workers[0]
+            rec_bullets.append(f"- **Ribilanciamento carico {bw}**: l'addetto concentra {bs['active']} fasi aperte contemporanee; riassegnare una delle fasi a un collega dello stesso reparto con minor carico.")
+        atex_actives = [p for p in active_projects if getattr(p, 'is_atex', False)]
+        if atex_actives:
+            p_names = ", ".join([p.code or p.name for p in atex_actives[:2]])
+            rec_bullets.append(f"- **Conformità ATEX ({p_names})**: verificare l'acquisizione delle schede tecniche dei componenti antideflagranti prima dell'inizio del montaggio quadro.")
+        alim_actives = [p for p in active_projects if getattr(p, 'is_alimentare', False)]
+        if alim_actives:
+            p_names = ", ".join([p.code or p.name for p in alim_actives[:2]])
+            rec_bullets.append(f"- **Presidio MOCA Alimentare ({p_names})**: accertare l'idoneità al contatto alimentare dei materiali impiegati prima del collaudo finale.")
+        if not rec_bullets:
+            rec_bullets.append("- Nessuna misura correttiva d'emergenza necessaria. I carichi operativi e le scadenze a breve risultano presidiati regolarmente.")
+        fallback_rec_text = "\n".join(rec_bullets)
+
         # Fallback se LLM non disponibile o fallito
         if not report_markdown:
             report_markdown = (
                 f"# 📑 Resoconto Esecutivo: Stato Commesse & Addetti ({today_str})\n\n"
                 f"### 1. 📊 Sintesi Esecutiva & Stato Commesse\n"
                 f"Nel sistema risultano registrate **{total_projects} commesse complessive**, di cui **{len(active_projects)} attive**, "
-                f"**{len(planning_projects)} in fase di pianificazione** e **{len(completed_projects)} completate**.\n\n"
+                f"**{len(planning_projects)} in fase di pianificazione** e **{len(completed_projects)} completate**.\n"
+                f"Ripartizione per tipologia: **{total_standard} Standard**, **{total_atex} ATEX**, **{total_alimentare} Alimentare**.\n\n"
                 f"**Stato delle commesse attive:**\n"
                 f"{active_proj_text}\n\n"
                 f"### 2. 👥 Analisi Carico di Lavoro & Distribuzione Addetti\n"
@@ -1251,9 +1366,7 @@ SQLQuery:"""
                 f"**Attività in ritardo:**\n{overdue_text}\n\n"
                 f"**Scadenze nei prossimi 7 giorni:**\n{upcoming_text}\n\n"
                 f"### 4. 💡 Raccomandazioni Strategiche & Operative\n"
-                f"- **Riequilibrio carichi**: verificare la disponibilità degli addetti con il maggior numero di attività aperte per evitare sovraccarichi.\n"
-                f"- **Priorità alle fasi scadute**: intervenire con solleciti o riprogrammazione sulle {len(overdue_tasks)} attività in ritardo.\n"
-                f"- **Monitoraggio ravvicinato**: verificare l'avanzamento delle {len(upcoming_tasks)} fasi con consegna programmata entro i prossimi 7 giorni."
+                f"{fallback_rec_text}"
             )
 
         return {
@@ -1267,7 +1380,10 @@ SQLQuery:"""
                 "active_tasks": len(active_tasks),
                 "overdue_tasks": len(overdue_tasks),
                 "total_workers": len(worker_stats),
-                "upcoming_deadlines_count": len(upcoming_tasks)
+                "upcoming_deadlines_count": len(upcoming_tasks),
+                "atex_projects": total_atex,
+                "alimentare_projects": total_alimentare,
+                "standard_projects": total_standard
             },
             "generated_at": datetime.now().strftime("%d/%m/%Y alle %H:%M"),
             "generated_timestamp": int(datetime.now().timestamp() * 1000)

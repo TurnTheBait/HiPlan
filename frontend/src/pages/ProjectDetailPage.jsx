@@ -408,6 +408,8 @@ export default function ProjectDetailPage() {
     color: '#185FA5',
     start_date: '',
     end_date: '',
+    is_atex: false,
+    is_alimentare: false,
   });
 
   useEffect(() => {
@@ -1416,6 +1418,8 @@ export default function ProjectDetailPage() {
       status: project.status || 'planning',
       responsible_id: project.responsible_id || '',
       assigned_workers: Array.isArray(project.assigned_workers) ? [...project.assigned_workers] : [],
+      is_atex: Boolean(project.is_atex),
+      is_alimentare: Boolean(project.is_alimentare),
     });
     setShowEditProjectModal(true);
   }
@@ -1438,6 +1442,8 @@ export default function ProjectDetailPage() {
         code: projectForm.code.trim(),
         client: projectForm.client.trim(),
         name: projectForm.name.trim(),
+        is_atex: Boolean(projectForm.is_atex),
+        is_alimentare: Boolean(projectForm.is_alimentare),
       };
       const { data } = await api.put(`/projects/${id}`, payload);
       setProject(prev => ({ ...prev, ...data }));
@@ -1690,6 +1696,21 @@ export default function ProjectDetailPage() {
             boxShadow: 'var(--shadow-sm)'
           }}>
             <span className="commessa-code" style={{ color: 'var(--text-primary)', fontWeight: 800, fontSize: '1.25rem' }}>{project?.code || 'UT-COMM'}</span>
+            {project?.is_atex && (
+              <span className="badge badge-atex" title="Conforme Direttiva ATEX">
+                ATEX
+              </span>
+            )}
+            {project?.is_alimentare && (
+              <span className="badge badge-alimentare" title="Conforme Settore Alimentare / Food Grade">
+                Alimentare
+              </span>
+            )}
+            {!project?.is_atex && !project?.is_alimentare && (
+              <span className="badge badge-standard">
+                Standard
+              </span>
+            )}
             {project?.client && (
               <>
                 <span style={{ color: 'var(--border-subtle)', fontSize: '1.2rem' }}>—</span>
@@ -2755,7 +2776,7 @@ export default function ProjectDetailPage() {
                   <Sparkles size={22} />
                 </div>
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                     <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--text-primary)', fontWeight: '700' }}>
                       Analisi Commessa
                     </h3>
@@ -2773,9 +2794,25 @@ export default function ProjectDetailPage() {
                     >
                       HiPlan AI
                     </span>
+                    {/* Badge Tipologia Commessa */}
+                    {project?.is_atex && (
+                      <span className="badge badge-atex" style={{ fontSize: '11px', padding: '2px 9px', borderRadius: 20 }}>
+                        ATEX
+                      </span>
+                    )}
+                    {project?.is_alimentare && (
+                      <span className="badge badge-alimentare" style={{ fontSize: '11px', padding: '2px 9px', borderRadius: 20 }}>
+                        Alimentare
+                      </span>
+                    )}
+                    {!project?.is_atex && !project?.is_alimentare && (
+                      <span className="badge badge-standard" style={{ fontSize: '11px', padding: '2px 9px', borderRadius: 20 }}>
+                        Standard
+                      </span>
+                    )}
                   </div>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '13.5px', margin: '4px 0 0 0' }}>
-                    Verifica ritardi, sovrapposizioni, ferie, sovraccarichi multi-commessa e dati mancanti con consigli di riprogrammazione.
+                    Verifica ritardi, sovrapposizioni, ferie, sovraccarichi multi-commessa, requisiti normativi e dati mancanti con consigli di riprogrammazione.
                   </p>
                 </div>
               </div>
@@ -2832,7 +2869,7 @@ export default function ProjectDetailPage() {
                     Analisi intelligente in corso...
                   </h4>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '14px', maxWidth: '520px', margin: '0 auto' }}>
-                    HiPlan AI sta esaminando le date della commessa, le fasi, le ferie e i carichi di lavoro degli addetti su tutte le commesse per individuare conflitti e suggerire le soluzioni ottimali.
+                    HiPlan AI sta esaminando le date della commessa, le fasi, la tipologia normativa (Standard / ATEX / Alimentare), le ferie e i carichi di lavoro degli addetti per individuare conflitti e suggerire le soluzioni ottimali.
                   </p>
                 </div>
               ) : aiAnalysis ? (
@@ -2847,10 +2884,11 @@ export default function ProjectDetailPage() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
+                      flexWrap: 'wrap',
                       gap: '12px'
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                       {aiAnalysis.has_conflicts ? (
                         <AlertTriangle size={20} color="#ef4444" />
                       ) : (
@@ -2860,6 +2898,18 @@ export default function ProjectDetailPage() {
                         {aiAnalysis.has_conflicts
                           ? `Rilevati conflitti/sovraccarichi e dati da verificare`
                           : 'Nessun conflitto rilevato: la commessa è pianificata regolarmente'}
+                      </span>
+                      {/* Pill di tipologia verificata */}
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '2px 8px',
+                        borderRadius: 12,
+                        background: 'var(--bg-tertiary)',
+                        color: 'var(--text-secondary)',
+                        border: '1px solid var(--border-subtle)'
+                      }}>
+                        Tipologia: {project?.is_atex && project?.is_alimentare ? 'ATEX + Alimentare' : project?.is_atex ? 'ATEX' : project?.is_alimentare ? 'Alimentare' : 'Standard'}
                       </span>
                     </div>
                     <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
@@ -3794,170 +3844,293 @@ export default function ProjectDetailPage() {
       {/* Modale Modifica Dati Commessa */}
       {showEditProjectModal && (
         <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: 850, width: '100%' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
+          <div className="modal" style={{ maxWidth: 1200, width: '95vw', maxHeight: '92vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header" style={{ marginBottom: 16 }}>
               <h2>Modifica Dati Commessa</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowEditProjectModal(false)} aria-label="Chiudi">
                 <AppIcon name="close" />
               </button>
             </div>
             <form onSubmit={handleSaveProject}>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="edit-proj-code">Codice Commessa *</label>
-                  <input
-                    id="edit-proj-code"
-                    className="input"
-                    value={projectForm.code}
-                    onChange={(e) => setProjectForm({ ...projectForm, code: e.target.value })}
-                    required
-                    placeholder="es. UT-COMM"
-                  />
-                </div>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="edit-proj-client">Cliente *</label>
-                  <input
-                    id="edit-proj-client"
-                    className="input"
-                    value={projectForm.client}
-                    onChange={(e) => setProjectForm({ ...projectForm, client: e.target.value })}
-                    required
-                    placeholder="es. HiWay s.r.l."
-                  />
-                </div>
-              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: 32, alignItems: 'start' }}>
+                {/* COLONNA SINISTRA: Informazioni e Tempistiche */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="edit-proj-code">Codice Commessa *</label>
+                      <input
+                        id="edit-proj-code"
+                        className="input"
+                        value={projectForm.code}
+                        onChange={(e) => setProjectForm({ ...projectForm, code: e.target.value })}
+                        required
+                        placeholder="es. UT-COMM"
+                      />
+                    </div>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="edit-proj-client">Cliente *</label>
+                      <input
+                        id="edit-proj-client"
+                        className="input"
+                        value={projectForm.client}
+                        onChange={(e) => setProjectForm({ ...projectForm, client: e.target.value })}
+                        required
+                        placeholder="es. HiWay s.r.l."
+                      />
+                    </div>
+                  </div>
 
-              <div className="input-group">
-                <label htmlFor="edit-proj-name">Titolo Commessa *</label>
-                <input
-                  id="edit-proj-name"
-                  className="input"
-                  value={projectForm.name}
-                  onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
-                  required
-                  placeholder="es. Lancio ERP e HiPlan Q3"
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="edit-proj-start">Data di Inizio</label>
-                  <input
-                    id="edit-proj-start"
-                    type="date"
-                    className="input"
-                    value={projectForm.start_date}
-                    onChange={(e) => setProjectForm({ ...projectForm, start_date: e.target.value })}
-                  />
-                </div>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="edit-proj-end">Data di Fine</label>
-                  <input
-                    id="edit-proj-end"
-                    type="date"
-                    className="input"
-                    value={projectForm.end_date}
-                    onChange={(e) => setProjectForm({ ...projectForm, end_date: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="edit-proj-color">Colore Identificativo</label>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div className="input-group">
+                    <label htmlFor="edit-proj-name">Titolo Commessa *</label>
                     <input
-                      id="edit-proj-color"
-                      type="color"
-                      value={projectForm.color}
-                      onChange={(e) => setProjectForm({ ...projectForm, color: e.target.value })}
-                      style={{ width: 44, height: 38, padding: 2, borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', cursor: 'pointer', flexShrink: 0 }}
-                    />
-                    <input
+                      id="edit-proj-name"
                       className="input"
-                      value={projectForm.color}
-                      onChange={(e) => setProjectForm({ ...projectForm, color: e.target.value })}
-                      placeholder="#185FA5"
-                      style={{ flex: 1, minWidth: 0 }}
+                      value={projectForm.name}
+                      onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
+                      required
+                      placeholder="es. Lancio ERP e HiPlan Q3"
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="edit-proj-start">Data di Inizio</label>
+                      <input
+                        id="edit-proj-start"
+                        type="date"
+                        className="input"
+                        value={projectForm.start_date}
+                        onChange={(e) => setProjectForm({ ...projectForm, start_date: e.target.value })}
+                      />
+                    </div>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="edit-proj-end">Data di Fine</label>
+                      <input
+                        id="edit-proj-end"
+                        type="date"
+                        className="input"
+                        value={projectForm.end_date}
+                        onChange={(e) => setProjectForm({ ...projectForm, end_date: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="edit-proj-color">Colore Identificativo</label>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                          id="edit-proj-color"
+                          type="color"
+                          value={projectForm.color}
+                          onChange={(e) => setProjectForm({ ...projectForm, color: e.target.value })}
+                          style={{ width: 44, height: 38, padding: 2, borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', cursor: 'pointer', flexShrink: 0 }}
+                        />
+                        <input
+                          className="input"
+                          value={projectForm.color}
+                          onChange={(e) => setProjectForm({ ...projectForm, color: e.target.value })}
+                          placeholder="#185FA5"
+                          style={{ flex: 1, minWidth: 0 }}
+                        />
+                      </div>
+                    </div>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="edit-proj-status">Stato Commessa</label>
+                      <select
+                        id="edit-proj-status"
+                        className="input"
+                        value={projectForm.status}
+                        onChange={(e) => setProjectForm({ ...projectForm, status: e.target.value })}
+                      >
+                        {STATUS_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="input-group">
+                    <label htmlFor="edit-proj-responsible">Referente di Commessa</label>
+                    <select
+                      id="edit-proj-responsible"
+                      className="input"
+                      value={projectForm.responsible_id || ''}
+                      onChange={(e) => setProjectForm({ ...projectForm, responsible_id: e.target.value })}
+                    >
+                      <option value="">-- Nessun referente predefinito --</option>
+                      {usersList.map(u => (
+                        <option key={u.id} value={u.id}>{u.full_name || u.username} ({u.username})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="input-group">
+                    <label htmlFor="edit-proj-desc">Descrizione / Note</label>
+                    <textarea
+                      id="edit-proj-desc"
+                      className="input"
+                      rows={3}
+                      value={projectForm.description}
+                      onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
+                      placeholder="Dettagli e obiettivo della commessa..."
+                      style={{ resize: 'vertical' }}
                     />
                   </div>
                 </div>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="edit-proj-status">Stato Commessa</label>
-                  <select
-                    id="edit-proj-status"
-                    className="input"
-                    value={projectForm.status}
-                    onChange={(e) => setProjectForm({ ...projectForm, status: e.target.value })}
-                  >
-                    {STATUS_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
 
-              <div className="input-group">
-                <label htmlFor="edit-proj-responsible">Referente di Commessa</label>
-                <select
-                  id="edit-proj-responsible"
-                  className="input"
-                  value={projectForm.responsible_id || ''}
-                  onChange={(e) => setProjectForm({ ...projectForm, responsible_id: e.target.value })}
-                >
-                  <option value="">-- Nessuno / Predefinito --</option>
-                  {usersList.map(u => (
-                    <option key={u.id} value={u.id}>{u.full_name || u.username} ({u.username})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="input-group">
-                <label>Addetti della Commessa (Multi-selezione)</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                  {usersList.map(u => {
-                    const selected = (projectForm.assigned_workers || []).includes(u.username);
-                    const wDept = u.department;
-                    const deptColor = wDept ? (DEPT_OPTIONS.find(d => d.value === wDept)?.color || '#3b82f6') : '#3b82f6';
-                    return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => toggleProjectWorkerSelection(u.username)}
+                {/* COLONNA DESTRA: Tipologia Commessa e Addetti Team */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {/* Tipologia Commessa */}
+                  <div className="input-group">
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
+                      <span style={{ fontWeight: 600 }}>Tipologia Commessa</span>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        ATEX e Alimentare selezionabili insieme
+                      </span>
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(125px, 1fr))', gap: 8, marginTop: 4 }}>
+                      {/* Opzione STANDARD */}
+                      <div
+                        onClick={() => setProjectForm({ ...projectForm, is_atex: false, is_alimentare: false })}
                         style={{
-                          padding: '6px 12px',
-                          borderRadius: 20,
-                          border: selected ? `2px solid ${deptColor}` : '1px solid var(--border-color)',
-                          background: selected ? `${deptColor}26` : 'var(--bg-tertiary)',
-                          color: selected ? deptColor : 'var(--text-secondary)',
-                          fontSize: 13,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 10,
                           cursor: 'pointer',
-                          fontWeight: selected ? 600 : 400
+                          border: (!projectForm.is_atex && !projectForm.is_alimentare) ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                          background: (!projectForm.is_atex && !projectForm.is_alimentare) ? 'rgba(59, 130, 246, 0.12)' : 'var(--bg-tertiary)',
+                          color: (!projectForm.is_atex && !projectForm.is_alimentare) ? '#2563eb' : 'var(--text-primary)',
+                          transition: 'all 0.15s ease',
+                          userSelect: 'none'
                         }}
                       >
-                        {selected ? '✓ ' : '+ '}{u.full_name || u.username}
-                      </button>
-                    );
-                  })}
+                        <input
+                          type="radio"
+                          checked={!projectForm.is_atex && !projectForm.is_alimentare}
+                          onChange={() => setProjectForm({ ...projectForm, is_atex: false, is_alimentare: false })}
+                          style={{ accentColor: '#3b82f6', cursor: 'pointer' }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>Standard</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Nessun vincolo spec.</div>
+                        </div>
+                      </div>
+
+                      {/* Opzione ATEX */}
+                      <div
+                        onClick={() => setProjectForm({ ...projectForm, is_atex: !projectForm.is_atex })}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          cursor: 'pointer',
+                          border: projectForm.is_atex ? '2px solid #f59e0b' : '1px solid var(--border-color)',
+                          background: projectForm.is_atex ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-tertiary)',
+                          color: projectForm.is_atex ? '#d97706' : 'var(--text-primary)',
+                          transition: 'all 0.15s ease',
+                          userSelect: 'none'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(projectForm.is_atex)}
+                          onChange={(e) => setProjectForm({ ...projectForm, is_atex: e.target.checked })}
+                          style={{ accentColor: '#f59e0b', cursor: 'pointer' }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>ATEX</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Rischio esplosione</div>
+                        </div>
+                      </div>
+
+                      {/* Opzione ALIMENTARE */}
+                      <div
+                        onClick={() => setProjectForm({ ...projectForm, is_alimentare: !projectForm.is_alimentare })}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          cursor: 'pointer',
+                          border: projectForm.is_alimentare ? '2px solid #10b981' : '1px solid var(--border-color)',
+                          background: projectForm.is_alimentare ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-tertiary)',
+                          color: projectForm.is_alimentare ? '#059669' : 'var(--text-primary)',
+                          transition: 'all 0.15s ease',
+                          userSelect: 'none'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(projectForm.is_alimentare)}
+                          onChange={(e) => setProjectForm({ ...projectForm, is_alimentare: e.target.checked })}
+                          style={{ accentColor: '#10b981', cursor: 'pointer' }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>Alimentare</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Settore Food Grade</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Addetti della Commessa */}
+                  <div className="input-group">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <label style={{ margin: 0 }}>Addetti della Commessa (Multi-selezione)</label>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        {projectForm.assigned_workers?.length || 0} selezionati
+                      </span>
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                      padding: 12,
+                      borderRadius: 10,
+                      border: '1px solid var(--border-color)',
+                      background: 'var(--bg-tertiary)',
+                      maxHeight: 250,
+                      overflowY: 'auto'
+                    }}>
+                      {usersList.map(u => {
+                        const selected = (projectForm.assigned_workers || []).includes(u.username);
+                        const wDept = u.department;
+                        const deptColor = wDept ? (DEPT_OPTIONS.find(d => d.value === wDept)?.color || '#3b82f6') : '#3b82f6';
+                        return (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => toggleProjectWorkerSelection(u.username)}
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: 20,
+                              border: selected ? `2px solid ${deptColor}` : '1px solid var(--border-color)',
+                              background: selected ? `${deptColor}26` : 'var(--bg-primary)',
+                              color: selected ? deptColor : 'var(--text-secondary)',
+                              fontSize: 12.5,
+                              cursor: 'pointer',
+                              fontWeight: selected ? 600 : 400,
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            {selected ? '✓ ' : '+ '}{u.full_name || u.username}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="input-group">
-                <label htmlFor="edit-proj-desc">Descrizione / Note</label>
-                <textarea
-                  id="edit-proj-desc"
-                  className="input"
-                  rows={3}
-                  value={projectForm.description}
-                  onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
-                  placeholder="Dettagli e obiettivo della commessa..."
-                  style={{ resize: 'vertical' }}
-                />
-              </div>
-
-              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 }}>
+              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
                 {(user?.role === 'admin' || user?.role === 'editor') ? (
                   <button
                     type="button"
