@@ -10,7 +10,7 @@ import { Copy, User, Send, MessageSquarePlus, Bot } from 'lucide-react';
 export default function ChatPage() {
   const { user } = useAuth();
   const { addToast } = useToast();
-  
+
   const getInitialMessages = () => {
     const cached = localStorage.getItem('hiplan-chat-messages');
     if (cached) {
@@ -299,145 +299,277 @@ export default function ChatPage() {
           color: var(--text-muted);
           cursor: not-allowed;
         }
+        .chat-quick-chips {
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+          padding: 4px 2px 2px 2px;
+          scrollbar-width: none;
+        }
+        .chat-quick-chips::-webkit-scrollbar {
+          display: none;
+        }
+        .chat-chip-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 12px;
+          border-radius: 20px;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          white-space: nowrap;
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-default);
+          color: var(--text-secondary);
+          cursor: pointer;
+          transition: all 0.15s ease;
+          user-select: none;
+          box-shadow: var(--shadow-sm);
+        }
+        .chat-chip-btn:hover:not(:disabled) {
+          background: var(--accent-50, rgba(99, 102, 241, 0.08));
+          border-color: var(--accent-500, #6366f1);
+          color: var(--accent-600, #4f46e5);
+          transform: translateY(-1px);
+        }
+        .chat-chip-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        /* STILI TABELLE CHAT (Larghezza generosa, scroll orizzontale, zero spezzamenti sgradevoli) */
+        .chat-table-wrapper {
+          width: 100%;
+          overflow-x: auto;
+          margin: 12px 0 16px 0;
+          border-radius: 8px;
+          border: 1px solid var(--border-default, #e2e8f0);
+          background: var(--bg-surface, #ffffff);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+          -webkit-overflow-scrolling: touch;
+        }
+        .dark .chat-table-wrapper {
+          background: var(--bg-secondary, #1e293b);
+          border-color: var(--border-color, #334155);
+        }
+        .chat-table {
+          width: 100%;
+          min-width: 680px;
+          border-collapse: collapse;
+          font-size: 0.86rem;
+          text-align: left;
+        }
+        .chat-th {
+          background-color: var(--bg-secondary, #f8fafc);
+          color: var(--text-secondary, #475569);
+          font-weight: 600;
+          font-size: 0.8rem;
+          padding: 10px 14px;
+          border-bottom: 2px solid var(--border-default, #e2e8f0);
+          border-right: 1px solid var(--border-subtle, #f1f5f9);
+          white-space: nowrap;
+        }
+        .dark .chat-th {
+          background-color: rgba(255, 255, 255, 0.04);
+          border-bottom-color: var(--border-color, #334155);
+          border-right-color: var(--border-color, #334155);
+          color: var(--text-muted, #94a3b8);
+        }
+        .chat-th:last-child {
+          border-right: none;
+        }
+        .chat-td {
+          padding: 10px 14px;
+          border-bottom: 1px solid var(--border-subtle, #f1f5f9);
+          border-right: 1px solid var(--border-subtle, #f1f5f9);
+          color: var(--text-primary);
+          vertical-align: middle;
+          line-height: 1.45;
+          word-break: normal;
+          overflow-wrap: normal;
+        }
+        .dark .chat-td {
+          border-bottom-color: var(--border-color, #334155);
+          border-right-color: var(--border-color, #334155);
+        }
+        .chat-td:last-child {
+          border-right: none;
+        }
+        .chat-table tr:last-child td {
+          border-bottom: none;
+        }
+        .chat-table tr:hover td {
+          background-color: var(--bg-hover, rgba(0, 0, 0, 0.02));
+        }
+        .dark .chat-table tr:hover td {
+          background-color: rgba(255, 255, 255, 0.03);
+        }
       `}</style>
-    <div className="workspace-container chat-page-container">
-      <header className="workspace-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-color)' }}>
-        <h2 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-primary)' }}>Chat</h2>
-        <div className="header-actions">
-          <button 
-            onClick={handleResetChat} 
-            className="btn btn-primary" 
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '8px' }}
-          >
-            <MessageSquarePlus size={18} />
-            Nuova Chat
-          </button>
-        </div>
-      </header>
-
-      <div className="workspace-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '0 20px 20px 20px', gap: '20px', backgroundColor: 'var(--bg-primary)' }}>
-        
-        <div className="chat-messages" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px', paddingRight: '10px' }}>
-          {messages.map((msg) => (
-            <div 
-              key={msg.id} 
-              className="chat-message-row"
-              style={{
-                alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
-                display: 'flex',
-                flexDirection: msg.sender === 'user' ? 'row-reverse' : 'row',
-                gap: '12px',
-                maxWidth: '85%'
-              }}
+      <div className="workspace-container chat-page-container">
+        <header className="workspace-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-color)' }}>
+          <h2 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-primary)' }}>Chat</h2>
+          <div className="header-actions">
+            <button
+              onClick={handleResetChat}
+              className="btn btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '8px' }}
             >
-              {/* Icona Mittente */}
-              <div style={{ flexShrink: 0, marginTop: '4px' }}>
-                {msg.sender === 'user' ? (
-                  <div className="chat-avatar" style={{ 
-                    width: '36px', height: '36px', borderRadius: '8px', 
-                    background: 'linear-gradient(135deg, var(--accent-500), var(--accent-600))', color: '#ffffff', 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: 'bold', fontSize: '1.1rem'
-                  }}>
-                    {user?.full_name?.[0]?.toUpperCase() || user?.username?.[0]?.toUpperCase() || '?'}
-                  </div>
-                ) : (
-                  <div className="chat-avatar" style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#fff', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                    <img src="/hiway-icon.png" alt="HiPlan AI" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
-                  </div>
-                )}
-              </div>
+              <MessageSquarePlus size={18} />
+              Nuova Chat
+            </button>
+          </div>
+        </header>
 
-              {/* Bolla Messaggio */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '0' }}>
-                <div className={msg.sender === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}>
-                  {msg.sender === 'ai' ? (
-                    <div className="chat-markdown">
-                      <ReactMarkdown 
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          table: ({node, ...props}) => <div style={{ overflowX: 'auto', margin: '0.6rem 0 1rem 0' }}><table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.88rem' }} {...props} /></div>,
-                          th: ({node, ...props}) => <th style={{ border: '1px solid var(--border-subtle)', padding: '6px 10px', backgroundColor: 'rgba(0,0,0,0.04)', textAlign: 'left', fontWeight: '600' }} {...props} />,
-                          td: ({node, ...props}) => <td style={{ border: '1px solid var(--border-subtle)', padding: '6px 10px' }} {...props} />,
-                        }}
-                      >
-                        {msg.text}
-                      </ReactMarkdown>
+        <div className="workspace-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '0 20px 20px 20px', gap: '14px', backgroundColor: 'var(--bg-primary)' }}>
+
+          <div className="chat-messages" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px', paddingRight: '10px' }}>
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className="chat-message-row"
+                style={{
+                  alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
+                  display: 'flex',
+                  flexDirection: msg.sender === 'user' ? 'row-reverse' : 'row',
+                  gap: '12px',
+                  maxWidth: msg.sender === 'user' ? '80%' : '94%'
+                }}
+              >
+                {/* Icona Mittente */}
+                <div style={{ flexShrink: 0, marginTop: '4px' }}>
+                  {msg.sender === 'user' ? (
+                    <div className="chat-avatar" style={{
+                      width: '36px', height: '36px', borderRadius: '8px',
+                      background: 'linear-gradient(135deg, var(--accent-500), var(--accent-600))', color: '#ffffff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontWeight: 'bold', fontSize: '1.1rem'
+                    }}>
+                      {user?.full_name?.[0]?.toUpperCase() || user?.username?.[0]?.toUpperCase() || '?'}
                     </div>
                   ) : (
-                    msg.text
-                  )}
-
-                  {/* Tasto Copia per le risposte dell'AI */}
-                  {msg.sender === 'ai' && (
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px', borderTop: '1px solid var(--border-subtle)', paddingTop: '8px' }}>
-                      <button
-                        onClick={() => handleCopy(msg.text)}
-                        className="chat-copy-btn"
-                        title="Copia risposta"
-                      >
-                        <Copy size={15} />
-                      </button>
+                    <div className="chat-avatar" style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#fff', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                      <img src="/hiway-icon.png" alt="HiPlan AI" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
                     </div>
                   )}
                 </div>
+
+                {/* Bolla Messaggio */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '0' }}>
+                  <div className={msg.sender === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}>
+                    {msg.sender === 'ai' ? (
+                      <div className="chat-markdown">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            table: ({ node, ...props }) => (
+                              <div className="chat-table-wrapper">
+                                <table className="chat-table" {...props} />
+                              </div>
+                            ),
+                            th: ({ node, ...props }) => <th className="chat-th" {...props} />,
+                            td: ({ node, ...props }) => <td className="chat-td" {...props} />,
+                          }}
+                        >
+                          {msg.text}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      msg.text
+                    )}
+
+                    {/* Tasto Copia per le risposte dell'AI */}
+                    {msg.sender === 'ai' && (
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px', borderTop: '1px solid var(--border-subtle)', paddingTop: '8px' }}>
+                        <button
+                          onClick={() => handleCopy(msg.text)}
+                          className="chat-copy-btn"
+                          title="Copia risposta"
+                        >
+                          <Copy size={15} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
-          {isLoading && (
-            <div className="chat-message-row" style={{ alignSelf: 'flex-start', display: 'flex', gap: '12px' }}>
-              <div className="chat-avatar" style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#fff', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, marginTop: '4px' }}>
-                <img src="/hiway-icon.png" alt="HiPlan AI" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
+            ))}
+            {isLoading && (
+              <div className="chat-message-row" style={{ alignSelf: 'flex-start', display: 'flex', gap: '12px' }}>
+                <div className="chat-avatar" style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#fff', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, marginTop: '4px' }}>
+                  <img src="/hiway-icon.png" alt="HiPlan AI" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
+                </div>
+                <div className="chat-bubble-ai" style={{ color: 'var(--text-secondary, #94a3b8)', display: 'flex', alignItems: 'center', gap: '8px', flexDirection: 'row' }}>
+                  <Bot size={18} className="animate-pulse" />
+                  <span>Sto analizzando la richiesta...</span>
+                </div>
               </div>
-              <div className="chat-bubble-ai" style={{ color: 'var(--text-secondary, #94a3b8)', display: 'flex', alignItems: 'center', gap: '8px', flexDirection: 'row' }}>
-                <Bot size={18} className="animate-pulse" />
-                <span>Sto analizzando la richiesta...</span>
-              </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* QUICK ACTION CHIPS (Domande Rapide) */}
+          <div className="chat-quick-chips">
+            {[
+              { icon: '🎯', label: 'Le mie attività', text: 'Quali sono le mie attività e fasi in corso?' },
+              { icon: '📊', label: 'Stato commesse', text: 'Mostrami una panoramica dello stato delle commesse attive' },
+              { icon: '👥', label: 'Carico addetti', text: 'Chi ha il maggior carico di lavoro tra gli addetti?' },
+              { icon: '📅', label: 'Scadenze 30gg', text: 'Quali fasi o commesse scadono questo mese?' },
+              { icon: '⚠️', label: 'Verifica ritardi', text: 'Ci sono attività in ritardo o problemi di calendario?' },
+            ].map((chip, idx) => (
+              <button
+                key={idx}
+                type="button"
+                className="chat-chip-btn"
+                disabled={isLoading}
+                onClick={() => sendText(chip.text)}
+                title={chip.text}
+              >
+                <span>{chip.icon}</span>
+                <span>{chip.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <form onSubmit={handleSendMessage} className="chat-input-wrapper">
+            <textarea
+              style={{
+                flex: 1,
+                padding: '12px 16px',
+                borderRadius: '16px',
+                border: 'none',
+                backgroundColor: 'transparent',
+                color: 'var(--text-primary)',
+                outline: 'none',
+                fontSize: '1rem',
+                resize: 'none',
+                minHeight: '48px',
+                maxHeight: '150px',
+                fontFamily: 'inherit'
+              }}
+              rows={inputValue.split('\n').length > 4 ? 4 : inputValue.split('\n').length || 1}
+              placeholder="Scrivi un messaggio per l'assistente... (Invio per inviare, Shift+Invio per a capo)"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage(e);
+                }
+              }}
+              disabled={isLoading}
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !inputValue.trim()}
+              className={`chat-send-btn ${inputValue.trim() && !isLoading ? 'active' : 'disabled'}`}
+              title="Invia messaggio (Invio)"
+            >
+              <Send size={18} style={{ marginLeft: '-2px', color: 'inherit' }} />
+            </button>
+          </form>
+
         </div>
-
-        <form onSubmit={handleSendMessage} className="chat-input-wrapper">
-          <textarea
-            style={{ 
-              flex: 1, 
-              padding: '12px 16px', 
-              borderRadius: '16px', 
-              border: 'none', 
-              backgroundColor: 'transparent', 
-              color: 'var(--text-primary)', 
-              outline: 'none', 
-              fontSize: '1rem',
-              resize: 'none',
-              minHeight: '48px',
-              maxHeight: '150px',
-              fontFamily: 'inherit'
-            }}
-            rows={inputValue.split('\n').length > 4 ? 4 : inputValue.split('\n').length || 1}
-            placeholder="Scrivi un messaggio per l'assistente... (Invio per inviare, Shift+Invio per a capo)"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage(e);
-              }
-            }}
-            disabled={isLoading}
-          />
-          <button 
-            type="submit" 
-            disabled={isLoading || !inputValue.trim()}
-            className={`chat-send-btn ${inputValue.trim() && !isLoading ? 'active' : 'disabled'}`}
-            title="Invia messaggio (Invio)"
-          >
-            <Send size={18} style={{ marginLeft: '-2px', color: 'inherit' }} />
-          </button>
-        </form>
-
       </div>
-    </div>
     </>
   );
 }
