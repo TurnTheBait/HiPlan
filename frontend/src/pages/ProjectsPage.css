@@ -18,16 +18,18 @@
 
 .projects-filters {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-bottom: 24px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .filter-chip {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 18px;
+  padding: 8px 12px;
   border-radius: var(--radius-md, 8px);
   border: 1px solid var(--border-default);
   background: var(--bg-tertiary);
@@ -36,6 +38,8 @@
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: all var(--transition-fast);
 }
 
@@ -52,6 +56,27 @@
   color: #ffffff;
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
   font-weight: 600;
+}
+
+.filter-chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  margin-left: 6px;
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--text-secondary);
+  line-height: 1;
+}
+
+.filter-chip.active .filter-chip-count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
 }
 
 .projects-grid {

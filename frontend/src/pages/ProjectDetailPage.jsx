@@ -3801,13 +3801,13 @@ export default function ProjectDetailPage() {
                     type="button"
                     className="btn btn-danger btn-sm"
                     onClick={async () => {
-                      if (!window.confirm(`Confermi l'eliminazione definitiva della commessa "${project?.name || project?.code}" e di tutte le sue fasi?`)) return;
+                      if (!window.confirm(`Vuoi spostare la commessa "${project?.name || project?.code}" nel cestino? Verrà conservata per 90 giorni prima dell'eliminazione definitiva.`)) return;
                       try {
                         await api.delete(`/projects/${id}`);
-                        toast.success('Commessa eliminata');
+                        toast.success('Commessa spostata nel cestino');
                         navigate('/projects');
                       } catch {
-                        toast.error("Errore nell'eliminazione della commessa");
+                        toast.error("Errore nello spostamento nel cestino");
                       }
                     }}
                     style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#ef4444', color: '#fff' }}

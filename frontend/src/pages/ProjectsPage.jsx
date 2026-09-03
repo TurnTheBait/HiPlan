@@ -35,6 +35,7 @@ export default function ProjectsPage() {
   const { user } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
+  const canCreate = user?.role === 'admin' || user?.role === 'editor';
   const [projects, setProjects] = useState([]);
   const [usersList, setUsersList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +54,11 @@ export default function ProjectsPage() {
   const [sortConfig, setSortConfig] = useState({ key: 'none', direction: 'asc' });
   const [showSortMenu, setShowSortMenu] = useState(false);
   const sortMenuRef = useRef(null);
+
+  // Stato Cestino
+  const [showTrashModal, setShowTrashModal] = useState(false);
+  const [trashProjects, setTrashProjects] = useState([]);
+  const [trashLoading, setTrashLoading] = useState(false);
 
   useEffect(() => {
     if (user?.role === 'admin' || user?.role === 'editor') {
@@ -92,7 +98,23 @@ export default function ProjectsPage() {
   useEffect(() => {
     loadProjects();
     loadUsers();
-  }, []);
+    if (canCreate) {
+      loadTrash();
+    }
+  }, [canCreate]);
+
+  async function loadTrash() {
+    if (!canCreate) return;
+    setTrashLoading(true);
+    try {
+      const { data } = await api.get('/projects/trash');
+      setTrashProjects(Array.isArray(data) ? data : []);
+    } catch {
+      // ignore
+    } finally {
+      setTrashLoading(false);
+    }
+  }
 
   async function loadUsers() {
     try {
@@ -140,12 +162,47 @@ export default function ProjectsPage() {
 
   async function handleDelete(id, e) {
     e.stopPropagation();
-    if (!window.confirm('Confermi l\'eliminazione definitiva di questa commessa e di tutte le sue fasi di lavorazione?')) return;
+    if (!window.confirm('Vuoi spostare questa commessa nel cestino? Verrà conservata per 90 giorni prima dell\'eliminazione definitiva.')) return;
     try {
       await api.delete(`/projects/${id}`);
-      toast.success('Commessa eliminata');
+      toast.success('Commessa spostata nel cestino');
       loadProjects();
+      loadTrash();
     } catch { toast.error('Errore nell\'eliminazione'); }
+  }
+
+  async function handleRestoreProject(project) {
+    try {
+      await api.post(`/projects/trash/${project.id}/restore`);
+      toast.success(`Commessa "${project.name}" ripristinata con successo`);
+      loadProjects();
+      loadTrash();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Errore durante il ripristino');
+    }
+  }
+
+  async function handleHardDeleteProject(project) {
+    if (!window.confirm(`Sei sicuro di voler eliminare DEFINITIVAMENTE la commessa "${project.name}" e tutte le sue fasi collegate?\n\nQuesta operazione è irreversibile.`)) return;
+    try {
+      await api.delete(`/projects/trash/${project.id}`);
+      toast.success(`Commessa "${project.name}" eliminata definitivamente`);
+      loadTrash();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Errore durante l\'eliminazione definitiva');
+    }
+  }
+
+  async function handleEmptyTrash() {
+    if (trashProjects.length === 0) return;
+    if (!window.confirm(`Sei sicuro di voler svuotare il cestino?\nTutte le ${trashProjects.length} commesse presenti verranno eliminate in modo irreversibile dal database.`)) return;
+    try {
+      await api.delete('/projects/trash/empty');
+      toast.success('Cestino svuotato con successo');
+      loadTrash();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Errore durante lo svuotamento del cestino');
+    }
   }
 
   function openEditProject(project, e) {
@@ -194,11 +251,36 @@ export default function ProjectsPage() {
   }
 
 
+  const statusCounts = useMemo(() => {
+    const counts = {
+      my_projects: 0,
+      all: 0,
+      planning: 0,
+      active: 0,
+      completed: 0,
+      archived: 0,
+    };
+    for (const p of projects) {
+      if (p.is_assigned && p.status !== 'archived' && p.status !== 'completed') {
+        counts.my_projects++;
+      }
+      if (p.status !== 'archived') {
+        counts.all++;
+      }
+      if (p.status && counts[p.status] !== undefined) {
+        counts[p.status]++;
+      }
+    }
+    return counts;
+  }, [projects]);
+
   const filtered = useMemo(() => {
     let list = projects;
     if (filter === 'my_projects') {
       list = list.filter(p => p.is_assigned && p.status !== 'archived' && p.status !== 'completed');
-    } else if (filter !== 'all') {
+    } else if (filter === 'all') {
+      list = list.filter(p => p.status !== 'archived');
+    } else {
       list = list.filter(p => p.status === filter);
     }
     if (searchQuery.trim()) {
@@ -244,8 +326,6 @@ export default function ProjectsPage() {
     return list;
   }, [projects, filter, searchQuery, sortConfig]);
 
-  const canCreate = user?.role === 'admin' || user?.role === 'editor';
-
   async function handleExportFiltered(format) {
     if (filtered.length === 0) return toast.info("Nessuna commessa da esportare");
     const project_ids = filtered.map(p => p.id);
@@ -284,6 +364,20 @@ export default function ProjectsPage() {
       <div className="projects-command-stack">
         <span className="page-result-count">{filtered.length} commesse</span>
         <div className="page-action-group">
+          {canCreate && (
+            <button
+              className="btn btn-secondary btn-icon"
+              onClick={() => { setShowTrashModal(true); loadTrash(); }}
+              title="Cestino commesse (conservate per 90 giorni)"
+              aria-label="Cestino commesse"
+              style={{ position: 'relative' }}
+            >
+              <AppIcon name="trash" />
+              {trashProjects.length > 0 && (
+                <span className="trash-badge-count">{trashProjects.length}</span>
+              )}
+            </button>
+          )}
           <div style={{ position: 'relative' }} ref={sortMenuRef}>
             <button
               className="btn btn-secondary btn-icon"
@@ -420,7 +514,8 @@ export default function ProjectsPage() {
               className={`filter-chip ${filter === f ? 'active' : ''}`}
               onClick={() => setFilter(f)}
             >
-              {STATUS_LABELS_IT[f] || f}
+              <span>{STATUS_LABELS_IT[f] || f}</span>
+              <span className="filter-chip-count">{statusCounts[f] || 0}</span>
             </button>
           ))}
         </div>
@@ -878,6 +973,191 @@ export default function ProjectsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODALE CESTINO COMMESSE */}
+      {showTrashModal && (
+        <div className="modal-overlay" onClick={() => setShowTrashModal(false)}>
+          <div
+            className="modal trash-modal animate-scaleIn"
+            style={{
+              maxWidth: 820,
+              width: '94%',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'var(--bg-card, #ffffff)',
+              backgroundColor: 'var(--bg-card, #ffffff)',
+              borderRadius: 16,
+              padding: '24px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              border: '1px solid var(--border-default)',
+              zIndex: 1001,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header del Cestino */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: 16, borderBottom: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 12,
+                  background: 'rgba(239, 68, 68, 0.12)', color: 'var(--danger, #ef4444)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                }}>
+                  <AppIcon name="trash" size={24} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h2 style={{ fontSize: '1.3rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Cestino Commesse</h2>
+                    <span style={{
+                      fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+                      background: 'rgba(148, 163, 184, 0.16)', color: 'var(--text-secondary)'
+                    }}>
+                      {trashProjects.length} {trashProjects.length === 1 ? 'commessa' : 'commesse'}
+                    </span>
+                  </div>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--text-tertiary)' }}>
+                    Gli elementi vengono conservati per 90 giorni prima dell'eliminazione definitiva automatica.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {trashProjects.length > 0 && (
+                  <button
+                    className="btn btn-danger btn-sm"
+                    onClick={handleEmptyTrash}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', padding: '6px 12px' }}
+                  >
+                    <AppIcon name="trash" size={14} />
+                    Svuota Cestino
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn-ghost btn-icon"
+                  onClick={() => setShowTrashModal(false)}
+                  aria-label="Chiudi"
+                  style={{ width: 34, height: 34, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <AppIcon name="close" size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Lista delle commesse nel Cestino */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 0', minHeight: 220 }}>
+              {trashLoading ? (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '60px 0' }}>
+                  <div className="spinner" />
+                </div>
+              ) : trashProjects.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-tertiary)' }}>
+                  <div style={{
+                    width: 58, height: 58, borderRadius: '50%',
+                    background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', margin: '0 auto 16px', color: 'var(--text-muted)'
+                  }}>
+                    <AppIcon name="trash" size={28} />
+                  </div>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>
+                    Il cestino è vuoto
+                  </h3>
+                  <p style={{ fontSize: '0.85rem', margin: 0 }}>
+                    Nessuna commessa presente nel cestino.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {trashProjects.map((p) => (
+                    <div
+                      key={p.id}
+                      className="trash-project-card"
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '12px 16px', borderRadius: 10,
+                        border: '1px solid var(--border-default)', background: 'var(--bg-card)',
+                        gap: 16
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            width: 8, height: 40, borderRadius: 4,
+                            backgroundColor: p.color || '#185FA5', flexShrink: 0
+                          }}
+                        />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-700)', background: 'var(--accent-soft)', padding: '1px 6px', borderRadius: 4 }}>
+                              {p.code}
+                            </span>
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.92rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {p.name}
+                            </span>
+                            {p.client && (
+                              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                • {p.client}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4, fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                            <span>Fasi: {p.task_count}</span>
+                            <span>•</span>
+                            <span>Eliminata il {p.deleted_at ? new Date(p.deleted_at).toLocaleDateString('it-IT') : 'N/D'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                        <span
+                          style={{
+                            fontSize: '0.75rem', fontWeight: 650, padding: '4px 10px', borderRadius: 999,
+                            background: p.days_left <= 7 ? 'rgba(239, 68, 68, 0.12)' : (p.days_left <= 30 ? 'rgba(245, 158, 11, 0.12)' : 'var(--bg-tertiary)'),
+                            color: p.days_left <= 7 ? 'var(--danger, #ef4444)' : (p.days_left <= 30 ? '#d97706' : 'var(--text-secondary)'),
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {p.days_left <= 0 ? 'Eliminazione oggi' : `Tra ${p.days_left} giorni`}
+                        </span>
+
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleRestoreProject(p)}
+                          title="Ripristina commessa"
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', padding: '6px 12px' }}
+                        >
+                          <AppIcon name="undo" size={14} />
+                          Ripristina
+                        </button>
+
+                        <button
+                          className="btn btn-icon btn-sm"
+                          onClick={() => handleHardDeleteProject(p)}
+                          title="Elimina definitivamente"
+                          style={{ color: 'var(--danger, #ef4444)', padding: 6 }}
+                        >
+                          <AppIcon name="trash" size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer del Cestino */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowTrashModal(false)}
+              >
+                Chiudi
+              </button>
+            </div>
           </div>
         </div>
       )}

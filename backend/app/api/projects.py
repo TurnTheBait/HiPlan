@@ -8,10 +8,49 @@ import json
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import get_db, get_current_user, require_role
 from app.models.user import User, UserRole
-from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectOut, ProjectDetail, MemberAdd, MemberOut
+from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectOut, ProjectDetail, MemberAdd, MemberOut, ProjectTrashOut
 from app.services import project_service
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
+
+
+@router.get("/trash", response_model=List[ProjectTrashOut])
+async def list_trash(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Restituisce le commesse nel cestino con giorni rimanenti."""
+    return await project_service.get_trash_projects(db, current_user)
+
+
+@router.delete("/trash/empty", status_code=204)
+async def empty_trash(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Svuota completamente il cestino."""
+    await project_service.empty_trash(db, current_user)
+
+
+@router.post("/trash/{project_id}/restore")
+async def restore_project(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Ripristina una commessa dal cestino."""
+    await project_service.restore_project(db, project_id, current_user)
+    return {"status": "ok", "message": "Commessa ripristinata con successo"}
+
+
+@router.delete("/trash/{project_id}", status_code=204)
+async def hard_delete_project(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Elimina definitivamente una commessa dal database."""
+    await project_service.hard_delete_project(db, project_id, current_user)
 
 
 @router.get("", response_model=List[ProjectOut])

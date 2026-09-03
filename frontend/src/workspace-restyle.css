@@ -124,6 +124,8 @@
   grid-row: 2;
   gap: 4px;
   padding: 4px;
+  flex-wrap: nowrap !important;
+  white-space: nowrap !important;
 }
 
 .projects-command-stack .filter-chip {
@@ -131,10 +133,12 @@
   align-items: center;
   justify-content: center;
   height: 34px;
-  padding: 0 12px;
+  padding: 0 10px;
   border-radius: 9px;
   font-size: 0.71rem;
   line-height: 1;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .projects-command-stack .hiway-search-bar .input {
@@ -232,6 +236,8 @@
   border-radius: 13px;
   background: var(--bg-card);
   box-shadow: var(--shadow-xs);
+  flex-wrap: nowrap !important;
+  white-space: nowrap !important;
 }
 
 /* Agent command stack: same look as projects-command-stack */
@@ -251,12 +257,16 @@
   text-align: center;
   line-height: normal;
   height: 34px;
+  padding: 0 11px;
+  gap: 6px;
   margin: 0;
   box-sizing: border-box;
   border: 1px solid transparent;
   border-radius: 9px;
   background: transparent;
   color: var(--text-secondary);
+  flex-shrink: 0;
+  white-space: nowrap;
   font-size: 0.75rem;
   font-weight: 650;
 }
@@ -275,6 +285,84 @@
   background: var(--accent-soft);
   color: var(--accent-700);
   box-shadow: none;
+}
+
+.projects-page .filter-chip .filter-chip-count,
+.replanning-page .filter-chip .filter-chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--text-secondary);
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.projects-page .filter-chip:hover .filter-chip-count,
+.replanning-page .filter-chip:hover .filter-chip-count {
+  background: rgba(148, 163, 184, 0.26);
+  color: var(--text-primary);
+}
+
+.projects-page .filter-chip.active .filter-chip-count,
+.replanning-page .filter-chip.active .filter-chip-count {
+  background: rgba(7, 151, 211, 0.22);
+  color: var(--accent-700);
+}
+
+.trash-badge-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--danger, #ef4444);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  border: 1.5px solid var(--bg-card);
+}
+
+.trash-modal {
+  background: var(--bg-card, #ffffff) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-default) !important;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.35) !important;
+  border-radius: 16px !important;
+}
+
+[data-theme="dark"] .trash-modal {
+  background: #182234 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+[data-theme="light"] .trash-modal,
+:root:not([data-theme="dark"]) .trash-modal {
+  background: #ffffff !important;
+  border-color: var(--border-default, #e2e8f0) !important;
+}
+
+.trash-project-card {
+  transition: all 0.2s ease;
+}
+
+.trash-project-card:hover {
+  border-color: var(--border-focus, rgba(99, 102, 241, 0.35)) !important;
+  background: var(--bg-hover) !important;
+  box-shadow: var(--shadow-xs);
 }
 
 .projects-page .hiway-search-bar .input {
