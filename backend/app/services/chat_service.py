@@ -560,9 +560,8 @@ SQLQuery:"""
                 f"- **Monitoraggio ravvicinato**: verificare l'avanzamento delle {len(upcoming_tasks)} fasi con consegna programmata entro i prossimi 7 giorni."
             )
 
-        final_report = str(report_markdown).strip()
         return {
-            "report": final_report,
+            "report": report_markdown.strip(),
             "kpis": {
                 "total_projects": total_projects,
                 "active_projects": len(active_projects),
