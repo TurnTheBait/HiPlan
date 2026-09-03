@@ -22,6 +22,7 @@ if exist "backend\venv\Scripts\python.exe" (
 echo.
 echo [3/3] Aggiornamento delle dipendenze e build...
 call scripts\setup_windows.bat --no-pause
+if errorlevel 1 goto error
 
 echo.
 echo ========================================================
@@ -31,3 +32,15 @@ echo I tuoi dati (Database, .env, Allegati) sono intatti.
 echo Ora puoi riavviare l'applicazione usando start_windows.bat
 echo.
 pause
+exit /b 0
+
+:error
+echo.
+echo ========================================================
+echo   AGGIORNAMENTO NON COMPLETATO
+echo   Si e' verificato un errore durante l'aggiornamento.
+echo   Controlla i messaggi sopra riportati.
+echo ========================================================
+echo.
+pause
+exit /b 1
