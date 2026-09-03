@@ -1,15 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Copy, User, Send, MessageSquarePlus, Bot } from 'lucide-react';
+import { Copy, User, Send, MessageSquarePlus, Bot, Download, Printer, ExternalLink, Mail } from 'lucide-react';
 
 export default function ChatPage() {
   const { user } = useAuth();
   const { addToast } = useToast();
+  const navigate = useNavigate();
 
   const getInitialMessages = () => {
     const cached = localStorage.getItem('hiplan-chat-messages');
@@ -77,6 +78,91 @@ export default function ChatPage() {
       console.error('Failed to copy text: ', err);
       addToast('Errore durante la copia', 'error');
     }
+  };
+
+  const handleExportCsv = (text) => {
+    try {
+      const lines = text.split('\n');
+      const tableLines = lines.filter(l => l.trim().startsWith('|') && l.trim().endsWith('|'));
+      if (tableLines.length < 2) {
+        addToast('Nessuna tabella rilevata nel messaggio', 'info');
+        return;
+      }
+      
+      const rows = [];
+      for (const line of tableLines) {
+        if (line.includes('---')) continue;
+        const cells = line
+          .split('|')
+          .slice(1, -1)
+          .map(c => {
+            let val = c.trim();
+            val = val.replace(/\[\*\*(.*?)\*\*\]\(.*?\)/g, '$1');
+            val = val.replace(/\[(.*?)\]\(.*?\)/g, '$1');
+            val = val.replace(/\*\*(.*?)\*\*/g, '$1');
+            val = val.replace(/"/g, '""');
+            return `"${val}"`;
+          });
+        rows.push(cells.join(';'));
+      }
+      
+      const csvContent = '\uFEFF' + rows.join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `hiplan-analisi-${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      addToast('Tabella esportata in CSV per Excel', 'success');
+    } catch (err) {
+      console.error(err);
+      addToast('Errore durante l\'esportazione CSV', 'error');
+    }
+  };
+
+  const handlePrintMessage = (msgId, text) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+    const targetEl = document.getElementById(`chat-msg-content-${msgId}`);
+    const htmlBody = targetEl ? targetEl.innerHTML : `<pre style="white-space: pre-wrap;">${text}</pre>`;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Report HiPlan AI - ${new Date().toLocaleDateString('it-IT')}</title>
+          <style>
+            body { font-family: system-ui, -apple-system, sans-serif; padding: 32px; color: #1e293b; line-height: 1.5; font-size: 13px; }
+            h1, h2, h3 { color: #0f172a; margin-top: 18px; margin-bottom: 8px; }
+            table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 12px; }
+            th { background: #f1f5f9; padding: 8px 10px; border: 1px solid #cbd5e1; text-align: left; font-weight: 600; text-transform: uppercase; font-size: 11px; }
+            td { padding: 8px 10px; border: 1px solid #e2e8f0; vertical-align: middle; }
+            hr { border: 0; border-top: 1px solid #e2e8f0; margin: 16px 0; }
+            button { display: none; }
+            a { color: #0284c7; text-decoration: none; }
+            @media print { body { padding: 0; } }
+          </style>
+        </head>
+        <body>
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0284c7; padding-bottom: 10px; margin-bottom: 20px;">
+            <h2 style="margin: 0; color: #0284c7; font-size: 18px;">HiPlan - Report Analisi Assistente</h2>
+            <span style="font-size: 12px; color: #64748b;">${new Date().toLocaleString('it-IT')}</span>
+          </div>
+          <div>${htmlBody}</div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
   };
 
   const sendText = async (text) => {
@@ -404,6 +490,99 @@ export default function ChatPage() {
         .dark .chat-table tr:hover td {
           background-color: rgba(255, 255, 255, 0.03);
         }
+
+        /* BADGE LINK AZIONABILI ALL'INTERNO DELLA CHAT */
+        .chat-action-badge-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          background: var(--accent-50, #eff6ff);
+          color: var(--accent-700, #1d4ed8);
+          border: 1px solid var(--accent-200, #bfdbfe);
+          border-radius: 6px;
+          padding: 2px 7px;
+          font-size: 0.82rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          vertical-align: middle;
+          text-decoration: none;
+        }
+        .chat-action-badge-btn:hover {
+          background: var(--accent-100, #dbeafe);
+          border-color: var(--accent-400, #60a5fa);
+          transform: translateY(-1px);
+        }
+        .dark .chat-action-badge-btn {
+          background: rgba(59, 130, 246, 0.15);
+          color: #93c5fd;
+          border-color: rgba(59, 130, 246, 0.3);
+        }
+        .dark .chat-action-badge-btn:hover {
+          background: rgba(59, 130, 246, 0.25);
+          border-color: rgba(59, 130, 246, 0.5);
+        }
+
+        .chat-action-email-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          background: #10b981;
+          color: #ffffff !important;
+          border-radius: 6px;
+          padding: 5px 12px;
+          font-size: 0.82rem;
+          font-weight: 600;
+          text-decoration: none;
+          margin: 6px 0;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+          transition: all 0.15s ease;
+        }
+        .chat-action-email-btn:hover {
+          background: #059669;
+          transform: translateY(-1px);
+        }
+
+        .chat-bubble-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 6px;
+          margin-top: 10px;
+          border-top: 1px solid var(--border-subtle, #f1f5f9);
+          padding-top: 8px;
+          flex-wrap: wrap;
+        }
+        .dark .chat-bubble-actions {
+          border-top-color: rgba(255, 255, 255, 0.08);
+        }
+        .chat-action-tool-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          background: transparent;
+          color: var(--text-secondary, #64748b);
+          border: 1px solid var(--border-default, #e2e8f0);
+          border-radius: 6px;
+          padding: 4px 8px;
+          font-size: 0.76rem;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+        .chat-action-tool-btn:hover {
+          background: var(--bg-hover, #f8fafc);
+          color: var(--text-primary);
+          border-color: var(--border-color);
+        }
+        .dark .chat-action-tool-btn {
+          border-color: rgba(255, 255, 255, 0.12);
+          color: #94a3b8;
+        }
+        .dark .chat-action-tool-btn:hover {
+          background: rgba(255, 255, 255, 0.06);
+          color: #f8fafc;
+        }
       `}</style>
       <div className="workspace-container chat-page-container">
         <header className="workspace-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-color)' }}>
@@ -457,7 +636,7 @@ export default function ChatPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '0' }}>
                   <div className={msg.sender === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}>
                     {msg.sender === 'ai' ? (
-                      <div className="chat-markdown">
+                      <div className="chat-markdown" id={`chat-msg-content-${msg.id}`}>
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
@@ -468,6 +647,40 @@ export default function ChatPage() {
                             ),
                             th: ({ node, ...props }) => <th className="chat-th" {...props} />,
                             td: ({ node, ...props }) => <td className="chat-td" {...props} />,
+                            a: ({ node, href, children, ...props }) => {
+                              if (href && href.startsWith('/projects/')) {
+                                return (
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      navigate(href);
+                                    }}
+                                    className="chat-action-badge-btn"
+                                    title="Apri commessa nel diagramma di Gantt"
+                                  >
+                                    <ExternalLink size={12} style={{ marginRight: '3px' }} />
+                                    {children}
+                                  </button>
+                                );
+                              }
+                              if (href && href.startsWith('mailto:')) {
+                                return (
+                                  <a
+                                    href={href}
+                                    className="chat-action-email-btn"
+                                    title="Apri nel tuo client di posta"
+                                  >
+                                    <Mail size={13} />
+                                    {children}
+                                  </a>
+                                );
+                              }
+                              return (
+                                <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+                                  {children}
+                                </a>
+                              );
+                            }
                           }}
                         >
                           {msg.text}
@@ -477,15 +690,34 @@ export default function ChatPage() {
                       msg.text
                     )}
 
-                    {/* Tasto Copia per le risposte dell'AI */}
+                    {/* Azioni rapide sotto le risposte dell'AI: Esporta CSV, Stampa PDF, Copia */}
                     {msg.sender === 'ai' && (
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px', borderTop: '1px solid var(--border-subtle)', paddingTop: '8px' }}>
+                      <div className="chat-bubble-actions">
+                        {msg.text && msg.text.includes('|') && (
+                          <button
+                            onClick={() => handleExportCsv(msg.text)}
+                            className="chat-action-tool-btn"
+                            title="Esporta la tabella in file CSV (compatibile con Microsoft Excel)"
+                          >
+                            <Download size={13} />
+                            <span>Esporta CSV</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handlePrintMessage(msg.id, msg.text)}
+                          className="chat-action-tool-btn"
+                          title="Stampa o salva in PDF questa analisi"
+                        >
+                          <Printer size={13} />
+                          <span>Stampa / PDF</span>
+                        </button>
                         <button
                           onClick={() => handleCopy(msg.text)}
-                          className="chat-copy-btn"
-                          title="Copia risposta"
+                          className="chat-action-tool-btn"
+                          title="Copia negli appunti"
                         >
-                          <Copy size={15} />
+                          <Copy size={13} />
+                          <span>Copia</span>
                         </button>
                       </div>
                     )}
@@ -510,8 +742,10 @@ export default function ChatPage() {
           {/* QUICK ACTION CHIPS (Domande Rapide) */}
           <div className="chat-quick-chips">
             {[
+              { icon: '☀️', label: 'Briefing di oggi', text: 'Dammi il mio briefing operativo del giorno con priorità e scadenze' },
               { icon: '🎯', label: 'Le mie attività', text: 'Quali sono le mie attività e fasi in corso?' },
               { icon: '📊', label: 'Stato commesse', text: 'Mostrami una panoramica dello stato delle commesse attive' },
+              { icon: '⏱️', label: 'Budget & Ore', text: 'Analizza il consumo ore e gli scostamenti di budget delle commesse' },
               { icon: '👥', label: 'Carico addetti', text: 'Chi ha il maggior carico di lavoro tra gli addetti?' },
               { icon: '📅', label: 'Scadenze 30gg', text: 'Quali fasi o commesse scadono questo mese?' },
               { icon: '⚠️', label: 'Verifica ritardi', text: 'Ci sono attività in ritardo o problemi di calendario?' },

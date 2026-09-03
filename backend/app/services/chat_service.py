@@ -1,6 +1,7 @@
 import os
 import re
-from datetime import date
+import json
+from datetime import date, timedelta
 # pyrefly: ignore [missing-import]
 from sqlalchemy import create_engine, select
 # pyrefly: ignore [missing-import]
@@ -44,7 +45,6 @@ def parse_clean_workers(val) -> list[str]:
     s = str(val).strip()
     if (s.startswith("[") and s.endswith("]")) or (s.startswith('"') and s.endswith('"')):
         try:
-            import json
             parsed = json.loads(s)
             if isinstance(parsed, list):
                 return [str(x).strip(" '\"[]\t\r\n") for x in parsed if str(x).strip(" '\"[]\t\r\n")]
@@ -76,6 +76,27 @@ def normalize_progress(raw_progress) -> int:
         return round(val)
     except (ValueError, TypeError):
         return 0
+
+def get_task_total_actual_hours(t) -> float:
+    """Estrae e calcola il totale delle ore consuntivate reali dal campo actual_hours (JSON dict)."""
+    val = getattr(t, 'actual_hours', None)
+    if not val:
+        return 0.0
+    try:
+        data = json.loads(val) if isinstance(val, str) else val
+        if not isinstance(data, dict):
+            return 0.0
+        tot = 0.0
+        for worker, dates_map in data.items():
+            if isinstance(dates_map, dict):
+                for d, h in dates_map.items():
+                    try:
+                        tot += float(h or 0)
+                    except (ValueError, TypeError):
+                        pass
+        return round(tot, 1)
+    except Exception:
+        return 0.0
 
 class ChatService:
     def __init__(self):
@@ -161,7 +182,7 @@ class ChatService:
         
         async with AsyncSessionLocal() as session:
             stmt = (
-                select(Task, Project.name.label("proj_name"), Project.code.label("proj_code"))
+                select(Task, Project.name.label("proj_name"), Project.code.label("proj_code"), Project.id.label("proj_id"))
                 .join(Project, Task.project_id == Project.id)
                 .where(Project.deleted_at.is_(None))
             )
@@ -169,7 +190,7 @@ class ChatService:
             all_rows = res.all()
             
             user_tasks: list = []
-            for t, p_name, p_code in all_rows:
+            for t, p_name, p_code, p_id in all_rows:
                 workers_list = [w.lower() for w in parse_clean_workers(getattr(t, 'workers', None))]
                 assigned_str = str(t.assigned_to) if t.assigned_to else ""
                 
@@ -182,7 +203,7 @@ class ChatService:
                     matched = True
                     
                 if matched:
-                    user_tasks.append((t, str(p_code or ""), str(p_name or "Senza nome")))
+                    user_tasks.append((t, str(p_code or ""), str(p_name or "Senza nome"), str(p_id)))
                     
             if not user_tasks:
                 return (
@@ -208,8 +229,8 @@ class ChatService:
                     return raw_d.date()
                 return raw_d or date.max
                 
-            for task_obj, p_code, p_name in sorted(user_tasks, key=get_sort_key):
-                p_label = f"**{p_code}**" if p_code else p_name
+            for task_obj, p_code, p_name, p_id in sorted(user_tasks, key=get_sort_key):
+                p_label = f"[**{p_code}**](/projects/{p_id})" if p_code else f"[**{p_name}**](/projects/{p_id})"
                 raw_end = getattr(task_obj, 'end_date', None)
                 end_d: date | None = raw_end.date() if (raw_end and hasattr(raw_end, 'date')) else raw_end
                 end_str = end_d.strftime("%d/%m/%Y") if end_d else "N/D"
@@ -304,7 +325,8 @@ class ChatService:
                     st_badge = "🟡 Pianificazione"
                     
                 client_str = str(p.client or "-")
-                lines.append(f"| {st_badge} | **{p.code or '-'}** | {p.name} | {client_str} | {end_str} | {avg_prog}% | {compl_t}/{tot_t} |")
+                p_code_link = f"[**{p.code or '-'}**](/projects/{p.id})"
+                lines.append(f"| {st_badge} | {p_code_link} | {p.name} | {client_str} | {end_str} | {avg_prog}% | {compl_t}/{tot_t} |")
                 
             lines.append("\n---")
             if overdue_p > 0:
@@ -395,7 +417,7 @@ class ChatService:
         
         async with AsyncSessionLocal() as session:
             stmt = (
-                select(Task, Project.name.label("proj_name"), Project.code.label("proj_code"))
+                select(Task, Project.name.label("proj_name"), Project.code.label("proj_code"), Project.id.label("proj_id"))
                 .join(Project, Task.project_id == Project.id)
                 .where(
                     Project.deleted_at.is_(None),
@@ -407,20 +429,16 @@ class ChatService:
             rows = res.all()
             
             upcoming = []
-            for t, p_name, p_code in rows:
-                end_d = t.end_date.date() if hasattr(t.end_date, 'date') else t.end_date
+            for t, p_name, p_code, p_id in rows:
+                raw_end = getattr(t, 'end_date', None)
+                end_d: date | None = raw_end.date() if (raw_end and hasattr(raw_end, 'date')) else raw_end
                 if end_d and today <= end_d <= cutoff:
-                    upcoming.append({
-                        "task": t,
-                        "project_name": p_name,
-                        "project_code": p_code,
-                        "days_left": (end_d - today).days
-                    })
+                    upcoming.append((t, str(p_name or ""), str(p_code or ""), str(p_id), (end_d - today).days))
                     
             if not upcoming:
                 return f"Non risultano fasi in scadenza nei prossimi {days} giorni nelle commesse attive."
                 
-            upcoming.sort(key=lambda x: x["days_left"])
+            upcoming.sort(key=lambda x: x[4])
             
             lines = [
                 f"Ecco le attività con consegna o scadenza programmata nei prossimi **{days} giorni** ({len(upcoming)} fasi individuate):\n",
@@ -428,23 +446,239 @@ class ChatService:
                 "| :---: | :---: | :--- | :--- | :--- | :---: |"
             ]
             
-            for item in upcoming:
-                t = item["task"]
-                p_label = f"**{item['project_code']}** - {item['project_name']}" if item['project_code'] else item['project_name']
-                end_d = t.end_date.date() if hasattr(t.end_date, 'date') else t.end_date
-                d_str = end_d.strftime("%d/%m/%Y")
-                w_str = format_clean_workers(getattr(t, 'workers', None))
-                prog_val = normalize_progress(getattr(t, 'progress', 0))
+            for t_obj, p_name_str, p_code_str, p_id_str, days_left in upcoming:
+                p_label = f"[**{p_code_str}**](/projects/{p_id_str}) - {p_name_str}" if p_code_str else f"[**{p_name_str}**](/projects/{p_id_str})"
+                raw_end = getattr(t_obj, 'end_date', None)
+                end_d_val = raw_end.date() if (raw_end and hasattr(raw_end, 'date')) else raw_end
+                d_str = end_d_val.strftime("%d/%m/%Y") if end_d_val else "N/D"
+                w_str = format_clean_workers(getattr(t_obj, 'workers', None))
+                prog_val = normalize_progress(getattr(t_obj, 'progress', 0))
                 prog = f"{prog_val}%"
                 
-                days_left = item["days_left"]
                 days_badge = "🔴 Oggi" if days_left == 0 else f"🟡 {days_left} gg" if days_left <= 3 else f"{days_left} gg"
                 
-                lines.append(f"| {d_str} | {days_badge} | **{t.text}** | {p_label} | {w_str} | {prog} |")
+                task_text = str(getattr(t_obj, 'text', 'Attività'))
+                lines.append(f"| {d_str} | {days_badge} | **{task_text}** | {p_label} | {w_str} | {prog} |")
                 
             lines.append("\n---")
             lines.append("💡 **Azione consigliata:** Dai la priorità alle fasi con consegna a meno di 3 giorni e verifica la disponibilità delle risorse per evitare slittamenti a cascata sul diagramma di Gantt.")
             return "\n".join(lines)
+
+    async def _tool_get_budget_and_hours(self) -> str:
+        """Analisi economica e controllo di gestione: ore previste a budget vs ore consuntivate reali."""
+        from app.models.base import AsyncSessionLocal
+        from app.models.project import Project, ProjectStatus
+        from app.models.task import Task, TaskType
+        
+        async with AsyncSessionLocal() as session:
+            p_res = await session.execute(
+                select(Project).where(Project.deleted_at.is_(None)).order_by(Project.end_date.asc())
+            )
+            projects = p_res.scalars().all()
+            if not projects:
+                return "Non ci sono commesse registrate nel sistema."
+                
+            t_res = await session.execute(select(Task))
+            all_tasks = t_res.scalars().all()
+            
+            tasks_by_proj: dict = {}
+            for t in all_tasks:
+                tasks_by_proj.setdefault(str(t.project_id), []).append(t)
+                
+            lines = [
+                "Ecco l'analisi dettagliata di controllo gestione: **Ore Previste a Budget vs Ore Consuntivate Reali**:\n",
+                "| Stato Budget | Commessa | Cliente | Ore Previste | Ore Consuntivate | Scostamento | Avanzamento SAL |",
+                "| :---: | :--- | :--- | :---: | :---: | :---: | :---: |"
+            ]
+            
+            extra_budget_count = 0
+            at_risk_count = 0
+            
+            for p in projects:
+                p_tasks = tasks_by_proj.get(str(p.id), [])
+                prog_tasks = [
+                    t for t in p_tasks 
+                    if getattr(t, 'type', None) != TaskType.MILESTONE and 'milestone' not in str(getattr(t, 'type', '')).lower()
+                ]
+                
+                tot_planned = sum(float(getattr(t, 'planned_hours', 0) or 0) for t in prog_tasks)
+                tot_actual = sum(get_task_total_actual_hours(t) for t in prog_tasks)
+                delta = round(tot_actual - tot_planned, 1)
+                
+                tot_t = len(prog_tasks)
+                avg_prog = round(sum(normalize_progress(getattr(t, 'progress', 0)) for t in prog_tasks) / tot_t) if tot_t > 0 else 0
+                
+                # Calcolo alert budget
+                if tot_planned > 0 and tot_actual > tot_planned:
+                    status_badge = "🔴 Extra Budget"
+                    extra_budget_count += 1
+                elif tot_planned > 0 and (tot_actual / tot_planned >= 0.85) and avg_prog < 70:
+                    status_badge = "🟡 A Rischio"
+                    at_risk_count += 1
+                else:
+                    status_badge = "🟢 In Budget"
+                    
+                delta_str = f"+{delta}h" if delta > 0 else f"{delta}h"
+                p_link = f"[**{p.code or p.name}**](/projects/{p.id})"
+                lines.append(
+                    f"| {status_badge} | {p_link} - {p.name} | {p.client or '-'} | {round(tot_planned, 1)}h | {round(tot_actual, 1)}h | {delta_str} | {avg_prog}% |"
+                )
+                
+            lines.append("\n---")
+            if extra_budget_count > 0:
+                lines.append(f"💡 **Azione consigliata:** Rilevate **{extra_budget_count} commesse con ore consuntivate superiori alle stime**. Si raccomanda un incontro di controllo con i responsabili per verificare varianti d'opera o consuntivazioni errate.")
+            elif at_risk_count > 0:
+                lines.append(f"💡 **Azione consigliata:** Ci sono **{at_risk_count} commesse con consumo ore avanzato (>85%) a fronte di un SAL ancora parziale**. Monitorare attentamente le prossime lavorazioni.")
+            else:
+                lines.append("💡 **Azione consigliata:** Tutte le commesse attive presentano un consumo di ore proporzionato all'avanzamento dei lavori.")
+                
+            return "\n".join(lines)
+
+    async def _tool_get_morning_briefing(self, current_user) -> str:
+        """Genera il digest esecutivo del buongiorno personalizzato per l'utente connesso."""
+        if not current_user:
+            return "Per accedere al Briefing del giorno personalizzato è necessario essere autenticati."
+            
+        username = str(getattr(current_user, 'username', '')).strip()
+        full_name = str(getattr(current_user, 'full_name', '')).strip()
+        user_id = getattr(current_user, 'id', None)
+        display_name = full_name or username or "Collega"
+        
+        today = date.today()
+        cutoff_48h = today + timedelta(days=2)
+        
+        from app.models.base import AsyncSessionLocal
+        from app.models.task import Task
+        from app.models.project import Project
+        from app.models.vacation import Vacation
+        
+        async with AsyncSessionLocal() as session:
+            # 1. Attività personali
+            stmt = (
+                select(Task, Project.name.label("proj_name"), Project.code.label("proj_code"), Project.id.label("proj_id"))
+                .join(Project, Task.project_id == Project.id)
+                .where(Project.deleted_at.is_(None))
+            )
+            res = await session.execute(stmt)
+            all_tasks = res.all()
+            
+            my_urgent_tasks = []
+            my_overdue = 0
+            
+            for t, p_name, p_code, p_id in all_tasks:
+                workers_list = [w.lower() for w in parse_clean_workers(getattr(t, 'workers', None))]
+                is_my = (
+                    (username and username.lower() in workers_list)
+                    or (full_name and full_name.lower() in workers_list)
+                    or (user_id and str(user_id) == str(t.assigned_to))
+                )
+                if is_my and getattr(t, 'completed', 0) != 1 and normalize_progress(getattr(t, 'progress', 0)) < 100:
+                    raw_end = getattr(t, 'end_date', None)
+                    end_d = raw_end.date() if (raw_end and hasattr(raw_end, 'date')) else raw_end
+                    if end_d:
+                        if end_d < today:
+                            my_overdue += 1
+                        elif end_d <= cutoff_48h:
+                            my_urgent_tasks.append((t, p_code, p_name, str(p_id), (end_d - today).days))
+                            
+            # 2. Ferie del personale
+            from app.models.user import User
+            v_stmt = select(Vacation, User.full_name, User.username).join(User, Vacation.user_id == User.id)
+            v_res = await session.execute(v_stmt)
+            vacations = v_res.all()
+            today_vacation_workers = []
+            for v, u_full, u_uname in vacations:
+                st = v.start_date.date() if hasattr(v.start_date, 'date') else v.start_date
+                en = v.end_date.date() if hasattr(v.end_date, 'date') else v.end_date
+                if st and en and st <= today <= en:
+                    today_vacation_workers.append(u_full or u_uname or "Addetto")
+                    
+            lines = [
+                f"### ☀️ Buongiorno, **{display_name}**! Ecco il tuo Briefing Operativo del giorno ({today.strftime('%d/%m/%Y')}):\n"
+            ]
+            
+            if my_overdue > 0:
+                lines.append(f"⚠️ **Attenzione:** Hai **{my_overdue} attività in ritardo** sulle scadenze programmate.")
+            else:
+                lines.append("✅ **Tempistiche:** Nessuna delle tue attività risulta attualmente in ritardo.")
+                
+            if my_urgent_tasks:
+                lines.append(f"\n🎯 **Priorità a brevissimo termine (prossime 48 ore):**")
+                for t, p_code, p_name, p_id, days_left in my_urgent_tasks:
+                    badge = "🔴 Scade OGGI" if days_left == 0 else f"🟡 Scade tra {days_left} gg"
+                    lines.append(f"- {badge}: **{t.text}** su [**{p_code or p_name}**](/projects/{p_id}) ({normalize_progress(t.progress)}% completato)")
+            else:
+                lines.append("\n🎯 **Priorità:** Nessuna scadenza personale imminente nelle prossime 48 ore.")
+                
+            if today_vacation_workers:
+                v_str = ", ".join(sorted(list(set(today_vacation_workers))))
+                lines.append(f"\n🏖️ **Assenze e Ferie registrate per oggi:** {v_str}")
+            else:
+                lines.append("\n🏖️ **Assenze:** Nessuna risorsa in ferie programmata per oggi.")
+                
+            lines.append("\n---")
+            if my_overdue > 0:
+                lines.append(f"💡 **Azione consigliata:** Dedica la prima parte della mattinata a sbloccare le attività in ritardo o concorda un rinvio con il capocommessa.")
+            elif my_urgent_tasks:
+                lines.append(f"💡 **Azione consigliata:** Concentrati sul completamento delle fasi a scadenza 48h per garantire il rispetto dei SAL settimanali.")
+            else:
+                lines.append(f"💡 **Azione consigliata:** Giornata regolare. Puoi avanzare sulla pianificazione ordinaria o revisionare lo stato di avanzamento commesse.")
+                
+            return "\n".join(lines)
+
+    async def _tool_simulate_scenario(self, user_message: str) -> str:
+        """Simula scenari predittivi 'What-If': impatto di slittamenti, assenze o nuove commesse."""
+        from app.models.base import AsyncSessionLocal
+        from app.models.project import Project
+        from app.models.vacation import Vacation
+        from app.models.user import User
+        
+        async with AsyncSessionLocal() as session:
+            p_res = await session.execute(select(Project).where(Project.deleted_at.is_(None)))
+            projects = p_res.scalars().all()
+            
+            proj_summary = []
+            for p in projects:
+                end_str = p.end_date.strftime("%d/%m/%Y") if p.end_date else "N/D"
+                proj_summary.append(f"- Commessa: {p.code or p.name} (ID: {p.id}, Scadenza contrattuale: {end_str}, Stato: {getattr(p.status, 'value', p.status)})")
+                
+            v_stmt = select(Vacation, User.full_name, User.username).join(User, Vacation.user_id == User.id)
+            v_res = await session.execute(v_stmt)
+            vacations = v_res.all()
+            v_summary = []
+            for v, u_full, u_uname in vacations[:20]:
+                st = v.start_date.strftime("%d/%m/%Y") if v.start_date else ""
+                en = v.end_date.strftime("%d/%m/%Y") if v.end_date else ""
+                v_summary.append(f"- {u_full or u_uname}: dal {st} al {en}")
+                
+            prompt = PromptTemplate.from_template(
+                "Sei il motore di simulazione predittiva 'What-If' di HiPlan per diagrammi di Gantt e gestione commesse.\n"
+                "Data odierna: {today_str}\n\n"
+                "COMMESSE ATTIVE E SCADENZE CONTRATTUALI:\n{proj_context}\n\n"
+                "FERIE PROGRAMMATE DEGLI ADDETTI:\n{vacation_context}\n\n"
+                "RICHIESTA SCENARIO IPOTETICO DELL'UTENTE:\n\"{message}\"\n\n"
+                "ISTRUZIONI PER L'ANALISI PREDITTIVA:\n"
+                "1. Analizza l'impatto potenziale dello scenario descritto:\n"
+                "   - C'è rischio di superare la data di consegna finale pattuita con il cliente?\n"
+                "   - C'è conflitto con ferie già approvate degli addetti menzionati?\n"
+                "   - Quali fasi a valle (dipendenti) o commesse parallele potrebbero subire colli di bottiglia?\n"
+                "2. Struttura la risposta con:\n"
+                "   - **Esito della simulazione**: [Fattibile / Critico / Richiede Ripianificazione]\n"
+                "   - **Tabella dell'impatto stimato**: | Elemento | Stato Attuale | Impatto Simulato | Valutazione Rischio |\n"
+                "   - **Strategia di mitigazione consigliata** (es. assegnare un secondo addetto, comprimere un'altra fase).\n"
+                "3. Concludi sempre con:\n"
+                "   ---\n"
+                "   💡 **Azione consigliata:** [consiglio operativo chiaro]\n\n"
+                "Risposta della simulazione:"
+            )
+            chain = prompt | self.chat_llm | StrOutputParser()
+            res = await chain.ainvoke({
+                "today_str": date.today().strftime("%d/%m/%Y"),
+                "proj_context": "\n".join(proj_summary),
+                "vacation_context": "\n".join(v_summary) if v_summary else "Nessuna ferie registrata",
+                "message": user_message
+            })
+            return res.strip()
 
     def _classify_intent(self, user_message: str) -> str:
         m = user_message.strip().lower()
@@ -458,7 +692,16 @@ class ChatService:
         if m in ["grazie", "grazie mille", "ok grazie", "perfetto", "ottimo", "grazie!", "ricevuto", "chiudi", "basta"]:
             return "chat"
 
-        # 2. Tool dedicato: mie attività / compiti personali
+        # 2. Tool dedicato: Morning Briefing
+        briefing_keys = [
+            "briefing", "sommario oggi", "riassunto del giorno", "cosa devo sapere oggi",
+            "cosa c'è oggi", "aggiornamento del giorno", "briefing del giorno", "briefing di oggi",
+            "buongiorno briefing", "start day"
+        ]
+        if any(k in m for k in briefing_keys):
+            return "briefing"
+
+        # 3. Tool dedicato: mie attività / compiti personali
         my_tasks_keys = [
             "mie attività", "miei compiti", "miei task", "mie fasi",
             "cosa devo fare", "cosa ho da fare", "miei incarichi",
@@ -468,7 +711,25 @@ class ChatService:
         if any(k in m for k in my_tasks_keys):
             return "my_tasks"
 
-        # 3. Tool dedicato: panoramica commesse
+        # 4. Tool dedicato: Budget / Ore consuntivate vs Stimate
+        budget_keys = [
+            "budget", "ore consuntivate", "scostamento ore", "scostamento", "ore lavorate",
+            "extra budget", "ore spese", "chi consuma più ore", "consuntivi", "costo ore",
+            "consumo ore", "ore stimate", "controllo gestione", "differenza ore"
+        ]
+        if any(k in m for k in budget_keys) and not any(k in m for k in ["mail", "email"]):
+            return "budget"
+
+        # 5. Tool dedicato: What-If / Simulazione predittiva
+        what_if_keys = [
+            "cosa succede se", "se slitta", "se posticipo", "se mario va in ferie",
+            "se va in ferie", "impatta la data", "possiamo prendere una nuova",
+            "simula", "simulazione", "se spostiamo", "se ritardo"
+        ]
+        if any(k in m for k in what_if_keys):
+            return "what_if"
+
+        # 6. Tool dedicato: panoramica commesse
         proj_overview_keys = [
             "stato commesse", "panoramica commesse", "elenco commesse",
             "commesse attive", "avanzamento commesse", "stato dei progetti",
@@ -477,7 +738,7 @@ class ChatService:
         if any(k in m for k in proj_overview_keys) and not any(k in m for k in ["mail", "email", "scrivi"]):
             return "projects_overview"
 
-        # 4. Tool dedicato: carico addetti
+        # 7. Tool dedicato: carico addetti
         workload_keys = [
             "carico addetti", "carico di lavoro", "chi ha più carico",
             "chi lavora di più", "distribuzione carichi", "carichi di lavoro",
@@ -486,7 +747,7 @@ class ChatService:
         if any(k in m for k in workload_keys) and not any(k in m for k in ["mail", "email", "scrivi"]):
             return "team_workload"
 
-        # 5. Tool dedicato: scadenze del mese o prossimi giorni
+        # 8. Tool dedicato: scadenze del mese o prossimi giorni
         deadlines_keys = [
             "scadenza questo mese", "scadenze questo mese", "scadenze del mese",
             "scadono questo mese", "scadenze a breve", "prossime scadenze",
@@ -495,9 +756,9 @@ class ChatService:
         if any(k in m for k in deadlines_keys) and not any(k in m for k in ["mail", "email", "scrivi"]):
             return "deadlines"
 
-        # 6. Conflitti, allarmi, sovraccarichi, ritardi, replanning o email di avviso anomalie
+        # 9. Conflitti, allarmi, sovraccarichi, ritardi, replanning o email di avviso anomalie
         alarm_keywords = [
-            "conflitt", "allarm", "ritard", "mancat", "consuntiv",
+            "conflitt", "allarm", "ritard", "mancat",
             "riprogramm", "replan", "segnalazion", "alert", "problemi di carico",
             "criticit", "sovrapposiz"
         ]
@@ -507,7 +768,7 @@ class ChatService:
         if is_alarm or (is_email and any(k in m for k in ["responsabile", "problem", "avvis", "programmazion", "commess"])):
             return "alarms"
 
-        # 7. Default: interrogazione database via SQL guidato
+        # 10. Default: interrogazione database via SQL guidato
         return "sql"
 
     async def get_response(self, user_message: str, current_user=None, history=None) -> str:
@@ -522,6 +783,7 @@ class ChatService:
         username = str(getattr(current_user, 'username', '') or '')
         full_name = str(getattr(current_user, 'full_name', '') or username or 'Utente')
         user_role = str(getattr(current_user.role, 'value', current_user.role)).upper() if (current_user and hasattr(current_user, 'role')) else "VIEWER"
+        user_id = str(getattr(current_user, 'id', '') or '')
         user_dept = str(getattr(current_user, 'department', 'generale') or 'generale')
 
         # Formatta cronologia recente
@@ -541,8 +803,17 @@ class ChatService:
             # ==========================================
             # INTENT 1: STRUMENTI DETERMINISTICI (AGENTIC TOOLS)
             # ==========================================
+            if intent == "briefing":
+                return await self._tool_get_morning_briefing(current_user)
+
             if intent == "my_tasks":
                 return await self._tool_get_user_tasks(current_user)
+
+            if intent == "budget":
+                return await self._tool_get_budget_and_hours()
+
+            if intent == "what_if":
+                return await self._tool_simulate_scenario(user_message)
 
             if intent == "projects_overview":
                 return await self._tool_get_projects_overview()
@@ -566,7 +837,8 @@ class ChatService:
                     "- Consultare e riepilogare commesse, fasi e stati di avanzamento Gantt\n"
                     "- Mostrare le attività personali assegnate al profilo utente\n"
                     "- Rilevare conflitti di calendario, ferie concomitanti, ritardi e carichi addetti\n"
-                    "- Proporre strategie operative e redigere bozze di email formali\n\n"
+                    "- Controllare ore a budget vs consuntivate e scostamenti\n"
+                    "- Effettuare simulazioni predittive 'What-If' e redigere bozze di email formali\n\n"
                     "Messaggio dell'utente: {message}\n\n"
                     "Risposta:"
                 )
@@ -589,101 +861,75 @@ class ChatService:
                 users_list_str = ""
                 try:
                     from app.models.base import AsyncSessionLocal
-                    from app.models.user import User
                     from app.services.replanning_service import get_replanning_suggestions
+                    from app.models.user import User
+
                     async with AsyncSessionLocal() as session:
-                        suggestions = await get_replanning_suggestions(session, current_user)
-                        if suggestions:
-                            type_labels = {
-                                "missing_data": "Dati incompleti",
-                                "zero_hours": "Mancata consuntivazione",
-                                "vacation_conflict": "Conflitto con ferie",
-                                "overload_conflict": "Sovraccarico lavorativo",
-                                "delay_conflict": "Fase in ritardo",
-                                "project_end_exceeded": "Scadenza commessa superata",
-                            }
-                            lines = []
-                            for s in suggestions[:30]:
-                                raw_type = s.get("type", "")
-                                h_type = type_labels.get(raw_type, raw_type.replace("_", " ").capitalize())
-                                reason = s.get("reason", "")
-                                p_name = s.get("project_name", "")
-                                t_name = s.get("task_name", "")
-                                w = format_clean_workers(s.get("worker", ""))
-                                d = s.get("date", "")
-                                lines.append(f"- [{h_type}] {reason} (Commessa: {p_name}, Fase: {t_name}, Data: {d}, Addetto: {w})")
-                            suggestions_text = "\n".join(lines)
-                        
-                        users_res = await session.execute(select(User).where(User.is_active == True))
-                        real_users = users_res.scalars().all()
-                        if real_users:
-                            u_entries = [f"{u.full_name or u.username} (email: {u.email or 'N/D'}, reparto: {u.department or 'generale'})" for u in real_users]
-                            users_list_str = "- " + "\n- ".join(u_entries)
-                except Exception as e_sugg:
-                    logger.warning(f"Errore recupero segnalazioni per path alarms: {e_sugg}")
+                        suggs = await get_replanning_suggestions(session, current_user)
+                        if suggs:
+                            clean_suggs = []
+                            for s in suggs[:15]:
+                                clean_s = dict(s)
+                                if "worker" in clean_s:
+                                    clean_s["worker"] = format_clean_workers(clean_s["worker"])
+                                clean_suggs.append(clean_s)
+                            suggestions_text = json.dumps(clean_suggs, ensure_ascii=False, indent=2)
+
+                        users_res = await session.execute(select(User))
+                        users = users_res.scalars().all()
+                        users_list_str = "\n".join([f"- {u.full_name or u.username} ({u.role.value if hasattr(u.role, 'value') else u.role})" for u in users])
+                except Exception as e:
+                    logger.error(f"Errore recupero suggerimenti/utenti per chatbot: {e}")
 
                 alarms_prompt = PromptTemplate.from_template(
-                    "Sei l'assistente virtuale di HiPlan, esperto di gestione commesse e pianificazione operativa.\n"
-                    "Data odierna: {today_str}\n"
-                    "Interlocutore: {full_name} (@{username}) | Ruolo: {user_role} | Reparto: {user_dept}\n\n"
+                    "Sei l'assistente virtuale ufficiale di HiPlan per la gestione commesse, Gantt e conflitti aziendali.\n"
+                    "Data di oggi: {today_str}\n"
+                    "Utente interlocutore: {full_name} (@{username}) | Ruolo: {user_role}\n\n"
+                    "ANOMALIE E SUGGERIMENTI RILEVATI DAL MOTORE GANTT:\n"
+                    "{suggestions_text}\n\n"
+                    "COLLABORATORI AZIENDALI:\n"
+                    "{users_list_str}\n\n"
+                    "RICHIESTA DELL'UTENTE:\n"
+                    "{message}\n\n"
+                    "ISTRUZIONI OBBLIGATORIE:\n"
+                    "1. TABELLE:\n"
+                    "   * Se l'utente chiede una lista o riepilogo delle criticità/ritardi, genera SEMPRE una tabella Markdown chiara e compatta.\n"
+                    "   * Usa colonne sintetiche: | Commessa | Fase / Area | Tipo Criticità | Periodo | Addetti | Note |\n"
+                    "   * Non mostrare MAI array JSON per gli addetti (es. NON scrivere mai `[\"anna_uff\"]`, scrivi solo `anna_uff`).\n"
+                    "2. BOZZE EMAIL:\n"
+                    "   * Se l'utente chiede di avvisare, scrivere o inviare un'email, redigi una bozza formale completa con: Oggetto, Destinatario, Testo professionale, Firma.\n"
+                    "   * Includi sempre una riga: `[✉️ Invia bozza email](mailto:destinatario@azienda.it?subject=...&body=...)` per consentire l'invio istantaneo.\n"
+                    "3. RACCOMANDAZIONE FINALE:\n"
+                    "   * Concludi sempre con:\n"
+                    "     ---\n"
+                    "     💡 **Azione consigliata:** [consiglio pratico chiaro per risolvere la criticità]\n\n"
                     "{history_context}"
-                    "ADDETTI REALI DEL SISTEMA:\n{users_list_str}\n\n"
-                    "SEGNALAZIONI ATTIVE DI SISTEMA (CONFLITTI, SOVRACCARICHI, RITARDI):\n{suggestions_text}\n\n"
-                    "LINEE GUIDA:\n"
-                    "1. LINGUAGGIO PROFESSIONALE: non usare MAI termini tecnici snake_case ('missing_data', 'vacation_conflict').\n"
-                    "2. Se l'utente chiede una EMAIL/BOZZA: crea una comunicazione formale, elegante e pronta all'invio, con 'Oggetto:' e corpo ben strutturato.\n"
-                    "3. Se l'utente chiede ANALISI/CONSIGLI: formatta se opportuno con tabelle Markdown e concludi sempre con un suggerimento pratico:\n"
-                    "   ---\n   💡 **Azione consigliata:** [consiglio operativo]\n"
-                    "4. Fai riferimento SOLO agli addetti reali del sistema.\n"
-                    "5. NOMI DEGLI ADDETTI: Mostra sempre i nomi o username puliti (es. 'admin', 'anna_uff', 'franco_pro'). NON mostrare MAI parentesi quadre o virgolette tipo '[\"anna_uff\"]'.\n"
-                    "6. FORMATTAZIONE TABELLE: Se organizzi le anomalie in tabella, usa intestazioni brevi e chiare (es. | Commessa | Fase / Attività | Criticità | Data / Periodo | Addetto | Note |).\n\n"
-                    "Richiesta dell'utente: {message}\n\n"
                     "Risposta:"
                 )
+
                 alarms_chain = alarms_prompt | self.chat_llm | StrOutputParser()
                 res = await alarms_chain.ainvoke({
                     "today_str": today_str,
                     "full_name": full_name,
                     "username": username,
                     "user_role": user_role,
-                    "user_dept": user_dept,
-                    "history_context": history_context,
-                    "users_list_str": users_list_str,
                     "suggestions_text": suggestions_text,
-                    "message": user_message
+                    "users_list_str": users_list_str,
+                    "message": user_message,
+                    "history_context": history_context
                 })
                 return res.strip()
 
             # ==========================================
-            # INTENT 4: INTERROGAZIONE DATABASE (SQL + DIZIONARIO DOMINIO + FEW-SHOT)
+            # INTENT 4: SQL GUIDATO + SELF-CORRECTION RETRY LOOP
             # ==========================================
-            user_id = str(current_user.id) if current_user else ""
-            is_admin = (user_role == "ADMIN")
-            is_observer = False
-            try:
-                import json
-                from app.models.base import AsyncSessionLocal
-                from app.models.setting import Setting
-                async with AsyncSessionLocal() as session:
-                    res_obs = await session.execute(select(Setting).where(Setting.key == "ticket_observers"))
-                    setting_obs = res_obs.scalar_one_or_none()
-                    if setting_obs and setting_obs.value:
-                        obs_list = json.loads(str(setting_obs.value))
-                        if username in obs_list:
-                            is_observer = True
-            except Exception as e_obs:
-                logger.warning(f"Errore lettura osservatori ticket: {e_obs}")
+            ticket_permission_rule = (
+                "L'utente ha accesso a TUTTI i ticket."
+                if user_role in ["ADMIN", "EDITOR"]
+                else f"L'utente può vedere SOLO i ticket creati da lui o assegnati a lui: `WHERE (tickets.created_by = '{user_id}' OR tickets.assigned_to = '{user_id}')`."
+            )
 
-            has_full_ticket_access = (is_admin or is_observer)
-            if has_full_ticket_access:
-                ticket_permission_rule = "- ACCESSO COMPLETO TICKET: L'utente è Admin/Osservatore e può visualizzare tutti i ticket."
-            else:
-                ticket_permission_rule = (
-                    f"- RESTRIZIONE TICKET UTENTE: L'utente può vedere SOLO i propri ticket. "
-                    f"Aggiungi sempre: `AND (tickets.author_id = '{user_id}' OR tickets.responsible_id = '{user_id}' OR tickets.assigned_to LIKE '%{username}%')`"
-                )
-
-            sql_query_template = """Sei un ingegnere esperto di database SQLite per la piattaforma di Project Management HiPlan.
+            sql_query_template = """Sei un data analyst esperto di database SQLite e PostgreSQL per HiPlan.
 Data odierna di riferimento: {today_str}
 UTENTE CONNESSO: {full_name} (username: '{username}', ID: '{user_id}', Ruolo: {user_role}, Reparto: {user_dept})
 
@@ -718,25 +964,20 @@ ESEMPI DI QUERY SQL CORRETTE (FEW-SHOT EXAMPLES):
 {history_context}Schema database:
 {table_info}
 
-Domanda dell'utente: {input}
+Domanda: {input}
 SQLQuery:"""
 
-            sql_query_prompt = PromptTemplate(
-                input_variables=["input", "table_info", "top_k"],
-                partial_variables={
-                    "today_str": today_str,
-                    "full_name": full_name,
-                    "username": username,
-                    "user_id": user_id,
-                    "user_role": user_role,
-                    "user_dept": user_dept,
-                    "ticket_permission_rule": ticket_permission_rule,
-                    "history_context": history_context
-                },
-                template=sql_query_template
+            sql_query_prompt = PromptTemplate.from_template(sql_query_template).partial(
+                today_str=today_str,
+                full_name=full_name,
+                username=username,
+                user_id=user_id,
+                user_role=user_role,
+                user_dept=user_dept,
+                ticket_permission_rule=ticket_permission_rule,
+                history_context=history_context
             )
 
-            # Esecuzione query con sql_llm deterministico (temperature=0.0)
             generate_query = create_sql_query_chain(self.sql_llm, self.db, prompt=sql_query_prompt, k=100)
             
             def clean_sql(query_str: str) -> str:
@@ -759,13 +1000,36 @@ SQLQuery:"""
             clean_sql_runnable = RunnableLambda(clean_sql)
             
             def execute_and_log(sql_query: str) -> str:
+                """Esegue la query SQL e, in caso di errore, esegue il Self-Correction Loop automatico."""
                 try:
                     res = self.db.run(sql_query)
-                    logger.info(f"Risultato SQL: {res}")
+                    logger.info(f"Risultato SQL (1° tentativo riuscito): {res}")
                     return str(res)
                 except Exception as ex:
-                    logger.error(f"Errore esecuzione SQL '{sql_query}': {ex}")
-                    return f"Errore SQL: {ex}"
+                    logger.warning(f"Errore SQL (1° tentativo) '{sql_query}': {ex}. Avvio Self-Correction Loop...")
+                    try:
+                        fix_prompt = PromptTemplate.from_template(
+                            "La seguente query SQLite ha fallito con un errore sul database HiPlan.\n"
+                            "Domanda originale dell'utente: {input_question}\n"
+                            "Query SQL errata: {bad_query}\n"
+                            "Errore SQLite restituito: {error_msg}\n\n"
+                            "Correggi la query SQL risolvendo l'errore SQLite (usa colonne valide e sintassi SQLite corretta).\n"
+                            "Genera SOLO la query SQL corretta senza spiegazioni o testo aggiuntivo:\nSQLQuery:"
+                        )
+                        fix_chain = fix_prompt | self.sql_llm | StrOutputParser()
+                        fixed_raw = fix_chain.invoke({
+                            "input_question": user_message,
+                            "bad_query": sql_query,
+                            "error_msg": str(ex)
+                        })
+                        fixed_clean = clean_sql(fixed_raw)
+                        logger.info(f"Query SQL corretta dal Self-Correction Loop: {fixed_clean}")
+                        res_fixed = self.db.run(fixed_clean)
+                        logger.info(f"Risultato SQL riuscito dopo auto-correzione: {res_fixed}")
+                        return str(res_fixed)
+                    except Exception as ex2:
+                        logger.error(f"Errore persistente anche dopo auto-correzione SQL: {ex2}")
+                        return f"Nessun dato corrispondente trovato o errore nei criteri di ricerca: {ex}"
 
             execute_query_runnable = RunnableLambda(execute_and_log)
             
