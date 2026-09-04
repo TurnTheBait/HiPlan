@@ -1543,14 +1543,29 @@ export default function ProjectDetailPage() {
   }
 
   function handleChatGPTAnalysis() {
+    const isAtex = Boolean(project.is_atex);
+    const isAlimentare = Boolean(project.is_alimentare);
+    const tipologia = (isAtex && isAlimentare) ? 'ATEX + Alimentare' : isAtex ? 'ATEX' : isAlimentare ? 'Alimentare' : 'Standard';
+
+    let tipologiaNote = '';
+    if (isAtex && isAlimentare) {
+      tipologiaNote = ' (Vincoli normativi: Direttiva ATEX 2014/34/UE e idoneità alimentare MOCA/HACCP)';
+    } else if (isAtex) {
+      tipologiaNote = ' (Vincoli normativi: Direttiva ATEX 2014/34/UE e collaudi antideflagranti)';
+    } else if (isAlimentare) {
+      tipologiaNote = ' (Vincoli normativi: idoneità al contatto alimentare MOCA e standard igienico-sanitari HACCP)';
+    }
+
     const promptLines = [
       "Comportati da Project Manager esperto e analizza i dati di questa commessa riportati di seguito (e nell'eventuale file allegato).",
       "",
       `COMMESSA: ${project.name} (Codice: ${project.code || 'N/A'})`,
+      `Tipologia: ${tipologia}${tipologiaNote}`,
+      `Cliente: ${project.client || 'N/A'}`,
       `Descrizione: ${project.description || 'Nessuna descrizione'}`,
-      `Inizio: ${new Date(project.start_date).toLocaleDateString()}`,
-      `Fine: ${new Date(project.end_date).toLocaleDateString()}`,
-      `Stato: ${project.status}`,
+      `Inizio: ${project.start_date ? new Date(project.start_date).toLocaleDateString() : 'N/A'}`,
+      `Fine: ${project.end_date ? new Date(project.end_date).toLocaleDateString() : 'N/A'}`,
+      `Stato: ${project.status || 'N/A'}`,
       "",
       "FASI DELLA COMMESSA:"
     ];
@@ -1924,10 +1939,23 @@ export default function ProjectDetailPage() {
                     className="btn btn-secondary"
                     style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'var(--accent-600)', color: '#fff', borderColor: 'var(--accent-600)' }}
                     onClick={() => {
+                      const isAtex = Boolean(project.is_atex);
+                      const isAlim = Boolean(project.is_alimentare);
+                      const tipologia = (isAtex && isAlim) ? 'ATEX + Alimentare' : isAtex ? 'ATEX' : isAlim ? 'Alimentare' : 'Standard';
+
+                      let tipologiaContext = `Tipologia: ${tipologia}`;
+                      if (isAtex && isAlim) {
+                        tipologiaContext += ' (Vincoli normativi: Direttiva ATEX 2014/34/UE e conformità idoneità alimentare MOCA/HACCP)';
+                      } else if (isAtex) {
+                        tipologiaContext += ' (Vincoli normativi: Direttiva ATEX 2014/34/UE e collaudi antideflagranti)';
+                      } else if (isAlim) {
+                        tipologiaContext += ' (Vincoli normativi: idoneità al contatto alimentare MOCA e standard igienico-sanitari HACCP)';
+                      }
+
                       setShowExportMenu(false);
                       navigate('/chat', {
                         state: {
-                          initialPrompt: `Analizza questa commessa: ${project.name}\nData inizio: ${project.start_date || 'N/A'}\nData fine: ${project.end_date || 'N/A'}\nStatus: ${project.status || 'N/A'}\nPuoi darmi un resoconto e segnalare eventuali criticità?`
+                          initialPrompt: `Analizza questa commessa: ${project.name} (Codice: ${project.code || 'N/A'})\n${tipologiaContext}\nCliente: ${project.client || 'N/A'}\nData inizio: ${project.start_date || 'N/A'}\nData fine: ${project.end_date || 'N/A'}\nStatus: ${project.status || 'N/A'}\nPuoi fornirmi un'analisi operativa approfondita con stato di avanzamento reale, rispetto delle scadenze, carichi degli addetti e verifiche di conformità per la tipologia ${tipologia}?`
                         }
                       });
                     }}

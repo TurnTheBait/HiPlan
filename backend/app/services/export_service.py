@@ -7,7 +7,7 @@ from app.utils.working_days import is_italian_holiday
 from sqlalchemy.ext.asyncio import AsyncSession
 # pyrefly: ignore [missing-import]
 from sqlalchemy import select
-from app.models.task import Task
+from app.models.task import Task, TaskType
 from app.models.project import Project
 from app.models.ticket import Ticket, TicketReply
 from app.models.user import User
@@ -31,6 +31,19 @@ from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 # pyrefly: ignore [missing-import]
 from openpyxl.utils import get_column_letter
+
+
+def _get_project_tipologia(proj: Any) -> str:
+    """Restituisce la stringa di tipologia commessa: Standard, ATEX, Alimentare o combinata"""
+    is_atex = bool(getattr(proj, "is_atex", False))
+    is_alim = bool(getattr(proj, "is_alimentare", False))
+    if is_atex and is_alim:
+        return "ATEX + Alimentare"
+    elif is_atex:
+        return "ATEX"
+    elif is_alim:
+        return "Alimentare"
+    return "Standard"
 
 
 def _extract_task_info(task: Any) -> Tuple[str, float, float, float]:
@@ -154,6 +167,7 @@ async def export_excel(db: AsyncSession, project_id: str, sections: Optional[Lis
     ws_info.append([f"COMMESSA: {proj.code or ''} - {proj.name}"])
     ws_info.cell(row=1, column=1).font = Font(size=14, bold=True, color="1E3A8A")
 
+    tipologia_str = _get_project_tipologia(proj)
     resp_str = proj.responsible.full_name or proj.responsible.username if proj.responsible else "-"
     addetti_list = []
     if proj.assigned_workers:
@@ -164,12 +178,15 @@ async def export_excel(db: AsyncSession, project_id: str, sections: Optional[Lis
         except:
             pass
     addetti_str = ", ".join(addetti_list) if addetti_list else "-"
-    ws_info.append([f"Cliente: {proj.client or '-'} | Stato: {proj.status.value if proj.status else '-'}"])
+    ws_info.append([f"Cliente: {proj.client or '-'} | Tipologia: {tipologia_str} | Stato: {proj.status.value if proj.status else '-'}"])
     ws_info.cell(row=2, column=1).font = Font(size=11, italic=True)
     ws_info.append([f"Periodo: {proj.start_date or '-'} al {proj.end_date or '-'} | Responsabile: {resp_str}"])
     ws_info.cell(row=3, column=1).font = Font(size=11, italic=True)
     ws_info.append([f"Addetti Commessa: {addetti_str}"])
     ws_info.cell(row=4, column=1).font = Font(size=11, italic=True)
+    if proj.description:
+        ws_info.append([f"Descrizione: {proj.description}"])
+        ws_info.cell(row=5, column=1).font = Font(size=10, italic=True)
     ws_info.column_dimensions["A"].width = 120
 
     # ========== SHEET 2: GANTT DIAGRAM ==========
@@ -538,6 +555,7 @@ async def export_pdf(db: AsyncSession, project_id: str, sections: Optional[List[
     # ===== INTESTAZIONE (solo sulla prima pagina) =====
     elements.append(Paragraph(f"<b>{proj.code or ''} {proj.name}</b> — Report Commessa", title_style))
 
+    tipologia_str = _get_project_tipologia(proj)
     resp_str = proj.responsible.full_name or proj.responsible.username if proj.responsible else "-"
     addetti_list = []
     if proj.assigned_workers:
@@ -548,7 +566,7 @@ async def export_pdf(db: AsyncSession, project_id: str, sections: Optional[List[
         except: pass
     addetti_str = ", ".join(addetti_list) if addetti_list else "-"
 
-    info_str = (f"<b>Cliente:</b> {proj.client or '-'} | <b>Stato:</b> {proj.status.value if proj.status else '-'} | "
+    info_str = (f"<b>Cliente:</b> {proj.client or '-'} | <b>Tipologia:</b> {tipologia_str} | <b>Stato:</b> {proj.status.value if proj.status else '-'} | "
                 f"<b>Periodo:</b> {proj.start_date or '-'} → {proj.end_date or '-'}<br/>"
                 f"<b>Responsabile:</b> {resp_str} | <b>Addetti:</b> {addetti_str}")
     if proj.description:
@@ -883,7 +901,7 @@ async def export_projects_list_excel(db: AsyncSession, project_ids: List[str]) -
     ws = cast(Worksheet, wb.active)
     ws.title = "Elenco Commesse"
 
-    headers = ["Codice", "Nome Commessa", "Cliente", "Responsabile", "Stato", "Avanzamento", "Addetti"]
+    headers = ["Codice", "Nome Commessa", "Cliente", "Tipologia", "Responsabile", "Stato", "Avanzamento", "Addetti"]
     header_fill = PatternFill("solid", fgColor="1F2937")
     header_font = Font(bold=True, color="FFFFFF")
     
@@ -911,15 +929,21 @@ async def export_projects_list_excel(db: AsyncSession, project_ids: List[str]) -
         res_tasks = await db.execute(select(Task).where(Task.project_id == p.id))
         tasks = res_tasks.scalars().all()
         
-        total_tasks = len(tasks)
-        completed_tasks = sum(1 for t in tasks if t.completed)
-        progress = f"{int((completed_tasks / total_tasks) * 100)}%" if total_tasks > 0 else "0%"
+        op_tasks = [t for t in tasks if getattr(t, 'type', None) not in [TaskType.PROJECT, TaskType.MILESTONE]]
+        if not op_tasks:
+            op_tasks = tasks
+        if op_tasks:
+            tot_p = sum(float(t.progress or 0) * (100 if (t.progress is not None and t.progress <= 1.0) else 1) for t in op_tasks)
+            progress = f"{round(tot_p / len(op_tasks))}%"
+        else:
+            progress = "0%"
         
         workers = set()
         for t in tasks:
             workers.update(_get_workers_from_task(t))
         workers_str = ", ".join(sorted(workers)) if workers else "-"
         
+        tipologia_str = _get_project_tipologia(p)
         status_it = {"planning": "Pianificazione", "active": "In Corso", "completed": "Completata", "archived": "Archiviata"}.get(p.status, p.status)
         resp_name = user_map.get(p.responsible_id, "-") if p.responsible_id else "-"
 
@@ -927,6 +951,7 @@ async def export_projects_list_excel(db: AsyncSession, project_ids: List[str]) -
             p.code or "-",
             p.name,
             p.client or "-",
+            tipologia_str,
             resp_name,
             status_it,
             progress,
@@ -936,13 +961,14 @@ async def export_projects_list_excel(db: AsyncSession, project_ids: List[str]) -
         for col_idx, val in enumerate(row_data, 1):
             cell = ws.cell(row=idx, column=col_idx, value=val)
             cell.border = thin_border
-            if col_idx in [1, 4, 5, 6]:
+            if col_idx in [1, 4, 5, 6, 7]:
                 cell.alignment = Alignment(horizontal="center")
 
     for col_idx in range(1, len(headers) + 1):
         ws.column_dimensions[get_column_letter(col_idx)].width = 20
     ws.column_dimensions["B"].width = 35
-    ws.column_dimensions["G"].width = 40
+    ws.column_dimensions["D"].width = 22
+    ws.column_dimensions["H"].width = 40
 
     wb.save(buffer)
     buffer.seek(0)
@@ -978,6 +1004,7 @@ async def export_projects_list_pdf(db: AsyncSession, project_ids: List[str]) -> 
             Paragraph("Codice", header_style),
             Paragraph("Nome Commessa", header_style),
             Paragraph("Cliente", header_style),
+            Paragraph("Tipologia", header_style),
             Paragraph("Resp.", header_style),
             Paragraph("Stato", header_style),
             Paragraph("Avanz.", header_style),
@@ -991,15 +1018,21 @@ async def export_projects_list_pdf(db: AsyncSession, project_ids: List[str]) -> 
         res_tasks = await db.execute(select(Task).where(Task.project_id == p.id))
         tasks = res_tasks.scalars().all()
         
-        total_tasks = len(tasks)
-        completed_tasks = sum(1 for t in tasks if t.completed)
-        progress = f"{int((completed_tasks / total_tasks) * 100)}%" if total_tasks > 0 else "0%"
+        op_tasks = [t for t in tasks if getattr(t, 'type', None) not in [TaskType.PROJECT, TaskType.MILESTONE]]
+        if not op_tasks:
+            op_tasks = tasks
+        if op_tasks:
+            tot_p = sum(float(t.progress or 0) * (100 if (t.progress is not None and t.progress <= 1.0) else 1) for t in op_tasks)
+            progress = f"{round(tot_p / len(op_tasks))}%"
+        else:
+            progress = "0%"
         
         workers = set()
         for t in tasks:
             workers.update(_get_workers_from_task(t))
         workers_str = ", ".join(sorted(workers)) if workers else "-"
         
+        tipologia_str = _get_project_tipologia(p)
         status_it = {"planning": "Pianificazione", "active": "In Corso", "completed": "Completata", "archived": "Archiviata"}.get(p.status, p.status)
         resp_name = user_map.get(p.responsible_id, "-") if p.responsible_id else "-"
         
@@ -1007,18 +1040,19 @@ async def export_projects_list_pdf(db: AsyncSession, project_ids: List[str]) -> 
             Paragraph(p.code or "-", cell_style),
             Paragraph(p.name, cell_style),
             Paragraph(p.client or "-", cell_style),
+            Paragraph(tipologia_str, cell_style),
             Paragraph(resp_name, cell_style),
             Paragraph(status_it, cell_style),
             Paragraph(progress, cell_style),
             Paragraph(workers_str, cell_style)
         ])
 
-    table = Table(data, colWidths=[65, 160, 110, 85, 75, 45, 190])
+    table = Table(data, colWidths=[55, 145, 95, 80, 75, 75, 45, 175])
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F2937")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
         ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-        ("ALIGN", (5, 0), (5, -1), "CENTER"), # Avanzamento
+        ("ALIGN", (6, 0), (6, -1), "CENTER"), # Avanzamento
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
         ("TOPPADDING", (0, 0), (-1, 0), 8),
