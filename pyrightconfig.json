@@ -1,5 +1,5 @@
 {
-  "venvPath": "/Users/davidegirolamo/Programming/Gantt",
+  "venvPath": ".",
   "venv": "backend/venv",
   "pythonVersion": "3.13",
   "extraPaths": [
@@ -14,5 +14,8 @@
         "backend/venv/lib/python3.13/site-packages"
       ]
     }
+  ],
+  "exclude": [
+    "**/__pyrefly_virtual__/**"
   ]
 }
