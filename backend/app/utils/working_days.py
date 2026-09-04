@@ -41,6 +41,24 @@ def is_italian_holiday(d: date) -> bool:
 def is_working_day(d: date) -> bool:
     return not is_italian_holiday(d)
 
+def get_italian_holidays(year: int) -> list:
+    """Return a list of dicts with date and name for Italian public holidays in a given year."""
+    fixed = [
+        (1, 1, "Capodanno"), (1, 6, "Epifania"), (4, 25, "Festa della Liberazione"), 
+        (5, 1, "Festa dei Lavoratori"), (6, 2, "Festa della Repubblica"),
+        (8, 15, "Ferragosto"), (11, 1, "Tutti i Santi"), (12, 8, "Immacolata Concezione"), 
+        (12, 25, "Natale"), (12, 26, "Santo Stefano"),
+    ]
+    holidays = []
+    for m, d, name in fixed:
+        holidays.append({"date": date(year, m, d), "name": name})
+    
+    easter = get_easter(year)
+    holidays.append({"date": easter, "name": "Pasqua"})
+    holidays.append({"date": easter + timedelta(days=1), "name": "Pasquetta"})
+    
+    return holidays
+
 
 def count_working_days_in_range(start: date, end: date) -> int:
     """Count working days from start to end inclusive."""

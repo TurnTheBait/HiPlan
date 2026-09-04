@@ -16,6 +16,8 @@ class ProjectCreate(BaseModel):
     status: ProjectStatus = ProjectStatus.PLANNING
     responsible_id: Optional[str] = None
     assigned_workers: List[str] = []
+    is_atex: bool = False
+    is_alimentare: bool = False
 
 
 class ProjectUpdate(BaseModel):
@@ -30,6 +32,8 @@ class ProjectUpdate(BaseModel):
     status: Optional[ProjectStatus] = None
     responsible_id: Optional[str] = None
     assigned_workers: Optional[List[str]] = None
+    is_atex: Optional[bool] = None
+    is_alimentare: Optional[bool] = None
 
 
 class MemberAdd(BaseModel):
@@ -64,6 +68,8 @@ class ProjectOut(BaseModel):
     responsible_username: Optional[str] = None
     responsible_name: Optional[str] = None
     assigned_workers: List[str] = []
+    is_atex: bool = False
+    is_alimentare: bool = False
     attachments: List[dict] = []
     is_assigned: bool = False
     created_at: Optional[datetime] = None
@@ -71,10 +77,25 @@ class ProjectOut(BaseModel):
     task_count: int = 0
     member_count: int = 0
     progress: float = 0.0
+    deleted_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ProjectDetail(ProjectOut):
     members: List[MemberOut] = []
+
+
+class ProjectTrashOut(BaseModel):
+    id: str
+    name: str
+    code: Optional[str] = None
+    client: Optional[str] = None
+    color: Optional[str] = "#185FA5"
+    status: ProjectStatus
+    deleted_at: Optional[datetime] = None
+    days_left: int = 90
+    task_count: int = 0
+
+    model_config = ConfigDict(from_attributes=True)
 

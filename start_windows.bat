@@ -16,7 +16,7 @@ goto setup_done
 
 :setup_required
 echo [INFO] Installazione incompleta: avvio della configurazione iniziale.
-call "%~dp0setup_windows.bat" --no-pause
+call "%~dp0scripts\setup_windows.bat" --no-pause
 if errorlevel 1 goto error
 
 :setup_done

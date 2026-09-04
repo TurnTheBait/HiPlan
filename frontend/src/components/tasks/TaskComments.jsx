@@ -72,7 +72,7 @@ export default function TaskComments({ projectId, taskId, currentUser }) {
   if (loading) return <div>Caricamento commenti...</div>;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1 }}>
       <div style={{ flex: 1, overflowY: 'auto', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {comments.length === 0 ? (
           <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '2rem' }}>Nessun commento ancora. Scrivi qualcosa per iniziare la discussione!</p>

@@ -3,7 +3,7 @@ import { gantt } from 'dhtmlx-gantt';
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css';
 import { getTaskColor } from '../../utils/phaseColors';
 import { isTaskCompleted, calculateTaskEffHours } from '../../utils/taskCompletion';
-import { isWeekendOrHoliday, getPasquettaDate } from '../../utils/workingDays';
+import { isWeekendOrHoliday } from '../../utils/workingDays';
 import './GanttChart.css';
 
 const parseDateSafe = (d) => {
@@ -24,23 +24,48 @@ const parseDateSafe = (d) => {
 
 export { isWeekendOrHoliday };
 
-export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onOpenTaskHours, onNewTask, visibleColumns, readOnly, projectStartDate, projectEndDate }) {
+export default function GanttChart({ projectId, sortResetKey, tasks, links, onTaskUpdate, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onNewTask, visibleColumns = ['workers'], readOnly, projectStartDate, projectEndDate }) {
 
   const containerRef = useRef(null);
   const initialized = useRef(false);
+  const initialScrollDone = useRef(false);
   const markerIdsRef = useRef([]);
+  const projectIdRef = useRef(projectId);
   const projectStartDateRef = useRef(projectStartDate);
   const projectEndDateRef = useRef(projectEndDate);
   const drawCustomMarkersRef = useRef(null);
   const tasksRef = useRef(tasks);
+  const onTaskUpdateRef = useRef(onTaskUpdate);
   const onTaskCreateRef = useRef(onTaskCreate);
   const onTaskDeleteRef = useRef(onTaskDelete);
   const onLinkCreateRef = useRef(onLinkCreate);
   const onLinkDeleteRef = useRef(onLinkDelete);
   const onEditTaskRef = useRef(onEditTask);
-  const onOpenTaskHoursRef = useRef(onOpenTaskHours);
   const onNewTaskRef = useRef(onNewTask);
-  const readOnlyRef = useRef(readOnly);
+  const isRestoringSort = useRef(false);
+
+  const getSortStorageKey = () => `gantt_sort_state_${projectIdRef.current || 'global'}`;
+
+  const getSortState = () => {
+    try {
+      const raw = localStorage.getItem(getSortStorageKey());
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const saveSortState = (state) => {
+    try {
+      localStorage.setItem(getSortStorageKey(), JSON.stringify(state));
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    projectIdRef.current = projectId;
+  }, [projectId]);
 
   useEffect(() => {
     projectStartDateRef.current = projectStartDate;
@@ -49,15 +74,29 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
   }, [projectStartDate, projectEndDate, tasks]);
 
   useEffect(() => {
+    onTaskUpdateRef.current = onTaskUpdate;
     onTaskCreateRef.current = onTaskCreate;
     onTaskDeleteRef.current = onTaskDelete;
     onLinkCreateRef.current = onLinkCreate;
     onLinkDeleteRef.current = onLinkDelete;
     onEditTaskRef.current = onEditTask;
-    onOpenTaskHoursRef.current = onOpenTaskHours;
     onNewTaskRef.current = onNewTask;
-    readOnlyRef.current = readOnly;
-  }, [tasks, onTaskCreate, onTaskDelete, onLinkCreate, onLinkDelete, onEditTask, onOpenTaskHours, onNewTask, readOnly, projectStartDate, projectEndDate]);
+  });
+
+  useEffect(() => {
+    if (!sortResetKey || !initialized.current) return;
+    try {
+      localStorage.removeItem(getSortStorageKey());
+    } catch (e) { /* ignore */ }
+    isRestoringSort.current = true;
+    try {
+      gantt.sort("start_date", false);
+      gantt.render();
+      if (drawCustomMarkersRef.current) drawCustomMarkersRef.current();
+    } catch (e) { /* ignore */ }
+    isRestoringSort.current = false;
+  }, [sortResetKey]);
+
   useEffect(() => {
     if (!containerRef.current || initialized.current) return;
     initialized.current = true;
@@ -81,17 +120,20 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
     gantt.config.drag_links = true;
     gantt.config.drag_resize = false;
     gantt.config.drag_move = false;
-    
+
     // Disabilita i popup nativi di conferma per l'eliminazione dei link
+    gantt.config.confirm_link_deleting = false;
     if (gantt.locale && gantt.locale.labels) {
       gantt.locale.labels.confirm_link_deleting = null;
     }
     gantt.config.auto_scheduling = false;
     gantt.config.drag_progress = false;
     gantt.config.open_tree_initially = true;
-    gantt.config.order_branch = false;
+    gantt.config.order_branch = true;
+    gantt.config.order_branch_free = true;
     gantt.config.show_progress = true;
     gantt.config.sort = true;
+    gantt.config.scroll_on_click = false;
 
     const baseColumns = [
       {
@@ -107,24 +149,24 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
           return `${checkIcon}${task.text || ''}`;
         }
       },
-      { 
-        name: "start_date", 
-        label: "Inizio", 
-        align: "center", 
-        width: 85, 
+      {
+        name: "start_date",
+        label: "Inizio",
+        align: "center",
+        width: 85,
         resize: true,
-        template: function(task) {
+        template: function (task) {
           if (task.type === 'milestone') return '-';
           return gantt.templates.date_grid(task.start_date, task);
         }
       },
-      { 
-        name: "end_date", 
-        label: "Fine", 
-        align: "center", 
-        width: 85, 
+      {
+        name: "end_date",
+        label: "Fine",
+        align: "center",
+        width: 85,
         resize: true,
-        template: function(task) {
+        template: function (task) {
           if (task.type === 'milestone') return '-';
           if (!task.end_date) return '';
           const end = new Date(task.end_date);
@@ -138,7 +180,7 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
         align: "center",
         width: 95,
         resize: true,
-        template: function(task) {
+        template: function (task) {
           if (task.type === 'milestone') return gantt.templates.date_grid(task.start_date, task);
           return '-';
         }
@@ -150,7 +192,7 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
         width: 105,
         template: function (task) {
           if (task.type === 'milestone') return '-';
-          return `${task.duration || 1}g (${task.planned_hours || (task.duration ? task.duration * 8 : 8)}h)`;
+          const d = task.orig_duration || task.duration || 1; return `${d}g (${task.planned_hours || (d * 8)}h)`;
         }
       },
       {
@@ -183,6 +225,23 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
         width: 120,
         template: function (task) { return Array.isArray(task.workers) ? task.workers.join(', ') : ''; }
       },
+      {
+        name: "department",
+        label: "Reparto",
+        align: "center",
+        width: 120,
+        template: function (task) {
+          if (!task.department || task.department === 'tutti') return '';
+          let color = '#6b7280';
+          let label = task.department;
+          if (task.department === 'ufficio_tecnico') { color = '#3b82f6'; label = 'Ufficio Tecnico'; }
+          else if (task.department === 'produzione') { color = '#10b981'; label = 'Produzione'; }
+          else if (task.department === 'amministrazione') { color = '#64748b'; label = 'Amministrazione'; }
+          else if (task.department === 'acquisti') { color = '#f59e0b'; label = 'Acquisti'; }
+          else if (task.department === 'commerciale') { color = '#ec4899'; label = 'Commerciale'; }
+          return `<div style="display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:10px; font-size:11px; font-weight:600; background-color:${color}18; color:${color}; border:1px solid ${color}44; line-height:normal; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; vertical-align:middle;">${label}</div>`;
+        }
+      },
     ];
 
     // Inizializza con le colonne visibili attuali o di default
@@ -194,6 +253,11 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
     const mesiItaliani = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
     const giorniItaliani = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
     const dayCssFunc = function (date) {
+      const today = new Date();
+      const isToday = date.getFullYear() === today.getFullYear() &&
+                      date.getMonth() === today.getMonth() &&
+                      date.getDate() === today.getDate();
+      if (isToday) return "gantt_today_scale_cell";
       if (isWeekendOrHoliday(date)) return "gantt_weekend_scale_cell";
       return "";
     };
@@ -215,15 +279,12 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
           Data Evento: ${gantt.templates.tooltip_date_format(start)}<br/>
           <i>Evento / Scadenza</i>`;
       }
-      let durationText = `<b>${task.duration || 1} giorni</b>`;
-      durationText += ` (${task.planned_hours || (task.duration ? task.duration * 8 : 8)} ore previste)`;
-      const displayEnd = new Date(end);
-      if (displayEnd.getHours() === 0 && displayEnd.getMinutes() === 0) {
-        displayEnd.setDate(displayEnd.getDate() - 1);
-      }
+      const d = task.orig_duration || task.duration || 1;
+      let durationText = `<b>${d} giorni</b>`;
+      durationText += ` (${task.planned_hours || (d * 8)} ore previste)`;
       return `<b>${task.text}</b><br/>
         Inizio: ${gantt.templates.tooltip_date_format(start)}<br/>
-        Fine: ${gantt.templates.tooltip_date_format(displayEnd)}<br/>
+        Fine: ${gantt.templates.tooltip_date_format(new Date(end.getTime() - 86400000))}<br/>
         Durata: ${durationText}<br/>
         Progresso: ${Math.round((task.progress || 0) * 100)}%`;
     };
@@ -240,10 +301,6 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
         classes.push('gantt-task-completed');
       } else if (isOverrun) {
         classes.push('gantt-task-overrun');
-      }
-
-      if (task.has_vacation_conflict) {
-        classes.push('gantt-task-conflict');
       }
 
       return classes.join(' ');
@@ -277,25 +334,9 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
     // Configurazione orari e giorni lavorativi (esclude sabati, domeniche e festivi)
     gantt.config.work_time = true;
     gantt.config.correct_work_time = true;
-
-    // Registra i weekend come non lavorativi per DHTMLX
-    gantt.setWorkTime({ day: 0, hours: false }); // Domenica
-    gantt.setWorkTime({ day: 6, hours: false }); // Sabato
-
-    // Registra le festività italiane fisse e mobili per DHTMLX dal 2020 al 2040
-    for (let y = 2020; y <= 2040; y++) {
-      gantt.setWorkTime({ date: new Date(y, 0, 1), hours: false });
-      gantt.setWorkTime({ date: new Date(y, 0, 6), hours: false });
-      gantt.setWorkTime({ date: new Date(y, 3, 25), hours: false });
-      gantt.setWorkTime({ date: new Date(y, 4, 1), hours: false });
-      gantt.setWorkTime({ date: new Date(y, 5, 2), hours: false });
-      gantt.setWorkTime({ date: new Date(y, 7, 15), hours: false });
-      gantt.setWorkTime({ date: new Date(y, 10, 1), hours: false });
-      gantt.setWorkTime({ date: new Date(y, 11, 8), hours: false });
-      gantt.setWorkTime({ date: new Date(y, 11, 25), hours: false });
-      gantt.setWorkTime({ date: new Date(y, 11, 26), hours: false });
-      gantt.setWorkTime({ date: getPasquettaDate(y), hours: false });
-    }
+    gantt.config.is_work_time = function (date) {
+      return !isWeekendOrHoliday(date);
+    };
 
     // Funzione helper per calcolare la fine esatta di una cella temporale (giorno, settimana, mese, trimestre, anno)
     function getCellEndDate(date, unit, step = 1) {
@@ -316,7 +357,21 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
       const cellEnd = getCellEndDate(date, unit, step);
 
       const classes = [];
-      if (unit === "day" && isWeekendOrHoliday(date)) {
+      let isTaskExcluded = false;
+      if (task && unit === "day") {
+        let exDates = [];
+        if (typeof task.excluded_dates === 'string') {
+          try { exDates = JSON.parse(task.excluded_dates); } catch (e) { }
+        } else if (Array.isArray(task.excluded_dates)) {
+          exDates = task.excluded_dates;
+        }
+        const dStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        if (exDates.includes(dStr)) {
+          isTaskExcluded = true;
+        }
+      }
+
+      if (unit === "day" && (isWeekendOrHoliday(date) || isTaskExcluded)) {
         classes.push("gantt_weekend_cell");
       }
       if (date <= today && today < cellEnd) {
@@ -325,77 +380,79 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
       return classes.join(" ");
     };
 
-    // Evidenziazione delle celle di intestazione per la data di oggi
-    gantt.templates.scale_cell_class = function (date) {
+    // Evidenziazione delle celle di intestazione per la data di oggi (funziona per giorno, settimana, mese, trimestre, anno)
+    gantt.templates.scale_cell_class = function (date, scale) {
       const today = new Date();
-      const cellEnd = gantt.date.add(date, 1, "day");
+      const unit = scale ? scale.unit : "day";
+      const step = (scale && scale.step) ? scale.step : 1;
+      const cellEnd = getCellEndDate(date, unit, step);
       if (date <= today && today < cellEnd) {
         return "gantt_today_scale_cell";
       }
       return "";
     };
 
+    // Layer per mostrare ore consuntivate extra (fuori dal periodo previsto)
     gantt.init(containerRef.current);
 
-    const ganttEvents = [];
-
-    ganttEvents.push(gantt.attachEvent("onGanttRender", () => {
+    gantt.attachEvent("onGanttRender", () => {
       if (drawCustomMarkersRef.current) drawCustomMarkersRef.current();
-    }));
-    ganttEvents.push(gantt.attachEvent("onGanttScroll", () => {
+    });
+    gantt.attachEvent("onGanttScroll", () => {
       if (drawCustomMarkersRef.current) drawCustomMarkersRef.current();
-    }));
-    ganttEvents.push(gantt.attachEvent("onTaskOpened", () => {
+    });
+    gantt.attachEvent("onTaskOpened", () => {
       if (drawCustomMarkersRef.current) drawCustomMarkersRef.current();
-    }));
-    ganttEvents.push(gantt.attachEvent("onTaskClosed", () => {
+    });
+    gantt.attachEvent("onTaskClosed", () => {
       if (drawCustomMarkersRef.current) drawCustomMarkersRef.current();
-    }));
-    ganttEvents.push(gantt.attachEvent("onDataRender", () => {
+    });
+    gantt.attachEvent("onDataRender", () => {
       if (drawCustomMarkersRef.current) drawCustomMarkersRef.current();
-    }));
-    ganttEvents.push(gantt.attachEvent("onAfterTaskAdd", () => {
+    });
+    gantt.attachEvent("onAfterTaskAdd", () => {
       if (drawCustomMarkersRef.current) drawCustomMarkersRef.current();
-    }));
-    ganttEvents.push(gantt.attachEvent("onAfterTaskDelete", () => {
+    });
+    gantt.attachEvent("onAfterTaskDelete", () => {
       if (drawCustomMarkersRef.current) drawCustomMarkersRef.current();
-    }));
+    });
 
     // Intercettazione doppio click e tasto "+" per aprire il modal React in italiano (con giorni, ore e addetti)
-    ganttEvents.push(gantt.attachEvent("onTaskDblClick", (id, e) => {
+    gantt.attachEvent("onTaskDblClick", (id, e) => {
       const task = gantt.getTask(id);
-      if (task) {
-        if (!readOnlyRef.current && onEditTaskRef.current) {
-          onEditTaskRef.current(task);
-        } else if (readOnlyRef.current && onOpenTaskHoursRef.current) {
-          onOpenTaskHoursRef.current(task);
-        }
+      if (task && onEditTaskRef.current) {
+        onEditTaskRef.current(task);
+        return false;
       }
-      return false; // Blocca 100% l'apertura del lightbox nativo DHTMLX
-    }));
+      return true;
+    });
 
-    ganttEvents.push(gantt.attachEvent("onBeforeLightbox", (id) => {
+    gantt.attachEvent("onBeforeLightbox", (id) => {
       const task = gantt.getTask(id);
       if (task && task.$new) {
         gantt.deleteTask(id);
         if (onNewTaskRef.current) {
           onNewTaskRef.current(task.parent && task.parent !== 0 ? String(task.parent) : null);
         }
-      } else if (task) {
-        if (!readOnlyRef.current && onEditTaskRef.current) {
-          onEditTaskRef.current(task);
-        } else if (readOnlyRef.current && onOpenTaskHoursRef.current) {
-          onOpenTaskHoursRef.current(task);
-        }
+      } else if (task && onEditTaskRef.current) {
+        onEditTaskRef.current(task);
       }
       return false; // Blocca 100% la lightbox inglese di DHTMLX
-    }));
+    });
 
-    // Le fasi si modificano esclusivamente dal relativo menu/modal.
-    // I collegamenti tra fasi restano invece trascinabili.
-    ganttEvents.push(gantt.attachEvent("onBeforeTaskDrag", () => false));
+    // Event handlers
+    gantt.attachEvent("onAfterTaskDrag", (id, mode) => {
+      const task = gantt.getTask(id);
+      if (onTaskUpdateRef.current) {
+        onTaskUpdateRef.current(id, {
+          start_date: gantt.date.date_to_str("%Y-%m-%d")(task.start_date),
+          duration: task.orig_duration || task.duration,
+          progress: task.progress,
+        });
+      }
+    });
 
-    ganttEvents.push(gantt.attachEvent("onAfterTaskAdd", (id, item) => {
+    gantt.attachEvent("onAfterTaskAdd", (id, item) => {
       if (onTaskCreateRef.current) {
         onTaskCreateRef.current({
           text: item.text,
@@ -404,29 +461,29 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
           parent_id: item.parent && item.parent !== 0 ? String(item.parent) : null,
         }, id);
       }
-    }));
+    });
 
-    ganttEvents.push(gantt.attachEvent("onBeforeTaskDelete", (id, item) => {
+    gantt.attachEvent("onBeforeTaskDelete", (id, item) => {
       if (!window.confirm(`Confermi l'eliminazione della fase di lavorazione "${item.text || 'selezionata'}"?`)) {
         return false;
       }
       return true;
-    }));
+    });
 
-    ganttEvents.push(gantt.attachEvent("onAfterTaskDelete", (id) => {
+    gantt.attachEvent("onAfterTaskDelete", (id) => {
       if (onTaskDeleteRef.current) onTaskDeleteRef.current(id, true);
-    }));
+    });
 
-    ganttEvents.push(gantt.attachEvent("onBeforeLinkAdd", (id, link) => {
+    gantt.attachEvent("onBeforeLinkAdd", (id, link) => {
       if (!link.source || !link.target || String(link.source) === String(link.target)) return false;
       const existing = gantt.getLinks().find(l =>
         String(l.source) === String(link.source) && String(l.target) === String(link.target) && String(l.id) !== String(id)
       );
       if (existing) return false;
       return true;
-    }));
+    });
 
-    ganttEvents.push(gantt.attachEvent("onAfterLinkAdd", (id, item) => {
+    gantt.attachEvent("onAfterLinkAdd", (id, item) => {
       if (onLinkCreateRef.current) {
         onLinkCreateRef.current({
           source: String(item.source),
@@ -434,14 +491,59 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
           type: String(item.type || '0'),
         }, id);
       }
-    }));
+    });
 
-    ganttEvents.push(gantt.attachEvent("onLinkDblClick", (id) => {
+    gantt.attachEvent("onLinkDblClick", (id) => {
       if (onLinkDeleteRef.current) {
         onLinkDeleteRef.current(id, false);
       }
       return false; // blocks native DHTMLX popup
-    }));
+    });
+
+    gantt.attachEvent("onBeforeLinkDelete", (id, link) => {
+      if (window.__programmaticLinkDelete) return true;
+      if (onLinkDeleteRef.current) {
+        onLinkDeleteRef.current(id, false);
+      }
+      return false;
+    });
+
+    // Cache ordinamento per colonna (click intestazione)
+    gantt.attachEvent("onAfterSort", (field, desc) => {
+      if (isRestoringSort.current) return;
+      if (typeof field === 'string') {
+        saveSortState({
+          type: 'column',
+          column: field,
+          desc: Boolean(desc)
+        });
+      }
+    });
+
+    // Cache ordinamento manuale delle righe (drag and drop)
+    const saveManualRowOrder = () => {
+      if (isRestoringSort.current) return;
+      const order = [];
+      if (gantt.eachTask) {
+        gantt.eachTask(t => {
+          order.push(String(t.id));
+        });
+      }
+      if (order.length > 0) {
+        saveSortState({
+          type: 'manual',
+          order
+        });
+      }
+    };
+
+    gantt.attachEvent("onRowDragEnd", () => {
+      setTimeout(saveManualRowOrder, 60);
+    });
+
+    gantt.attachEvent("onAfterTaskMove", () => {
+      setTimeout(saveManualRowOrder, 60);
+    });
 
     const handleResize = () => {
       if (initialized.current) gantt.setSizes();
@@ -449,7 +551,6 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
     window.addEventListener('resize', handleResize);
 
     return () => {
-      ganttEvents.forEach(eventId => gantt.detachEvent(eventId));
       window.removeEventListener('resize', handleResize);
       if (gantt.ext && gantt.ext.tooltips && gantt.ext.tooltips.tooltip) {
         gantt.ext.tooltips.tooltip.hide();
@@ -483,24 +584,24 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
           return `${checkIcon}${task.text || ''}`;
         }
       },
-      { 
-        name: "start_date", 
-        label: "Inizio", 
-        align: "center", 
-        width: 85, 
+      {
+        name: "start_date",
+        label: "Inizio",
+        align: "center",
+        width: 85,
         resize: true,
-        template: function(task) {
+        template: function (task) {
           if (task.type === 'milestone') return '-';
           return gantt.templates.date_grid(task.start_date, task);
         }
       },
-      { 
-        name: "end_date", 
-        label: "Fine", 
-        align: "center", 
-        width: 85, 
+      {
+        name: "end_date",
+        label: "Fine",
+        align: "center",
+        width: 85,
         resize: true,
-        template: function(task) {
+        template: function (task) {
           if (task.type === 'milestone') return '-';
           if (!task.end_date) return '';
           const end = new Date(task.end_date);
@@ -514,7 +615,7 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
         align: "center",
         width: 95,
         resize: true,
-        template: function(task) {
+        template: function (task) {
           if (task.type === 'milestone') return gantt.templates.date_grid(task.start_date, task);
           return '-';
         }
@@ -526,7 +627,7 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
         width: 105,
         template: function (task) {
           if (task.type === 'milestone') return '-';
-          return `${task.duration || 1}g (${task.planned_hours || (task.duration ? task.duration * 8 : 8)}h)`;
+          const d = task.orig_duration || task.duration || 1; return `${d}g (${task.planned_hours || (d * 8)}h)`;
         }
       },
       {
@@ -556,6 +657,23 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
         width: 120,
         template: function (task) { return Array.isArray(task.workers) ? task.workers.join(', ') : ''; }
       },
+      {
+        name: "department",
+        label: "Reparto",
+        align: "center",
+        width: 120,
+        template: function (task) {
+          if (!task.department || task.department === 'tutti') return '';
+          let color = '#6b7280';
+          let label = task.department;
+          if (task.department === 'ufficio_tecnico') { color = '#3b82f6'; label = 'Ufficio Tecnico'; }
+          else if (task.department === 'produzione') { color = '#10b981'; label = 'Produzione'; }
+          else if (task.department === 'amministrazione') { color = '#64748b'; label = 'Amministrazione'; }
+          else if (task.department === 'acquisti') { color = '#f59e0b'; label = 'Acquisti'; }
+          else if (task.department === 'commerciale') { color = '#ec4899'; label = 'Commerciale'; }
+          return `<div style="display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:10px; font-size:11px; font-weight:600; background-color:${color}18; color:${color}; border:1px solid ${color}44; line-height:normal; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; vertical-align:middle;">${label}</div>`;
+        }
+      },
     ];
 
     gantt.config.columns = baseColumns.filter(c =>
@@ -571,6 +689,91 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
       // Rimuovi vecchi marker custom
       const existing = gantt.$task_data.querySelectorAll('.custom-project-marker');
       existing.forEach(el => el.remove());
+      
+      const existingExtra = gantt.$task_data.querySelectorAll('.custom-extra-hours-marker');
+      existingExtra.forEach(el => el.remove());
+
+      if (Array.isArray(tasksRef.current)) {
+        tasksRef.current.forEach(task => {
+          if (task.type === 'milestone') return;
+          if (!task.actual_hours || typeof task.actual_hours !== 'object') return;
+          if (!task.start_date || !task.end_date) return;
+          
+          try {
+            if (!gantt.isTaskExists(task.id)) return;
+            
+            const ganttTask = gantt.getTask(task.id);
+            const taskTop = gantt.getTaskTop(task.id);
+            const rowHeight = gantt.config.row_height || 44;
+            
+            const extraDays = {};
+            const tStart = new Date(ganttTask.start_date).setHours(0,0,0,0);
+            const tEnd = new Date(ganttTask.end_date).setHours(0,0,0,0);
+            
+            Object.values(task.actual_hours).forEach(dayMap => {
+              if (dayMap && typeof dayMap === 'object') {
+                Object.keys(dayMap).forEach(dateStr => {
+                  const h = Number(dayMap[dateStr]) || 0;
+                  if (h > 0) {
+                    const parts = dateStr.split('-');
+                    if (parts.length === 3) {
+                      const d = new Date(parts[0], parts[1]-1, parts[2]);
+                      const time = d.getTime();
+                      if (time < tStart || time >= tEnd) {
+                        extraDays[dateStr] = (extraDays[dateStr] || 0) + h;
+                      }
+                    }
+                  }
+                });
+              }
+            });
+            
+            const ganttState = gantt.getState();
+            Object.keys(extraDays).forEach(dateStr => {
+              const h = extraDays[dateStr];
+              const parts = dateStr.split('-');
+              const d = new Date(parts[0], parts[1]-1, parts[2]);
+              
+              // Disegna il marker SOLO se visibile nella scala attuale (evita espansione infinita layout)
+              if (ganttState.min_date && ganttState.max_date) {
+                if (d < ganttState.min_date || d > ganttState.max_date) return;
+              }
+              
+              const pos = gantt.posFromDate(d);
+              const nextDay = gantt.date.add(d, 1, 'day');
+              const endPos = gantt.posFromDate(nextDay);
+              if (!isFinite(pos) || !isFinite(endPos)) return;
+              
+              const width = endPos - pos;
+
+              const size = 18;
+              const markerDiv = document.createElement('div');
+              markerDiv.className = 'custom-extra-hours-marker';
+              markerDiv.style.position = 'absolute';
+              markerDiv.style.left = (pos + width / 2 - size / 2) + 'px';
+              markerDiv.style.width = size + 'px';
+              markerDiv.style.height = size + 'px';
+              markerDiv.style.top = (taskTop + rowHeight / 2 - size / 2) + 'px';
+              markerDiv.style.borderRadius = '50%';
+              markerDiv.style.backgroundColor = '#f59e0b';
+              markerDiv.style.color = '#ffffff';
+              markerDiv.style.display = 'flex';
+              markerDiv.style.alignItems = 'center';
+              markerDiv.style.justifyContent = 'center';
+              markerDiv.style.zIndex = 10;
+              markerDiv.style.pointerEvents = 'auto'; 
+              markerDiv.style.boxShadow = '0 2px 5px rgba(245, 158, 11, 0.4)';
+              markerDiv.style.cursor = 'pointer';
+              markerDiv.title = `${h}h extra il ${parts[2]}/${parts[1]}/${parts[0]}`;
+              markerDiv.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`;
+              
+              gantt.$task_data.appendChild(markerDiv);
+            });
+          } catch (e) {
+            console.warn("Errore rendering marker extra hours per task", task.id, e);
+          }
+        });
+      }
 
       const visibleTasksCount = (typeof gantt.getVisibleTaskCount === 'function' ? gantt.getVisibleTaskCount() : 0) || (Array.isArray(tasksRef.current) ? tasksRef.current.length : 10);
       const rowHeight = gantt.config.row_height || 38;
@@ -595,12 +798,12 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
             markerDiv.style.top = '0px';
             markerDiv.style.height = `${totalRowsHeight}px`;
             markerDiv.title = `Avvio Commessa: ${formattedS}`;
-            
+
             const badgeDiv = document.createElement('div');
             badgeDiv.className = 'custom-marker-badge';
             badgeDiv.innerText = 'Inizio Commessa';
             markerDiv.appendChild(badgeDiv);
-            
+
             gantt.$task_data.appendChild(markerDiv);
           }
         } catch (e) { /* scala non ancora pronta */ }
@@ -608,7 +811,9 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
 
       if (eDate) {
         try {
-          const posEnd = gantt.posFromDate(eDate);
+          const markerEndDate = new Date(eDate);
+          markerEndDate.setHours(23, 59, 59, 999);
+          const posEnd = gantt.posFromDate(markerEndDate);
           if (typeof posEnd === 'number' && !isNaN(posEnd) && posEnd >= 0) {
             const formattedE = `${String(eDate.getDate()).padStart(2, '0')}/${String(eDate.getMonth() + 1).padStart(2, '0')}/${eDate.getFullYear()}`;
             const markerDiv = document.createElement('div');
@@ -617,12 +822,12 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
             markerDiv.style.top = '0px';
             markerDiv.style.height = `${totalRowsHeight}px`;
             markerDiv.title = `Fine Commessa: ${formattedE}`;
-            
+
             const badgeDiv = document.createElement('div');
             badgeDiv.className = 'custom-marker-badge';
             badgeDiv.innerText = 'Fine Commessa';
             markerDiv.appendChild(badgeDiv);
-            
+
             gantt.$task_data.appendChild(markerDiv);
           }
         } catch (e) { /* scala non ancora pronta */ }
@@ -637,18 +842,24 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
             try {
               const pos = gantt.posFromDate(mDate);
               if (typeof pos === 'number' && !isNaN(pos) && pos >= 0) {
+                const nextDay = gantt.date.add(mDate, 1, 'day');
+                const nextPos = gantt.posFromDate(nextDay);
+                const colWidth = (typeof nextPos === 'number' && !isNaN(nextPos) && nextPos > pos) ? (nextPos - pos) : (gantt.config.min_column_width || 38);
+                const centerPos = pos + Math.floor(colWidth / 2);
+
                 const formattedM = `${String(mDate.getDate()).padStart(2, '0')}/${String(mDate.getMonth() + 1).padStart(2, '0')}/${mDate.getFullYear()}`;
+                const markerColor = t.color || '#8b5cf6';
                 const markerDiv = document.createElement('div');
                 markerDiv.className = 'custom-project-marker custom-milestone-marker';
-                markerDiv.style.left = `${pos}px`;
+                markerDiv.style.left = `${centerPos}px`;
                 markerDiv.style.top = '0px';
                 markerDiv.style.height = `${totalRowsHeight}px`;
-                const markerColor = t.color || '#f59e0b';
-                markerDiv.style.borderLeft = `2px dashed ${markerColor}`;
-                markerDiv.title = `Evento: ${t.text || 'Milestone'} (${formattedM})`;
+                markerDiv.style.borderLeft = `2px solid ${markerColor}`;
+                markerDiv.title = `Milestone: ${t.text || 'Evento'} (${formattedM})`;
 
-                let taskTop = 4;
+                let taskTop = 22;
                 try {
+                  const rHeight = gantt.config.row_height || 44;
                   if (typeof gantt.getTaskTop === 'function') {
                     let topVal = gantt.getTaskTop(String(t.id));
                     if (typeof topVal !== 'number' || isNaN(topVal)) {
@@ -658,25 +869,28 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
                       topVal = gantt.getTaskTop(Number(t.id));
                     }
                     if (typeof topVal === 'number' && !isNaN(topVal)) {
-                      taskTop = topVal + 4;
+                      taskTop = topVal + Math.floor(rHeight / 2);
                     }
                   }
                 } catch (e) {
-                  taskTop = 4;
+                  taskTop = 22;
                 }
 
                 const badge = document.createElement('div');
-                badge.className = 'custom-marker-badge';
-                badge.style.border = `1px solid ${markerColor}`;
-                badge.style.color = markerColor;
-                badge.style.backgroundColor = 'var(--bg-primary, #ffffff)';
+                badge.className = 'custom-marker-badge custom-milestone-badge';
+                badge.style.backgroundColor = markerColor;
+                badge.style.color = '#ffffff';
+                badge.style.border = `1px solid rgba(255, 255, 255, 0.5)`;
+                badge.style.boxShadow = `0 2px 8px rgba(0, 0, 0, 0.25)`;
                 badge.style.setProperty('top', `${taskTop}px`, 'important');
-                badge.textContent = `📍 ${t.text || 'Evento'}`;
+                badge.style.setProperty('left', `0px`, 'important');
+                badge.style.setProperty('transform', `translate(-50%, -50%)`, 'important');
+                badge.textContent = `📍 ${t.text || 'Milestone'}`;
                 markerDiv.appendChild(badge);
 
                 gantt.$task_data.appendChild(markerDiv);
               }
-            } catch (e) { /* scala non ancora pronta */ }
+            } catch (e) { /* errore rendering marker milestone */ }
           }
         }
       });
@@ -711,13 +925,35 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
       return true;
     });
 
-    const sortedTaskList = [...taskList].sort((a, b) => {
-      const da = new Date(a.start_date ? String(a.start_date).split(' ')[0] : '1970-01-01');
-      const db = new Date(b.start_date ? String(b.start_date).split(' ')[0] : '1970-01-01');
-      if (da < db) return -1;
-      if (da > db) return 1;
-      return (a.id || 0) - (b.id || 0);
-    });
+    const sortState = getSortState();
+
+    const sortedTaskList = [...taskList];
+    if (sortState && sortState.type === 'manual' && Array.isArray(sortState.order) && sortState.order.length > 0) {
+      const orderMap = new Map();
+      sortState.order.forEach((id, idx) => orderMap.set(String(id), idx));
+      sortedTaskList.sort((a, b) => {
+        const hasA = orderMap.has(String(a.id));
+        const hasB = orderMap.has(String(b.id));
+        if (hasA && hasB) {
+          return orderMap.get(String(a.id)) - orderMap.get(String(b.id));
+        }
+        if (hasA) return -1;
+        if (hasB) return 1;
+        const da = new Date(a.start_date ? String(a.start_date).split(' ')[0] : '1970-01-01');
+        const db = new Date(b.start_date ? String(b.start_date).split(' ')[0] : '1970-01-01');
+        if (da < db) return -1;
+        if (da > db) return 1;
+        return (a.id || 0) - (b.id || 0);
+      });
+    } else {
+      sortedTaskList.sort((a, b) => {
+        const da = new Date(a.start_date ? String(a.start_date).split(' ')[0] : '1970-01-01');
+        const db = new Date(b.start_date ? String(b.start_date).split(' ')[0] : '1970-01-01');
+        if (da < db) return -1;
+        if (da > db) return 1;
+        return (a.id || 0) - (b.id || 0);
+      });
+    }
 
     let minDate = parseDateSafe(projectStartDateRef.current) || new Date();
     let maxDate = parseDateSafe(projectEndDateRef.current) || new Date(minDate.getTime() + 30 * 86400000);
@@ -735,6 +971,16 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
     gantt.config.start_date = scaleStart;
     gantt.config.end_date = scaleEnd;
 
+    let currentScrollState = null;
+    let currentVisibleDate = null;
+    if (gantt.getTaskCount && gantt.getTaskCount() > 0) {
+      currentScrollState = gantt.getScrollState();
+      try {
+        currentVisibleDate = gantt.dateFromPos(currentScrollState.x);
+      } catch (e) { /* ignore */ }
+    }
+
+    window.__programmaticLinkDelete = true;
     gantt.clearAll();
     gantt.parse({
       data: sortedTaskList.map(t => {
@@ -742,11 +988,28 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
         const totEff = calculateTaskEffHours(t);
         const plannedH = Number(t.planned_hours || 8.0);
         const isOverrun = plannedH > 0 && totEff > plannedH;
+
+        let parsedEndDate = t.end_date;
+        if (parsedEndDate && t.type !== 'milestone') {
+          const dateParts = String(parsedEndDate).split(' ')[0].split('T')[0].split('-');
+          if (dateParts.length === 3) {
+            const ed = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+            ed.setDate(ed.getDate() + 1);
+            const y = ed.getFullYear();
+            const m = String(ed.getMonth() + 1).padStart(2, '0');
+            const d = String(ed.getDate()).padStart(2, '0');
+            parsedEndDate = `${y}-${m}-${d}`;
+          }
+        }
         const taskPayload = {
           ...t,
+          end_date: parsedEndDate,
+
           id: String(t.id),
           text: t.text,
           start_date: t.start_date,
+          orig_duration: t.orig_duration || t.duration,
+          // duration: t.duration,
           progress: isCompleted ? 1 : Math.min(1, t.progress || (plannedH > 0 ? totEff / plannedH : 0)),
           parent: t.parent === '0' || !t.parent ? 0 : String(t.parent),
           open: Boolean(t.open),
@@ -754,17 +1017,6 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
           color: isCompleted ? '#10b981' : (isOverrun ? '#ef4444' : getTaskColor(t)),
           is_overrun: isOverrun,
         };
-
-        if (t.end_date) {
-          const exclusiveEnd = new Date(t.end_date);
-          exclusiveEnd.setDate(exclusiveEnd.getDate() + 1);
-          taskPayload.end_date = exclusiveEnd;
-          // Impostiamo la durata originale in modo da preservarla per la UI,
-          // anche se dhtmlx calcolerà internamente i giorni lavorativi.
-          taskPayload.duration = t.duration;
-        } else if (t.duration && t.start_date) {
-          taskPayload.duration = t.duration;
-        }
 
         return taskPayload;
       }),
@@ -775,15 +1027,42 @@ export default function GanttChart({ tasks, links, onTaskCreate, onTaskDelete, o
         type: String(l.type || '0'),
       })),
     });
+    window.__programmaticLinkDelete = false;
 
-    gantt.sort("start_date", false);
+    isRestoringSort.current = true;
+    if (sortState && sortState.type === 'column' && sortState.column) {
+      try {
+        gantt.sort(sortState.column, sortState.desc);
+      } catch (e) {
+        gantt.sort("start_date", false);
+      }
+    } else if (sortState && sortState.type === 'manual') {
+      // L'ordine manuale delle righe è già stato applicato in fase di caricamento dei dati
+    } else {
+      gantt.sort("start_date", false);
+    }
+    isRestoringSort.current = false;
     drawCustomMarkers();
 
     try {
-      // Centra il gantt sul giorno di oggi (meno 3 giorni per avere un po' di margine a sinistra)
-      const pos = gantt.posFromDate(new Date(Date.now() - 3 * 86400000));
-      if (typeof pos === 'number' && !isNaN(pos)) {
-        gantt.scrollTo(Math.max(0, pos), null);
+      if (!initialScrollDone.current) {
+        initialScrollDone.current = true;
+        const pos = gantt.posFromDate(new Date(Date.now() - 3 * 86400000));
+        if (typeof pos === 'number' && !isNaN(pos)) {
+          gantt.scrollTo(Math.max(0, pos), null);
+        }
+      } else if (currentScrollState && currentVisibleDate) {
+        const newPos = gantt.posFromDate(currentVisibleDate);
+        if (typeof newPos === 'number' && !isNaN(newPos)) {
+          gantt.scrollTo(newPos, currentScrollState.y);
+        } else {
+          gantt.scrollTo(currentScrollState.x, currentScrollState.y);
+        }
+      } else {
+        const pos = gantt.posFromDate(new Date(Date.now() - 3 * 86400000));
+        if (typeof pos === 'number' && !isNaN(pos)) {
+          gantt.scrollTo(Math.max(0, pos), null);
+        }
       }
     } catch (e) { /* ignore */ }
   }, [tasks, links, drawCustomMarkers]);

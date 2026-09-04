@@ -44,3 +44,120 @@
   font-size: 0.75rem;
   color: var(--text-muted);
 }
+
+/* ─── Tabella backup eseguiti ─── */
+.backup-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.85rem;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+.backup-table thead th {
+  text-align: left;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-default);
+  font-weight: 600;
+}
+.backup-table tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+.backup-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.backup-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+.backup-table .backup-icon {
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+}
+.backup-table .backup-file {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.backup-table .backup-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.backup-empty {
+  padding: 20px 14px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  border: 1px dashed var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+}
+
+/* ─── Box Reportistica AI ─── */
+.ai-report-markdown {
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+.ai-report-markdown h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-top: 0;
+  margin-bottom: 14px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 8px;
+}
+.ai-report-markdown h2,
+.ai-report-markdown h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-top: 18px;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+}
+.ai-report-markdown p {
+  margin-bottom: 12px;
+}
+.ai-report-markdown ul,
+.ai-report-markdown ol {
+  margin-left: 20px;
+  margin-bottom: 14px;
+}
+.ai-report-markdown li {
+  margin-bottom: 6px;
+}
+.ai-report-markdown strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.ai-report-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+}
+.ai-report-markdown th,
+.ai-report-markdown td {
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  text-align: left;
+}
+.ai-report-markdown th {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+}
+

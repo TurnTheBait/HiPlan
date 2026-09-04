@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import api from '../api/client';
 import { useToast } from '../context/ToastContext';
 import AppIcon from '../components/ui/AppIcon';
@@ -7,14 +9,28 @@ import './AdminPage.css';
 const DEPT_LABELS = {
   ufficio_tecnico: 'Ufficio Tecnico',
   produzione: 'Produzione',
+  amministrazione: 'Amministrazione',
   acquisti: 'Acquisti',
-  admin: 'Admin',
+  commerciale: 'Commerciale',
+  condivisa: 'Condivisa tra più reparti'
 };
 const DEPT_COLORS = {
   ufficio_tecnico: '#3b82f6',
-  produzione: '#10b981',
-  acquisti: '#f59e0b',
-  admin: '#8b5cf6',
+  produzione: '#f59e0b',
+  amministrazione: '#64748b',
+  acquisti: '#10b981',
+  commerciale: '#ec4899',
+  condivisa: '#8b5cf6'
+};
+
+const BUDGET_MODE_SHORT_LABELS = {
+  start_days: 'Data Inizio / Giorni',
+  start_hours: 'Data Inizio / Ore',
+  start_end: 'Data Inizio / Fine',
+  end_days: 'Data Fine / Giorni',
+  end_hours: 'Data Fine / Ore',
+  start_days_hours: 'Inizio / Giorni / Ore',
+  end_days_hours: 'Fine / Giorni / Ore',
 };
 
 export default function AdminPage() {
@@ -30,12 +46,16 @@ export default function AdminPage() {
     default_color: '#3b82f6',
     default_days: '',
     default_hours: '',
+    default_budget_mode: 'start_days',
   });
   const [globalBannerForm, setGlobalBannerForm] = useState({ text: '', type: 'info', duration_hours: 24, isManualDate: false, manualDate: '' });
   const [globalBanners, setGlobalBanners] = useState([]);
   const [ticketPhases, setTicketPhases] = useState([]);
   const [newTicketPhase, setNewTicketPhase] = useState('');
   const [lastBackup, setLastBackup] = useState(null);
+  const [backups, setBackups] = useState([]);
+  const [restoringBackup, setRestoringBackup] = useState(null);
+  const [uploadingBackup, setUploadingBackup] = useState(false);
   const [emailLogs, setEmailLogs] = useState([]);
   const [scheduledEmails, setScheduledEmails] = useState([]);
   const [emailLogTab, setEmailLogTab] = useState('sent'); // 'sent' | 'scheduled'
@@ -52,7 +72,50 @@ export default function AdminPage() {
   const [managingUser, setManagingUser] = useState(null);
   const [newPassword, setNewPassword] = useState('');
 
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newUserForm, setNewUserForm] = useState({
+    username: '',
+    email: '',
+    full_name: '',
+    password: '',
+    role: 'viewer',
+    department: 'ufficio_tecnico'
+  });
+
+  function isReportExpired(data) {
+    if (!data) return true;
+    let ts = data.generated_timestamp;
+    if (!ts && data.generated_at) {
+      const match = data.generated_at.match(/(\d{2})\/(\d{2})\/(\d{4})\s+alle\s+(\d{2}):(\d{2})/);
+      if (match) {
+        const [, d, m, y, h, min] = match;
+        ts = new Date(Number(y), Number(m) - 1, Number(d), Number(h), Number(min)).getTime();
+      }
+    }
+    if (!ts) return true;
+
+    const now = new Date();
+    // Cutoff delle ore 07:00 di oggi
+    const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 7, 0, 0, 0);
+    if (now.getTime() < cutoff.getTime()) {
+      // Se sono prima delle 7:00 del mattino, il cutoff è ieri alle 07:00
+      cutoff.setDate(cutoff.getDate() - 1);
+    }
+    return ts < cutoff.getTime();
+  }
+
+  const [aiReportData, setAiReportData] = useState(() => {
+    try {
+      const cached = localStorage.getItem('admin_ai_report_cache');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [aiReportLoading, setAiReportLoading] = useState(false);
+
   const [collapsedSections, setCollapsedSections] = useState({
+    aiReport: true, // Di default compresso mostrando solo i KPI come in Immagine 2
     annunci: true,
     users: true,
     templates: true,
@@ -66,6 +129,40 @@ export default function AdminPage() {
     setCollapsedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
+  async function fetchAiReport(showToast = true) {
+    if (aiReportLoading) return;
+    setAiReportLoading(true);
+    try {
+      const res = await api.post('/chat/admin-report');
+      const dataWithTs = {
+        ...res.data,
+        generated_timestamp: res.data.generated_timestamp || Date.now()
+      };
+      setAiReportData(dataWithTs);
+      try {
+        localStorage.setItem('admin_ai_report_cache', JSON.stringify(dataWithTs));
+      } catch (e) {
+        console.error("Cache error", e);
+      }
+      if (showToast) {
+        toast.success("Report AI aggiornato con successo!");
+      }
+    } catch (err) {
+      console.error("Errore generazione report AI:", err);
+      if (showToast) {
+        toast.error(err.response?.data?.detail || "Errore nella generazione del report AI");
+      }
+    } finally {
+      setAiReportLoading(false);
+    }
+  }
+
+  function copyAiReport() {
+    if (!aiReportData?.report) return;
+    navigator.clipboard.writeText(aiReportData.report);
+    toast.success("Report copiato negli appunti!");
+  }
+
   function toggleAdminColumn(col) {
     setAdminVisibleColumns(prev => {
       const next = prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col];
@@ -76,7 +173,41 @@ export default function AdminPage() {
 
   useEffect(() => {
     loadData();
+    // Controllo aggiornamento report alle 7:00
+    if (isReportExpired(aiReportData)) {
+      fetchAiReport(false);
+    }
   }, []);
+
+  useEffect(() => {
+    // Controllo periodico ogni minuto se si sono superate le 07:00 per aggiornamento automatico
+    const interval = setInterval(() => {
+      if (isReportExpired(aiReportData)) {
+        fetchAiReport(false);
+      }
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [aiReportData]);
+
+  async function handleCreateUser(e) {
+    e.preventDefault();
+    try {
+      await api.post('/auth/register', newUserForm);
+      toast.success('Utente creato con successo!');
+      setShowAddUserModal(false);
+      setNewUserForm({
+        username: '',
+        email: '',
+        full_name: '',
+        password: '',
+        role: 'viewer',
+        department: 'ufficio_tecnico'
+      });
+      loadUsers();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Errore durante la creazione utente');
+    }
+  }
 
   async function loadData() {
     setLoading(true);
@@ -129,6 +260,54 @@ export default function AdminPage() {
       setLastBackup(data.last_backup);
     } catch (e) {
       console.error('Errore caricamento stato backup:', e);
+    }
+    loadBackups();
+  }
+
+  async function loadBackups() {
+    try {
+      const { data } = await api.get('/settings/backup/list');
+      setBackups(Array.isArray(data.backups) ? data.backups : []);
+    } catch (e) {
+      console.error('Errore caricamento elenco backup:', e);
+    }
+  }
+
+  async function handleRestoreBackup(filename) {
+    if (!window.confirm(`Sei sicuro di voler ripristinare HiPlan dal backup "${filename}"? I dati attuali verranno sostituiti.`)) return;
+    try {
+      setRestoringBackup(filename);
+      const { data } = await api.post('/settings/backup/restore', { filename });
+      toast.success(data.message || 'Ripristino completato');
+      await loadBackups();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Errore durante il ripristino');
+    } finally {
+      setRestoringBackup(null);
+    }
+  }
+
+  async function handleRestoreUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!window.confirm(`Sei sicuro di voler ripristinare HiPlan dal file "${file.name}"? I dati attuali verranno sostituiti.`)) {
+      e.target.value = '';
+      return;
+    }
+    try {
+      setUploadingBackup(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      const { data } = await api.post('/settings/backup/restore/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      toast.success(data.message || 'Ripristino completato');
+      await loadBackups();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Errore durante il ripristino');
+    } finally {
+      setUploadingBackup(false);
+      e.target.value = '';
     }
   }
 
@@ -283,7 +462,7 @@ export default function AdminPage() {
       }
       setShowAddTemplateModal(false);
       setEditingTemplate(null);
-      setTemplateForm({ name: '', department: 'ufficio_tecnico', default_color: '#3b82f6', default_days: '', default_hours: '' });
+      setTemplateForm({ name: '', department: 'ufficio_tecnico', default_color: '#3b82f6', default_days: '', default_hours: '', default_budget_mode: 'start_days' });
       loadPhaseTemplates();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Errore durante il salvataggio della fase');
@@ -309,6 +488,7 @@ export default function AdminPage() {
       default_color: tpl.default_color || '#3b82f6',
       default_days: tpl.default_days != null ? tpl.default_days : '',
       default_hours: tpl.default_hours != null ? tpl.default_hours : '',
+      default_budget_mode: tpl.default_budget_mode || 'start_days',
     });
     setShowAddTemplateModal(true);
   }
@@ -321,6 +501,7 @@ export default function AdminPage() {
       default_color: DEPT_COLORS[filterDept] || '#3b82f6',
       default_days: '',
       default_hours: '',
+      default_budget_mode: 'start_days',
     });
     setShowAddTemplateModal(true);
   }
@@ -390,6 +571,194 @@ export default function AdminPage() {
 
   return (
     <div className="admin-page animate-fadeIn">
+
+      {/* SEZIONE REPORTISTICA AI */}
+      <div className={`admin-section-card ${collapsedSections.aiReport ? 'is-collapsed' : ''}`} style={{
+        marginBottom: 30,
+        background: 'linear-gradient(135deg, var(--bg-card) 0%, rgba(99, 102, 241, 0.04) 100%)',
+        border: '1px solid var(--border-default)',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+          <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('aiReport')}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 30,
+                  height: 30,
+                  borderRadius: 8,
+                  background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                  color: '#fff',
+                  boxShadow: '0 2px 6px rgba(99, 102, 241, 0.3)'
+                }}>
+                  <AppIcon name="robot" size={17} />
+                </span>
+                Reportistica & Analisi AI
+              </h2>
+            </div>
+            <p className="admin-section-desc">Resoconto intelligente dello stato attuale di commesse, avanzamento e carico addetti salvato in cache.</p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+            {aiReportData && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={(e) => { e.stopPropagation(); copyAiReport(); }}
+                title="Copia report negli appunti"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
+              >
+                <AppIcon name="copy" size={13} />
+                Copia
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={aiReportLoading}
+              onClick={(e) => { e.stopPropagation(); fetchAiReport(true); }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: '12px',
+                background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                borderColor: '#4f46e5'
+              }}
+            >
+              <AppIcon name={aiReportLoading ? "spinner" : "refresh"} size={13} className={aiReportLoading ? "spin" : ""} />
+              {aiReportLoading ? "Analisi in corso..." : (aiReportData ? "Aggiorna Report" : "Genera Report")}
+            </button>
+            <div style={{ cursor: 'pointer', color: 'var(--text-muted)', marginLeft: 6 }} onClick={() => toggleSection('aiReport')}>
+              <AppIcon name={collapsedSections.aiReport ? 'chevronDown' : 'chevronUp'} size={18} />
+            </div>
+          </div>
+        </div>
+
+        {/* KPI Cards: sempre visibili anche a sezione compressa (esattamente come in Immagine 2) */}
+        {aiReportData?.kpis && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+            gap: 12,
+            marginTop: 18,
+            marginBottom: collapsedSections.aiReport ? 0 : 16
+          }}>
+            <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Commesse Attive</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#6366f1', marginTop: 2 }}>{aiReportData.kpis.active_projects}</div>
+            </div>
+            <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>In Pianificazione</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#f59e0b', marginTop: 2 }}>{aiReportData.kpis.planning_projects}</div>
+            </div>
+            <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Fasi in Corso</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#3b82f6', marginTop: 2 }}>{aiReportData.kpis.active_tasks}</div>
+            </div>
+            <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Fasi in Ritardo</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: aiReportData.kpis.overdue_tasks > 0 ? '#ef4444' : '#10b981', marginTop: 2 }}>{aiReportData.kpis.overdue_tasks}</div>
+            </div>
+            <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Addetti Coinvolti</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>{aiReportData.kpis.total_workers}</div>
+            </div>
+            <div style={{ background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Scadenze a 7gg</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#ec4899', marginTop: 2 }}>{aiReportData.kpis.upcoming_deadlines_count}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Dettaglio del report: mostrato solo se espanso */}
+        {!collapsedSections.aiReport && (
+          <div className="admin-section-content" style={{ marginTop: 14 }}>
+            {/* Timestamp bar */}
+            {aiReportData?.generated_at && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '7px 14px',
+                background: 'rgba(99, 102, 241, 0.06)',
+                borderRadius: 6,
+                border: '1px solid rgba(99, 102, 241, 0.18)',
+                marginBottom: 14,
+                fontSize: '11.5px',
+                color: 'var(--text-secondary)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <AppIcon name="clock" size={13} />
+                  <span>Report generato il <strong>{aiReportData.generated_at}</strong> (aggiornato ogni giorno alle ore 07:00)</span>
+                </div>
+              </div>
+            )}
+
+            {/* Report Content */}
+            {aiReportLoading ? (
+              <div style={{
+                padding: '36px 20px',
+                textAlign: 'center',
+                background: 'var(--bg-secondary)',
+                borderRadius: 10,
+                border: '1px dashed var(--border-default)'
+              }}>
+                <div className="spinner" style={{ margin: '0 auto 12px' }} />
+                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>HiPlan AI sta analizzando...</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Elaborazione commesse attive, calcolo carichi addetti e individuazione criticità</div>
+              </div>
+            ) : aiReportData?.report ? (
+              <div className="ai-report-markdown" style={{
+                padding: '18px 22px',
+                background: 'var(--bg-secondary)',
+                borderRadius: 10,
+                border: '1px solid var(--border-subtle)',
+                lineHeight: 1.65,
+                fontSize: '13.5px',
+                color: 'var(--text-primary)'
+              }}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {aiReportData.report}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              <div style={{
+                padding: '30px 20px',
+                textAlign: 'center',
+                background: 'var(--bg-secondary)',
+                borderRadius: 10,
+                border: '1px dashed var(--border-default)'
+              }}>
+                <AppIcon name="robot" size={28} style={{ color: '#6366f1', marginBottom: 8 }} />
+                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>Nessun report dettagliato in cache</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, marginBottom: 16 }}>
+                  Clicca sul pulsante qui sotto per avviare l'analisi dello stato delle commesse e degli addetti.
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => fetchAiReport(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                    borderColor: '#4f46e5'
+                  }}
+                >
+                  <AppIcon name="sparkles" size={14} />
+                  Genera Report Esecutivo AI
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* SEZIONE BACHECA AZIENDALE */}
       <div className={`admin-section-card ${collapsedSections.annunci ? 'is-collapsed' : ''}`} style={{ marginBottom: 30 }}>
@@ -503,6 +872,13 @@ export default function AdminPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
             {!collapsedSections.users && (
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setShowAddUserModal(true)}
+                >
+                  <AppIcon name="plus" />
+                  Crea Utente
+                </button>
                 <div style={{ position: 'relative' }}>
                   <button
                     className="btn btn-secondary btn-sm"
@@ -590,7 +966,9 @@ export default function AdminPage() {
                           <option value="">— Nessun reparto —</option>
                           <option value="ufficio_tecnico">Ufficio Tecnico</option>
                           <option value="produzione">Produzione</option>
+                          <option value="amministrazione">Amministrazione</option>
                           <option value="acquisti">Acquisti</option>
+                          <option value="commerciale">Commerciale</option>
                           <option value="admin">Admin</option>
                         </select>
                       </td>
@@ -631,7 +1009,7 @@ export default function AdminPage() {
           <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleSection('templates')}>
             <h2><AppIcon name="list" /> Fasi di lavorazione preimpostate</h2>
             <p className="admin-section-desc">
-              Gestisci l'elenco delle fasi suggerite nel menu a tendina quando gli addetti creano o modificano le attività di commessa ({phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'tutti').length} visualizzate).
+              Gestisci l'elenco delle fasi suggerite nel menu a tendina quando gli addetti creano o modificano le attività di commessa ({phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'condivisa').length} visualizzate).
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
@@ -646,8 +1024,10 @@ export default function AdminPage() {
                   <option value="all">Tutti i reparti ({phaseTemplates.length})</option>
                   <option value="ufficio_tecnico">Ufficio Tecnico ({phaseTemplates.filter(t => t.department === 'ufficio_tecnico').length})</option>
                   <option value="produzione">Produzione ({phaseTemplates.filter(t => t.department === 'produzione').length})</option>
+                  <option value="amministrazione">Amministrazione ({phaseTemplates.filter(t => t.department === 'amministrazione').length})</option>
                   <option value="acquisti">Acquisti ({phaseTemplates.filter(t => t.department === 'acquisti').length})</option>
-                  <option value="tutti">Tutti / Condivise ({phaseTemplates.filter(t => t.department === 'tutti').length})</option>
+                  <option value="commerciale">Commerciale ({phaseTemplates.filter(t => t.department === 'commerciale').length})</option>
+                  <option value="condivisa">Condivisa tra più reparti ({phaseTemplates.filter(t => t.department === 'condivisa').length})</option>
                 </select>
                 <button
                   className="btn btn-primary btn-sm"
@@ -672,19 +1052,20 @@ export default function AdminPage() {
                   <th>Nome Fase / Lavorazione</th>
                   <th>Reparto Assegnato</th>
                   <th>Colore Predefinito</th>
+                  <th>Modalità / Budget</th>
                   <th>Tipo</th>
                   <th style={{ width: 120 }}>Azioni</th>
                 </tr>
               </thead>
               <tbody>
-                {phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'tutti').length === 0 ? (
+                {phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'condivisa').length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-muted)' }}>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-muted)' }}>
                       Nessuna fase preimpostata per il filtro selezionato.
                     </td>
                   </tr>
                 ) : (
-                  phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'tutti').sort((a, b) => (a.name || '').localeCompare(b.name || '', 'it')).map((tpl) => (
+                  phaseTemplates.filter(t => filterDept === 'all' || t.department === filterDept || t.department === 'condivisa').sort((a, b) => (a.name || '').localeCompare(b.name || '', 'it')).map((tpl) => (
                     <tr key={tpl.id}>
                       <td>
                         <div style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -694,13 +1075,23 @@ export default function AdminPage() {
                       </td>
                       <td>
                         <span className="badge" style={{ background: DEPT_COLORS[tpl.department] ? `${DEPT_COLORS[tpl.department]}20` : 'var(--bg-tertiary)', color: DEPT_COLORS[tpl.department] || 'var(--text-secondary)', border: `1px solid ${DEPT_COLORS[tpl.department] || 'var(--border)'}40` }}>
-                          {DEPT_LABELS[tpl.department] || (tpl.department === 'tutti' ? 'Condivisa / Tutti' : tpl.department)}
+                          {DEPT_LABELS[tpl.department] || (tpl.department === 'condivisa' ? 'Condivisa tra più reparti' : tpl.department)}
                         </span>
                       </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'monospace', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                           <span style={{ display: 'inline-block', width: 22, height: 22, borderRadius: 6, background: tpl.default_color || '#3b82f6', border: '1px solid var(--border-default)' }} />
                           {tpl.default_color || '#3b82f6'}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '0.82rem', color: 'var(--text-primary)' }}>
+                          <span style={{ fontWeight: 600 }}>{tpl.default_days != null ? `${tpl.default_days} gg` : '-'}</span>
+                          <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>·</span>
+                          <span style={{ fontWeight: 600, color: 'var(--accent-600)' }}>{tpl.default_hours != null ? `${tpl.default_hours}h` : '-'}</span>
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                          {BUDGET_MODE_SHORT_LABELS[tpl.default_budget_mode || 'start_days'] || tpl.default_budget_mode}
                         </div>
                       </td>
                       <td>
@@ -933,16 +1324,72 @@ export default function AdminPage() {
         {!collapsedSections.backup && (
           <div style={{ padding: '16px 20px', background: 'var(--bg-tertiary)', borderRadius: 8, marginTop: 16 }}>
             {lastBackup ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 14 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 14, marginBottom: 16 }}>
                 <div><strong>Ultimo backup completato:</strong> {new Date(lastBackup.date).toLocaleString()}</div>
                 <div><strong>Dimensione archivio:</strong> {lastBackup.size_mb} MB</div>
                 <div><strong>File:</strong> <code>{lastBackup.filename}</code></div>
                 <div style={{ marginTop: 8, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                  Il backup settimanale viene eseguito automaticamente ogni domenica notte. Include il database completo e tutti gli allegati.
+                  Il backup viene eseguito automaticamente ogni giorno alle 20:00 e conserva le ultime due settimane (14 backup). Include il database completo e tutti gli allegati.
                 </div>
               </div>
             ) : (
-              <div style={{ color: 'var(--text-muted)' }}>Nessun backup trovato nel sistema.</div>
+              <div style={{ color: 'var(--text-muted)', marginBottom: 16 }}>Nessun backup trovato nel sistema.</div>
+            )}
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+              <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <AppIcon name="upload" size={14} /> {uploadingBackup ? 'Ripristino in corso...' : 'Ripristina da file'}
+                <input
+                  type="file"
+                  accept=".zip"
+                  style={{ display: 'none' }}
+                  disabled={uploadingBackup}
+                  onChange={handleRestoreUpload}
+                />
+              </label>
+            </div>
+
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Backup disponibili</div>
+            {backups.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table className="backup-table">
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>File</th>
+                      <th>Dimensione</th>
+                      <th style={{ textAlign: 'right' }}>Azioni</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {backups.map((b, idx) => (
+                      <tr key={b.filename}>
+                        <td>
+                          {new Date(b.date).toLocaleString()}
+                          {idx === 0 && (
+                            <span style={{ marginLeft: 8, fontSize: '0.7rem', padding: '2px 6px', borderRadius: 999, background: 'rgba(99,102,241,0.15)', color: 'var(--accent-500, #6366f1)', fontWeight: 600 }}>
+                              Ultimo
+                            </span>
+                          )}
+                        </td>
+                        <td className="backup-file" title={b.filename}>{b.filename}</td>
+                        <td>{b.size_mb} MB</td>
+                        <td className="backup-actions">
+                          <button
+                            className="btn btn-danger btn-sm"
+                            disabled={restoringBackup === b.filename}
+                            onClick={() => handleRestoreBackup(b.filename)}
+                          >
+                            <AppIcon name="undo" size={14} /> {restoringBackup === b.filename ? 'Ripristino...' : 'Ripristina'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="backup-empty">Nessun archivio di backup presente.</div>
             )}
           </div>
         )}
@@ -951,95 +1398,160 @@ export default function AdminPage() {
       {/* MODALE AGGIUNTA/MODIFICA TEMPLATE */}
       {showAddTemplateModal && (
         <div className="modal-overlay animate-fadeIn">
-          <div className="modal" style={{ maxWidth: 650, background: 'var(--bg-secondary)', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-xl)' }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal" style={{ maxWidth: 850, width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-xl)', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{editingTemplate ? 'Modifica Fase Preimpostata' : 'Nuova Fase Preimpostata'}</h2>
+              <h2 style={{ fontSize: '1.4rem' }}>{editingTemplate ? 'Modifica Fase Preimpostata' : 'Nuova Fase Preimpostata'}</h2>
               <button className="btn-ghost btn-icon" type="button" onClick={() => setShowAddTemplateModal(false)} aria-label="Chiudi">
                 <AppIcon name="close" />
               </button>
             </div>
             <form onSubmit={handleSaveTemplate}>
-              <div className="modal-body">
-                <div className="input-group">
-                  <label>Nome Fase di Lavorazione *</label>
-                  <input
-                    className="input"
-                    value={templateForm.name}
-                    onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
-                    required
-                    placeholder="es. Progettazione elettrica avanzata"
-                  />
-                </div>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  <div className="input-group" style={{ flex: 1.6, minWidth: 0 }}>
+                    <label style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 6 }}>Nome Fase di Lavorazione *</label>
+                    <input
+                      className="input"
+                      style={{ fontSize: '0.95rem', height: 42 }}
+                      value={templateForm.name}
+                      onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
+                      required
+                      placeholder="es. Progettazione elettrica avanzata"
+                    />
+                  </div>
 
-                <div className="input-group" style={{ marginTop: 14 }}>
-                  <label>Reparto di Assegnazione *</label>
+                  <div className="input-group" style={{ flex: 1.2, minWidth: 0 }}>
+                    <label style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 6 }}>Reparto di Assegnazione *</label>
+                    <select
+                      className="input"
+                      style={{ fontSize: '0.95rem', height: 42 }}
+                      value={templateForm.department}
+                      onChange={(e) => {
+                        const newDept = e.target.value;
+                        setTemplateForm(prev => ({
+                          ...prev,
+                          department: newDept,
+                          default_color: DEPT_COLORS[newDept] || prev.default_color || '#3b82f6'
+                        }));
+                      }}
+                    >
+                      <option value="ufficio_tecnico">Ufficio Tecnico</option>
+                      <option value="produzione">Produzione</option>
+                      <option value="amministrazione">Amministrazione</option>
+                      <option value="acquisti">Acquisti</option>
+                      <option value="commerciale">Commerciale</option>
+                      <option value="condivisa">Condivisa tra più reparti</option>
+                    </select>
+                  </div>
+                </div>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: -10, display: 'block' }}>
+                  Questa fase comparirà nel menu a tendina di tutti gli addetti del reparto selezionato.
+                </span>
+
+                <div className="input-group">
+                  <label style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 6 }}>Modalità calcolo budget e pianificazione date:</label>
                   <select
                     className="input"
-                    value={templateForm.department}
-                    onChange={(e) => setTemplateForm({ ...templateForm, department: e.target.value })}
+                    style={{ fontSize: '0.95rem', height: 42 }}
+                    value={templateForm.default_budget_mode || 'start_days'}
+                    onChange={(e) => {
+                      const newMode = e.target.value;
+                      setTemplateForm(prev => {
+                        let next = { ...prev, default_budget_mode: newMode };
+                        if (newMode === 'start_days' || newMode === 'end_days') {
+                          if (next.default_days && !next.default_hours) {
+                            next.default_hours = Number(next.default_days) * 8;
+                          }
+                        } else if (newMode === 'start_hours' || newMode === 'end_hours') {
+                          if (next.default_hours && !next.default_days) {
+                            next.default_days = Math.max(1, Math.ceil(Number(next.default_hours) / 8));
+                          }
+                        }
+                        return next;
+                      });
+                    }}
                   >
-                    <option value="ufficio_tecnico">Ufficio Tecnico</option>
-                    <option value="produzione">Produzione</option>
-                    <option value="acquisti">Acquisti</option>
-                    <option value="tutti">Condivisa per tutti i reparti</option>
+                    <option value="start_days">Data Inizio / Giorni (calcola data fine escludendo sab/dom e festivi, ore = giorni×8)</option>
+                    <option value="start_hours">Data Inizio / Ore (calcola data fine escludendo sab/dom e festivi, giorni = ore/8)</option>
+                    <option value="start_end">Data Inizio / Data Fine (calcola giorni lavorativi ed ore escludendo sab/dom e festivi)</option>
+                    <option value="end_days">Data Fine / Giorni (calcola data inizio a ritroso escludendo sab/dom e festivi)</option>
+                    <option value="end_hours">Data Fine / Ore (calcola data inizio a ritroso escludendo sab/dom e festivi)</option>
+                    <option value="start_days_hours">Data Inizio / Giorni / Ore (es. 24h spalmate su 10 gg escludendo sab/dom e festivi)</option>
+                    <option value="end_days_hours">Data Fine / Giorni / Ore (es. 24h spalmate a ritroso su 10 gg escludendo sab/dom e festivi)</option>
                   </select>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
-                    Questa fase comparirà nel menu a tendina di tutti gli addetti del reparto selezionato.
-                  </span>
                 </div>
 
-                <div style={{ display: 'flex', gap: 16, marginTop: 14 }}>
+                <div style={{ display: 'flex', gap: 16 }}>
                   <div className="input-group" style={{ flex: 1 }}>
-                    <label>Giorni Lavorativi Previsti</label>
+                    <label style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 6 }}>Giorni Lavorativi Previsti</label>
                     <input
                       type="number"
                       step="1"
                       min="0"
                       className="input"
+                      style={{ fontSize: '0.95rem', height: 42 }}
                       value={templateForm.default_days}
-                      onChange={(e) => setTemplateForm({ ...templateForm, default_days: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setTemplateForm(prev => {
+                          const next = { ...prev, default_days: val };
+                          if ((prev.default_budget_mode === 'start_days' || prev.default_budget_mode === 'end_days') && val !== '') {
+                            next.default_hours = Number(val) * 8;
+                          }
+                          return next;
+                        });
+                      }}
                       placeholder="es. 3"
                     />
                   </div>
                   <div className="input-group" style={{ flex: 1 }}>
-                    <label>Ore Previste</label>
+                    <label style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 6 }}>Ore Previste</label>
                     <input
                       type="number"
                       step="0.5"
                       min="0"
                       className="input"
+                      style={{ fontSize: '0.95rem', height: 42 }}
                       value={templateForm.default_hours}
-                      onChange={(e) => setTemplateForm({ ...templateForm, default_hours: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setTemplateForm(prev => {
+                          const next = { ...prev, default_hours: val };
+                          if ((prev.default_budget_mode === 'start_hours' || prev.default_budget_mode === 'end_hours') && val !== '') {
+                            next.default_days = Math.max(1, Math.ceil(Number(val) / 8));
+                          }
+                          return next;
+                        });
+                      }}
                       placeholder="es. 24"
                     />
                   </div>
-                </div>
-
-                <div className="input-group" style={{ marginTop: 14 }}>
-                  <label>Colore Predefinito sul Gantt</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
-                    <input
-                      type="color"
-                      value={templateForm.default_color || '#3b82f6'}
-                      onChange={(e) => setTemplateForm({ ...templateForm, default_color: e.target.value })}
-                      style={{ width: 44, height: 38, padding: 2, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--bg-tertiary)' }}
-                    />
-                    <input
-                      type="text"
-                      className="input"
-                      value={templateForm.default_color || '#3b82f6'}
-                      onChange={(e) => setTemplateForm({ ...templateForm, default_color: e.target.value })}
-                      style={{ width: 110, fontFamily: 'monospace' }}
-                      placeholder="#3b82f6"
-                    />
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 6 }}>Colore sul Gantt</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                      <input
+                        type="color"
+                        value={templateForm.default_color || '#3b82f6'}
+                        onChange={(e) => setTemplateForm({ ...templateForm, default_color: e.target.value })}
+                        style={{ width: 44, height: 42, padding: 2, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--bg-tertiary)' }}
+                      />
+                      <input
+                        type="text"
+                        className="input"
+                        value={templateForm.default_color || '#3b82f6'}
+                        onChange={(e) => setTemplateForm({ ...templateForm, default_color: e.target.value })}
+                        style={{ width: 110, height: 42, fontSize: '0.95rem', fontFamily: 'monospace' }}
+                        placeholder="#3b82f6"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddTemplateModal(false)}>
+              <div className="modal-footer" style={{ marginTop: 20 }}>
+                <button type="button" className="btn btn-secondary" style={{ fontSize: '0.95rem', padding: '10px 22px' }} onClick={() => setShowAddTemplateModal(false)}>
                   Annulla
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="btn btn-primary" style={{ fontSize: '0.95rem', padding: '10px 22px' }}>
                   {editingTemplate ? 'Salva Modifiche' : 'Aggiungi Fase'}
                 </button>
               </div>
@@ -1047,6 +1559,109 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+      {/* MODAL CREAZIONE UTENTE */}
+      {showAddUserModal && (
+        <div className="modal-overlay animate-fadeIn">
+          <div className="modal" style={{ maxWidth: 500, background: 'var(--bg-secondary)', border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-xl)' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Crea Nuovo Utente</h2>
+              <button className="btn-ghost btn-icon" type="button" onClick={() => setShowAddUserModal(false)} aria-label="Chiudi">
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateUser}>
+              <div className="modal-body">
+                <div className="input-group">
+                  <label>Nome Utente (Username) *</label>
+                  <input
+                    className="input"
+                    value={newUserForm.username}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, username: e.target.value })}
+                    required
+                    placeholder="es. mario.rossi"
+                  />
+                </div>
+
+                <div className="input-group" style={{ marginTop: 14 }}>
+                  <label>Email *</label>
+                  <input
+                    type="email"
+                    className="input"
+                    value={newUserForm.email}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                    required
+                    placeholder="es. mario@example.com"
+                  />
+                </div>
+
+                <div className="input-group" style={{ marginTop: 14 }}>
+                  <label>Nome Completo</label>
+                  <input
+                    className="input"
+                    value={newUserForm.full_name}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, full_name: e.target.value })}
+                    placeholder="es. Mario Rossi"
+                  />
+                </div>
+
+                <div className="input-group" style={{ marginTop: 14 }}>
+                  <label>Password *</label>
+                  <input
+                    type="password"
+                    className="input"
+                    value={newUserForm.password}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                    required
+                    placeholder="Scegli una password"
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: 16, marginTop: 14 }}>
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Ruolo *</label>
+                    <select
+                      className="input"
+                      value={newUserForm.role}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value })}
+                      required
+                    >
+                      <option value="viewer">Viewer (Solo lettura)</option>
+                      <option value="editor">Editor (Lettura/Scrittura parziale)</option>
+                      <option value="admin">Admin (Completo)</option>
+                    </select>
+                  </div>
+
+                  <div className="input-group" style={{ flex: 1 }}>
+                    <label>Reparto *</label>
+                    <select
+                      className="input"
+                      value={newUserForm.department}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, department: e.target.value })}
+                      required
+                    >
+                      <option value="ufficio_tecnico">Ufficio Tecnico</option>
+                      <option value="produzione">Produzione</option>
+                      <option value="amministrazione">Amministrazione</option>
+                      <option value="acquisti">Acquisti</option>
+                      <option value="commerciale">Commerciale</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowAddUserModal(false)}>
+                  Annulla
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Crea Utente
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* MODAL GESTIONE UTENTE */}
       {managingUser && (
         <div className="modal-overlay">

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,17 @@ import './NotesPage.css';
 const BACKEND_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
   : `http://${window.location.hostname}:8000`;
+
+const NOTES_ORDER_KEY = 'hiplan_notes_order';
+
+function loadSavedOrder() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(NOTES_ORDER_KEY) || '[]');
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+}
 
 export default function NotesPage() {
   const { user } = useAuth();
@@ -40,6 +51,12 @@ export default function NotesPage() {
   const [newSharedWith, setNewSharedWith] = useState([]);
 
   const [users, setUsers] = useState([]);
+
+  // Ordinamento e riordino personalizzato (drag & drop) delle note
+  const [sortMode, setSortMode] = useState(() => (loadSavedOrder().length ? 'custom' : 'created'));
+  const [customOrder, setCustomOrder] = useState(loadSavedOrder);
+  const [dragId, setDragId] = useState(null);
+  const [dropTarget, setDropTarget] = useState(null); // { id, pos: 'before' | 'after' }
 
   // Ref per l'editor visuale contentEditable e timeout autocalcolato
   const editorRef = useRef(null);
@@ -78,6 +95,12 @@ export default function NotesPage() {
     try {
       const { data } = await api.get('/notes');
       setNotes(data);
+      // Tieni l'ordine personalizzato allineato con tutte le note esistenti
+      setCustomOrder(prev => {
+        const allIds = data.map(n => n.id);
+        const merged = [...prev.filter(id => allIds.includes(id)), ...allIds.filter(id => !prev.includes(id))];
+        return merged;
+      });
     } catch {
       toast.error('Errore durante il caricamento dei blocchi note');
     } finally {
@@ -279,7 +302,7 @@ export default function NotesPage() {
       setNotes(prev => prev.map(n => n.id === activeNoteId ? data : n));
       // Only close the menu if we are clicking a major option, not while editing the user list
       if (targetVisibility !== 'selected' || targetSharedWith === sharedWith) {
-         // Do not auto-close if we are just updating the sharedWith list interactively
+        // Do not auto-close if we are just updating the sharedWith list interactively
       }
       toast.success('Visibilità blocco note aggiornata!');
     } catch {
@@ -377,17 +400,71 @@ export default function NotesPage() {
     }
   }
 
+  const handleDownloadDoc = () => {
+    if (!activeNoteId || !editorRef.current) return;
+    const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>" + (title || 'Nota') + "</title><style>body { font-family: sans-serif; } .note-code-block { background: #f4f4f4; padding: 10px; border-radius: 4px; } .note-checklist-item { margin-bottom: 5px; list-style-type: none; } h1, h2, h3 { color: #1f2937; margin-bottom: 16px; }</style></head><body>";
+    const footer = "</body></html>";
+    const htmlContent = editorRef.current.innerHTML;
+    const html = header + `<h1>${title || 'Senza Titolo'}</h1><hr>` + htmlContent + footer;
+
+    const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${title || 'Nota'}.doc`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // Formattazione visuale istantanea stile Notion (H1, H2, Bold, Check-list, ecc.)
+  function escapeHtmlText(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function getCurrentBlock() {
+    try {
+      return (document.queryCommandValue('formatBlock') || '').toLowerCase();
+    } catch {
+      return '';
+    }
+  }
+
+  function getSelectionClosest(selector) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    let node = sel.anchorNode;
+    if (!node) return null;
+    if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+    return (node && node.closest) ? node.closest(selector) : null;
+  }
+
+  function selectionIsInside(selector) {
+    return !!getSelectionClosest(selector);
+  }
+
+  function unwrapChecklistItem(item) {
+    const textEl = item.querySelector('.checklist-text');
+    const text = textEl ? textEl.textContent : item.textContent;
+    const p = document.createElement('p');
+    p.textContent = text;
+    if (item.parentNode) item.parentNode.replaceChild(p, item);
+  }
+
   function applyFormatting(formatType) {
     if (!editorRef.current) return;
     editorRef.current.focus();
 
     switch (formatType) {
       case 'h1':
-        document.execCommand('formatBlock', false, '<h1>');
+        document.execCommand('formatBlock', false, getCurrentBlock() === 'h1' ? '<p>' : '<h1>');
         break;
       case 'h2':
-        document.execCommand('formatBlock', false, '<h2>');
+        document.execCommand('formatBlock', false, getCurrentBlock() === 'h2' ? '<p>' : '<h2>');
         break;
       case 'bold':
         document.execCommand('bold', false, null);
@@ -399,38 +476,55 @@ export default function NotesPage() {
         document.execCommand('insertUnorderedList', false, null);
         break;
       case 'todo': {
+        // Se la selezione è già una check-list, la rimuove (toggle off) anziché annidarla
+        const existing = getSelectionClosest('.note-checklist-item');
+        if (existing) {
+          unwrapChecklistItem(existing);
+          break;
+        }
         const sel = window.getSelection();
-        const text = sel && sel.toString() ? sel.toString() : 'Attività da fare';
-        document.execCommand('insertHTML', false, `<div class="note-checklist-item" contenteditable="false"><input type="checkbox" class="note-checkbox" /> <span contenteditable="true" class="checklist-text">${text}</span></div><p><br></p>`);
+        const text = sel && sel.toString().trim() ? sel.toString() : 'Attività da fare';
+        document.execCommand('insertHTML', false, `<div class="note-checklist-item" contenteditable="false"><input type="checkbox" class="note-checkbox" /> <span contenteditable="true" class="checklist-text">${escapeHtmlText(text)}</span></div><p><br></p>`);
         break;
       }
       case 'quote':
-        document.execCommand('formatBlock', false, 'blockquote');
+        document.execCommand('formatBlock', false, getCurrentBlock() === 'blockquote' ? '<p>' : 'blockquote');
         break;
-      case 'code': {
-        const sel = window.getSelection();
-        const text = sel && sel.toString() ? sel.toString() : 'inserisci qui il codice';
-        document.execCommand('insertHTML', false, `<pre class="note-code-block"><code>${text}</code></pre><p><br></p>`);
+      case 'code':
+        // Non applicare se la selezione è già dentro un blocco codice (evita annidamenti)
+        if (selectionIsInside('.note-code-block')) return;
+        {
+          const sel = window.getSelection();
+          const text = sel && sel.toString() ? sel.toString() : 'inserisci qui il codice';
+          document.execCommand('insertHTML', false, `<pre class="note-code-block"><code>${escapeHtmlText(text)}</code></pre><p><br></p>`);
+        }
+        break;
+      case 'normal': {
+        // Se siamo dentro una checklist, la rimuoviamo
+        const checklistItem = getSelectionClosest('.note-checklist-item');
+        if (checklistItem) unwrapChecklistItem(checklistItem);
+
+        // Se siamo dentro un blocco di codice, lo rimuoviamo
+        const codeBlock = getSelectionClosest('.note-code-block');
+        if (codeBlock) {
+          const p = document.createElement('p');
+          p.textContent = codeBlock.textContent;
+          if (codeBlock.parentNode) codeBlock.parentNode.replaceChild(p, codeBlock);
+        }
+
+        // Se l'utente non ha selezionato testo ma è solo in un paragrafo, 
+        // rimuovere il grassetto/corsivo potrebbe richiedere di selezionare tutto il nodo.
+        // Eseguiamo il reset standard fornito dal browser:
+        document.execCommand('formatBlock', false, '<p>');
+        document.execCommand('removeFormat', false, null);
+        if (document.queryCommandState('insertUnorderedList')) document.execCommand('insertUnorderedList');
+        if (document.queryCommandState('insertOrderedList')) document.execCommand('insertOrderedList');
         break;
       }
-      case 'normal':
-        document.execCommand('formatBlock', false, '<p>');
-        break;
       default:
         return;
     }
     handleEditorInput();
-  }
-
-  // Estratto di testo pulito per la sidebar
-  function getCleanSnippet(htmlOrMarkdown) {
-    if (!htmlOrMarkdown) return 'Nessun testo...';
-    const clean = htmlOrMarkdown
-      .replace(/<[^>]*>?/gm, ' ')
-      .replace(/[#*`>-]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    return clean || 'Nessun testo...';
   }
 
   // Filtra note per tab e ricerca
@@ -450,10 +544,82 @@ export default function NotesPage() {
     });
   }, [notes, activeTab, searchQuery, user]);
 
+  // Note ordinate in base al criterio selezionato (data / alfabetico / personalizzato)
+  const displayedNotes = useMemo(() => {
+    const list = [...filteredNotes];
+    if (sortMode === 'alpha') {
+      list.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'it', { sensitivity: 'base' }));
+    } else if (sortMode === 'created') {
+      list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    } else {
+      // Ordine personalizzato (drag & drop): note non ancora ordinate in fondo
+      list.sort((a, b) => {
+        const ia = customOrder.indexOf(a.id);
+        const ib = customOrder.indexOf(b.id);
+        if (ia === -1 && ib === -1) return 0;
+        if (ia === -1) return 1;
+        if (ib === -1) return -1;
+        return ia - ib;
+      });
+    }
+    return list;
+  }, [filteredNotes, sortMode, customOrder]);
+
+  // Gestione drag & drop per riordino personalizzato
+  function handleDragStart(e, id) {
+    setDragId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', id); } catch { /* noop */ }
+  }
+
+  function handleDragOver(e, targetId) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = e.currentTarget.getBoundingClientRect();
+    const before = (e.clientY - rect.top) < rect.height / 2;
+    setDropTarget({ id: targetId, pos: before ? 'before' : 'after' });
+  }
+
+  function handleDragEnd() {
+    setDragId(null);
+    setDropTarget(null);
+  }
+
+  function handleDrop(e, targetId) {
+    e.preventDefault();
+    const srcId = dragId || e.dataTransfer.getData('text/plain');
+    const rect = e.currentTarget.getBoundingClientRect();
+    const before = (e.clientY - rect.top) < rect.height / 2;
+    setDragId(null);
+    setDropTarget(null);
+    if (!srcId || srcId === targetId) return;
+    setCustomOrder(prev => {
+      const order = [...prev];
+      const allIds = notes.map(n => n.id);
+      for (const id of allIds) if (!order.includes(id)) order.push(id);
+      const from = order.indexOf(srcId);
+      let to = order.indexOf(targetId);
+      if (from === -1 || to === -1) return prev;
+      order.splice(from, 1);
+      if (from < to) to -= 1;
+      if (!before) to += 1;
+      order.splice(to, 0, srcId);
+      localStorage.setItem(NOTES_ORDER_KEY, JSON.stringify(order));
+      return order;
+    });
+    setSortMode('custom');
+  }
+
   // Formatta data in modo compatto
   function formatRelativeDate(dateStr) {
     if (!dateStr) return '';
-    const date = new Date(dateStr);
+    // Append 'Z' to treat the date as UTC if it lacks timezone info
+    let safeDateStr = dateStr;
+    if (typeof safeDateStr === 'string' && !safeDateStr.endsWith('Z') && !safeDateStr.includes('+')) {
+      if (!safeDateStr.includes('T')) safeDateStr = safeDateStr.replace(' ', 'T');
+      safeDateStr += 'Z';
+    }
+    const date = new Date(safeDateStr);
     const now = new Date();
     const diffHours = Math.round((now - date) / (1000 * 60 * 60));
     if (diffHours < 1) return 'Adesso';
@@ -468,9 +634,16 @@ export default function NotesPage() {
       {/* SIDEBAR SINISTRA */}
       <aside className="notes-sidebar">
         <div className="notes-sidebar-top">
-          <div className="notes-sidebar-title">
-            <span>Le tue note</span>
-          </div>
+          <select
+            className="notes-sort-select"
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value)}
+            aria-label="Ordina note"
+          >
+            <option value="created">Data di creazione</option>
+            <option value="alpha">Alfabetico</option>
+            <option value="custom">Personalizzato (trascina)</option>
+          </select>
           <button
             className="btn btn-primary btn-sm"
             onClick={() => {
@@ -517,20 +690,20 @@ export default function NotesPage() {
         {/* TABS FILTRO */}
         <div className="notes-tabs">
           <button
-            className={`notes-tab-btn ${activeTab === 'all' ? 'active' : ''}`}
+            className={`notes-tab-btn notes-tab-btn--all ${activeTab === 'all' ? 'active' : ''}`}
             onClick={() => setActiveTab('all')}
           >
             Tutte ({notes.length})
           </button>
           <button
-            className={`notes-tab-btn ${activeTab === 'private' ? 'active' : ''}`}
+            className={`notes-tab-btn notes-tab-btn--private ${activeTab === 'private' ? 'active' : ''}`}
             onClick={() => setActiveTab('private')}
           >
             <AppIcon name="lock" size={14} />
             Private
           </button>
           <button
-            className={`notes-tab-btn ${activeTab === 'shared' ? 'active' : ''}`}
+            className={`notes-tab-btn notes-tab-btn--shared ${activeTab === 'shared' ? 'active' : ''}`}
             onClick={() => setActiveTab('shared')}
           >
             <AppIcon name="users" size={14} />
@@ -539,36 +712,51 @@ export default function NotesPage() {
         </div>
 
         {/* LISTA SCHEDE NOTE */}
-        <div className="notes-list">
-          {filteredNotes.length === 0 ? (
+        <div className={`notes-list notes-list--${activeTab}`}>
+          {displayedNotes.length === 0 ? (
             <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8125rem', padding: '32px 12px' }}>
               Nessun blocco note trovato.
             </div>
           ) : (
-            filteredNotes.map(note => {
+            displayedNotes.map(note => {
               const isSelected = note.id === activeNoteId;
               const isMine = note.owner_id === user?.id;
+              const showBefore = sortMode === 'custom' && dragId && dragId !== note.id && dropTarget?.id === note.id && dropTarget.pos === 'before';
+              const showAfter = sortMode === 'custom' && dragId && dragId !== note.id && dropTarget?.id === note.id && dropTarget.pos === 'after';
               return (
-                <div
-                  key={note.id}
-                  className={`note-card ${isSelected ? 'active' : ''}`}
-                  onClick={() => selectNote(note)}
-                >
-                  <div className="note-card-header">
-                    <span className="note-card-title">{note.title || 'Senza Titolo'}</span>
-                    <span className={`note-visibility-badge ${note.visibility === 'team' ? 'badge-shared' : note.visibility === 'selected' ? 'badge-selected' : 'badge-private'}`}>
-                      <AppIcon name={note.visibility === 'team' ? 'users' : note.visibility === 'selected' ? 'user-check' : 'lock'} size={12} />
-                      {note.visibility === 'team' ? 'Condiviso' : note.visibility === 'selected' ? 'Utenti Selezionati' : 'Privato'}
-                    </span>
+                <Fragment key={note.id}>
+                  {showBefore && <div className="note-drop-indicator" />}
+                  <div
+                    className={`note-card ${isSelected ? 'active' : ''} ${dragId === note.id ? 'dragging' : ''}`}
+                    draggable={sortMode === 'custom'}
+                    onDragStart={(e) => handleDragStart(e, note.id)}
+                    onDragOver={sortMode === 'custom' ? (e) => handleDragOver(e, note.id) : undefined}
+                    onDrop={sortMode === 'custom' ? (e) => handleDrop(e, note.id) : undefined}
+                    onDragEnd={handleDragEnd}
+                    onClick={() => selectNote(note)}
+                  >
+                    {sortMode === 'custom' && (
+                      <span className="note-drag-handle" title="Trascina per riordinare">
+                        <AppIcon name="grip" size={14} />
+                      </span>
+                    )}
+                    <div className="note-card-header">
+                      <span className="note-card-title">{note.title || 'Senza Titolo'}</span>
+                      <span
+                        className={`note-visibility-badge ${note.visibility === 'team' ? 'badge-shared' : note.visibility === 'selected' ? 'badge-selected' : 'badge-private'}`}
+                        title={note.visibility === 'team' ? 'Condiviso' : note.visibility === 'selected' ? 'Utenti Selezionati' : 'Privato'}
+                        style={{ padding: '4px 6px' }}
+                      >
+                        <AppIcon name={note.visibility === 'team' ? 'users' : note.visibility === 'selected' ? 'user-check' : 'lock'} size={14} />
+                      </span>
+                    </div>
+                    <div className="note-card-meta">
+                      <span className="note-meta-owner"><AppIcon name="user" size={12} />{note.owner?.full_name || note.owner?.username || (isMine ? 'Tu' : 'Utente')}</span>
+                      <span>{formatRelativeDate(note.created_at)}</span>
+                    </div>
                   </div>
-                  <div className="note-card-snippet">
-                    {getCleanSnippet(note.content)}
-                  </div>
-                  <div className="note-card-meta">
-                    <span className="note-meta-owner"><AppIcon name="user" size={12} />{note.owner?.full_name || note.owner?.username || (isMine ? 'Tu' : 'Utente')}</span>
-                    <span>{formatRelativeDate(note.updated_at || note.created_at)}</span>
-                  </div>
-                </div>
+                  {showAfter && <div className="note-drop-indicator" />}
+                </Fragment>
               );
             })
           )}
@@ -582,7 +770,7 @@ export default function NotesPage() {
             <span className="empty-state-icon"><AppIcon name="notes" size={28} /></span>
             <h3 style={{ fontSize: '1.25rem', color: 'var(--text-primary)', marginBottom: '8px' }}>Seleziona o crea un blocco note</h3>
             <p style={{ maxWidth: 400, marginBottom: '24px', lineHeight: 1.5 }}>
-              Scrivi appunti, specifiche di commessa o check-list con formattazione visuale in stile Notion. Puoi decidere in qualsiasi momento se mantenere il file privato o condividerlo con il resto del team.
+              Scrivi appunti, specifiche di commessa o check-list. Puoi decidere in qualsiasi momento se mantenere il file privato o condividerlo con il resto del team.
             </p>
             <button
               className="btn btn-primary"
@@ -619,71 +807,108 @@ export default function NotesPage() {
                     type="button"
                     className={`visibility-btn-interactive ${visibility === 'team' ? 'badge-shared' : visibility === 'selected' ? 'badge-selected' : 'badge-private'}`}
                     onClick={() => {
-                      if (activeNote.owner_id === user?.id) {
+                      if (activeNote.owner_id === user?.id || visibility === 'selected' || visibility === 'team') {
                         setShowVisibilityMenu(!showVisibilityMenu);
                       }
                     }}
-                    title={activeNote.owner_id === user?.id ? "Clicca per modificare la visibilità del blocco note" : "Solo l'autore può modificare la visibilità"}
-                    style={{ cursor: activeNote.owner_id === user?.id ? 'pointer' : 'default', opacity: activeNote.owner_id === user?.id ? 1 : 0.8 }}
+                    title={activeNote.owner_id === user?.id ? "Clicca per modificare la visibilità del blocco note" : "Clicca per vedere chi ha accesso"}
+                    style={{ cursor: (activeNote.owner_id === user?.id || visibility === 'selected' || visibility === 'team') ? 'pointer' : 'default', opacity: activeNote.owner_id === user?.id ? 1 : 0.8 }}
                   >
                     <AppIcon name={visibility === 'team' ? 'users' : visibility === 'selected' ? 'user-check' : 'lock'} size={14} />
                     {visibility === 'team' ? 'Condiviso' : visibility === 'selected' ? 'Utenti Selezionati' : 'Privato'}
-                    {activeNote.owner_id === user?.id && <AppIcon name="chevronDown" size={12} />}
+                    {(activeNote.owner_id === user?.id || visibility === 'selected' || visibility === 'team') && <AppIcon name="chevronDown" size={12} />}
                   </button>
 
-                  {showVisibilityMenu && activeNote.owner_id === user?.id && (
+                  {showVisibilityMenu && (
                     <div className="visibility-menu-popup">
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>
-                        IMPOSTAZIONI VISIBILITÀ
-                      </div>
-                      <div
-                        className={`visibility-option ${visibility === 'private' ? 'selected' : ''}`}
-                        onClick={() => handleToggleVisibility('private')}
-                      >
-                        <AppIcon name="lock" size={18} />
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>File Privato</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Visibile solo al tuo account personale</div>
-                        </div>
-                      </div>
-                      <div
-                        className={`visibility-option ${visibility === 'team' ? 'selected' : ''}`}
-                        onClick={() => handleToggleVisibility('team')}
-                        style={{ marginTop: 6 }}
-                      >
-                        <AppIcon name="users" size={18} />
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>In Condivisione</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Accessibile in lettura a tutto il team</div>
-                        </div>
-                      </div>
-                      <div
-                        className={`visibility-option ${visibility === 'selected' ? 'selected' : ''}`}
-                        onClick={() => handleToggleVisibility('selected', sharedWith)}
-                        style={{ marginTop: 6 }}
-                      >
-                        <AppIcon name="user-check" size={18} />
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>Utenti Selezionati</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Solo gli utenti scelti possono leggere</div>
-                        </div>
-                      </div>
-                      {visibility === 'selected' && (
-                        <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border-subtle)', marginTop: 8 }}>
-                          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>SELEZIONA UTENTI</div>
-                          <AssigneeInput 
-                            selected={sharedWith} 
-                            onChange={(newShared) => {
-                              setSharedWith(newShared);
-                              handleToggleVisibility('selected', newShared);
-                            }} 
-                            users={users} 
-                          />
+                      {activeNote.owner_id === user?.id ? (
+                        <>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>
+                            IMPOSTAZIONI VISIBILITÀ
+                          </div>
+                          <div
+                            className={`visibility-option ${visibility === 'private' ? 'selected' : ''}`}
+                            onClick={() => handleToggleVisibility('private')}
+                          >
+                            <AppIcon name="lock" size={18} />
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>File Privato</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Visibile solo al tuo account personale</div>
+                            </div>
+                          </div>
+                          <div
+                            className={`visibility-option ${visibility === 'team' ? 'selected' : ''}`}
+                            onClick={() => handleToggleVisibility('team')}
+                            style={{ marginTop: 6 }}
+                          >
+                            <AppIcon name="users" size={18} />
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>In Condivisione</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Accessibile in lettura a tutto il team</div>
+                            </div>
+                          </div>
+                          <div
+                            className={`visibility-option ${visibility === 'selected' ? 'selected' : ''}`}
+                            onClick={() => handleToggleVisibility('selected', sharedWith)}
+                            style={{ marginTop: 6 }}
+                          >
+                            <AppIcon name="user-check" size={18} />
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>Utenti Selezionati</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Solo gli utenti scelti possono leggere</div>
+                            </div>
+                          </div>
+                          {visibility === 'selected' && (
+                            <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border-subtle)', marginTop: 8 }}>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>SELEZIONA UTENTI</div>
+                              <AssigneeInput
+                                selected={sharedWith}
+                                onChange={(newShared) => {
+                                  setSharedWith(newShared);
+                                  handleToggleVisibility('selected', newShared);
+                                }}
+                                users={users}
+                              />
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div style={{ padding: '8px 12px' }}>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10 }}>CONDIVISO CON</div>
+                          {visibility === 'team' ? (
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <AppIcon name="users" size={14} /> Tutto il team
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {sharedWith.length > 0 ? sharedWith.map(u => {
+                                const matchedUser = users.find(userObj => userObj.username === u);
+                                return (
+                                  <div key={u} style={{ fontSize: '0.85rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <AppIcon name="user" size={14} />
+                                    {matchedUser ? (matchedUser.full_name || matchedUser.username) : u}
+                                  </div>
+                                );
+                              }) : (
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Nessun utente specifico</div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
                   )}
                 </div>
+
+                {/* PULSANTE DOWNLOAD DOC */}
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={handleDownloadDoc}
+                  title="Scarica in formato Word (.doc)"
+                >
+                  <AppIcon name="download" size={15} />
+                </button>
 
                 {/* PULSANTE ELIMINA */}
                 <button
@@ -699,94 +924,108 @@ export default function NotesPage() {
               </div>
             </div>
 
-            {/* AREA SCROLLABILE: FORMATTING BAR + TITOLO + CONTENUTO + ALLEGATI */}
-            <div className="notes-editor-scroll">
-              {/* TOOLBAR DI FORMATTAZIONE STYLE NOTION */}
-              <div className="notion-formatting-bar">
-                <button type="button" className="format-btn" onClick={() => applyFormatting('normal')} title="Testo normale (P)">P Normale</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('h1')} title="Titolo grande (H1)">H1 Titolo</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('h2')} title="Sottotitolo (H2)">H2 Sottotitolo</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('bold')} title="Grassetto"><strong>B</strong> Grassetto</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('italic')} title="Corsivo"><em>I</em> Corsivo</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('bullet')} title="Elenco puntato">• Elenco</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('todo')} title="Check-list interattiva"><AppIcon name="check" size={14} /> Check-list [ ]</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('quote')} title="Citazione">❝ Citazione</button>
-                <button type="button" className="format-btn" onClick={() => applyFormatting('code')} title="Blocco Codice">⟨/⟩ Codice</button>
-              </div>
+            {/* AREA SCROLLABILE CON SUPPORTO DRAG & DROP GLOBALE */}
+            <div
+              className="notes-editor-scroll"
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onDrop={handleDropAttachment}
+            >
+              <div style={{ display: 'flex', gap: '32px', minHeight: '100%' }}>
 
-              {/* CAMPO TITOLO */}
-              <input
-                type="text"
-                className="note-title-input"
-                value={title}
-                onChange={handleTitleChange}
-                placeholder="Titolo del Blocco Note..."
-              />
-
-              {/* AREA TESTO VISUALE WYSIWYG CENTRALE */}
-              <div
-                ref={editorRef}
-                contentEditable
-                className="note-content-area"
-                onInput={handleEditorInput}
-                onClick={handleEditorClick}
-                onKeyDown={handleEditorKeyDown}
-                placeholder="Scrivi qui i tuoi appunti in stile Notion... Usa i pulsanti sopra per formattare con titoli, check-list e citazioni."
-                suppressContentEditableWarning
-              />
-
-              {/* ALLEGATI DELLA NOTA */}
-              {activeNote && (
-                <div 
-                  style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border-default)', paddingBottom: 16 }}
-                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                  onDrop={handleDropAttachment}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <h4 style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)' }}>Allegati</h4>
-                    <div>
-                      <input
-                        type="file"
-                        id="note-attachment-upload"
-                        multiple
-                        style={{ display: 'none' }}
-                        onChange={handleUploadAttachment}
-                      />
-                      <label htmlFor="note-attachment-upload" className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
-                        + Aggiungi File
-                      </label>
-                    </div>
+                {/* COLONNA SINISTRA: EDITOR TESTUALE */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                  {/* TOOLBAR DI FORMATTAZIONE STYLE NOTION */}
+                  <div className="notion-formatting-bar">
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('normal')} title="Testo normale (P)">P Normale</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('h1')} title="Titolo grande (H1)">H1 Titolo</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('h2')} title="Sottotitolo (H2)">H2 Sottotitolo</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('bold')} title="Grassetto"><strong>B</strong> Grassetto</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('italic')} title="Corsivo"><em>I</em> Corsivo</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('bullet')} title="Elenco puntato">• Elenco</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('todo')} title="Check-list interattiva"><AppIcon name="check" size={14} /> Check-list [ ]</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('quote')} title="Citazione">❝ Citazione</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('code')} title="Blocco Codice">⟨/⟩ Codice</button>
+                    <button type="button" className="format-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormatting('normal')} title="Rimuovi ogni formattazione">Nessuna formattazione</button>
                   </div>
-                  
-                  {Array.isArray(activeNote.attachments) && activeNote.attachments.length > 0 ? (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      {activeNote.attachments.map((att, idx) => (
-                        <div key={idx} style={{ 
-                          display: 'flex', alignItems: 'center', gap: 8, 
-                          padding: '4px 12px', background: 'var(--bg-secondary)', 
-                          border: '1px solid var(--border-subtle)', borderRadius: 16, fontSize: 13 
-                        }}>
-                          <a className="inline-detail-row" href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-500)', textDecoration: 'none' }}>
-                            <AppIcon name="paperclip" size={13} />{att.name}
-                          </a>
-                          <button 
-                            onClick={() => handleDeleteAttachment(att.name)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: 0, fontSize: 14 }}
-                            title="Elimina allegato"
-                            aria-label="Elimina allegato"
-                          >
-                            <AppIcon name="close" size={13} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                      Nessun allegato presente
-                    </div>
-                  )}
+
+                  {/* CAMPO TITOLO */}
+                  <input
+                    type="text"
+                    className="note-title-input"
+                    value={title}
+                    onChange={handleTitleChange}
+                    placeholder="Titolo del Blocco Note..."
+                  />
+
+                  {/* AREA TESTO VISUALE WYSIWYG CENTRALE */}
+                  <div
+                    ref={editorRef}
+                    contentEditable
+                    className="note-content-area"
+                    onInput={handleEditorInput}
+                    onClick={handleEditorClick}
+                    onKeyDown={handleEditorKeyDown}
+                    placeholder="Scrivi qui i tuoi appunti... Usa i pulsanti sopra per formattare con titoli, check-list e citazioni."
+                    suppressContentEditableWarning
+                  />
                 </div>
-              )}
+
+                {/* COLONNA DESTRA: ALLEGATI */}
+                {activeNote && (
+                  <div style={{ width: '280px', flexShrink: 0, borderLeft: '1px solid var(--border-default)', paddingLeft: '24px', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                      <h4 style={{ margin: 0, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
+                        Allegati
+                      </h4>
+                      <div>
+                        <input
+                          type="file"
+                          id="note-attachment-upload"
+                          multiple
+                          style={{ display: 'none' }}
+                          onChange={handleUploadAttachment}
+                        />
+                        <label htmlFor="note-attachment-upload" className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', padding: '4px 8px', fontSize: '0.75rem' }}>
+                          + Aggiungi
+                        </label>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 16 }}>
+                      Puoi anche trascinare i file ovunque in questa pagina per allegarli.
+                    </div>
+
+                    {Array.isArray(activeNote.attachments) && activeNote.attachments.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {activeNote.attachments.map((att, idx) => (
+                          <div key={idx} style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '8px 12px', background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-subtle)', borderRadius: '8px', fontSize: '0.8rem'
+                          }}>
+                            <a className="inline-detail-row" href={`${BACKEND_URL}/${att.path}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-500)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '8px' }} title={att.name}>
+                              <AppIcon name="paperclip" size={13} style={{ flexShrink: 0 }} />
+                              <span style={{ marginLeft: 4 }}>{att.name}</span>
+                            </a>
+                            <button
+                              onClick={() => handleDeleteAttachment(att.name)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: '2px', fontSize: 14, flexShrink: 0 }}
+                              title="Elimina allegato"
+                              aria-label="Elimina allegato"
+                            >
+                              <AppIcon name="close" size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic', background: 'var(--bg-tertiary)', padding: '16px', borderRadius: '8px', textAlign: 'center', border: '1px dashed var(--border-subtle)' }}>
+                        Nessun allegato presente
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </>
         )}
@@ -913,10 +1152,10 @@ export default function NotesPage() {
                     </label>
                     {newVisibility === 'selected' && (
                       <div style={{ padding: '0 14px 14px 44px' }}>
-                        <AssigneeInput 
-                          selected={newSharedWith} 
-                          onChange={setNewSharedWith} 
-                          users={users} 
+                        <AssigneeInput
+                          selected={newSharedWith}
+                          onChange={setNewSharedWith}
+                          users={users}
                           placeholder="Cerca utente per aggiungerlo..."
                         />
                       </div>

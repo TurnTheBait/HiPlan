@@ -99,16 +99,9 @@ const paths = {
     </>
   ),
   plus: <path d="M12 5v14M5 12h14" />,
-  pause: <path d="M8 5v14M16 5v14" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
   arrowLeft: <path d="m15 18-6-6 6-6" />,
-  arrowRight: <path d="m9 18 6-6-6-6" />,
-  undo: (
-    <>
-      <path d="M9 7 4 12l5 5" />
-      <path d="M4 12h9a7 7 0 0 1 7 7" />
-    </>
-  ),
+  arrowRight: <path d="m9 6 6 6-6 6" />,
   chevronLeft: <path d="m15 18-6-6 6-6" />,
   chevronRight: <path d="m9 18 6-6-6-6" />,
   chevronDown: <path d="m6 9 6 6 6-6" />,
@@ -130,12 +123,6 @@ const paths = {
     <>
       <path d="M4 21V7l8-4 8 4v14" />
       <path d="M8 9h2M14 9h2M8 13h2M14 13h2M8 17h2M14 17h2M3 21h18" />
-    </>
-  ),
-  alert: (
-    <>
-      <path d="M12 3 2.5 20h19Z" />
-      <path d="M12 9v5M12 17h.01" />
     </>
   ),
   gantt: (
@@ -211,14 +198,92 @@ const paths = {
       <path d="M4 11H2v4h4M7 14l2 7h4l-2-8" />
     </>
   ),
+  robot: (
+    <>
+      <rect x="3" y="11" width="18" height="10" rx="2" />
+      <circle cx="12" cy="5" r="2" />
+      <path d="M12 7v4" />
+      <line x1="8" y1="16" x2="8" y2="16" />
+      <line x1="16" y1="16" x2="16" y2="16" />
+    </>
+  ),
+  play: (
+    <>
+      <polygon points="5 3 19 12 5 21 5 3" />
+    </>
+  ),
+  pause: (
+    <>
+      <rect x="6" y="4" width="4" height="16" />
+      <rect x="14" y="4" width="4" height="16" />
+    </>
+  ),
+  undo: (
+    <>
+      <path d="M3 7v6h6" />
+      <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+    </>
+  ),
+  filter: <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />,
+  archive: (
+    <>
+      <rect x="3" y="4" width="18" height="5" rx="1" />
+      <path d="M5 9v11h14V9" />
+      <path d="M9 13h6" />
+    </>
+  ),
+  update: (
+    <>
+      <path d="M20 11a8 8 0 0 0-14.85-4" />
+      <path d="M5 7V3h4" />
+      <path d="M4 13a8 8 0 0 0 14.85 4" />
+      <path d="M19 17v4h-4" />
+    </>
+  ),
+  grip: (
+    <>
+      <circle cx="9" cy="6" r="1" />
+      <circle cx="15" cy="6" r="1" />
+      <circle cx="9" cy="12" r="1" />
+      <circle cx="15" cy="12" r="1" />
+      <circle cx="9" cy="18" r="1" />
+      <circle cx="15" cy="18" r="1" />
+    </>
+  ),
+  copy: (
+    <>
+      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+    </>
+  ),
+  sparkles: (
+    <>
+      <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+      <path d="M5 3v4M3 5h4M19 17v4M17 19h4" />
+    </>
+  ),
+  refresh: (
+    <>
+      <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+      <path d="M16 16h5v5" />
+    </>
+  ),
+  spinner: (
+    <>
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </>
+  ),
 };
 
-export default function AppIcon({ name, size = 18, className = '', strokeWidth = 1.9 }) {
+export default function AppIcon({ name, size = 18, className = '', strokeWidth = 1.9, style = {} }) {
   return (
     <svg
       className={`app-icon ${className}`.trim()}
       width={size}
       height={size}
+      style={style}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

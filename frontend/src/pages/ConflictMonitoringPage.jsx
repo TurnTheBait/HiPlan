@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useToast } from '../context/ToastContext';
@@ -20,9 +20,45 @@ export default function ConflictMonitoringPage() {
   const [editingVacation, setEditingVacation] = useState(null);
   const [deletingVacation, setDeletingVacation] = useState(null);
 
+  const [vacationSortConfig, setVacationSortConfig] = useState({ key: 'created_at', direction: 'desc' });
+
+  function handleVacationSort(key) {
+    if (vacationSortConfig.key === key) {
+      setVacationSortConfig({ key, direction: vacationSortConfig.direction === 'asc' ? 'desc' : 'asc' });
+    } else {
+      setVacationSortConfig({ key, direction: 'asc' });
+    }
+  }
+
+  const sortedVacations = useMemo(() => {
+    return [...vacations].sort((a, b) => {
+      let valA = a[vacationSortConfig.key];
+      let valB = b[vacationSortConfig.key];
+
+      if (vacationSortConfig.key === 'username') {
+        valA = (a.full_name || a.username || '').toLowerCase();
+        valB = (b.full_name || b.username || '').toLowerCase();
+      } else if (vacationSortConfig.key === 'start_date' || vacationSortConfig.key === 'end_date' || vacationSortConfig.key === 'created_at') {
+        valA = valA ? new Date(valA).getTime() : 0;
+        valB = valB ? new Date(valB).getTime() : 0;
+      } else if (vacationSortConfig.key === 'reason') {
+        valA = (valA || '').toLowerCase();
+        valB = (valB || '').toLowerCase();
+      }
+
+      if (valA < valB) return vacationSortConfig.direction === 'asc' ? -1 : 1;
+      if (valA > valB) return vacationSortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [vacations, vacationSortConfig]);
+
   const [usersList, setUsersList] = useState([]);
   const [addingVacation, setAddingVacation] = useState(false);
   const [newVacation, setNewVacation] = useState({ user_id: '', start_date: '', end_date: '', reason: '' });
+  
+  const [addingClosure, setAddingClosure] = useState(false);
+  const [newClosure, setNewClosure] = useState({ start_date: '', end_date: '', reason: 'Chiusura Aziendale' });
+  
   const [submittingVacation, setSubmittingVacation] = useState(false);
 
   // Search Slots State
@@ -36,6 +72,7 @@ export default function ConflictMonitoringPage() {
   const [searchResults, setSearchResults] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [visibleResultsCount, setVisibleResultsCount] = useState(10);
+  const [visibleVacationsCount, setVisibleVacationsCount] = useState(10);
 
   const navigate = useNavigate();
   const toast = useToast();
@@ -44,6 +81,14 @@ export default function ConflictMonitoringPage() {
     loadConflicts();
     loadVacations();
     loadUsers();
+
+    const handleDataModified = () => {
+      loadConflicts();
+      loadVacations();
+    };
+
+    window.addEventListener('agent-data-modified', handleDataModified);
+    return () => window.removeEventListener('agent-data-modified', handleDataModified);
   }, []);
 
   async function loadUsers() {
@@ -124,6 +169,35 @@ export default function ConflictMonitoringPage() {
       window.dispatchEvent(new Event('vacationsUpdated'));
     } catch (err) {
       toast.error('Errore durante l\'aggiunta delle ferie');
+    } finally {
+      setSubmittingVacation(false);
+    }
+  }
+
+  async function handleAddClosure(e) {
+    e.preventDefault();
+    if (!newClosure.start_date || !newClosure.end_date) {
+      toast.error('Compila tutte le date obbligatorie.');
+      return;
+    }
+    setSubmittingVacation(true);
+    try {
+      const res = await api.post(`/vacations/admin/company_closure`, {
+        start_date: newClosure.start_date,
+        end_date: newClosure.end_date,
+        reason: newClosure.reason
+      });
+      toast.success('Chiusura aziendale aggiunta per tutti gli addetti.');
+      if (res.data.recovery_items?.length > 0) {
+        toast.warning(`⚠️ ${res.data.recovery_items.length} fase/i con ore da recuperare rilevate in totale.`);
+      }
+      setAddingClosure(false);
+      setNewClosure({ start_date: '', end_date: '', reason: 'Chiusura Aziendale' });
+      loadVacations();
+      loadConflicts();
+      window.dispatchEvent(new Event('vacationsUpdated'));
+    } catch (err) {
+      toast.error('Errore durante l\'aggiunta della chiusura aziendale');
     } finally {
       setSubmittingVacation(false);
     }
@@ -253,32 +327,45 @@ export default function ConflictMonitoringPage() {
       <WorkloadHeatmap />
 
       {/* Ricerca Slot Liberi Section */}
-      <div style={{ background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-default)', overflow: 'hidden' }}>
+      <div className="workload-heatmap-container">
         <div
-          className="section-heading"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: isSearchOpen ? 16 : 0,
+            cursor: 'pointer',
+            userSelect: 'none'
+          }}
           onClick={() => setIsSearchOpen(!isSearchOpen)}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', margin: 0, cursor: 'pointer', transition: 'background 0.2s', borderBottom: isSearchOpen ? '1px solid var(--border-default)' : 'none' }}
         >
           <div>
-            <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <AppIcon name="search" />
+            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AppIcon name="search" size={18} />
               Ricerca Slot Liberi
-            </h2>
-            <p style={{ color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>Trova gli spazi di tempo disponibili per uno o più addetti.</p>
+            </h3>
+            <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginTop: 4 }}>
+              Trova gli spazi di tempo disponibili per uno o più addetti.
+            </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
             {searchResults && searchResults.length > 0 && (
-              <span className="badge badge-success" style={{ padding: '4px 8px', fontSize: '0.9rem', borderRadius: '12px' }}>
+              <span className="badge badge-success" style={{ padding: '4px 8px', fontSize: '0.85rem', borderRadius: '12px' }}>
                 {searchResults.length}
               </span>
             )}
-            {isSearchOpen ? <AppIcon name="chevronUp" /> : <AppIcon name="chevronDown" />}
+            <div
+              style={{ cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-secondary)' }}
+              onClick={() => setIsSearchOpen(!isSearchOpen)}
+            >
+              <AppIcon name={isSearchOpen ? "chevronUp" : "chevronDown"} size={20} />
+            </div>
           </div>
         </div>
 
         {isSearchOpen && (
-          <>
-            <form onSubmit={handleSearchSlots} style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', padding: '16px', background: 'var(--bg-primary)' }}>
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 16 }}>
+            <form onSubmit={handleSearchSlots} style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', padding: '16px', background: 'var(--bg-primary)', borderRadius: '8px' }}>
               <div style={{ flex: '1 1 200px' }}>
                 <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: 600 }}>Reparto</label>
                 <select
@@ -333,30 +420,40 @@ export default function ConflictMonitoringPage() {
                 />
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                <button type="submit" className="btn btn-primary" disabled={isSearching} style={{ height: '40px' }}>
+              <div style={{ flex: '1 1 150px' }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: 600 }}>A partire dal</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={searchParams.fromDate}
+                  onChange={e => setSearchParams({ ...searchParams, fromDate: e.target.value })}
+                />
+              </div>
+
+              <div style={{ flex: '1 1 100%', display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                <button type="submit" className="btn btn-primary" disabled={isSearching}>
+                  <AppIcon name="search" />
                   {isSearching ? 'Ricerca in corso...' : 'Cerca Slot'}
                 </button>
               </div>
             </form>
 
+            {/* Risultati Slot */}
             {searchResults && searchResults.length > 0 && (
-              <div style={{ borderTop: '1px solid var(--border-default)', background: 'var(--bg-primary)', overflowX: 'auto' }}>
-                <table className="table" style={{ width: '100%', margin: 0 }}>
+              <div style={{ marginTop: '16px', background: 'var(--bg-primary)', borderRadius: '8px', border: '1px solid var(--border-default)', overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
                   <thead>
-                    <tr>
-                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Addetto</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Reparto</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Inizio Slot</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Fine Slot</th>
+                    <tr style={{ background: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-default)' }}>
+                      <th style={{ padding: '12px 16px' }}>Addetto</th>
+                      <th style={{ padding: '12px 16px' }}>Reparto</th>
+                      <th style={{ padding: '12px 16px' }}>Data Inizio</th>
+                      <th style={{ padding: '12px 16px' }}>Data Fine</th>
                     </tr>
                   </thead>
                   <tbody>
                     {searchResults.slice(0, visibleResultsCount).map((res, idx) => (
-                      <tr key={idx} style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                        <td style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <AppIcon name="user" size={16} /> <strong>{res.user.full_name || res.user.username}</strong>
-                        </td>
+                      <tr key={idx} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                        <td style={{ padding: '12px 16px', fontWeight: 600 }}>{res.user.full_name || res.user.username}</td>
                         <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>
                           {res.user.department === 'ufficio_tecnico' ? 'Ufficio Tecnico' : res.user.department ? res.user.department.charAt(0).toUpperCase() + res.user.department.slice(1) : '-'}
                         </td>
@@ -379,41 +476,54 @@ export default function ConflictMonitoringPage() {
                 )}
               </div>
             )}
-            {isSearchOpen && (!searchResults || searchResults.length === 0) && !isSearching && (
-              <div style={{ padding: '16px', borderTop: '1px solid var(--border-default)', background: 'var(--bg-primary)', textAlign: 'center', color: 'var(--text-secondary)' }}>
+            {(!searchResults || searchResults.length === 0) && !isSearching && (
+              <div style={{ padding: '16px', marginTop: '12px', background: 'var(--bg-primary)', borderRadius: '8px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                 Nessun risultato da mostrare.
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
 
       {/* Conflitti Collapsible Section */}
-      <div style={{ background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-default)', overflow: 'hidden' }}>
+      <div className="workload-heatmap-container">
         <div
-          className="section-heading"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: isConflictsOpen ? 16 : 0,
+            cursor: 'pointer',
+            userSelect: 'none'
+          }}
           onClick={() => setIsConflictsOpen(!isConflictsOpen)}
-          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', transition: 'background 0.2s', margin: 0 }}
         >
           <div>
-            <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <AppIcon name="alert" />
+            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AppIcon name="alert" size={18} />
               Conflitti
-            </h2>
-            <p style={{ color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>Dettaglio delle sovrapposizioni critiche di pianificazione sulle fasi.</p>
+            </h3>
+            <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginTop: 4 }}>
+              Dettaglio delle sovrapposizioni critiche di pianificazione sulle fasi.
+            </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
             {conflicts.length > 0 && (
-              <span className="btn btn-primary btn-sm" style={{ padding: '4px 8px', fontSize: '0.9rem', borderRadius: '12px', color: '#fff' }}>
+              <span className="btn btn-primary btn-sm" style={{ padding: '4px 8px', fontSize: '0.85rem', borderRadius: '12px', color: '#fff' }}>
                 {conflicts.length}
               </span>
             )}
-            {isConflictsOpen ? <AppIcon name="chevronUp" /> : <AppIcon name="chevronDown" />}
+            <div
+              style={{ cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-secondary)' }}
+              onClick={() => setIsConflictsOpen(!isConflictsOpen)}
+            >
+              <AppIcon name={isConflictsOpen ? "chevronUp" : "chevronDown"} size={20} />
+            </div>
           </div>
         </div>
 
         {isConflictsOpen && (
-          <div style={{ padding: '16px', borderTop: '1px solid var(--border-default)', background: 'var(--bg-primary)' }}>
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 16 }}>
             {conflicts.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-state-icon"><AppIcon name="check" size={24} /></div>
@@ -466,40 +576,63 @@ export default function ConflictMonitoringPage() {
       </div>
 
       {/* Panoramica Ferie Collapsible Section */}
-      <div style={{ background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-default)', overflow: 'hidden' }}>
+      <div className="workload-heatmap-container">
         <div
-          className="section-heading"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: isVacationsOpen ? 16 : 0,
+            cursor: 'pointer',
+            userSelect: 'none'
+          }}
           onClick={() => setIsVacationsOpen(!isVacationsOpen)}
-          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', transition: 'background 0.2s', margin: 0 }}
         >
           <div>
-            <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '1.2rem' }}>
-                <AppIcon name="vacations" size={20} />
-              </span>
+            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AppIcon name="vacations" size={18} />
               Panoramica Ferie
-            </h2>
-            <p style={{ color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>Gestione centralizzata delle ferie inserite.</p>
+            </h3>
+            <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginTop: 4 }}>
+              Gestione centralizzata delle ferie inserite.
+            </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
             {(user?.role === 'admin' || user?.role === 'editor') && (
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setAddingVacation(true);
-                  if (!isVacationsOpen) setIsVacationsOpen(true);
-                }}
-              >
-                + Aggiungi Ferie
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAddingClosure(true);
+                    if (!isVacationsOpen) setIsVacationsOpen(true);
+                  }}
+                >
+                  + Chiusura Aziendale
+                </button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAddingVacation(true);
+                    if (!isVacationsOpen) setIsVacationsOpen(true);
+                  }}
+                >
+                  + Aggiungi Ferie
+                </button>
+              </div>
             )}
-            <div>{isVacationsOpen ? <AppIcon name="chevronUp" /> : <AppIcon name="chevronDown" />}</div>
+            <div
+              style={{ cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-secondary)' }}
+              onClick={() => setIsVacationsOpen(!isVacationsOpen)}
+            >
+              <AppIcon name={isVacationsOpen ? "chevronUp" : "chevronDown"} size={20} />
+            </div>
           </div>
         </div>
 
         {isVacationsOpen && (
-          <div style={{ padding: '16px', borderTop: '1px solid var(--border-default)', background: 'var(--bg-primary)' }}>
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 16 }}>
             {vacations.length === 0 ? (
               <div className="empty-state">
                 <p>Nessuna ferie inserita.</p>
@@ -510,15 +643,23 @@ export default function ConflictMonitoringPage() {
                   <table className="table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
                     <thead style={{ background: 'var(--bg-tertiary)' }}>
                       <tr>
-                        <th style={{ padding: '12px' }}>Addetto</th>
-                        <th style={{ padding: '12px' }}>Dal</th>
-                        <th style={{ padding: '12px' }}>Al</th>
-                        <th style={{ padding: '12px' }}>Motivo</th>
+                        <th style={{ padding: '12px', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleVacationSort('username')}>
+                          Addetto {vacationSortConfig.key === 'username' && (vacationSortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th style={{ padding: '12px', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleVacationSort('start_date')}>
+                          Dal {vacationSortConfig.key === 'start_date' && (vacationSortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th style={{ padding: '12px', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleVacationSort('end_date')}>
+                          Al {vacationSortConfig.key === 'end_date' && (vacationSortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th style={{ padding: '12px', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleVacationSort('reason')}>
+                          Motivo {vacationSortConfig.key === 'reason' && (vacationSortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
                         {(user?.role === 'admin' || user?.role === 'editor') && <th style={{ padding: '12px', textAlign: 'right' }}>Azioni</th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {vacations.sort((a, b) => b.start_date.localeCompare(a.start_date)).map(v => (
+                      {sortedVacations.slice(0, visibleVacationsCount).map(v => (
                         <tr key={v.id} style={{ borderTop: '1px solid var(--border-default)' }}>
                           <td style={{ padding: '12px', fontWeight: 600 }}>{v.full_name || v.username}</td>
                           <td style={{ padding: '12px' }}>{formatDate(v.start_date)}</td>
@@ -526,8 +667,8 @@ export default function ConflictMonitoringPage() {
                           <td style={{ padding: '12px', color: 'var(--text-secondary)' }}>{v.reason || '—'}</td>
                           {(user?.role === 'admin' || user?.role === 'editor') && (
                             <td style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                              <button className="btn btn-secondary btn-sm" style={{ marginRight: '8px' }} onClick={() => setEditingVacation(v)}>✏️ Modifica</button>
-                              <button className="btn btn-secondary btn-sm" style={{ color: 'var(--error-500)', borderColor: 'var(--error-500)' }} onClick={() => setDeletingVacation(v)}>🗑️ Elimina</button>
+                              <button className="btn btn-secondary btn-sm" style={{ marginRight: '8px' }} onClick={() => setEditingVacation(v)}><AppIcon name='edit' /> Modifica</button>
+                              <button className="btn btn-secondary btn-sm" style={{ color: 'var(--error-500)', borderColor: 'var(--error-500)' }} onClick={() => setDeletingVacation(v)}><AppIcon name='trash' /> Elimina</button>
                             </td>
                           )}
                         </tr>
@@ -535,6 +676,17 @@ export default function ConflictMonitoringPage() {
                     </tbody>
                   </table>
                 </div>
+                
+                {sortedVacations.length > visibleVacationsCount && (
+                  <div style={{ padding: '16px', textAlign: 'center', borderTop: '1px solid var(--border-default)' }}>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setVisibleVacationsCount(prev => prev + 10)}
+                    >
+                      Mostra altri 10 risultati
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -609,12 +761,11 @@ export default function ConflictMonitoringPage() {
             </div>
             <div className="modal-content">
               <p>Sei sicuro di voler eliminare le ferie di <strong>{deletingVacation.full_name || deletingVacation.username}</strong> dal {formatDate(deletingVacation.start_date)} al {formatDate(deletingVacation.end_date)}?</p>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '10px' }}>Questo ripristinerà eventuali conflitti o ore mancanti sulle fasi precedentemente accavallate.</p>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setDeletingVacation(null)}>
                   Annulla
                 </button>
-                <button type="button" className="btn btn-primary" style={{ background: 'var(--error-500)', borderColor: 'var(--error-500)' }} onClick={handleDeleteVacation}>
+                <button type="button" className="btn btn-primary" style={{ background: 'red', borderColor: 'red' }} onClick={handleDeleteVacation}>
                   Conferma Eliminazione
                 </button>
               </div>
@@ -681,6 +832,64 @@ export default function ConflictMonitoringPage() {
                 </div>
                 <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' }}>
                   <button type="button" className="btn btn-secondary" onClick={() => setAddingVacation(false)}>
+                    Annulla
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={submittingVacation}>
+                    {submittingVacation ? 'Salvataggio...' : 'Conferma'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale Chiusura Aziendale */}
+      {addingClosure && (
+        <div className="modal-overlay">
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
+            <div className="modal-header">
+              <h2>Inserisci Chiusura Aziendale</h2>
+              <button className="btn-ghost btn-icon" onClick={() => setAddingClosure(false)}>
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <div className="modal-content">
+              <p style={{ marginBottom: '16px', color: 'var(--text-secondary)' }}>
+                Questa azione aggiungerà i giorni di ferie selezionati a <strong>tutti gli addetti</strong>.
+              </p>
+              <form onSubmit={handleAddClosure} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div className="form-group">
+                  <label>Data di Inizio *</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={newClosure.start_date}
+                    onChange={(e) => setNewClosure({ ...newClosure, start_date: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Data di Fine *</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={newClosure.end_date}
+                    onChange={(e) => setNewClosure({ ...newClosure, end_date: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Descrizione</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={newClosure.reason}
+                    onChange={(e) => setNewClosure({ ...newClosure, reason: e.target.value })}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setAddingClosure(false)}>
                     Annulla
                   </button>
                   <button type="submit" className="btn btn-primary" disabled={submittingVacation}>

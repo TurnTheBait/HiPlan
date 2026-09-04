@@ -15,10 +15,10 @@ export default function ProfilePage() {
   );
   const [form, setForm] = useState({ start_date: '', end_date: '', reason: '' });
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({ full_name: '', username: '' });
+  const [editForm, setEditForm] = useState({ full_name: '', username: '', email: '' });
 
   function openEditModal() {
-    setEditForm({ full_name: user?.full_name || '', username: user?.username || '' });
+    setEditForm({ full_name: user?.full_name || '', username: user?.username || '', email: user?.email || '' });
     setShowEditModal(true);
   }
 
@@ -31,7 +31,8 @@ export default function ProfilePage() {
     try {
       await api.patch('/users/me', {
         full_name: editForm.full_name.trim() || null,
-        username: editForm.username.trim()
+        username: editForm.username.trim(),
+        email: editForm.email.trim()
       });
       toast.success('Profilo aggiornato con successo!');
       setShowEditModal(false);
@@ -182,6 +183,7 @@ export default function ProfilePage() {
             <div className="stat-value" style={{ fontSize: 14 }}>
               {user?.department === 'ufficio_tecnico' ? 'Ufficio Tecnico' :
                 user?.department === 'produzione' ? 'Produzione' :
+                  user?.department === 'amministrazione' ? 'Amministrazione' :
                   user?.department === 'acquisti' ? 'Acquisti' :
                     user?.department === 'admin' ? 'Admin' :
                       (user?.department || 'Nessuno')}
@@ -257,7 +259,7 @@ export default function ProfilePage() {
               <AppIcon name="alert-circle" /> Ore da Recuperare per Ferie
             </h3>
             <p style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
-              Le seguenti fasi hanno ore pianificate che cadono nei tuoi giorni di ferie. Queste ore andrebbero recuperate in accordo con il tuo responsabile.
+              Le seguenti fasi hanno ore pianificate che cadono nei tuoi giorni di ferie. Queste ore andrebbero recuperate in accordo con il tuo referente.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {recoveryItems
@@ -305,7 +307,10 @@ export default function ProfilePage() {
         <div className="modal-overlay">
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>👤 Modifica Profilo</h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AppIcon name="user" />
+                <div style={{ fontSize: '18px', fontWeight: '600' }}>Modifica Profilo</div>
+              </div>
               <button className="btn-ghost btn-icon" onClick={() => setShowEditModal(false)} aria-label="Chiudi">
                 <AppIcon name="close" />
               </button>
@@ -328,6 +333,16 @@ export default function ProfilePage() {
                   value={editForm.username}
                   onChange={e => setEditForm({ ...editForm, username: e.target.value })}
                   placeholder="Es. m.rossi"
+                />
+              </div>
+              <div className="input-group">
+                <label>Email *</label>
+                <input
+                  className="input"
+                  required
+                  value={editForm.email}
+                  onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                  placeholder="Es. m.rossi@hiway.it"
                 />
               </div>
               <div className="modal-footer">

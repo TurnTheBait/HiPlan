@@ -14,10 +14,15 @@ export default function WorkloadHeatmap() {
   const { user } = useAuth();
   const [heatmapData, setHeatmapData] = useState({});
   const [loading, setLoading] = useState(true);
+  const [isWorkloadOpen, setIsWorkloadOpen] = useState(false);
   const [leftColWidth, setLeftColWidth] = useState(200);
   const [expandedUsers, setExpandedUsers] = useState({});
   const [viewMode, setViewMode] = useState('day');
+  const [dataMode, setDataMode] = useState('both'); // 'planned', 'actual', 'both'
   const [dayDetails, setDayDetails] = useState(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportFormat, setExportFormat] = useState('pdf');
+  const exportMenuRef = React.useRef(null);
   const toast = useToast();
   const gridRef = React.useRef(null);
   useDragScroll(gridRef, [loading]);
@@ -40,10 +45,49 @@ export default function WorkloadHeatmap() {
     setExpandedUsers(prev => ({ ...prev, [userId]: !prev[userId] }));
   };
 
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) {
+        setShowExportMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleChatGPTAnalysis = () => {
+    const prompt = "Agisci come un esperto HR e Resource Planner. In allegato troverai l'export dei carichi di lavoro (ore pianificate vs ore consuntivate). Analizza la saturazione degli addetti, evidenziando chi è sovraccarico e chi ha disponibilità, e suggerisci eventuali ribilanciamenti.";
+    window.open('https://chatgpt.com/?q=' + encodeURIComponent(prompt), '_blank');
+  };
+
+  const handleExport = async (format) => {
+    try {
+      const response = await api.get(`/workload/export/${format}?mode=${dataMode}`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Saturazione_Carichi_Lavoro.${format === 'excel' ? 'xlsx' : 'pdf'}`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      toast.success(`Export ${format.toUpperCase()} completato!`);
+      setShowExportMenu(false);
+    } catch (err) {
+      console.error(err);
+      toast.error(`Errore durante l'esportazione in ${format.toUpperCase()}`);
+    }
+  };
+
   // Build full date range including weekends
   const allWorkDates = new Set();
   Object.values(heatmapData).forEach(u => {
-    Object.keys(u.workload).forEach(d => allWorkDates.add(d));
+    Object.keys(u.workload || {}).forEach(d => {
+      if (d && d !== '__extra__' && !isNaN(new Date(d).getTime())) allWorkDates.add(d);
+    });
+    Object.keys(u.actual_workload || {}).forEach(d => {
+      if (d && d !== '__extra__' && !isNaN(new Date(d).getTime())) allWorkDates.add(d);
+    });
   });
 
   let minDateStr = null;
@@ -71,12 +115,16 @@ export default function WorkloadHeatmap() {
 
   // Riempiamo tutti i giorni nel range in modo che la tabella mostri anche i periodi vuoti
   const fullDatesSet = new Set(allWorkDates);
-  const start = new Date(minDateStr);
-  const end = new Date(maxDateStr);
-  const cur = new Date(start);
-  while (cur <= end) {
-    fullDatesSet.add(cur.toISOString().substring(0, 10));
-    cur.setDate(cur.getDate() + 1);
+  let loopCount = 0;
+  if (minDateStr && maxDateStr) {
+    const start = new Date(minDateStr + 'T12:00:00Z');
+    const end = new Date(maxDateStr + 'T12:00:00Z');
+    const cur = new Date(start.getTime());
+    while (cur <= end) {
+      fullDatesSet.add(cur.toISOString().substring(0, 10));
+      cur.setUTCDate(cur.getUTCDate() + 1);
+      loopCount++;
+    }
   }
 
   const sortedDates = Array.from(fullDatesSet).sort();
@@ -144,7 +192,6 @@ export default function WorkloadHeatmap() {
     if (!loading && columns.length > 0) {
       scrollToToday();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, columns.length, viewMode]);
 
   const capacityMap = { day: 8, week: 40, month: 160 };
@@ -171,41 +218,163 @@ export default function WorkloadHeatmap() {
     return d + '/' + m + '/' + y;
   };
 
-  if (loading) return <div>Caricamento heatmap...</div>;
+  if (loading) return <div>Caricamento...</div>;
 
   return (
     <div className="workload-heatmap-container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+      <div 
+        style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          marginBottom: isWorkloadOpen ? 16 : 0,
+          cursor: 'pointer',
+          userSelect: 'none'
+        }}
+        onClick={() => setIsWorkloadOpen(!isWorkloadOpen)}
+      >
         <div>
-          <h3 style={{ margin: 0 }}>Saturazione Carichi di Lavoro</h3>
+          <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AppIcon name="users" size={18} />
+            Pianificazione Carichi di Lavoro
+          </h3>
           <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-            Panoramica ore assegnate nelle fasi dei vari progetti (ore previste, non a consuntivo)
+            {dataMode === 'planned' ? 'Panoramica ore assegnate nelle fasi dei vari progetti (ore previste, non a consuntivo)' : dataMode === 'actual' ? 'Panoramica ore effettivamente registrate (consuntivate) dagli addetti' : 'Panoramica ore consuntivate rispetto alle previste (Consuntivate / Previste)'}
           </span>
         </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={scrollToToday}
-            title="Centra la tabella sulla data di oggi"
-            style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+          {isWorkloadOpen && (
+            <>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={scrollToToday}
+                title="Centra la tabella sulla data di oggi"
+                style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <AppIcon name="calendar" size={15} />
+                Oggi
+              </button>
+              <select
+                className="input"
+                value={dataMode}
+                onChange={e => setDataMode(e.target.value)}
+                style={{ minWidth: 100, padding: '4px 8px', fontSize: '0.75rem' }}
+              >
+                <option value="both">Consuntivate / Pianificate</option>
+                <option value="planned">Solo Ore Pianificate</option>
+                <option value="actual">Solo Ore Consuntivate</option>
+              </select>
+              <select
+                className="input"
+                value={viewMode}
+                onChange={(e) => setViewMode(e.target.value)}
+                style={{ width: 200, padding: '4px 8px', fontSize: '0.75rem' }}
+              >
+                <option value="day">Per Giorno</option>
+                <option value="week">Per Settimana</option>
+                <option value="month">Per Mese</option>
+              </select>
+              <div style={{ position: 'relative' }} ref={exportMenuRef}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                >
+                  <AppIcon name="download" size={14} />
+                </button>
+                {showExportMenu && (
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: 8, background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-default)', borderRadius: 12, padding: 16, width: 320,
+                    boxShadow: '0 10px 25px rgba(0,0,0,0.2)', zIndex: 9999
+                  }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>Esporta Carichi di Lavoro</div>
+
+                    <div style={{ borderTop: '1px solid var(--border-default)', marginTop: 10, paddingTop: 12 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Formato:
+                      </div>
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <label style={{
+                          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                          background: exportFormat === 'pdf' ? 'rgba(239, 68, 68, 0.15)' : 'var(--bg-tertiary)',
+                          border: exportFormat === 'pdf' ? '2px solid #ef4444' : '1px solid var(--border-default)',
+                          color: exportFormat === 'pdf' ? '#ef4444' : 'var(--text-secondary)',
+                        }}>
+                          <input
+                            type="radio"
+                            name="exportFormat"
+                            value="pdf"
+                            checked={exportFormat === 'pdf'}
+                            onChange={() => setExportFormat('pdf')}
+                            style={{ display: 'none' }}
+                          />
+                          <AppIcon name="download" size={14} /> PDF
+                        </label>
+                        <label style={{
+                          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                          background: exportFormat === 'excel' ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-tertiary)',
+                          border: exportFormat === 'excel' ? '2px solid #10b981' : '1px solid var(--border-default)',
+                          color: exportFormat === 'excel' ? '#10b981' : 'var(--text-secondary)',
+                        }}>
+                          <input
+                            type="radio"
+                            name="exportFormat"
+                            value="excel"
+                            checked={exportFormat === 'excel'}
+                            onChange={() => setExportFormat('excel')}
+                            style={{ display: 'none' }}
+                          />
+                          <AppIcon name="download" size={14} /> Excel
+                        </label>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#10a37f', color: '#fff', borderColor: '#10a37f' }}
+                        onClick={() => { setShowExportMenu(false); handleChatGPTAnalysis(); }}
+                      >
+                        <img src="/chatgpt-logo.png" style={{ width: 16, height: 16, filter: 'brightness(0) invert(1)' }} alt="ChatGPT" />
+                        Analizza con ChatGPT
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ flex: 1 }}
+                        onClick={() => setShowExportMenu(false)}
+                      >
+                        Annulla
+                      </button>
+                      <button
+                        className="btn btn-primary"
+                        style={{ flex: 1 }}
+                        onClick={() => handleExport(exportFormat)}
+                      >
+                        Export {exportFormat.toUpperCase()}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+          <div 
+            style={{ cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-secondary)' }}
+            onClick={() => setIsWorkloadOpen(!isWorkloadOpen)}
           >
-            <AppIcon name="calendar" size={15} />
-            Oggi
-          </button>
-          <select
-            className="input"
-            value={viewMode}
-            onChange={(e) => setViewMode(e.target.value)}
-            style={{ width: 150 }}
-          >
-            <option value="day">Per Giorno</option>
-            <option value="week">Per Settimana</option>
-            <option value="month">Per Mese</option>
-          </select>
+            <AppIcon name={isWorkloadOpen ? "chevronUp" : "chevronDown"} size={20} />
+          </div>
         </div>
       </div>
 
-      <div className="heatmap-grid" ref={gridRef} style={{ gridTemplateColumns: `${leftColWidth}px repeat(` + columns.length + ', 90px)' }}>
+      {isWorkloadOpen && (
+        <div className="heatmap-grid" ref={gridRef} style={{ gridTemplateColumns: `${leftColWidth}px repeat(` + columns.length + ', 90px)' }}>
 
         {/* Header (Columns) */}
         <div className="heatmap-header-cell sticky-col sticky-header-col" style={{ position: 'relative' }}>
@@ -255,9 +424,20 @@ export default function WorkloadHeatmap() {
               className={'heatmap-header-cell' + (isTodayCol ? ' today-header' : '') + (isWeekendCol ? ' weekend-header' : '')}
               title={titleText}
             >
-              {columnsMap.get(colKey)}
-              {isTodayCol && (
-                <div style={{ fontSize: '0.7rem', color: 'var(--accent-500)', fontWeight: 800 }}>Oggi</div>
+              <div>{columnsMap.get(colKey)}</div>
+              {viewMode === 'day' ? (
+                <div style={{ fontSize: '0.75rem', fontWeight: isTodayCol ? 800 : 500, color: isTodayCol ? 'var(--accent-500)' : 'var(--text-secondary)' }}>
+                  {(() => {
+                    const [y, m, d] = colKey.split('-');
+                    const date = new Date(Date.UTC(y, parseInt(m) - 1, d, 12, 0, 0));
+                    const dayName = date.toLocaleDateString('it-IT', { weekday: 'short', timeZone: 'UTC' }).replace(/^\w/, c => c.toUpperCase());
+                    return isTodayCol ? `${dayName} (Oggi)` : dayName;
+                  })()}
+                </div>
+              ) : (
+                isTodayCol && (
+                  <div style={{ fontSize: '0.7rem', color: 'var(--accent-500)', fontWeight: 800 }}>Oggi</div>
+                )
               )}
             </div>
           );
@@ -267,34 +447,52 @@ export default function WorkloadHeatmap() {
         {Object.entries(heatmapData).sort(([, a], [, b]) => (a.full_name || '').localeCompare(b.full_name || '', 'it')).map(([userId, userData]) => {
 
           const aggregatedWorkload = {};
-          columns.forEach(c => aggregatedWorkload[c] = { hours: 0, tasks: [] });
+          columns.forEach(c => aggregatedWorkload[c] = { hours: 0, actual_hours: 0, tasks: [], actual_tasks: [] });
 
-          Object.entries(userData.workload).forEach(([dStr, dayData]) => {
-            const d = new Date(dStr);
-            let key;
-            if (viewMode === 'month') key = dStr.substring(0, 7);
-            else if (viewMode === 'week') {
-              const day = d.getDay();
-              const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-              const monday = new Date(d);
-              monday.setDate(diff);
-              key = monday.toISOString().substring(0, 10);
-            } else {
-              key = dStr;
-            }
+          const processWorkload = (sourceWorkload, isActualField) => {
+            Object.entries(sourceWorkload || {}).forEach(([dStr, dayData]) => {
+              const d = new Date(dStr);
+              let key;
+              if (viewMode === 'month') key = dStr.substring(0, 7);
+              else if (viewMode === 'week') {
+                const day = d.getDay();
+                const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+                const monday = new Date(d);
+                monday.setDate(diff);
+                key = monday.toISOString().substring(0, 10);
+              } else {
+                key = dStr;
+              }
 
-            if (aggregatedWorkload[key]) {
-              aggregatedWorkload[key].hours += dayData.hours;
-              dayData.tasks.forEach(t => {
-                const existing = aggregatedWorkload[key].tasks.find(x => x.id === t.id);
-                if (existing) {
-                  existing.hours += t.hours;
+              if (aggregatedWorkload[key]) {
+                let dailySumRounded = 0;
+                dayData.tasks.forEach(t => {
+                  const roundedTaskHours = Number(t.hours.toFixed(1));
+                  dailySumRounded += roundedTaskHours;
+
+                  const targetTasks = isActualField ? aggregatedWorkload[key].actual_tasks : aggregatedWorkload[key].tasks;
+                  const existing = targetTasks.find(x => x.id === t.id);
+                  if (existing) {
+                    existing.hours += roundedTaskHours;
+                  } else {
+                    targetTasks.push({ ...t, hours: roundedTaskHours });
+                  }
+                });
+                if (isActualField) {
+                  aggregatedWorkload[key].actual_hours += dailySumRounded;
                 } else {
-                  aggregatedWorkload[key].tasks.push({ ...t });
+                  aggregatedWorkload[key].hours += dailySumRounded;
                 }
-              });
-            }
-          });
+              }
+            });
+          };
+
+          if (dataMode === 'planned' || dataMode === 'both') {
+            processWorkload(userData.workload, false);
+          }
+          if (dataMode === 'actual' || dataMode === 'both') {
+            processWorkload(userData.actual_workload, dataMode === 'both' ? true : false);
+          }
 
           const isCurrentUser = userData.username === user?.username;
           return (
@@ -340,21 +538,54 @@ export default function WorkloadHeatmap() {
 
                 if (isVacation) {
                   tooltipText = 'Ferie (' + formatDateStr(colKey) + ')';
+                  if (data.tasks.length > 0) {
+                    tooltipText += '\n\n⚠️ ATTENZIONE: Ci sono ' + (data.hours?.toFixed(1) || 0) + 'h assegnate su un giorno di ferie!\n\n';
+                    tooltipText += data.tasks.map(t => '📁 ' + (t.project_name || 'Progetto') + '\n📌 ' + t.name + (t.type === 'milestone' ? '' : (': ' + (t.hours?.toFixed(1) || 0) + 'h (' + (columnsMap.get(colKey) || '') + ')'))).join('\n\n');
+                  }
                 } else if (isWeekendCol) {
                   tooltipText = formatDateStr(colKey) + ' (Sabato/Domenica/Festivo)';
                 } else if (data.tasks.length > 0) {
-                  tooltipText = data.tasks.map(t => '📁 ' + (t.project_name || 'Progetto') + '\n   📌 ' + t.name + ': ' + (t.hours?.toFixed(1) || 0) + 'h (' + columnsMap.get(colKey) + ') | Totale Fase: ' + (t.total_assigned_hours?.toFixed(1) || '-') + 'h').join('\n\n');
+                  tooltipText = data.tasks.map(t => '📁 ' + (t.project_name || 'Progetto') + '\n📌 ' + t.name + (t.type === 'milestone' ? '' : (': ' + (t.hours?.toFixed(1) || 0) + 'h (' + columnsMap.get(colKey) + ') | Totale Fase: ' + (t.total_assigned_hours?.toFixed(1) || '-') + 'h'))).join('\n\n');
                 } else {
                   tooltipText = 'Nessuna ora assegnata';
                 }
 
+                const getCellText = () => {
+                  if (dataMode === 'both') {
+                    if (data.actual_hours > 0 || data.hours > 0) {
+                      return `${data.actual_hours.toFixed(1)}h / ${data.hours.toFixed(1)}h`;
+                    }
+                    return '-';
+                  } else {
+                    return data.hours > 0 ? `${data.hours.toFixed(1)}h` : '-';
+                  }
+                };
+
+                const cellText = getCellText();
+                const cellTextNode = dataMode === 'both' && cellText !== '-' ? <span style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{cellText}</span> : cellText;
+
                 let displayContent;
                 if (isVacation) {
-                  displayContent = '🏖️';
+                  if (data.hours > 0 || (dataMode === 'both' && data.actual_hours > 0)) {
+                    displayContent = (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', color: '#dc2626', fontWeight: 'bold' }} title={tooltipText}>
+                        <AppIcon name="vacations" size={14} />
+                        {dataMode === 'both' ? cellTextNode : <span>{data.hours.toFixed(1)}h</span>}
+                      </div>
+                    );
+                  } else {
+                    displayContent = <AppIcon name="vacations" size={16} />;
+                  }
                 } else if (isWeekendCol) {
-                  displayContent = data.hours > 0 ? data.hours.toFixed(1) + 'h' : '';
+                  displayContent = cellText !== '-' ? cellTextNode : '';
                 } else {
-                  displayContent = data.hours > 0 ? data.hours.toFixed(1) + 'h' : '-';
+                  displayContent = cellTextNode;
+                }
+
+                const isConflict = isVacation && data.hours > 0;
+                const isClickable = data.tasks.length > 0 || (dataMode === 'both' && data.actual_tasks.length > 0);
+                if (isConflict) {
+                  colorClass = 'over-capacity';
                 }
 
                 return (
@@ -363,17 +594,21 @@ export default function WorkloadHeatmap() {
                     className={'heatmap-cell ' + colorClass + (colKey === todayKey ? ' today-cell' : '') + (isWeekendCol ? ' heatmap-weekend' : '')}
                     title={tooltipText}
                     onClick={() => {
-                      if (!isVacation && data.tasks.length > 0) {
+                      if (isClickable) {
                         setDayDetails({
                           user: userData.full_name,
                           date: colKey,
                           dateLabel: formatDateStr(colKey),
                           tasks: data.tasks,
-                          hours: data.hours
+                          actual_tasks: data.actual_tasks || [],
+                          hours: data.hours,
+                          actual_hours: data.actual_hours || 0
                         });
                       }
                     }}
-                    style={{ cursor: (!isVacation && data.tasks.length > 0) ? 'pointer' : 'default' }}
+                    style={{
+                      cursor: isClickable ? 'pointer' : 'default'
+                    }}
                   >
                     {displayContent}
                   </div>
@@ -383,10 +618,14 @@ export default function WorkloadHeatmap() {
               {/* Dettagli tasks se espanso (Timeline Nidificata) */}
               {expandedUsers[userId] && (() => {
                 const uniqueTasks = {};
-                Object.values(userData.workload).forEach(day => {
+                const currentWorkload = dataMode === 'actual' ? (userData.actual_workload || {}) : (userData.workload || {});
+                Object.values(currentWorkload).forEach(day => {
                   if (day.tasks) {
                     day.tasks.forEach(t => {
-                      if (!uniqueTasks[t.id]) uniqueTasks[t.id] = t;
+                      const isActive = t.project_status !== 'archived' && t.project_status !== 'completed';
+                      if (isActive && !uniqueTasks[t.id]) {
+                        uniqueTasks[t.id] = t;
+                      }
                     });
                   }
                 });
@@ -700,6 +939,7 @@ export default function WorkloadHeatmap() {
           );
         })}
       </div>
+      )}
 
       {/* Modale Dettagli Giorno (Visualizzazione al click) */}
       {dayDetails && (
@@ -713,22 +953,56 @@ export default function WorkloadHeatmap() {
             </div>
             <div className="modal-content">
               <p style={{ color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                Ore previste per questo giorno: <strong>{dayDetails.hours.toFixed(1)}h</strong>
+                {dataMode === 'planned' ? (
+                  <>Ore previste per questo giorno: <strong>{dayDetails.hours.toFixed(1)}h</strong></>
+                ) : dataMode === 'actual' ? (
+                  <>Ore consuntivate per questo giorno: <strong>{dayDetails.hours.toFixed(1)}h</strong></>
+                ) : (
+                  <>Ore Consuntivate / Previste: <strong>{dayDetails.actual_hours.toFixed(1)}h / {dayDetails.hours.toFixed(1)}h</strong></>
+                )}
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {dayDetails.tasks.map((t, idx) => (
-                  <div key={idx} style={{ padding: '12px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-default)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                    <div style={{ color: 'var(--accent-500)', fontWeight: 700, marginBottom: 4 }}>
-                      📁 {t.project_name || 'Progetto non specificato'}
+                {(() => {
+                  const combinedTasks = dataMode === 'both'
+                    ? [...dayDetails.tasks, ...(dayDetails.actual_tasks || []).filter(a => !dayDetails.tasks.some(p => p.id === a.id))]
+                    : dayDetails.tasks;
+
+                  return combinedTasks.map((t, idx) => (
+                    <div key={idx} style={{ padding: '12px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-default)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                      <div style={{ color: 'var(--accent-500)', fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <AppIcon name="folder" size={16} /> {t.project_code && t.project_name && t.project_name !== 'Progetto non specificato' ? `${t.project_code} - ${t.project_name}` : (t.project_code || t.project_name || 'Progetto non specificato')}
+                        </div>
+                        {t.project_id && (
+                          <button
+                            className="btn btn-secondary"
+                            onClick={() => navigate(`/projects/${t.project_id}`)}
+                            style={{ padding: '4px 12px', fontSize: '0.8rem', minHeight: 'unset' }}
+                          >
+                            Apri commessa
+                          </button>
+                        )}
+                      </div>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ color: 'var(--text-secondary)', display: 'flex' }}><AppIcon name="todo" size={16} /></span> {t.name}
+                      </div>
+                      {t.type !== 'milestone' && (
+                        <div style={{ marginTop: 8, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                          {dataMode === 'planned' ? (
+                            <>Assegnate: <strong style={{ color: 'var(--text-primary)' }}>{t.hours?.toFixed(1) || 0}h</strong> oggi su <strong style={{ color: 'var(--text-primary)' }}>{t.total_assigned_hours ? t.total_assigned_hours.toFixed(1) + 'h' : '-'}</strong> totali per questo addetto.</>
+                          ) : dataMode === 'actual' ? (
+                            <>Consuntivate: <strong style={{ color: 'var(--text-primary)' }}>{t.hours?.toFixed(1) || 0}h</strong> oggi.</>
+                          ) : (
+                            <>
+                              Consuntivate: <strong style={{ color: 'var(--text-primary)' }}>{dayDetails.actual_tasks?.find(a => a.id === t.id)?.hours?.toFixed(1) || 0}h</strong> /
+                              Previste: <strong style={{ color: 'var(--text-primary)' }}>{dayDetails.tasks?.find(p => p.id === t.id)?.hours?.toFixed(1) || 0}h</strong>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '1rem' }}>
-                      📌 {t.name}
-                    </div>
-                    <div style={{ marginTop: 8, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      Assegnate: <strong style={{ color: 'var(--text-primary)' }}>{t.hours?.toFixed(1) || 0}h</strong> oggi su <strong style={{ color: 'var(--text-primary)' }}>{t.total_assigned_hours ? t.total_assigned_hours.toFixed(1) + 'h' : '-'}</strong> totali per questo addetto.
-                    </div>
-                  </div>
-                ))}
+                  ));
+                })()}
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setDayDetails(null)}>

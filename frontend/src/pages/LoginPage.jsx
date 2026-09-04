@@ -42,7 +42,9 @@ function MonitorIcon() {
 const DEPARTMENT_OPTIONS = [
   { value: 'ufficio_tecnico', label: '🔧 Ufficio Tecnico' },
   { value: 'produzione', label: '🏭 Produzione' },
+  { value: 'amministrazione', label: '📄 Amministrazione' },
   { value: 'acquisti', label: '🛒 Acquisti' },
+  { value: 'commerciale', label: '💼 Commerciale' },
 ];
 
 export default function LoginPage() {

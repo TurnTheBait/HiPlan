@@ -1,8 +1,11 @@
 import json
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
+# pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends
+# pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
+# pyrefly: ignore [missing-import]
 from sqlalchemy.future import select
 from app.core.dependencies import get_db, get_current_user
 from app.models.user import User
@@ -16,8 +19,9 @@ async def get_workload_heatmap(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
+    # pyrefly: ignore [missing-import]
     from sqlalchemy.orm import joinedload
-    users_res = await db.execute(select(User).where(User.is_active == True))
+    users_res = await db.execute(select(User))
     users = users_res.scalars().all()
     
     tasks_res = await db.execute(select(Task).options(joinedload(Task.project)))
@@ -47,6 +51,7 @@ async def get_workload_heatmap(
             "username": u.username,
             "department": u.department,
             "workload": {},
+            "actual_workload": {},
             "vacations": vac_by_user.get(uid, [])
         }
         
@@ -78,54 +83,158 @@ async def get_workload_heatmap(
         start_date = task.start_date
         end_date = task.end_date
         
+        excluded_dates = []
+        try:
+            ex_dates_raw = getattr(task, 'excluded_dates', '[]')
+            if isinstance(ex_dates_raw, str):
+                excluded_dates = json.loads(ex_dates_raw or '[]')
+            elif isinstance(ex_dates_raw, list):
+                excluded_dates = ex_dates_raw
+        except:
+            excluded_dates = []
+            
         delta = end_date - start_date
         days = []
         for i in range(delta.days + 1):
             day = start_date + timedelta(days=i)
-            if day.weekday() < 5:
+            # Skip weekends and explicitly excluded dates
+            if day.weekday() < 5 and day.strftime("%Y-%m-%d") not in excluded_dates:
                 days.append(day)
                 
-        if not days:
-            continue
-            
-        worker_hours_map = {}
-        try:
-            worker_hours_map = json.loads(getattr(task, 'worker_hours', '{}')) or {}
-        except:
-            worker_hours_map = {}
+        task_type_str = task.type.value if hasattr(task.type, 'value') else str(task.type)
+        if task_type_str.lower() == "milestone" or task_type_str == "TaskType.MILESTONE":
+            task_type_str = "milestone"
 
-        planned_hours = task.planned_hours or 0.0
-        
-        for winfo in worker_info:
-            w_id = winfo["id"]
-            w_name = winfo["name"]
+        if days:
+            worker_hours_map = {}
+            try:
+                worker_hours_map = json.loads(getattr(task, 'worker_hours', '{}')) or {}
+            except:
+                worker_hours_map = {}
+
+            planned_hours = task.planned_hours or 0.0
             
-            if w_name in worker_hours_map and worker_hours_map[w_name] is not None:
-                try:
-                    assigned_total = float(worker_hours_map[w_name])
-                except:
+            for winfo in worker_info:
+                w_id = winfo["id"]
+                w_name = winfo["name"]
+                
+                if w_name in worker_hours_map and worker_hours_map[w_name] is not None:
+                    try:
+                        assigned_total = float(worker_hours_map[w_name])
+                    except:
+                        assigned_total = planned_hours / len(worker_info)
+                else:
                     assigned_total = planned_hours / len(worker_info)
-            else:
-                assigned_total = planned_hours / len(worker_info)
+                    
+                hours_per_day = assigned_total / len(days)
                 
-            hours_per_day = assigned_total / len(days)
+                for day in days:
+                    date_str = day.strftime("%Y-%m-%d")
+                    if date_str not in heatmap[w_id]["workload"]:
+                        heatmap[w_id]["workload"][date_str] = {"hours": 0.0, "tasks": []}
+                    
+                    daily_hours = 0.0 if task_type_str == "milestone" else hours_per_day
+                    
+                    heatmap[w_id]["workload"][date_str]["hours"] += daily_hours
+                    heatmap[w_id]["workload"][date_str]["tasks"].append({
+                        "id": str(task.id),
+                        "name": task.text,
+                        "project_name": task.project.name if task.project else "Progetto non specificato",
+                        "project_id": str(task.project.id) if task.project else None,
+                        "project_code": getattr(task.project, "code", None) if task.project else None,
+                        "project_status": getattr(task.project, "status", None) if task.project else None,
+                        "start_date": task.start_date.strftime("%Y-%m-%d"),
+                        "end_date": task.end_date.strftime("%Y-%m-%d"),
+                        "hours": daily_hours,
+                        "total_assigned_hours": 0.0 if task_type_str == "milestone" else assigned_total,
+                        "color": getattr(task, "color", None) or "#3b82f6",
+                        "type": task_type_str
+                    })
+
+        # Process actual hours
+        actual_hours_map = {}
+        try:
+            actual_hours_map = json.loads(getattr(task, 'actual_hours', '{}')) or {}
+        except:
+            pass
             
-            for day in days:
-                date_str = day.strftime("%Y-%m-%d")
-                if date_str not in heatmap[w_id]["workload"]:
-                    heatmap[w_id]["workload"][date_str] = {"hours": 0.0, "tasks": []}
+        for w_username, date_hrs in actual_hours_map.items():
+            if not isinstance(date_hrs, dict):
+                continue
                 
-                heatmap[w_id]["workload"][date_str]["hours"] += hours_per_day
-                heatmap[w_id]["workload"][date_str]["tasks"].append({
-                    "id": str(task.id),
-                    "name": task.text,
-                    "project_name": task.project.name if task.project else "Progetto non specificato",
-                    "project_id": str(task.project.id) if task.project else None,
-                    "start_date": task.start_date.strftime("%Y-%m-%d"),
-                    "end_date": task.end_date.strftime("%Y-%m-%d"),
-                    "hours": hours_per_day,
-                    "total_assigned_hours": assigned_total,
-                    "color": getattr(task, "color", None) or "#3b82f6"
-                })
+            w_id = None
+            for u in users:
+                if (u.username and u.username.lower() == w_username.lower()) or (u.full_name and w_username.lower() in u.full_name.lower()):
+                    w_id = str(u.id)
+                    break
+                    
+            if w_id:
+                # Calculate total actual for this user on this task
+                total_actual = 0.0
+                for v in date_hrs.values():
+                    try:
+                        total_actual += float(v)
+                    except:
+                        pass
+                        
+                for date_str, hrs in date_hrs.items():
+                    try:
+                        h_val = float(hrs)
+                    except:
+                        continue
+                        
+                    if h_val > 0:
+                        if date_str not in heatmap[w_id]["actual_workload"]:
+                            heatmap[w_id]["actual_workload"][date_str] = {"hours": 0.0, "tasks": []}
+                            
+                        heatmap[w_id]["actual_workload"][date_str]["hours"] += h_val
+                        heatmap[w_id]["actual_workload"][date_str]["tasks"].append({
+                            "id": str(task.id),
+                            "name": task.text,
+                            "project_name": task.project.name if task.project else "Progetto non specificato",
+                            "project_id": str(task.project.id) if task.project else None,
+                            "project_code": getattr(task.project, "code", None) if task.project else None,
+                            "project_status": getattr(task.project, "status", None) if task.project else None,
+                            "start_date": task.start_date.strftime("%Y-%m-%d") if task.start_date else None,
+                            "end_date": task.end_date.strftime("%Y-%m-%d") if task.end_date else None,
+                            "hours": h_val,
+                            "total_assigned_hours": total_actual,
+                            "color": getattr(task, "color", None) or "#3b82f6",
+                            "type": task_type_str
+                        })
                 
     return {"heatmap": heatmap}
+
+@router.get("/export/excel")
+async def export_workload_excel_route(
+    mode: str = "both",
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # pyrefly: ignore [missing-import]
+    from fastapi.responses import StreamingResponse
+    from app.services import export_service
+    data = await get_workload_heatmap(db, current_user)
+    buffer = await export_service.export_workload_excel(data["heatmap"], mode)
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=Saturazione_Carichi_Lavoro.xlsx"}
+    )
+
+@router.get("/export/pdf")
+async def export_workload_pdf_route(
+    mode: str = "both",
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # pyrefly: ignore [missing-import]
+    from fastapi.responses import StreamingResponse
+    from app.services import export_service
+    data = await get_workload_heatmap(db, current_user)
+    buffer = await export_service.export_workload_pdf(data["heatmap"], mode)
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=Saturazione_Carichi_Lavoro.pdf"}
+    )

@@ -8,16 +8,19 @@ import DashboardPage from './pages/DashboardPage';
 import ProjectsPage from './pages/ProjectsPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import CalendarPage from './pages/CalendarPage';
+import PersonalCalendarPage from './pages/PersonalCalendarPage';
 import NotesPage from './pages/NotesPage';
 import AdminPage from './pages/AdminPage';
 import ConflictMonitoringPage from './pages/ConflictMonitoringPage';
+import ReplanningAgentPage from './pages/ReplanningAgentPage';
 import ProfilePage from './pages/ProfilePage';
 import TicketsPage from './pages/TicketsPage';
 import TodoPage from './pages/TodoPage';
+import ChatPage from './pages/ChatPage';
 import './index.css';
 import './workspace-restyle.css';
 
-function ProtectedRoute({ children, adminOnly = false }) {
+function ProtectedRoute({ children, adminOnly = false, editorOrAdminOnly = false }) {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -31,6 +34,7 @@ function ProtectedRoute({ children, adminOnly = false }) {
 
   if (!user) return <Navigate to="/login" replace />;
   if (adminOnly && user.role !== 'admin') return <Navigate to="/dashboard" replace />;
+  if (editorOrAdminOnly && user.role !== 'admin' && user.role !== 'editor') return <Navigate to="/dashboard" replace />;
   return children;
 }
 
@@ -61,11 +65,21 @@ function AppRoutes() {
         <Route path="/projects/:id" element={<ProjectDetailPage />} />
         <Route path="/me" element={<ProfilePage />} />
         <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/personal-calendar" element={<PersonalCalendarPage />} />
         <Route path="/notes" element={<NotesPage />} />
         <Route path="/todo" element={<TodoPage />} />
         <Route path="/tickets" element={<TicketsPage />} />
         <Route path="/conflicts" element={<ConflictMonitoringPage />} />
         <Route path="/admin/conflicts" element={<ConflictMonitoringPage />} />
+        <Route
+          path="/replanning"
+          element={
+            <ProtectedRoute editorOrAdminOnly>
+              <ReplanningAgentPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/chat" element={<ChatPage />} />
         <Route
           path="/admin"
           element={

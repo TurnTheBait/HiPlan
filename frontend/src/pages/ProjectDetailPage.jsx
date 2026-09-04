@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api from '../api/client';
 import { useToast } from '../context/ToastContext';
@@ -14,19 +14,55 @@ import TaskComments from '../components/tasks/TaskComments';
 import TaskChecklist from '../components/tasks/TaskChecklist';
 import ActivityLogPanel from '../components/projects/ActivityLogModal';
 import AppIcon from '../components/ui/AppIcon';
+import MultiDatePicker from '../components/ui/MultiDatePicker';
 import SearchableCombobox from '../components/ui/SearchableCombobox';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Sparkles, Bot, RefreshCw, AlertTriangle, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import useWebSocket from '../hooks/useWebSocket';
 
-const DEPT_OPTIONS = [
+const departmentOptions = [
   { value: 'ufficio_tecnico', label: 'Ufficio Tecnico', color: '#3b82f6' },
-  { value: 'produzione', label: 'Produzione', color: '#10b981' },
-  { value: 'acquisti', label: 'Acquisti', color: '#f59e0b' },
+  { value: 'produzione', label: 'Produzione', color: '#f59e0b' },
+  { value: 'amministrazione', label: 'Amministrazione', color: '#64748b' },
+  { value: 'acquisti', label: 'Acquisti', color: '#10b981' },
+  { value: 'commerciale', label: 'Commerciale', color: '#ec4899' },
+  { value: 'condivisa', label: 'Condivisa tra più reparti', color: '#8b5cf6' },
 ];
+
+const deptNameMap = {
+  ufficio_tecnico: 'Ufficio Tecnico',
+  produzione: 'Produzione',
+  amministrazione: 'Amministrazione',
+  acquisti: 'Acquisti',
+  commerciale: 'Commerciale',
+  condivisa: 'Condivisa'
+};
+
+const deptColorMap = departmentOptions.reduce((acc, d) => ({ ...acc, [d.value]: d.color }), {});
+
+const DEPT_OPTIONS = departmentOptions;
 
 const BACKEND_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
   : `http://${window.location.hostname}:8000`;
-const ALL_DEPTS = DEPT_OPTIONS.map(d => d.value);
+const ALL_DEPTS = departmentOptions.map(d => d.value);
+
+const GANTT_ALL_COLUMNS = [
+  { id: 'start_date', label: 'Inizio' },
+  { id: 'end_date', label: 'Fine' },
+  { id: 'event_date', label: 'Data Evento' },
+  { id: 'duration', label: 'Durata' },
+  { id: 'progress', label: 'Progresso' },
+  { id: 'priority', label: 'Priorità' },
+  { id: 'workers', label: 'Addetti' },
+  { id: 'department', label: 'Reparto' }
+];
+
+const ALL_PHASE_TYPES = [
+  { id: 'task', label: 'Lavorazioni' },
+  { id: 'milestone', label: 'Eventi (Milestone)' }
+];
 
 const PREDEFINED_WORKERS_DEFAULT = [];
 
@@ -41,6 +77,7 @@ export default function ProjectDetailPage() {
   const [predefinedWorkers, setPredefinedWorkers] = useState(PREDEFINED_WORKERS_DEFAULT);
   const [usersList, setUsersList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
   // Calcolo WebSocket URL
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -50,15 +87,14 @@ export default function ProjectDetailPage() {
   const wsUrl = `${protocol}//${wsHost}/api/ws/projects/${id}`;
 
   const { isConnected: wsConnected } = useWebSocket(wsUrl, (msg) => {
-    if (['task_created', 'task_updated', 'task_deleted', 'link_created', 'link_deleted', 'project_updated', 'auto_reschedule_applied', 'auto_reschedule_undone', 'planning_agent_pause_changed'].includes(msg.action)) {
+    if (['task_created', 'task_updated', 'task_deleted', 'link_created', 'link_deleted', 'project_updated'].includes(msg.action)) {
       loadGanttDataOnly();
-      if (msg.action.startsWith('auto_reschedule_') || msg.action === 'planning_agent_pause_changed') loadRescheduling();
     }
   });
 
   async function loadGanttDataOnly() {
     try {
-      const ganttRes = await api.get(`/projects/${id}/gantt`);
+      const ganttRes = await api.get(`/projects/${id}/gantt?_t=${Date.now()}`);
       const sortedTasks = Array.isArray(ganttRes.data?.tasks)
         ? [...ganttRes.data.tasks].sort((a, b) => {
           const da = new Date(a.start_date ? String(a.start_date).split(' ')[0] : '1970-01-01');
@@ -66,6 +102,20 @@ export default function ProjectDetailPage() {
           if (da < db) return -1;
           if (da > db) return 1;
           return (a.id || 0) - (b.id || 0);
+        }).map(t => {
+          if (t.start_date && t.end_date && t.type !== 'milestone') {
+            t.orig_duration = t.duration;
+            const s = new Date(String(t.start_date).split(' ')[0] + 'T00:00:00');
+            const e = new Date(String(t.end_date).split(' ')[0] + 'T00:00:00');
+            let wDays = 0;
+            let cur = new Date(s);
+            while (cur <= e) {
+              if (cur.getDay() !== 0 && cur.getDay() !== 6) wDays++;
+              cur.setDate(cur.getDate() + 1);
+            }
+            t.duration = wDays > 0 ? wDays : 1;
+          }
+          return t;
         })
         : [];
       setGanttData({ ...ganttRes.data, tasks: sortedTasks });
@@ -82,16 +132,47 @@ export default function ProjectDetailPage() {
     return false;
   }, [user, project]);
 
-  // STATO PER COLONNE GANTT (leggiamo dal localStorage)
+  // STATO PER COLONNE GANTT (default: 'Attività' e 'Addetti', persistito in cache)
   const [visibleColumns, setVisibleColumns] = useState(() => {
-    const saved = localStorage.getItem('ganttVisibleColumns');
-    return saved ? JSON.parse(saved) : ['start_date', 'end_date', 'event_date', 'duration'];
+    try {
+      const saved = localStorage.getItem(`gantt_visible_cols_${id}`) || localStorage.getItem('ganttVisibleColumns_v2');
+      return saved ? JSON.parse(saved) : ['workers'];
+    } catch {
+      return ['workers'];
+    }
   });
   const [showColumnsMenu, setShowColumnsMenu] = useState(false);
 
-  // STATO PER FILTRO TIPO FASE
-  const [phaseFilter, setPhaseFilter] = useState('all'); // 'all', 'task', 'milestone'
+  useEffect(() => {
+    if (!id) return;
+    try {
+      localStorage.setItem(`gantt_visible_cols_${id}`, JSON.stringify(visibleColumns));
+      localStorage.setItem('ganttVisibleColumns_v2', JSON.stringify(visibleColumns));
+    } catch (e) { /* ignore */ }
+  }, [id, visibleColumns]);
+
+  // STATO PER FILTRO TIPO FASE (multiselezione persistita in cache fino a reset)
+  const [phaseTypes, setPhaseTypes] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`gantt_phase_types_${id}`);
+      if (saved) return JSON.parse(saved);
+      const old = localStorage.getItem(`gantt_phase_filter_${id}`);
+      if (old === 'task') return ['task'];
+      if (old === 'milestone') return ['milestone'];
+      return ['task', 'milestone'];
+    } catch {
+      return ['task', 'milestone'];
+    }
+  });
   const [showPhaseFilterMenu, setShowPhaseFilterMenu] = useState(false);
+  const [linkToDelete, setLinkToDelete] = useState(null);
+
+  useEffect(() => {
+    if (!id) return;
+    try {
+      localStorage.setItem(`gantt_phase_types_${id}`, JSON.stringify(phaseTypes));
+    } catch (e) { /* ignore */ }
+  }, [id, phaseTypes]);
 
   // STATO PER COLONNE TABELLA FASI
   const [tableVisibleColumns, setTableVisibleColumns] = useState(() => {
@@ -125,12 +206,94 @@ export default function ProjectDetailPage() {
   }
 
   const [showDeptMenu, setShowDeptMenu] = useState(false);
-  const [activeDepartments, setActiveDepartments] = useState(ALL_DEPTS);
+  // STATO PER FILTRO REPARTI (persistito in cache fino a reset)
+  const [activeDepartments, setActiveDepartments] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`gantt_active_depts_${id}`);
+      return saved ? JSON.parse(saved) : ALL_DEPTS;
+    } catch {
+      return ALL_DEPTS;
+    }
+  });
+
+  useEffect(() => {
+    if (!id) return;
+    try {
+      localStorage.setItem(`gantt_active_depts_${id}`, JSON.stringify(activeDepartments));
+    } catch (e) { /* ignore */ }
+  }, [id, activeDepartments]);
+
+  const [showWorkerMenu, setShowWorkerMenu] = useState(false);
+  // STATO PER FILTRO ADDETTI (persistito in cache fino a reset)
+  const [activeWorkers, setActiveWorkers] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`gantt_active_workers_${id}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    if (!id) return;
+    try {
+      localStorage.setItem(`gantt_active_workers_${id}`, JSON.stringify(activeWorkers));
+    } catch (e) { /* ignore */ }
+  }, [id, activeWorkers]);
+
   const [viewMode, setViewMode] = useState('day');
-  const [activeTab, setActiveTab] = useState(() => {
+  const [ganttResetKey, setGanttResetKey] = useState(0);
+
+  const handleResetGanttFiltersAndSort = () => {
+    // 1. Colonne predefinite: solo attività ed addetti
+    setVisibleColumns(['workers']);
+    try {
+      localStorage.setItem(`gantt_visible_cols_${id}`, JSON.stringify(['workers']));
+      localStorage.setItem('ganttVisibleColumns_v2', JSON.stringify(['workers']));
+    } catch (e) { /* ignore */ }
+
+    // 2. Tipo fase: tutte le fasi
+    setPhaseTypes(['task', 'milestone']);
+    try {
+      localStorage.setItem(`gantt_phase_types_${id}`, JSON.stringify(['task', 'milestone']));
+      localStorage.removeItem(`gantt_phase_filter_${id}`);
+    } catch (e) { /* ignore */ }
+
+    // 3. Addetti: nessun addetto selezionato (tutti visibili)
+    setActiveWorkers([]);
+    try {
+      localStorage.setItem(`gantt_active_workers_${id}`, JSON.stringify([]));
+    } catch (e) { /* ignore */ }
+
+    // 4. Reparti: tutti i reparti
+    setActiveDepartments(ALL_DEPTS);
+    try {
+      localStorage.setItem(`gantt_active_depts_${id}`, JSON.stringify(ALL_DEPTS));
+    } catch (e) { /* ignore */ }
+
+    // 5. Rimuove l'ordinamento in cache (per data inizio predefinita)
+    try {
+      localStorage.removeItem(`gantt_sort_state_${id}`);
+      localStorage.removeItem('gantt_sort_state_global');
+    } catch (e) { /* ignore */ }
+
+    // 6. Notifica GanttChart per forzare riordino per data inizio
+    setGanttResetKey(prev => prev + 1);
+
+    // Chiude tutti i menu a tendina
+    setShowColumnsMenu(false);
+    setShowPhaseFilterMenu(false);
+    setShowWorkerMenu(false);
+    setShowDeptMenu(false);
+
+    toast.success('Filtri e ordinamento reimpostati ai valori predefiniti');
+  };
+
+  const activeTabDefault = () => {
     const params = new URLSearchParams(window.location.search);
     return params.get('tab') || 'gantt';
-  });
+  };
+  const [activeTab, setActiveTab] = useState(activeTabDefault);
 
   // Stato Modale Nuova / Modifica Fase
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -140,6 +303,7 @@ export default function ProjectDetailPage() {
   const [phaseTemplates, setPhaseTemplates] = useState([]);
   const [showPhaseDropdown, setShowPhaseDropdown] = useState(false);
   const [taskForm, setTaskForm] = useState({
+    id: null,
     faseSel: PREDEFINED_PHASES[0],
     customText: '',
     color: PHASE_DEFAULT_COLORS[PREDEFINED_PHASES[0]] || '#3b82f6',
@@ -149,6 +313,7 @@ export default function ProjectDetailPage() {
     planned_hours: 8.0,
     workers: [],
     worker_hours: {},
+    excluded_dates: [],
     customWorker: '',
     department: null,
   });
@@ -162,13 +327,76 @@ export default function ProjectDetailPage() {
   const [specificExtraDate, setSpecificExtraDate] = useState('');
   const [allVacations, setAllVacations] = useState([]);
   const [openTicketsCount, setOpenTicketsCount] = useState(0);
-  const [rescheduling, setRescheduling] = useState({ paused: false, scenarios: [], preview: null, runs: [] });
-  const [reschedulingLoading, setReschedulingLoading] = useState(false);
-  const [visibleRunsCount, setVisibleRunsCount] = useState(3);
-  const [agentBusy, setAgentBusy] = useState(false);
-  const [applyingNow, setApplyingNow] = useState(false);
-  const [agentPanelExpanded, setAgentPanelExpanded] = useState(false);
-  const [semaforiExpanded, setSemaforiExpanded] = useState(true);
+  const [isAlertsExpanded, setIsAlertsExpanded] = useState(false);
+
+  // Stato Analisi HiPlan AI per Commessa con persistenza in cache locale
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
+
+  const getCachedAnalysis = (projId) => {
+    try {
+      const cached = localStorage.getItem(`hiplan_ai_analysis_${projId}`);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (e) {
+      console.error('Errore lettura cache analisi AI:', e);
+    }
+    return null;
+  };
+
+  const handleRunAiAnalysis = async (forceRefresh = false) => {
+    if (!forceRefresh) {
+      const cached = getCachedAnalysis(id);
+      if (cached) {
+        setAiAnalysis(cached);
+        return;
+      }
+    }
+
+    setIsAiAnalyzing(true);
+    try {
+      const res = await api.post(`/projects/${id}/ai-analysis`);
+      if (res.data && res.data.success) {
+        const now = new Date();
+        const dataWithMeta = {
+          ...res.data,
+          generated_at: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          generated_date: now.toLocaleDateString('it-IT')
+        };
+        setAiAnalysis(dataWithMeta);
+        try {
+          localStorage.setItem(`hiplan_ai_analysis_${id}`, JSON.stringify(dataWithMeta));
+        } catch (e) {
+          console.error('Errore salvataggio cache analisi AI:', e);
+        }
+        addToast('Analisi HiPlan AI completata con successo', 'success');
+      }
+    } catch (err) {
+      console.error('Errore analisi AI:', err);
+      addToast(err?.response?.data?.detail || 'Errore durante l\'analisi AI della commessa', 'error');
+    } finally {
+      setIsAiAnalyzing(false);
+    }
+  };
+
+  // Caricamento immediato da cache o reset al cambio commessa
+  useEffect(() => {
+    const cached = getCachedAnalysis(id);
+    setAiAnalysis(cached);
+  }, [id]);
+
+  // Se apro la tab e non è ancora in cache, avvia l'analisi per la prima volta
+  useEffect(() => {
+    if (activeTab === 'ai_analysis' && !aiAnalysis && !isAiAnalyzing) {
+      const cached = getCachedAnalysis(id);
+      if (cached) {
+        setAiAnalysis(cached);
+      } else {
+        handleRunAiAnalysis(false);
+      }
+    }
+  }, [activeTab, id]);
 
   // Stato Modale Modifica Dati Commessa
   const [showEditProjectModal, setShowEditProjectModal] = useState(false);
@@ -180,40 +408,50 @@ export default function ProjectDetailPage() {
     color: '#185FA5',
     start_date: '',
     end_date: '',
+    is_atex: false,
+    is_alimentare: false,
   });
 
   useEffect(() => {
     loadProject();
   }, [id]);
 
-  useEffect(() => {
-    if (user) loadRescheduling();
-    else setRescheduling({ paused: false, scenarios: [], preview: null, runs: [] });
-  }, [id, user?.id]);
-
-  useEffect(() => {
-    if (user?.role === 'viewer') setAgentPanelExpanded(true);
-  }, [user?.role]);
-
-  useEffect(() => {
-    if (activeTab === 'alert' && user) loadRescheduling();
-  }, [activeTab, agentPanelExpanded, id, user?.id]);
-
   const location = useLocation();
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const openTask = params.get('open_task');
+    const openTab = params.get('open_tab') || 'generale';
     if (openTask && ganttData.tasks && ganttData.tasks.length > 0) {
       const t = ganttData.tasks.find(t => String(t.id) === openTask);
       if (t && !showTaskModal) {
-        openEditTaskModal(t, 'commenti');
+        openEditTaskModal(t, openTab);
         // Remove from url
         params.delete('open_task');
+        params.delete('open_tab');
         navigate({ search: params.toString() }, { replace: true });
       }
     }
   }, [location.search, ganttData.tasks]);
+
+  // Sincronizza automaticamente le ore pianificate con l'addetto se c'è un solo addetto selezionato
+  useEffect(() => {
+    if (taskForm.taskType !== 'milestone' && taskForm.workers && taskForm.workers.length === 1) {
+      const singleWorker = taskForm.workers[0];
+      const plannedHours = Number(taskForm.planned_hours) || 0;
+      const currentWorkerHours = Number(taskForm.worker_hours?.[singleWorker]) || 0;
+
+      if (plannedHours !== currentWorkerHours) {
+        setTaskForm(prev => ({
+          ...prev,
+          worker_hours: {
+            ...prev.worker_hours,
+            [singleWorker]: plannedHours
+          }
+        }));
+      }
+    }
+  }, [taskForm.planned_hours, taskForm.workers, taskForm.taskType]);
 
   async function handleUploadAttachment(e) {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -265,7 +503,7 @@ export default function ProjectDetailPage() {
     try {
       const [projRes, ganttRes, usersRes, vacRes, ticketsRes] = await Promise.all([
         api.get(`/projects/${id}`),
-        api.get(`/projects/${id}/gantt`),
+        api.get(`/projects/${id}/gantt?_t=${Date.now()}`),
         api.get('/users').catch(() => ({ data: [] })),
         api.get('/vacations/all').catch(() => ({ data: [] })),
         api.get('/tickets', { params: { project_id: id } }).catch(() => ({ data: [] }))
@@ -279,6 +517,34 @@ export default function ProjectDetailPage() {
           if (da < db) return -1;
           if (da > db) return 1;
           return (a.id || 0) - (b.id || 0);
+        }).map(t => {
+          if (t.start_date && t.end_date && t.type !== 'milestone') {
+            t.orig_duration = t.duration;
+            const s = new Date(String(t.start_date).split(' ')[0] + 'T00:00:00');
+            const e = new Date(String(t.end_date).split(' ')[0] + 'T00:00:00');
+
+            let exDates = [];
+            if (typeof t.excluded_dates === 'string') {
+              try { exDates = JSON.parse(t.excluded_dates); } catch (e) { }
+            } else if (Array.isArray(t.excluded_dates)) {
+              exDates = t.excluded_dates;
+            }
+
+            let wDays = 0;
+            let cur = new Date(s);
+            while (cur <= e) {
+              const y = cur.getFullYear();
+              const m = String(cur.getMonth() + 1).padStart(2, '0');
+              const d = String(cur.getDate()).padStart(2, '0');
+              const dStr = `${y}-${m}-${d}`;
+              if (cur.getDay() !== 0 && cur.getDay() !== 6 && !exDates.includes(dStr)) {
+                wDays++;
+              }
+              cur.setDate(cur.getDate() + 1);
+            }
+            t.duration = wDays > 0 ? wDays : 1;
+          }
+          return t;
         })
         : [];
       setGanttData({ ...ganttRes.data, tasks: sortedTasks });
@@ -299,73 +565,6 @@ export default function ProjectDetailPage() {
       navigate('/projects');
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function loadRescheduling() {
-    if (!user) return;
-    try {
-      setReschedulingLoading(true);
-      const { data } = await api.get(`/projects/${id}/rescheduling`);
-      setRescheduling({
-        paused: Boolean(data?.paused),
-        scenarios: Array.isArray(data?.scenarios) ? data.scenarios : [],
-        preview: data?.preview || null,
-        runs: Array.isArray(data?.runs) ? data.runs : [],
-      });
-    } catch (err) {
-      console.error('Errore analisi ripianificazione:', err);
-    } finally {
-      setReschedulingLoading(false);
-    }
-  }
-
-  async function handleTogglePlanningAgent() {
-    const nextPaused = !rescheduling.paused;
-    const message = nextPaused
-      ? 'Mettere in pausa l’agente per questa commessa? Il Gantt non verrà più ripianificato automaticamente.'
-      : 'Riattivare l’agente per questa commessa? Dalla prossima analisi giornaliera potrà aggiornare automaticamente il Gantt.';
-    if (!window.confirm(message)) return;
-    try {
-      setAgentBusy(true);
-      const { data } = await api.post(`/projects/${id}/rescheduling/pause`, { paused: nextPaused });
-      setRescheduling(prev => ({ ...prev, paused: Boolean(data.paused) }));
-      await loadRescheduling();
-      toast.success(nextPaused ? 'Agente in pausa per questa commessa' : 'Agente riattivato');
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Impossibile aggiornare lo stato dell’agente');
-    } finally {
-      setAgentBusy(false);
-    }
-  }
-
-  async function handleApplyReschedulingNow() {
-    if (!window.confirm('Rianalizzare ora lo scenario globale? Ritardi, ferie e deficit consuntivi di tutte le commesse operative verranno aggregati per addetto e ripianificati rispettando le dipendenze.')) return;
-    try {
-      setAgentBusy(true);
-      setApplyingNow(true);
-      const { data } = await api.post(`/projects/${id}/rescheduling/apply`, { task_ids: [] });
-      toast.success(data?.solution_summary || 'Soluzioni applicate immediatamente');
-      await Promise.all([loadProject(), loadRescheduling()]);
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Impossibile applicare le soluzioni');
-    } finally {
-      setApplyingNow(false);
-      setAgentBusy(false);
-    }
-  }
-
-  async function handleUndoRescheduling(runId) {
-    if (!window.confirm('Annullare questa ripianificazione automatica e ripristinare le date precedenti?')) return;
-    try {
-      setAgentBusy(true);
-      await api.post(`/projects/${id}/rescheduling/${runId}/undo`);
-      toast.success('Ripianificazione annullata e date ripristinate');
-      await Promise.all([loadProject(), loadRescheduling()]);
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Impossibile annullare la ripianificazione');
-    } finally {
-      setAgentBusy(false);
     }
   }
 
@@ -434,27 +633,32 @@ export default function ProjectDetailPage() {
     }
   }
 
-  function formatAgentReason(reason = '') {
-    return reason
-      .replace(/ferie sovrapposte in (\d+) giorni lavorativi/gi, 'Ferie: $1 giorni')
-      .replace(/([\d.]+)h già pianificate in recuperi precedenti/gi, '$1h già recuperate')
-      .replace(/([\d.]+)h non consuntivate rispetto all'avanzamento atteso/gi, '$1h non consuntivate');
+  function formatDateItalian(d) {
+    const str = formatDateOnly(d);
+    if (!str) return '';
+    const parts = str.split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return str;
   }
 
   // Calcolo stato semaforo e ore giornaliere previste (algoritmo prototipo Ufficio Tecnico)
   function computeStato(task) {
     if (!task) return 'ok';
+    if (task.type === 'milestone' || task.type === 'project') return 'ok';
     const totEff = calculateTaskEffHours(task);
     const plannedH = Number(task.planned_hours || 8.0);
     if (plannedH > 0 && totEff > plannedH) {
       return 'sforamento';
     }
+    const isCompleted = isTaskCompleted(task);
+    if (!isCompleted && (!task.workers || task.workers.length === 0) && task.type !== 'milestone') {
+      return 'orfana';
+    }
     if (plannedH > 0 && totEff === plannedH) {
       return 'ok';
     }
-    if (task.has_vacation_conflict) return 'ritardo_ferie';
     if (!task.start_date) return 'ok';
-    if (isTaskCompleted(task)) return 'ok';
+    if (isCompleted) return 'ok';
     const startStr = formatDateOnly(task.start_date);
     const endStr = task.end_date ? formatDateOnly(task.end_date) : startStr;
     if (!startStr) return 'ok';
@@ -476,6 +680,7 @@ export default function ProjectDetailPage() {
 
     let hasRitardo = false;
     let hasAttenzione = false;
+    let hasZeroHours = false;
 
     cur = new Date(start);
     while (cur <= end && cur <= today) {
@@ -492,10 +697,13 @@ export default function ProjectDetailPage() {
             if (dayMap && dayMap[dateStr]) totDayEff += Number(dayMap[dateStr]) || 0;
           });
         }
-        if (totDayEff < oreGg * 0.5 || (totDayEff === 0 && oreGg > 0)) {
+
+        if (totDayEff > 0 && totDayEff < oreGg * 0.5) {
           hasRitardo = true;
-        } else if (totDayEff < oreGg) {
+        } else if (totDayEff > 0 && totDayEff < oreGg) {
           hasAttenzione = true;
+        } else if (totDayEff === 0 && oreGg > 0) {
+          hasZeroHours = true;
         }
       }
       cur.setDate(cur.getDate() + 1);
@@ -503,6 +711,7 @@ export default function ProjectDetailPage() {
 
     if (hasRitardo) return 'ritardo';
     if (hasAttenzione) return 'attenzione';
+    if (hasZeroHours) return 'mancata_consuntivazione';
     return 'ok';
   }
 
@@ -548,15 +757,41 @@ export default function ProjectDetailPage() {
       eff += tEff;
 
       const st = computeStato(t);
-      if (st === 'ritardo' || st === 'attenzione' || st === 'ritardo_ferie') {
+      if (['ritardo', 'attenzione', 'ritardo_ferie', 'sforamento', 'orfana', 'mancata_consuntivazione'].includes(st)) {
         delays.push({ task: t, stato: st, tEff });
       }
     });
 
+    if (project && (!project.responsible_id && !project.responsible_name) && (user?.role === 'admin' || user?.role === 'editor')) {
+      delays.push({ isProjectAlert: true, type: 'no_responsible', text: 'Commessa senza responsabile assegnato', stato: 'no_responsible' });
+    }
+
     return { totalPrev: prev, totalEff: eff, delaysList: delays };
-  }, [ganttData.tasks]);
+  }, [ganttData.tasks, project, user?.role]);
 
   // Gestione Task da Gantt e Form
+  async function handleTaskUpdate(taskId, data) {
+    if (project && project.end_date) {
+      if (data.end_date && data.end_date.substring(0, 10) > project.end_date) {
+        toast.error(`La data di fine fase non può superare la data di fine commessa (${formatDateItalian(project.end_date)})`);
+        loadProject();
+        return;
+      }
+      if (data.start_date && data.start_date.substring(0, 10) > project.end_date) {
+        toast.error(`La data di inizio fase non può superare la data di fine commessa (${formatDateItalian(project.end_date)})`);
+        loadProject();
+        return;
+      }
+    }
+    try {
+      await api.put(`/projects/${id}/tasks/${taskId}`, data);
+      loadProject();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Errore aggiornamento fase');
+      loadProject();
+    }
+  }
+
   async function handleSaveNotes() {
     try {
       await api.put(`/projects/${id}`, { notes: notesText });
@@ -568,11 +803,26 @@ export default function ProjectDetailPage() {
   }
 
   async function handleTaskCreate(data, tempId) {
+    if (project && project.end_date) {
+      if (data.end_date && data.end_date.substring(0, 10) > project.end_date) {
+        toast.error(`La data di fine fase non può superare la data di fine commessa (${formatDateItalian(project.end_date)})`);
+        loadProject();
+        return;
+      }
+      if (data.start_date && data.start_date.substring(0, 10) > project.end_date) {
+        toast.error(`La data di inizio fase non può superare la data di fine commessa (${formatDateItalian(project.end_date)})`);
+        loadProject();
+        return;
+      }
+    }
     try {
       const { data: created } = await api.post(`/projects/${id}/tasks`, data);
       if (tempId) gantt.changeTaskId(tempId, created.id);
       loadProject();
-    } catch { toast.error('Errore creazione fase'); }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Errore creazione fase');
+      loadProject();
+    }
   }
 
   async function handleTaskDelete(taskId, skipConfirm = false) {
@@ -585,9 +835,20 @@ export default function ProjectDetailPage() {
 
   async function handleToggleTaskCompleted(task, currentIsCompleted) {
     if (!canManageProject) {
-      toast.error('Solo proprietario, responsabile o editor possono segnare la fase come completata/in corso');
-      return;
+      toast.error('Solo proprietario, referente o editor possono segnare la fase come completata/in corso');
+      return false;
     }
+
+    if (currentIsCompleted) {
+      if (user?.role !== 'admin' && user?.role !== 'editor') {
+        toast.error('Solo un admin o un editor può riaprire una fase già completata.');
+        return false;
+      }
+      if (!window.confirm(`Sei sicuro di voler riaprire la fase "${task.text}"?`)) return false;
+    } else {
+      if (!window.confirm(`Sei sicuro di voler segnare la fase "${task.text}" come completata?`)) return false;
+    }
+
     const newCompleted = currentIsCompleted ? -1 : 1;
     try {
       await api.put(`/projects/${id}/tasks/${task.id}`, {
@@ -595,34 +856,56 @@ export default function ProjectDetailPage() {
       });
       toast.success(newCompleted === 1 ? 'Fase completata!' : 'Fase ripristinata in corso');
       loadProject();
+      return true;
     } catch {
       toast.error("Errore durante l'aggiornamento dello stato della fase");
+      return false;
     }
   }
 
   async function handleLinkCreate(data, tempId) {
     try {
       const { data: created } = await api.post(`/projects/${id}/links`, data);
+      const newLinkId = created?.id || tempId;
       if (tempId && gantt.isLinkExists && gantt.isLinkExists(tempId)) {
-        gantt.changeLinkId(tempId, created.id);
+        gantt.changeLinkId(tempId, newLinkId);
       }
-      loadProject();
+      setGanttData(prev => {
+        const newLink = {
+          id: String(newLinkId),
+          source: String(data.source),
+          target: String(data.target),
+          type: String(data.type || '0')
+        };
+        if (prev.links.some(l => String(l.id) === String(newLinkId))) return prev;
+        return { ...prev, links: [...prev.links, newLink] };
+      });
     } catch {
       toast.error('Errore creazione dipendenza');
       if (tempId && gantt.isLinkExists && gantt.isLinkExists(tempId)) {
+        window.__programmaticLinkDelete = true;
         gantt.deleteLink(tempId);
+        window.__programmaticLinkDelete = false;
       }
     }
   }
 
   async function handleLinkDelete(linkId, skipConfirm = false) {
-    if (!skipConfirm && !window.confirm("Confermi l'eliminazione di questa dipendenza tra fasi?")) return;
+    if (!skipConfirm) {
+      setLinkToDelete(linkId);
+      return;
+    }
     try {
       await api.delete(`/projects/${id}/links/${linkId}`);
-      loadProject();
+      setGanttData(prev => ({
+        ...prev,
+        links: prev.links.filter(l => String(l.id) !== String(linkId))
+      }));
+      setLinkToDelete(null);
     } catch (e) {
       toast.error('Errore eliminazione dipendenza');
       console.error(e);
+      setLinkToDelete(null);
     }
   }
 
@@ -630,7 +913,8 @@ export default function ProjectDetailPage() {
     fetchPhaseTemplates();
     const available = getAvailableTemplates();
     const initialFase = '__custom__';
-    const initialColor = '#3b82f6';
+    const initialDept = user?.department && user.department !== 'admin' ? user.department : 'ufficio_tecnico';
+    const initialColor = departmentOptions.find(d => d.value === initialDept)?.color || '#3b82f6';
 
     setEditingTask(null);
     setTaskModalTab('generale');
@@ -648,7 +932,7 @@ export default function ProjectDetailPage() {
       workers: [],
       worker_hours: {},
       customWorker: '',
-      department: user?.department && user.department !== 'admin' ? user.department : 'ufficio_tecnico',
+      department: initialDept,
       completed: 0,
     });
     setShowTaskModal(true);
@@ -659,7 +943,18 @@ export default function ProjectDetailPage() {
       openOreModalForTask(task);
       return;
     }
-    const realTask = (ganttData && Array.isArray(ganttData.tasks) ? ganttData.tasks.find(t => String(t.id) === String(task.id)) : null) || task;
+    let realTask = null;
+    if (ganttData && Array.isArray(ganttData.tasks)) {
+      realTask = ganttData.tasks.find(t => String(t.id) === String(task.id));
+    }
+    if (!realTask) {
+      realTask = { ...task };
+      if (realTask.end_date && realTask.type !== 'milestone') {
+        const ed = new Date(realTask.end_date);
+        ed.setDate(ed.getDate() - 1);
+        realTask.end_date = ed;
+      }
+    }
 
     fetchPhaseTemplates();
     const available = getAvailableTemplates();
@@ -679,8 +974,8 @@ export default function ProjectDetailPage() {
 
     const s = safeDate(realTask.start_date);
     const e = safeDate(realTask.end_date);
-    const diff = countWorkingDays(s, e);
-    const taskDur = Number(realTask.duration) || diff;
+    const diff = countWorkingDays(s, e, realTask.excluded_dates);
+    const taskDur = Number(realTask.orig_duration) || Number(realTask.duration) || diff;
     const taskPlan = Number(realTask.planned_hours) || (taskDur * 8.0);
     const mode = realTask.budget_mode || realTask.budgetMode || (Math.abs(taskPlan - taskDur * 8.0) > 0.1 ? 'start_days_hours' : 'start_days');
     setBudgetMode(mode);
@@ -700,6 +995,7 @@ export default function ProjectDetailPage() {
       budgetMode: mode,
       workers: Array.isArray(realTask.workers) ? realTask.workers : [],
       worker_hours: typeof realTask.worker_hours === 'object' ? realTask.worker_hours : {},
+      excluded_dates: Array.isArray(realTask.excluded_dates) ? realTask.excluded_dates : [],
       customWorker: '',
       department: realTask.department || (user?.department && user.department !== 'admin' ? user.department : 'ufficio_tecnico'),
       completed: compVal,
@@ -713,37 +1009,37 @@ export default function ProjectDetailPage() {
     setTaskForm(prev => {
       const updates = { budgetMode: newMode };
       if (newMode === 'start_end') {
-        const days = countWorkingDays(prev.start_date, prev.end_date);
+        const days = countWorkingDays(prev.start_date, prev.end_date, prev.excluded_dates);
         updates.duration_days = days;
         updates.planned_hours = days * 8.0;
       } else if (newMode === 'start_hours') {
         const hours = Number(prev.planned_hours) || 8;
         const days = Math.max(1, Math.ceil(hours / 8.0));
         updates.duration_days = days;
-        updates.end_date = addWorkingDays(prev.start_date || new Date(), days);
+        updates.end_date = addWorkingDays(prev.start_date || new Date(), days, prev.excluded_dates);
       } else if (newMode === 'end_hours') {
         const hours = Number(prev.planned_hours) || 8;
         const days = Math.max(1, Math.ceil(hours / 8.0));
         updates.duration_days = days;
-        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days);
+        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days, prev.excluded_dates);
       } else if (newMode === 'start_days') {
         const days = Math.max(1, Number(prev.duration_days) || 1);
         updates.duration_days = days;
-        updates.end_date = addWorkingDays(prev.start_date || new Date(), days);
+        updates.end_date = addWorkingDays(prev.start_date || new Date(), days, prev.excluded_dates);
         updates.planned_hours = days * 8.0;
       } else if (newMode === 'end_days') {
         const days = Math.max(1, Number(prev.duration_days) || 1);
         updates.duration_days = days;
-        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days);
+        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days, prev.excluded_dates);
         updates.planned_hours = days * 8.0;
       } else if (newMode === 'start_days_hours') {
         const days = Math.max(1, Number(prev.duration_days) || 1);
         updates.duration_days = days;
-        updates.end_date = addWorkingDays(prev.start_date || new Date(), days);
+        updates.end_date = addWorkingDays(prev.start_date || new Date(), days, prev.excluded_dates);
       } else if (newMode === 'end_days_hours') {
         const days = Math.max(1, Number(prev.duration_days) || 1);
         updates.duration_days = days;
-        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days);
+        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days, prev.excluded_dates);
       }
       return { ...prev, ...updates };
     });
@@ -753,7 +1049,7 @@ export default function ProjectDetailPage() {
     setTaskForm(prev => {
       const updates = { start_date: newStart };
       if (budgetMode === 'start_end') {
-        const days = countWorkingDays(newStart, prev.end_date);
+        const days = countWorkingDays(newStart, prev.end_date, prev.excluded_dates);
         if (new Date(newStart) > new Date(prev.end_date)) {
           updates.end_date = newStart;
           updates.duration_days = 1;
@@ -764,7 +1060,7 @@ export default function ProjectDetailPage() {
         }
       } else if (budgetMode === 'start_hours' || budgetMode === 'start_days' || budgetMode === 'start_days_hours') {
         const days = Math.max(1, Number(prev.duration_days) || 1);
-        updates.end_date = addWorkingDays(newStart, days);
+        updates.end_date = addWorkingDays(newStart, days, prev.excluded_dates);
       }
       return { ...prev, ...updates };
     });
@@ -774,7 +1070,7 @@ export default function ProjectDetailPage() {
     setTaskForm(prev => {
       const updates = { end_date: newEnd };
       if (budgetMode === 'start_end') {
-        const days = countWorkingDays(prev.start_date, newEnd);
+        const days = countWorkingDays(prev.start_date, newEnd, prev.excluded_dates);
         if (new Date(newEnd) < new Date(prev.start_date)) {
           updates.start_date = newEnd;
           updates.duration_days = 1;
@@ -785,7 +1081,7 @@ export default function ProjectDetailPage() {
         }
       } else if (budgetMode === 'end_hours' || budgetMode === 'end_days' || budgetMode === 'end_days_hours') {
         const days = Math.max(1, Number(prev.duration_days) || 1);
-        updates.start_date = subtractWorkingDays(newEnd, days);
+        updates.start_date = subtractWorkingDays(newEnd, days, prev.excluded_dates);
       }
       return { ...prev, ...updates };
     });
@@ -796,15 +1092,15 @@ export default function ProjectDetailPage() {
     setTaskForm(prev => {
       const updates = { duration_days: daysVal };
       if (budgetMode === 'start_days') {
-        updates.end_date = addWorkingDays(prev.start_date || new Date(), days);
+        updates.end_date = addWorkingDays(prev.start_date || new Date(), days, prev.excluded_dates);
         updates.planned_hours = days * 8.0;
       } else if (budgetMode === 'end_days' || budgetMode === 'end_days_hours') {
-        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days);
+        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days, prev.excluded_dates);
         if (budgetMode === 'end_days') {
           updates.planned_hours = days * 8.0;
         }
       } else if (budgetMode === 'start_days_hours') {
-        updates.end_date = addWorkingDays(prev.start_date || new Date(), days);
+        updates.end_date = addWorkingDays(prev.start_date || new Date(), days, prev.excluded_dates);
       }
       return { ...prev, ...updates };
     });
@@ -817,11 +1113,11 @@ export default function ProjectDetailPage() {
       if (budgetMode === 'start_hours') {
         const days = Math.max(1, Math.ceil(hours / 8.0));
         updates.duration_days = days;
-        updates.end_date = addWorkingDays(prev.start_date || new Date(), days);
+        updates.end_date = addWorkingDays(prev.start_date || new Date(), days, prev.excluded_dates);
       } else if (budgetMode === 'end_hours') {
         const days = Math.max(1, Math.ceil(hours / 8.0));
         updates.duration_days = days;
-        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days);
+        updates.start_date = subtractWorkingDays(prev.end_date || new Date(), days, prev.excluded_dates);
       }
       return { ...prev, ...updates };
     });
@@ -829,7 +1125,7 @@ export default function ProjectDetailPage() {
 
   function applyDurationPreset(days, hours) {
     const sDate = taskForm.start_date || new Date().toISOString().split('T')[0];
-    const newEnd = addWorkingDays(sDate, days);
+    const newEnd = addWorkingDays(sDate, days, taskForm.excluded_dates);
     setTaskForm({
       ...taskForm,
       duration_days: days,
@@ -848,16 +1144,34 @@ export default function ProjectDetailPage() {
     const isMilestone = taskForm.taskType === 'milestone';
     const sDate = taskForm.start_date;
     const eDate = taskForm.end_date;
-    const diffDays = countWorkingDays(sDate, eDate);
+    const diffDays = countWorkingDays(sDate, eDate, taskForm.excluded_dates);
     const finalDays = Math.max(1, Number(taskForm.duration_days) || diffDays);
     const plannedHours = isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDays * 8.0));
 
     if (!isMilestone && taskForm.workers && taskForm.workers.length > 0) {
-      const sumWorkerHours = Number(taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0).toFixed(2));
-      if (sumWorkerHours > plannedHours) {
-        toast.error(`Le ore assegnate agli addetti (${sumWorkerHours}h) superano il budget totale della fase (${plannedHours}h).`);
+      const sumWorkerHours = taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0);
+      const roundedSum = Math.round(sumWorkerHours * 10) / 10;
+      const roundedPlanned = Math.round(plannedHours * 10) / 10;
+      if (roundedSum > roundedPlanned) {
+        toast.error(`Le ore assegnate agli addetti (${roundedSum}h) superano il budget totale della fase (${roundedPlanned}h).`);
         return;
       }
+    }
+
+    if (project && project.end_date) {
+      if (taskForm.end_date && taskForm.end_date > project.end_date) {
+        toast.error(`La data di fine fase non può superare la data di fine commessa (${formatDateItalian(project.end_date)})`);
+        return;
+      }
+      if (taskForm.start_date && taskForm.start_date > project.end_date) {
+        toast.error(`La data di inizio fase non può superare la data di fine commessa (${formatDateItalian(project.end_date)})`);
+        return;
+      }
+    }
+
+    let finalWorkerHours = taskForm.worker_hours;
+    if (taskForm.workers && taskForm.workers.length === 1 && !isMilestone) {
+      finalWorkerHours = { [taskForm.workers[0]]: plannedHours };
     }
 
     const payload = {
@@ -865,47 +1179,101 @@ export default function ProjectDetailPage() {
       start_date: taskForm.start_date,
       end_date: isMilestone ? taskForm.start_date : taskForm.end_date,
       duration: isMilestone ? 0 : finalDays,
-      planned_hours: isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDays * 8.0)),
+      planned_hours: plannedHours,
       workers: taskForm.workers,
-      worker_hours: taskForm.worker_hours,
+      worker_hours: finalWorkerHours,
       type: isMilestone ? 'milestone' : 'task',
       color: taskForm.color || (isMilestone ? '#f59e0b' : null),
       department: taskForm.department || null,
       budget_mode: taskForm.budgetMode || budgetMode || 'start_days',
       completed: isMilestone ? 0 : (taskForm.completed !== undefined && taskForm.completed !== null ? Number(taskForm.completed) : 0),
+      excluded_dates: taskForm.excluded_dates || [],
     };
 
 
     try {
       if (editingTask) {
         const res = await api.put(`/projects/${id}/tasks/${editingTask.id}`, payload);
-        const returnedStart = res.data?.start_date?.slice(0, 10);
-        const returnedEnd = res.data?.end_date?.slice(0, 10);
-        const automaticallyRescheduled = returnedStart !== payload.start_date || returnedEnd !== payload.end_date;
-        toast.success(automaticallyRescheduled
-          ? `Fase modificata e ore ripianificate automaticamente: ${returnedStart} → ${returnedEnd}`
-          : 'Fase modificata con successo!');
+        toast.success('Fase modificata con successo!');
         if (res.data && ganttData && Array.isArray(ganttData.tasks)) {
           const updatedTasks = ganttData.tasks.map(t => String(t.id) === String(editingTask.id) ? res.data : t);
           setGanttData({ ...ganttData, tasks: updatedTasks });
         }
       } else {
         const res = await api.post(`/projects/${id}/tasks`, payload);
-        const returnedStart = res.data?.start_date?.slice(0, 10);
-        const returnedEnd = res.data?.end_date?.slice(0, 10);
-        const automaticallyRescheduled = returnedStart !== payload.start_date || returnedEnd !== payload.end_date;
-        toast.success(automaticallyRescheduled
-          ? `Fase aggiunta e ore ripianificate automaticamente: ${returnedStart} → ${returnedEnd}`
-          : 'Nuova fase aggiunta!');
+        toast.success('Nuova fase aggiunta!');
         if (res.data && ganttData && Array.isArray(ganttData.tasks)) {
           setGanttData({ ...ganttData, tasks: [...ganttData.tasks, res.data] });
+        }
+      }
+
+      // ----------------------------------------------------
+      // Controllo Sovraccarico Post-Salvataggio (sempre eseguito)
+      // ----------------------------------------------------
+      if (!isMilestone && taskForm.workers && taskForm.workers.length > 0) {
+        try {
+          await new Promise(r => setTimeout(r, 400)); // Attendiamo il commit su DB
+
+          const workloadRes = await api.get(`/workload/heatmap?_t=${Date.now()}`);
+          const heatmap = workloadRes.data.heatmap || {};
+          let overloadedWorkers = new Map();
+
+          const assignedWorkerIds = [];
+          Object.keys(heatmap).forEach(uid => {
+            const h = heatmap[uid];
+            // Match case-insensitive
+            const isMatch = taskForm.workers.some(w => {
+              const workerLower = (w || '').toLowerCase().trim();
+              const hUser = (h.username || '').toLowerCase().trim();
+              const hFull = (h.full_name || '').toLowerCase().trim();
+              return (hUser && hUser.includes(workerLower)) || (hFull && hFull.includes(workerLower));
+            });
+
+            if (isMatch) {
+              assignedWorkerIds.push({ uid, name: h.username || h.full_name });
+            }
+          });
+
+          for (const w of assignedWorkerIds) {
+            const wData = heatmap[w.uid];
+            if (!wData || !wData.workload) continue;
+
+            let curDate = new Date(taskForm.start_date + 'T12:00:00');
+            const endDate = new Date(taskForm.end_date + 'T12:00:00');
+
+            while (curDate <= endDate) {
+              const dd = String(curDate.getDate()).padStart(2, '0');
+              const mm = String(curDate.getMonth() + 1).padStart(2, '0');
+              const yyyy = curDate.getFullYear();
+              const dStr = `${yyyy}-${mm}-${dd}`;
+
+              const h = wData.workload[dStr] ? wData.workload[dStr].hours : 0;
+
+              if (h > 8.01) {
+                if (!overloadedWorkers.has(w.name)) {
+                  overloadedWorkers.set(w.name, []);
+                }
+                overloadedWorkers.get(w.name).push(`${dd}/${mm}`);
+              }
+              curDate.setDate(curDate.getDate() + 1);
+            }
+          }
+
+          if (overloadedWorkers.size > 0) {
+            overloadedWorkers.forEach((dates, workerName) => {
+              toast.warning(`Attenzione: l'addetto ${workerName} è andato in sovraccarico (più di 8h/giorno) nei giorni: ${dates.join(', ')}!`);
+            });
+          }
+        } catch (err) {
+          console.error("Errore controllo sovraccarico post-salvataggio:", err);
+          toast.error("Errore nel controllo del sovraccarico: " + err.message);
         }
       }
 
       // Se l'utente ha inserito una fase personalizzata o nuova, aggiungiamola automaticamente alle fasi suggerite per quel reparto
       if (taskForm.faseSel === '__custom__' && taskName.trim()) {
         try {
-          const targetDept = taskForm.department || (user?.role === 'admin' ? 'tutti' : (user?.department || 'ufficio_tecnico'));
+          const targetDept = taskForm.department || (user?.role === 'admin' ? 'condivisa' : (user?.department || 'ufficio_tecnico'));
           await api.post('/phase-templates', {
             name: taskName.trim(),
             department: targetDept,
@@ -962,6 +1330,11 @@ export default function ProjectDetailPage() {
 
   function handleSpecificDateChange(dateStr) {
     if (!dateStr || !selectedTaskForHours) return;
+    if (project && project.end_date && dateStr > project.end_date) {
+      toast.error(`Non è possibile aggiungere giorni oltre la fine della commessa (${formatDateItalian(project.end_date)}).`);
+      setSpecificExtraDate('');
+      return;
+    }
     const plannedDates = getWorkDatesBetween(
       selectedTaskForHours.start_date ? selectedTaskForHours.start_date.split(' ')[0] : '',
       selectedTaskForHours.end_date ? selectedTaskForHours.end_date.split(' ')[0] : ''
@@ -997,6 +1370,10 @@ export default function ProjectDetailPage() {
     const nextWorkDateStr = addWorkingDays(`${y}-${m}-${d}`, 1);
 
     if (nextWorkDateStr && !allCurrentDates.includes(nextWorkDateStr)) {
+      if (project && project.end_date && nextWorkDateStr > project.end_date) {
+        toast.error(`Non è possibile aggiungere giorni oltre la fine della commessa (${formatDateItalian(project.end_date)}).`);
+        return;
+      }
       setModalExtraDates(prev => [...prev, nextWorkDateStr].sort());
       toast.success(`Aggiunta colonna giorno extra: ${nextWorkDateStr.split('-').reverse().join('/')}`);
     }
@@ -1041,6 +1418,8 @@ export default function ProjectDetailPage() {
       status: project.status || 'planning',
       responsible_id: project.responsible_id || '',
       assigned_workers: Array.isArray(project.assigned_workers) ? [...project.assigned_workers] : [],
+      is_atex: Boolean(project.is_atex),
+      is_alimentare: Boolean(project.is_alimentare),
     });
     setShowEditProjectModal(true);
   }
@@ -1053,8 +1432,20 @@ export default function ProjectDetailPage() {
 
   async function handleSaveProject(e) {
     e.preventDefault();
+    if (!projectForm.code?.trim() || !projectForm.client?.trim() || !projectForm.name?.trim()) {
+      toast.error('Codice, Cliente e Titolo Commessa sono campi obbligatori');
+      return;
+    }
     try {
-      const { data } = await api.put(`/projects/${id}`, projectForm);
+      const payload = {
+        ...projectForm,
+        code: projectForm.code.trim(),
+        client: projectForm.client.trim(),
+        name: projectForm.name.trim(),
+        is_atex: Boolean(projectForm.is_atex),
+        is_alimentare: Boolean(projectForm.is_alimentare),
+      };
+      const { data } = await api.put(`/projects/${id}`, payload);
       setProject(prev => ({ ...prev, ...data }));
       setShowEditProjectModal(false);
       toast.success('Dati commessa aggiornati con successo!');
@@ -1070,28 +1461,23 @@ export default function ProjectDetailPage() {
 
     let newWorkers;
     if (isSelected) {
-      newWorkers = taskForm.workers.filter(x => x !== w);
+      newWorkers = [];
     } else {
-      newWorkers = [...taskForm.workers, w];
+      newWorkers = [w];
     }
 
     const totalHours = Number(taskForm.planned_hours) || (Number(taskForm.duration_days) * 8.0) || 8.0;
-
     let newWorkerHours = {};
     if (newWorkers.length > 0) {
-      const baseHours = parseFloat((totalHours / newWorkers.length).toFixed(1));
-      let sumSoFar = 0;
-      for (let i = 0; i < newWorkers.length; i++) {
-        if (i === newWorkers.length - 1) {
-          newWorkerHours[newWorkers[i]] = parseFloat((totalHours - sumSoFar).toFixed(1));
-        } else {
-          newWorkerHours[newWorkers[i]] = baseHours;
-          sumSoFar += baseHours;
-        }
-      }
+      newWorkerHours[w] = totalHours;
     }
 
-    setTaskForm({ ...taskForm, workers: newWorkers, worker_hours: newWorkerHours });
+    setTaskForm({
+      ...taskForm,
+      workers: newWorkers,
+      worker_hours: newWorkerHours,
+      excluded_dates: [] // Reset excluded dates when worker changes
+    });
   }
 
   function handleZoom(mode) {
@@ -1157,14 +1543,29 @@ export default function ProjectDetailPage() {
   }
 
   function handleChatGPTAnalysis() {
+    const isAtex = Boolean(project.is_atex);
+    const isAlimentare = Boolean(project.is_alimentare);
+    const tipologia = (isAtex && isAlimentare) ? 'ATEX + Alimentare' : isAtex ? 'ATEX' : isAlimentare ? 'Alimentare' : 'Standard';
+
+    let tipologiaNote = '';
+    if (isAtex && isAlimentare) {
+      tipologiaNote = ' (Vincoli normativi: Direttiva ATEX 2014/34/UE e idoneità alimentare MOCA/HACCP)';
+    } else if (isAtex) {
+      tipologiaNote = ' (Vincoli normativi: Direttiva ATEX 2014/34/UE e collaudi antideflagranti)';
+    } else if (isAlimentare) {
+      tipologiaNote = ' (Vincoli normativi: idoneità al contatto alimentare MOCA e standard igienico-sanitari HACCP)';
+    }
+
     const promptLines = [
       "Comportati da Project Manager esperto e analizza i dati di questa commessa riportati di seguito (e nell'eventuale file allegato).",
       "",
       `COMMESSA: ${project.name} (Codice: ${project.code || 'N/A'})`,
+      `Tipologia: ${tipologia}${tipologiaNote}`,
+      `Cliente: ${project.client || 'N/A'}`,
       `Descrizione: ${project.description || 'Nessuna descrizione'}`,
-      `Inizio: ${new Date(project.start_date).toLocaleDateString()}`,
-      `Fine: ${new Date(project.end_date).toLocaleDateString()}`,
-      `Stato: ${project.status}`,
+      `Inizio: ${project.start_date ? new Date(project.start_date).toLocaleDateString() : 'N/A'}`,
+      `Fine: ${project.end_date ? new Date(project.end_date).toLocaleDateString() : 'N/A'}`,
+      `Stato: ${project.status || 'N/A'}`,
       "",
       "FASI DELLA COMMESSA:"
     ];
@@ -1175,12 +1576,17 @@ export default function ProjectDetailPage() {
       const taskName = t.text || 'Fase senza nome';
       const startDate = new Date(t.start_date).toLocaleDateString();
       const endDate = new Date(t.end_date).toLocaleDateString();
-      const progress = t.completed || 0;
+      let progressStr = `${Math.round((t.progress || 0) * 100)}% completata`;
+      if (isTaskCompleted(t)) {
+        progressStr = 'Completata (100%)';
+      } else if (Number(t.completed) === -1) {
+        progressStr = 'Sospesa';
+      }
 
       const workers = Array.isArray(t.workers) ? t.workers : [];
 
       promptLines.push(`- [${dept}] ${taskName}`);
-      promptLines.push(`  Date: dal ${startDate} al ${endDate} (${t.duration || 0} giorni) | Stato: ${progress}% completata`);
+      promptLines.push(`  Date: dal ${startDate} al ${endDate} (${t.duration || 0} giorni) | Stato: ${progressStr}`);
 
       if (workers.length > 0) {
         promptLines.push(`  Addetti:`);
@@ -1188,17 +1594,20 @@ export default function ProjectDetailPage() {
           const wAssigned = (t.worker_hours && t.worker_hours[w] !== undefined && t.worker_hours[w] !== '')
             ? Number(t.worker_hours[w])
             : (Number(t.planned_hours || 8) / workers.length);
-          const wActual = (t.actual_hours && t.actual_hours[w]) ? Number(t.actual_hours[w]) : 0;
+
+          let wActual = 0;
+          if (t.actual_hours && t.actual_hours[w] && typeof t.actual_hours[w] === 'object') {
+            Object.values(t.actual_hours[w]).forEach(h => {
+              wActual += Number(h) || 0;
+            });
+          }
           promptLines.push(`    - ${w}: ${wActual}h fatte / ${Number(wAssigned.toFixed(1))}h assegnate`);
         });
       } else {
         promptLines.push(`  Addetti: Nessuno`);
       }
 
-      let totOreReg = 0;
-      if (t.actual_hours && typeof t.actual_hours === 'object') {
-        totOreReg = Object.values(t.actual_hours).reduce((acc, v) => acc + (Number(v) || 0), 0);
-      }
+      const totOreReg = calculateTaskEffHours(t);
       promptLines.push(`  Totale Fase: ${totOreReg}h fatte su ${t.planned_hours || 0}h previste`);
     });
 
@@ -1235,6 +1644,53 @@ export default function ProjectDetailPage() {
 
   if (loading) return <div className="loading-screen"><div className="spinner" /></div>;
 
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  let sortedTasks = [...(ganttData.tasks || [])];
+  if (sortConfig.key !== null) {
+    sortedTasks.sort((a, b) => {
+      let aValue, bValue;
+      switch (sortConfig.key) {
+        case 'fase':
+          aValue = a.text || '';
+          bValue = b.text || '';
+          break;
+        case 'reparto':
+          aValue = a.department || '';
+          bValue = b.department || '';
+          break;
+        case 'addetti':
+          aValue = (a.workers || []).join(', ');
+          bValue = (b.workers || []).join(', ');
+          break;
+        case 'date':
+          aValue = new Date(a.start_date).getTime() || 0;
+          bValue = new Date(b.start_date).getTime() || 0;
+          break;
+        case 'ore':
+          aValue = Number(a.planned_hours) || 0;
+          bValue = Number(b.planned_hours) || 0;
+          break;
+        case 'semaforo':
+          const weight = { 'ritardo': 3, 'attenzione': 2, 'ok': 1 };
+          aValue = weight[computeStato(a)] || 0;
+          bValue = weight[computeStato(b)] || 0;
+          break;
+        default:
+          return 0;
+      }
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+
   return (
     <div className="project-detail animate-fadeIn">
       <div className="project-detail-header">
@@ -1255,13 +1711,34 @@ export default function ProjectDetailPage() {
             boxShadow: 'var(--shadow-sm)'
           }}>
             <span className="commessa-code" style={{ color: 'var(--text-primary)', fontWeight: 800, fontSize: '1.25rem' }}>{project?.code || 'UT-COMM'}</span>
+            {project?.is_atex && (
+              <span className="badge badge-atex" title="Conforme Direttiva ATEX">
+                ATEX
+              </span>
+            )}
+            {project?.is_alimentare && (
+              <span className="badge badge-alimentare" title="Conforme Settore Alimentare / Food Grade">
+                Alimentare
+              </span>
+            )}
+            {!project?.is_atex && !project?.is_alimentare && (
+              <span className="badge badge-standard">
+                Standard
+              </span>
+            )}
             {project?.client && (
               <>
                 <span style={{ color: 'var(--border-subtle)', fontSize: '1.2rem' }}>—</span>
                 <span className="commessa-client" style={{ color: 'var(--text-secondary)' }}><AppIcon name="building" size={15} />{project.client}</span>
               </>
             )}
-            {project?.name && project.name !== project.code && (
+            {project?.responsible_name && (
+              <>
+                <span style={{ color: 'var(--border-subtle)', fontSize: '1.2rem' }}>—</span>
+                <span className="commessa-client commessa-responsible" style={{ color: 'var(--text-secondary)' }}><AppIcon name="user" size={15} />{project.responsible_name}</span>
+              </>
+            )}
+            {project?.name && (
               <>
                 <span style={{ color: 'var(--border-subtle)', fontSize: '1.2rem' }}>|</span>
                 <span className="commessa-title-in-box" style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '1.25rem' }}>{project.name}</span>
@@ -1305,18 +1782,30 @@ export default function ProjectDetailPage() {
           <AppIcon name="notes" />
           Note
         </button>
-        {(delaysList.length > 0 || rescheduling.scenarios.length > 0 || rescheduling.preview?.has_changes || rescheduling.runs.length > 0 || user?.role === 'admin' || user?.role === 'editor') && (
+        {delaysList.length > 0 && (
           <button
             className={`ut-tab-btn ${activeTab === 'alert' ? 'active' : ''}`}
             onClick={() => setActiveTab('alert')}
           >
             <AppIcon name="alert" />
             Ritardi
-            {Math.max(delaysList.length, rescheduling.preview?.scenarios?.length || rescheduling.scenarios.length) > 0 && (
-              <span className="tab-badge tab-badge-danger">{Math.max(delaysList.length, rescheduling.preview?.scenarios?.length || rescheduling.scenarios.length)}</span>
-            )}
+            <span className="tab-badge tab-badge-danger">{delaysList.length}</span>
           </button>
         )}
+
+        <button
+          className={`ut-tab-btn ${activeTab === 'ai_analysis' ? 'active' : ''}`}
+          onClick={() => setActiveTab('ai_analysis')}
+          title="Analisi intelligente HiPlan AI e riprogrammazione"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+        >
+          <Sparkles size={16} />
+          Analisi AI
+        </button>
 
         {user?.role === 'admin' && (
           <button
@@ -1439,11 +1928,40 @@ export default function ProjectDetailPage() {
                 <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
                   <button
                     className="btn btn-secondary"
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#10a37f', color: '#fff', borderColor: '#10a37f' }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#10a37f', color: '#fff', borderColor: '#10a37f', marginBottom: 8 }}
                     onClick={() => { setShowExportMenu(false); handleChatGPTAnalysis(); }}
                   >
                     <img src="/chatgpt-logo.png" style={{ width: 16, height: 16, filter: 'brightness(0) invert(1)' }} alt="ChatGPT" />
                     Analizza con ChatGPT
+                  </button>
+
+                  <button
+                    className="btn btn-secondary"
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'var(--accent-600)', color: '#fff', borderColor: 'var(--accent-600)' }}
+                    onClick={() => {
+                      const isAtex = Boolean(project.is_atex);
+                      const isAlim = Boolean(project.is_alimentare);
+                      const tipologia = (isAtex && isAlim) ? 'ATEX + Alimentare' : isAtex ? 'ATEX' : isAlim ? 'Alimentare' : 'Standard';
+
+                      let tipologiaContext = `Tipologia: ${tipologia}`;
+                      if (isAtex && isAlim) {
+                        tipologiaContext += ' (Vincoli normativi: Direttiva ATEX 2014/34/UE e conformità idoneità alimentare MOCA/HACCP)';
+                      } else if (isAtex) {
+                        tipologiaContext += ' (Vincoli normativi: Direttiva ATEX 2014/34/UE e collaudi antideflagranti)';
+                      } else if (isAlim) {
+                        tipologiaContext += ' (Vincoli normativi: idoneità al contatto alimentare MOCA e standard igienico-sanitari HACCP)';
+                      }
+
+                      setShowExportMenu(false);
+                      navigate('/chat', {
+                        state: {
+                          initialPrompt: `Analizza questa commessa: ${project.name} (Codice: ${project.code || 'N/A'})\n${tipologiaContext}\nCliente: ${project.client || 'N/A'}\nData inizio: ${project.start_date || 'N/A'}\nData fine: ${project.end_date || 'N/A'}\nStatus: ${project.status || 'N/A'}\nPuoi fornirmi un'analisi operativa approfondita con stato di avanzamento reale, rispetto delle scadenze, carichi degli addetti e verifiche di conformità per la tipologia ${tipologia}?`
+                        }
+                      });
+                    }}
+                  >
+                    <AppIcon name="robot" size={16} />
+                    Analizza con HiPlan AI
                   </button>
                 </div>
 
@@ -1478,44 +1996,64 @@ export default function ProjectDetailPage() {
           {activeTab === 'gantt' && (
             <div style={{ position: 'relative' }}>
               <button
+                type="button"
                 className="btn btn-secondary"
-                style={{ fontSize: '12px' }}
-                onClick={() => setShowColumnsMenu(!showColumnsMenu)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
+                onClick={handleResetGanttFiltersAndSort}
+                title="Reimposta tutti i filtri e l'ordinamento ai valori predefiniti"
+              >
+                <AppIcon name="undo" size={14} />
+                Reimposta
+              </button>
+            </div>
+          )}
+
+          {activeTab === 'gantt' && (
+            <div style={{ position: 'relative' }}>
+              <button
+                className="btn btn-secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
+                onClick={() => {
+                  setShowColumnsMenu(!showColumnsMenu);
+                  setShowPhaseFilterMenu(false); setShowWorkerMenu(false); setShowDeptMenu(false);
+                }}
               >
                 <AppIcon name="columns" />
                 Colonne
+                {(visibleColumns.length !== 1 || visibleColumns[0] !== 'workers') && (
+                  <span style={{ background: '#6366f1', color: '#fff', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px' }}>
+                    {visibleColumns.length}
+                  </span>
+                )}
               </button>
 
               {showColumnsMenu && (
                 <div className="action-popover" style={{
                   position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-default)',
-                  borderRadius: 8, padding: 10, zIndex: 100, minWidth: 200, boxShadow: 'var(--shadow-md)'
+                  borderRadius: 10, padding: 12, zIndex: 200, minWidth: 200, boxShadow: 'var(--shadow-md)'
                 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>MOSTRA/NASCONDI:</div>
-                  {[
-                    { id: 'start_date', label: 'Inizio' },
-                    { id: 'end_date', label: 'Fine' },
-                    { id: 'event_date', label: 'Data Evento' },
-                    { id: 'duration', label: 'Durata' },
-                    { id: 'progress', label: 'Progresso' },
-                    { id: 'priority', label: 'Priorità' },
-                    { id: 'workers', label: 'Addetti' }
-                  ].map(col => (
-                    <label key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
-                      <input
-                        type="checkbox"
-                        checked={visibleColumns.includes(col.id)}
-                        onChange={(e) => {
-                          const newCols = e.target.checked
-                            ? [...visibleColumns, col.id]
-                            : visibleColumns.filter(c => c !== col.id);
-                          setVisibleColumns(newCols);
-                          localStorage.setItem('ganttVisibleColumns', JSON.stringify(newCols));
-                        }}
-                      />
-                      {col.label}
-                    </label>
-                  ))}
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MOSTRA/NASCONDI:</div>
+                  <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                    {GANTT_ALL_COLUMNS.map(col => (
+                      <label key={col.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+                        <input
+                          type="checkbox"
+                          checked={visibleColumns.includes(col.id)}
+                          onChange={(e) => {
+                            const newCols = e.target.checked
+                              ? [...visibleColumns, col.id]
+                              : visibleColumns.filter(c => c !== col.id);
+                            setVisibleColumns(newCols);
+                          }}
+                        />
+                        {col.label}
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 8, paddingTop: 8, display: 'flex', gap: 8 }}>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setVisibleColumns(GANTT_ALL_COLUMNS.map(c => c.id))} style={{ flex: 1, fontSize: 11 }}>Tutti</button>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setVisibleColumns([])} style={{ flex: 1, fontSize: 11 }}>Nessuno</button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1525,12 +2063,12 @@ export default function ProjectDetailPage() {
             <div style={{ position: 'relative' }}>
               <button
                 className="btn btn-secondary"
-                onClick={() => { setShowPhaseFilterMenu(!showPhaseFilterMenu); setShowColumnsMenu(false); setShowDeptMenu(false); }}
+                onClick={() => { setShowPhaseFilterMenu(!showPhaseFilterMenu); setShowColumnsMenu(false); setShowDeptMenu(false); setShowWorkerMenu(false); }}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
               >
                 <AppIcon name="filter" />
                 Tipo Fase
-                {phaseFilter !== 'all' && (
+                {phaseTypes.length === 1 && (
                   <span style={{ background: '#6366f1', color: '#fff', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px' }}>
                     1
                   </span>
@@ -1543,38 +2081,95 @@ export default function ProjectDetailPage() {
                   borderRadius: 10, padding: 12, zIndex: 200, minWidth: 200,
                   boxShadow: 'var(--shadow-md)'
                 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MOSTRA:</div>
-                  {[
-                    { value: 'all', label: 'Tutte le fasi' },
-                    { value: 'task', label: 'Solo Lavorazioni' },
-                    { value: 'milestone', label: 'Solo Eventi (Milestone)' }
-                  ].map(opt => (
-                    <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
-                      <input
-                        type="radio"
-                        name="phaseFilter"
-                        checked={phaseFilter === opt.value}
-                        onChange={() => setPhaseFilter(opt.value)}
-                      />
-                      {opt.label}
-                    </label>
-                  ))}
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>MOSTRA TIPO FASE:</div>
+                  <div>
+                    {ALL_PHASE_TYPES.map(opt => (
+                      <label key={opt.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+                        <input
+                          type="checkbox"
+                          checked={phaseTypes.includes(opt.id)}
+                          onChange={(e) => {
+                            setPhaseTypes(e.target.checked
+                              ? [...phaseTypes, opt.id]
+                              : phaseTypes.filter(x => x !== opt.id)
+                            );
+                          }}
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 8, paddingTop: 8, display: 'flex', gap: 8 }}>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setPhaseTypes(['task', 'milestone'])} style={{ flex: 1, fontSize: 11 }}>Tutti</button>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setPhaseTypes([])} style={{ flex: 1, fontSize: 11 }}>Nessuno</button>
+                  </div>
                 </div>
               )}
             </div>
           )}
 
+          {activeTab === 'gantt' && (
+            <div style={{ position: 'relative' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => { setShowWorkerMenu(!showWorkerMenu); setShowColumnsMenu(false); setShowPhaseFilterMenu(false); setShowDeptMenu(false); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
+              >
+                <AppIcon name="users" />
+                Addetto
+                {activeWorkers.length > 0 && activeWorkers.length < predefinedWorkers.length && (
+                  <span style={{ background: '#6366f1', color: '#fff', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px' }}>
+                    {activeWorkers.length}
+                  </span>
+                )}
+              </button>
+              {showWorkerMenu && (
+                <div className="action-popover" style={{
+                  position: 'absolute', top: '100%', left: 0, marginTop: 4,
+                  background: 'var(--bg-card)', border: '1px solid var(--border-default)',
+                  borderRadius: 10, padding: 12, zIndex: 200, minWidth: 200,
+                  boxShadow: 'var(--shadow-md)'
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>FILTRA PER ADDETTO:</div>
+                  <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                    {[...predefinedWorkers].sort((a, b) => a === user?.username ? -1 : b === user?.username ? 1 : a.localeCompare(b)).map(w => (
+                      <label key={w} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+                        <input
+                          type="checkbox"
+                          checked={activeWorkers.includes(w)}
+                          onChange={(e) => {
+                            setActiveWorkers(e.target.checked
+                              ? [...activeWorkers, w]
+                              : activeWorkers.filter(x => x !== w)
+                            );
+                          }}
+                        />
+                        {w}
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 8, paddingTop: 8, display: 'flex', gap: 8 }}>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setActiveWorkers([...predefinedWorkers])} style={{ flex: 1, fontSize: 11 }}>Tutti</button>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setActiveWorkers([])} style={{ flex: 1, fontSize: 11 }}>Nessuno</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {activeTab === 'gantt' && (
             <div style={{ position: 'relative' }}>
               <button
                 className="btn btn-secondary"
-                onClick={() => { setShowDeptMenu(!showDeptMenu); setShowColumnsMenu(false); setShowPhaseFilterMenu(false); }}
+                onClick={() => {
+                  setShowDeptMenu(!showDeptMenu);
+                  setShowColumnsMenu(false); setShowPhaseFilterMenu(false); setShowWorkerMenu(false);
+                }}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '12px' }}
               >
                 <AppIcon name="building" />
                 Reparto
-                {activeDepartments.length < ALL_DEPTS.length && (
+                {activeDepartments.length > 0 && activeDepartments.length < ALL_DEPTS.length && (
                   <span style={{ background: '#6366f1', color: '#fff', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px' }}>
                     {activeDepartments.length}/{ALL_DEPTS.length}
                   </span>
@@ -1588,25 +2183,27 @@ export default function ProjectDetailPage() {
                   boxShadow: 'var(--shadow-md)'
                 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>FILTRA PER REPARTO:</div>
-                  {DEPT_OPTIONS.map(dept => (
-                    <label key={dept.value} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
-                      <input
-                        type="checkbox"
-                        checked={activeDepartments.includes(dept.value)}
-                        onChange={(e) => {
-                          setActiveDepartments(e.target.checked
-                            ? [...activeDepartments, dept.value]
-                            : activeDepartments.filter(d => d !== dept.value)
-                          );
-                        }}
-                      />
-                      <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: dept.color, flexShrink: 0 }} />
-                      {dept.label}
-                    </label>
-                  ))}
+                  <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                    {departmentOptions.map(dept => (
+                      <label key={dept.value} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }}>
+                        <input
+                          type="checkbox"
+                          checked={activeDepartments.includes(dept.value)}
+                          onChange={(e) => {
+                            setActiveDepartments(e.target.checked
+                              ? [...activeDepartments, dept.value]
+                              : activeDepartments.filter(d => d !== dept.value)
+                            );
+                          }}
+                        />
+                        <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: dept.color, flexShrink: 0 }} />
+                        {dept.label}
+                      </label>
+                    ))}
+                  </div>
                   <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 8, paddingTop: 8, display: 'flex', gap: 8 }}>
-                    <button className="btn btn-sm btn-secondary" onClick={() => setActiveDepartments(ALL_DEPTS)} style={{ flex: 1, fontSize: 11 }}>Tutti</button>
-                    <button className="btn btn-sm btn-secondary" onClick={() => setActiveDepartments([])} style={{ flex: 1, fontSize: 11 }}>Nessuno</button>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setActiveDepartments(ALL_DEPTS)} style={{ flex: 1, fontSize: 11 }}>Tutti</button>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setActiveDepartments([])} style={{ flex: 1, fontSize: 11 }}>Nessuno</button>
                   </div>
                 </div>
               )}
@@ -1637,10 +2234,23 @@ export default function ProjectDetailPage() {
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, width: '100%', maxWidth: '100%' }}>
           <div className="gantt-wrapper">
             <GanttChart
+              projectId={id}
+              sortResetKey={ganttResetKey}
               tasks={ganttData.tasks.filter(t => {
-                if (t.department && !activeDepartments.includes(t.department)) return false;
-                if (phaseFilter === 'task' && t.type === 'milestone') return false;
-                if (phaseFilter === 'milestone' && t.type !== 'milestone') return false;
+                // Per addetto e reparto se non ci sono selezioni mostra tutto
+                if (activeDepartments.length > 0 && t.department && !activeDepartments.includes(t.department)) return false;
+
+                // Tipo fase (multiselezione): se vuoto o entrambe selezionate mostra tutto
+                if (phaseTypes.length > 0 && phaseTypes.length < 2) {
+                  const isMs = t.type === 'milestone';
+                  if (isMs && !phaseTypes.includes('milestone')) return false;
+                  if (!isMs && !phaseTypes.includes('task')) return false;
+                }
+
+                // Per addetto se non ci sono selezioni mostra tutto
+                if (activeWorkers.length > 0) {
+                  if (!t.workers || !t.workers.some(w => activeWorkers.includes(w))) return false;
+                }
                 return true;
               })}
               links={ganttData.links}
@@ -1648,12 +2258,12 @@ export default function ProjectDetailPage() {
               readOnly={!canManageProject}
               projectStartDate={project?.start_date}
               projectEndDate={project?.end_date}
+              onTaskUpdate={handleTaskUpdate}
               onTaskCreate={handleTaskCreate}
               onTaskDelete={handleTaskDelete}
               onLinkCreate={handleLinkCreate}
               onLinkDelete={handleLinkDelete}
               onEditTask={openEditTaskModal}
-              onOpenTaskHours={openOreModalForTask}
               onNewTask={() => openNewTaskModal()}
             />
           </div>
@@ -1680,7 +2290,7 @@ export default function ProjectDetailPage() {
               <div className="stat-box">
                 <div className="stat-box-label">Data Avvio / Fine</div>
                 <div className="stat-box-value" style={{ fontSize: '0.95rem' }}>
-                  {project?.start_date || 'N/D'} → {project?.end_date || 'N/D'}
+                  {project?.start_date ? formatDateItalian(project.start_date) : 'N/D'} → {project?.end_date ? formatDateItalian(project.end_date) : 'N/D'}
                 </div>
               </div>
               <div className="stat-box">
@@ -1704,7 +2314,7 @@ export default function ProjectDetailPage() {
                 </div>
               </div>
               <div className="stat-box">
-                <div className="stat-box-label">Responsabile Commessa</div>
+                <div className="stat-box-label">Referente Commessa</div>
                 <div className="stat-box-value" style={{ fontSize: '0.95rem' }}>
                   {project?.responsible?.full_name || project?.responsible?.username || 'N/D'}
                 </div>
@@ -1756,50 +2366,70 @@ export default function ProjectDetailPage() {
             <table className="phases-table">
               <thead>
                 <tr>
-                  <th>Fase Lavorazione</th>
-                  {tableVisibleColumns.includes('reparto') && <th>Reparto</th>}
-                  {tableVisibleColumns.includes('addetti') && <th>Addetti Assegnati</th>}
-                  {tableVisibleColumns.includes('date') && <th>Inizio / Fine</th>}
-                  {tableVisibleColumns.includes('ore') && <th>Ore Prev vs Eff</th>}
-                  {tableVisibleColumns.includes('semaforo') && <th>Semaforo Avanzamento</th>}
+                  <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('fase')}>
+                    Fase Lavorazione <span style={{ color: 'var(--accent-500)', marginLeft: 4 }}>{sortConfig.key === 'fase' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</span>
+                  </th>
+                  {tableVisibleColumns.includes('reparto') && (
+                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('reparto')}>
+                      Reparto <span style={{ color: 'var(--accent-500)', marginLeft: 4 }}>{sortConfig.key === 'reparto' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</span>
+                    </th>
+                  )}
+                  {tableVisibleColumns.includes('addetti') && (
+                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('addetti')}>
+                      Addetti Assegnati <span style={{ color: 'var(--accent-500)', marginLeft: 4 }}>{sortConfig.key === 'addetti' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</span>
+                    </th>
+                  )}
+                  {tableVisibleColumns.includes('date') && (
+                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('date')}>
+                      Inizio / Fine <span style={{ color: 'var(--accent-500)', marginLeft: 4 }}>{sortConfig.key === 'date' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</span>
+                    </th>
+                  )}
+                  {tableVisibleColumns.includes('ore') && (
+                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('ore')}>
+                      Ore Prev vs Eff <span style={{ color: 'var(--accent-500)', marginLeft: 4 }}>{sortConfig.key === 'ore' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</span>
+                    </th>
+                  )}
+                  {tableVisibleColumns.includes('semaforo') && (
+                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('semaforo')}>
+                      Semaforo Avanzamento <span style={{ color: 'var(--accent-500)', marginLeft: 4 }}>{sortConfig.key === 'semaforo' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : ''}</span>
+                    </th>
+                  )}
                   {tableVisibleColumns.includes('azioni') && <th style={{ textAlign: 'right' }}>Azioni</th>}
                 </tr>
               </thead>
               <tbody>
-                {ganttData.tasks.length === 0 ? (
+                {sortedTasks.length === 0 ? (
                   <tr>
                     <td colSpan={1 + tableVisibleColumns.length} style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 32 }}>
                       Nessuna fase aggiunta. Clicca <strong>+ Nuova Fase Lavorazione</strong> in alto.
                     </td>
                   </tr>
                 ) : (
-                  ganttData.tasks.map((task) => {
+                  sortedTasks.map((task) => {
                     const st = computeStato(task);
                     const tEff = calculateTaskEffHours(task);
                     const tColor = getTaskColor(task);
                     const isCompleted = isTaskCompleted(task);
                     return (
 
-                      <tr key={task.id} style={{ backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.18)' : undefined }}>
+                      <tr key={task.id} style={{ backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.18)' : (task.type === 'milestone' ? 'rgba(245, 158, 11, 0.15)' : undefined) }}>
                         <td style={{ fontWeight: 600 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <input
-                              type="checkbox"
-                              checked={isCompleted}
-                              onChange={() => handleToggleTaskCompleted(task, isCompleted)}
-                              title="Clicca per spuntare/rimuovere completamento fase"
-                              style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#10b981' }}
-                            />
                             <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: tColor, flexShrink: 0, display: 'inline-block', border: '1px solid rgba(255,255,255,0.2)' }} title={`Colore fase: ${tColor}`} />
-                            <span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               {task.text}
+                              {isCompleted && (
+                                <div title="Fase completata" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <AppIcon name="check" size={16} style={{ color: '#10b981' }} />
+                                </div>
+                              )}
                             </span>
                           </div>
                         </td>
                         {tableVisibleColumns.includes('reparto') && (
                           <td>
                             {task.department ? (() => {
-                              const dept = DEPT_OPTIONS.find(d => d.value === task.department);
+                              const dept = departmentOptions.find(d => d.value === task.department);
                               return (
                                 <span style={{
                                   display: 'inline-block', padding: '3px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 600,
@@ -1826,10 +2456,18 @@ export default function ProjectDetailPage() {
                         )}
                         {tableVisibleColumns.includes('date') && (
                           <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                            <div>{formatDateOnly(task.start_date)} → {formatDateOnly(task.end_date)}</div>
-                            <div style={{ fontSize: 11, color: 'var(--accent-500)', fontWeight: 600, marginTop: 2 }}>
-                              <AppIcon name="calendar" size={12} />Durata: {task.duration || 1} {task.duration === 1 ? 'giorno' : 'giorni'}
-                            </div>
+                            {task.type === 'milestone' ? (
+                              <div style={{ fontWeight: 600, color: '#d97706', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <AppIcon name="calendar" size={13} /> {formatDateItalian(task.start_date)}
+                              </div>
+                            ) : (
+                              <>
+                                <div style={{ whiteSpace: 'nowrap' }}>{formatDateItalian(task.start_date)} → {formatDateItalian(task.end_date)}</div>
+                                <div style={{ fontSize: 11, color: 'var(--accent-500)', fontWeight: 600, marginTop: 2, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <AppIcon name="calendar" size={12} />Durata: {task.duration || 1} {task.duration === 1 ? 'giorno' : 'giorni'}
+                                </div>
+                              </>
+                            )}
                           </td>
                         )}
                         {tableVisibleColumns.includes('ore') && (
@@ -1853,6 +2491,7 @@ export default function ProjectDetailPage() {
                             {st === 'ritardo_ferie' && <span className="semaforo-ritardo"><span className="status-dot danger" />Rischio ritardo ferie</span>}
                             {st === 'ritardo' && <span className="semaforo-ritardo"><span className="status-dot danger" />Ritardo lavorazione</span>}
                             {st === 'sforamento' && <span className="semaforo-ritardo"><span className="status-dot danger" />Sforamento ore</span>}
+                            {st === 'mancata_consuntivazione' && <span className="semaforo-mancata-consuntivazione"><span className="status-dot" style={{ background: '#8b5cf6' }} />Mancata consuntivazione</span>}
                           </td>
                         )}
                         {tableVisibleColumns.includes('azioni') && (
@@ -2001,205 +2640,80 @@ export default function ProjectDetailPage() {
               </div>
             </div>
           </div>
-          {wsConnected && (
-            <div style={{ marginLeft: 16, display: 'flex', alignItems: 'center', gap: 6, color: '#10b981', fontSize: '0.9rem' }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#10b981', display: 'inline-block' }}></span>
-              Sincronizzato
-            </div>
-          )}
         </div>
       )}
 
       {/* TAB 4: RITARDI & ALLARMI */}
       {activeTab === 'alert' && (
         <div className="animate-fadeIn">
-          <section className={`planning-agent-panel ${agentPanelExpanded ? 'expanded' : 'compact'}`}>
-            <div className="planning-agent-header">
+          <div
+            className="commessa-summary-card"
+            style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column' }}
+            onClick={() => setIsAlertsExpanded(!isAlertsExpanded)}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <span className={`planning-agent-kicker ${rescheduling.paused ? 'paused' : ''}`}>
-                  <span className="planning-agent-live-dot" />
-                  {rescheduling.paused ? 'Agente in pausa' : 'Agente attivo · ogni giorno alle 01:15'}
-                </span>
-                <h3>Ripianificazione automatica</h3>
-                <p>Recupera le ore perse e aggiorna le fasi collegate, anche nelle altre commesse.</p>
-              </div>
-              <div className="planning-agent-controls">
-                {(user?.role === 'admin' || user?.role === 'editor') ? (
-                  <div className="planning-agent-actions">
-                    <button
-                      className="btn btn-primary"
-                      onClick={handleApplyReschedulingNow}
-                      disabled={agentBusy || reschedulingLoading || !rescheduling.preview?.has_changes}
-                      title={rescheduling.preview?.has_changes ? 'Applica le modifiche mostrate nell’anteprima aggiornata' : 'Nessuna soluzione disponibile'}
-                    >
-                      <AppIcon name="timeline" />
-                      {applyingNow ? 'Elaborazione…' : 'Applica ora'}
-                    </button>
-                    <button
-                      className={`btn ${rescheduling.paused ? 'btn-primary' : 'btn-secondary'}`}
-                      onClick={handleTogglePlanningAgent}
-                      disabled={agentBusy || reschedulingLoading}
-                    >
-                      <AppIcon name={rescheduling.paused ? 'timeline' : 'pause'} />
-                      {rescheduling.paused ? 'Riattiva agente' : 'Metti in pausa'}
-                    </button>
-                  </div>
-                ) : (
-                  <span className="planning-agent-readonly"><AppIcon name="lock" size={14} /> Sola lettura</span>
-                )}
-                <button
-                  type="button"
-                  className="btn btn-secondary planning-agent-expand"
-                  onClick={() => setAgentPanelExpanded(value => !value)}
-                  aria-expanded={agentPanelExpanded}
-                  title={agentPanelExpanded ? 'Comprimi agente' : 'Mostra dettagli agente'}
-                >
-                  <AppIcon name={agentPanelExpanded ? 'chevronUp' : 'chevronDown'} />
-                </button>
-              </div>
-            </div>
-
-            {agentPanelExpanded && (
-              reschedulingLoading ? (
-                <div className="planning-agent-empty">Analisi degli scenari in corso…</div>
-              ) : rescheduling.scenarios.length > 0 ? (
-                <div className="planning-scenario-grid">
-                  {rescheduling.scenarios.map(scenario => (
-                    <article className="planning-scenario-card" key={scenario.task_id}>
-                      <div className="planning-scenario-title">
-                        <AppIcon name="alert" size={16} />
-                        <strong>{scenario.task_name}</strong>
-                        <span>{scenario.missing_hours}h da recuperare</span>
-                      </div>
-                      <p>{formatAgentReason(scenario.reason)}</p>
-                      <small><AppIcon name="users" size={13} /> {scenario.workers.join(', ') || 'Nessun addetto assegnato'}</small>
-                      <small className="planning-scenario-schedule">
-                        {rescheduling.paused ? 'Agente in pausa' : 'Gestione automatica alla prossima analisi'}
-                      </small>
-                    </article>
-                  ))}
-                </div>
-              ) : rescheduling.preview?.has_changes ? (
-                <div className="planning-agent-empty"><AppIcon name="check" size={15} /> Nessuna criticità rilevata nella commessa attuale.</div>
-              ) : null
-            )}
-
-            {agentPanelExpanded && !reschedulingLoading && rescheduling.preview?.has_changes && (
-              <div className="planning-preview">
-                <div className="planning-preview-heading">
-                  <div>
-                    <span className="planning-run-status preview">Anteprima</span>
-                    <h4>Modifiche proposte</h4>
-                  </div>
-                  <strong>
-                    {rescheduling.preview.recovered_hours}h · {rescheduling.preview.changes.length} fasi · {rescheduling.preview.affected_project_count} {rescheduling.preview.affected_project_count === 1 ? 'commessa' : 'commesse'}
-                  </strong>
-                </div>
-                <div className="planning-preview-projects">
-                  {rescheduling.preview.projects.map(projectPreview => (
-                    <article className="planning-preview-project" key={projectPreview.project_id}>
-                      <h5>
-                        {projectPreview.project_code && <span>{projectPreview.project_code}</span>}
-                        {projectPreview.project_name}
-                      </h5>
-                      <div className="planning-change-list">
-                        {projectPreview.changes.map(change => (
-                          <div key={change.task_id}>
-                            <strong>{change.task_name}</strong>
-                            <span>{change.before.start_date} → {change.before.end_date}</span>
-                            <AppIcon name="arrowRight" size={13} />
-                            <span>{change.after.start_date} → {change.after.end_date}</span>
-                            <small>{formatAgentReason(change.reason)}</small>
-                          </div>
-                        ))}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {agentPanelExpanded && !reschedulingLoading && !rescheduling.preview?.has_changes && (
-              <div className={`planning-agent-empty ${rescheduling.preview?.error ? 'preview-error' : ''}`}>
-                <AppIcon name={rescheduling.preview?.error ? 'alert' : 'check'} size={15} />
-                {rescheduling.preview?.error || 'Lo scenario globale attuale non richiede modifiche.'}
-              </div>
-            )}
-
-            {agentPanelExpanded && rescheduling.runs.length > 0 && (
-              <div className="planning-runs">
-                <div className="planning-runs-title">
-                  <h4>Soluzioni applicate</h4>
-                </div>
-                {rescheduling.runs.slice(0, visibleRunsCount).map(run => (
-                  <article className="planning-run-card" key={run.id}>
-                    <div className="planning-run-heading">
-                      <div>
-                        <span className={`planning-run-status ${run.status}`}>{run.status === 'applied' ? 'Applicata' : 'Annullata'}</span>
-                        <strong>{run.solution_summary}</strong>
-                        <small>{run.created_at ? new Date(run.created_at).toLocaleString('it-IT') : ''} · {run.created_by}</small>
-                      </div>
-                      {run.status === 'applied' && (user?.role === 'admin' || user?.role === 'editor') && (
-                        <button className="btn btn-secondary" onClick={() => handleUndoRescheduling(run.id)} disabled={agentBusy}>
-                          <AppIcon name="undo" /> Annulla modifiche
-                        </button>
-                      )}
-                    </div>
-                    <div className="planning-change-list">
-                      {run.changes.map(change => (
-                        <div key={change.task_id}>
-                          <strong>{change.task_name}</strong>
-                          <span>{change.before.start_date} → {change.before.end_date}</span>
-                          <AppIcon name="arrowRight" size={13} />
-                          <span>{change.after.start_date} → {change.after.end_date}</span>
-                          <small>{formatAgentReason(change.reason)}</small>
-                        </div>
-                      ))}
-                    </div>
-                  </article>
-                ))}
-                {rescheduling.runs.length > visibleRunsCount && (
-                  <div style={{ textAlign: 'center', marginTop: '16px' }}>
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => setVisibleRunsCount(prev => prev + 3)}
-                    >
-                      <AppIcon name="chevronDown" size={15} /> Carica altro
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-
-          <div className="commessa-summary-card">
-            <div
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-              onClick={() => setSemaforiExpanded(!semaforiExpanded)}
-            >
-              <div>
-                <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Semafori e allarmi lavorazioni</h3>
+                <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Motore Semafori ed Allarmi Lavorazioni</h3>
                 <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 6, marginBottom: 0 }}>
-                  Le allerte evidenziano ferie sovrapposte o una consuntivazione inferiore all'avanzamento atteso.
+                  Questo pannello identifica automaticamente tutte le lavorazioni e commesse che non stanno rispettando la consuntivazione oraria attesa (meno del 50% delle ore previste o giorni lavorativi trascorsi con 0 ore registrate).
                 </p>
               </div>
-              <AppIcon name={semaforiExpanded ? 'chevronUp' : 'chevronDown'} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 16, marginTop: 25 }}>
+                {delaysList.length > 0 && (
+                  <span style={{
+                    background: '#dd3333', color: '#fff',
+                    padding: '4px 10px', borderRadius: 12, fontSize: 13, fontWeight: 600,
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {delaysList.length} {delaysList.length === 1 ? 'allerta' : 'allerte'}
+                  </span>
+                )}
+                <AppIcon name={isAlertsExpanded ? "chevronUp" : "chevronDown"} size={20} color="var(--text-secondary)" />
+              </div>
             </div>
 
-            {semaforiExpanded && (
-              <div style={{ marginTop: delaysList.length > 0 ? 20 : 0 }}>
+            {isAlertsExpanded && (
+              <div style={{ marginTop: 24, borderTop: '1px solid var(--border-subtle)', paddingTop: 24 }}>
                 {delaysList.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '40px 20px', marginTop: 24, border: '1px solid rgba(16, 185, 129, 0.4)', borderRadius: 12, background: 'rgba(16,185,129,0.05)' }}>
-                    <div className="empty-state-icon" style={{ margin: '0 auto 12px auto' }}><AppIcon name="check" size={26} /></div>
-                    <h3 style={{ color: 'var(--success)', margin: 0 }}>Nessuna Allerta di Ritardo!</h3>
-                    <p style={{ color: 'var(--text-secondary)', marginTop: 8 }}>
+                  <div style={{ textAlign: 'center', padding: 24 }}>
+                    <div className="empty-state-icon" style={{ margin: '0 auto 12px' }}><AppIcon name="check" size={26} /></div>
+                    <h4 style={{ color: 'var(--success)', margin: 0 }}>Nessuna Allerta di Ritardo!</h4>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: 8, fontSize: 14 }}>
                       Tutte le {ganttData.tasks.length} fasi di lavorazione della commessa sono regolarmente coperte dalla consuntivazione oraria degli addetti.
                     </p>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {delaysList.map(item => (
-                      <div key={item.task.id} className={`alert-card ${item.stato}`} style={{ border: '1px solid var(--border-default)', boxShadow: 'none' }}>
+                  delaysList.map((item, idx) => {
+                    if (item.isProjectAlert) {
+                      return (
+                        <div
+                          key={`proj-alert-${idx}`}
+                          className={`alert-card no_responsible`}
+                          style={{ marginBottom: 12, cursor: 'default' }}
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                              <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
+                                Allarme Commessa
+                              </span>
+                              <span className="semaforo-dato-mancante"><span className="status-dot" style={{ background: '#0ea5e9' }} />Dato mancante</span>
+                            </div>
+                            <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                              <AppIcon name="alertTriangle" size={14} style={{ color: '#0ea5e9' }} /> <strong style={{ marginLeft: 6 }}>{item.text}</strong>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={item.task.id}
+                        className={`alert-card ${item.stato}`}
+                        style={{ marginBottom: 12, cursor: 'default' }}
+                        onClick={e => e.stopPropagation()}
+                      >
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                             <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
@@ -2211,12 +2725,16 @@ export default function ProjectDetailPage() {
                               <span className="semaforo-ritardo"><span className="status-dot danger" />Rischio ritardo ferie</span>
                             ) : item.stato === 'sforamento' ? (
                               <span className="semaforo-ritardo"><span className="status-dot danger" />Sforamento ore</span>
+                            ) : item.stato === 'orfana' ? (
+                              <span className="semaforo-attenzione" style={{ color: '#f59e0b', background: '#fffbeb', border: '1px solid #fef3c7' }}><span className="status-dot warning" />Nessun addetto</span>
+                            ) : item.stato === 'mancata_consuntivazione' ? (
+                              <span className="semaforo-mancata-consuntivazione"><span className="status-dot" style={{ background: '#8b5cf6' }} />Mancata consuntivazione</span>
                             ) : (
                               <span className="semaforo-attenzione"><span className="status-dot open" />Attenzione</span>
                             )}
                           </div>
                           <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                            <AppIcon name="calendar" size={14} /> Inizio/Fine: <strong>{formatDateOnly(item.task.start_date)} → {formatDateOnly(item.task.end_date)}</strong> |{' '}
+                            <AppIcon name="calendar" size={14} /> Inizio/Fine: <strong>{formatDateItalian(item.task.start_date)} → {formatDateItalian(item.task.end_date)}</strong> |{' '}
                             Addetti: <strong>{Array.isArray(item.task.workers) ? item.task.workers.join(', ') : 'Nessuno'}</strong>
                           </div>
                           <div className="inline-detail-row" style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>
@@ -2225,14 +2743,17 @@ export default function ProjectDetailPage() {
                         </div>
                         <button
                           className="btn btn-primary"
-                          onClick={() => openOreModalForTask(item.task)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openOreModalForTask(item.task);
+                          }}
                         >
                           <AppIcon name="clock" />
                           Registra ore
                         </button>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })
                 )}
               </div>
             )}
@@ -2240,12 +2761,255 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
+      {/* TAB 5: ANALISI AI */}
+      {activeTab === 'ai_analysis' && (
+        <div className="animate-fadeIn">
+          <div
+            className="commessa-summary-card"
+            style={{
+              background: 'var(--bg-secondary)',
+              borderRadius: '16px',
+              border: '1px solid rgba(59, 130, 246, 0.35)',
+              boxShadow: '0 4px 20px rgba(59, 130, 246, 0.06)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            {/* Header del Box AI */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '20px 24px',
+                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(99, 102, 241, 0.04))',
+                borderBottom: '1px solid var(--border-subtle)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, var(--accent-500, #3b82f6), var(--accent-600, #2563eb))',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#fff',
+                    boxShadow: '0 2px 10px rgba(37, 99, 235, 0.3)'
+                  }}
+                >
+                  <Sparkles size={22} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--text-primary)', fontWeight: '700' }}>
+                      Analisi Commessa
+                    </h3>
+                    <span
+                      style={{
+                        background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+                        color: '#fff',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}
+                    >
+                      HiPlan AI
+                    </span>
+                    {/* Badge Tipologia Commessa */}
+                    {project?.is_atex && (
+                      <span className="badge badge-atex" style={{ fontSize: '11px', padding: '2px 9px', borderRadius: 20 }}>
+                        ATEX
+                      </span>
+                    )}
+                    {project?.is_alimentare && (
+                      <span className="badge badge-alimentare" style={{ fontSize: '11px', padding: '2px 9px', borderRadius: 20 }}>
+                        Alimentare
+                      </span>
+                    )}
+                    {!project?.is_atex && !project?.is_alimentare && (
+                      <span className="badge badge-standard" style={{ fontSize: '11px', padding: '2px 9px', borderRadius: 20 }}>
+                        Standard
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '13.5px', margin: '4px 0 0 0' }}>
+                    Verifica ritardi, sovrapposizioni, ferie, sovraccarichi multi-commessa, requisiti normativi e dati mancanti con consigli di riprogrammazione.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                className="btn btn-primary"
+                onClick={() => handleRunAiAnalysis(true)}
+                disabled={isAiAnalyzing}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '9px 18px',
+                  borderRadius: '10px',
+                  fontWeight: '600',
+                  fontSize: '13.5px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                }}
+              >
+                {isAiAnalyzing ? (
+                  <>
+                    <RefreshCw size={16} className="animate-spin" />
+                    Analisi in corso...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={16} />
+                    {aiAnalysis ? 'Rianalizza Commessa' : 'Avvia Analisi con AI'}
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Contenuto del Box AI */}
+            <div style={{ padding: '24px' }}>
+              {isAiAnalyzing ? (
+                <div style={{ textAlign: 'center', padding: '48px 20px' }}>
+                  <div
+                    style={{
+                      width: '54px',
+                      height: '54px',
+                      borderRadius: '50%',
+                      background: 'rgba(59, 130, 246, 0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 16px',
+                      color: 'var(--accent-500)'
+                    }}
+                  >
+                    <Bot size={30} className="animate-pulse" />
+                  </div>
+                  <h4 style={{ margin: '0 0 8px 0', color: 'var(--text-primary)', fontSize: '1.1rem' }}>
+                    Analisi intelligente in corso...
+                  </h4>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '14px', maxWidth: '520px', margin: '0 auto' }}>
+                    HiPlan AI sta esaminando le date della commessa, le fasi, la tipologia normativa (Standard / ATEX / Alimentare), le ferie e i carichi di lavoro degli addetti per individuare conflitti e suggerire le soluzioni ottimali.
+                  </p>
+                </div>
+              ) : aiAnalysis ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {/* Badge di stato */}
+                  <div
+                    style={{
+                      padding: '12px 16px',
+                      borderRadius: '10px',
+                      background: aiAnalysis.has_conflicts ? 'rgba(239, 68, 68, 0.08)' : 'rgba(16, 185, 129, 0.08)',
+                      border: `1px solid ${aiAnalysis.has_conflicts ? 'rgba(239, 68, 68, 0.25)' : 'rgba(16, 185, 129, 0.25)'}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '12px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      {aiAnalysis.has_conflicts ? (
+                        <AlertTriangle size={20} color="#ef4444" />
+                      ) : (
+                        <CheckCircle size={20} color="#10b981" />
+                      )}
+                      <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>
+                        {aiAnalysis.has_conflicts
+                          ? `Rilevati conflitti/sovraccarichi e dati da verificare`
+                          : 'Nessun conflitto rilevato: la commessa è pianificata regolarmente'}
+                      </span>
+                      {/* Pill di tipologia verificata */}
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '2px 8px',
+                        borderRadius: 12,
+                        background: 'var(--bg-tertiary)',
+                        color: 'var(--text-secondary)',
+                        border: '1px solid var(--border-subtle)'
+                      }}>
+                        Tipologia: {project?.is_atex && project?.is_alimentare ? 'ATEX + Alimentare' : project?.is_atex ? 'ATEX' : project?.is_alimentare ? 'Alimentare' : 'Standard'}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                      Generato {aiAnalysis.generated_date ? `il ${aiAnalysis.generated_date} ` : ''}alle {aiAnalysis.generated_at || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+
+                  {/* Markdown Report Formattato */}
+                  <div
+                    className="chat-markdown"
+                    style={{
+                      background: 'var(--bg-primary)',
+                      padding: '20px',
+                      borderRadius: '12px',
+                      border: '1px solid var(--border-subtle)',
+                      lineHeight: '1.65',
+                      fontSize: '0.95rem'
+                    }}
+                  >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {aiAnalysis.analysis}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    textAlign: 'center',
+                    padding: '40px 20px',
+                    background: 'rgba(59, 130, 246, 0.02)',
+                    borderRadius: '12px',
+                    border: '1px dashed var(--border-color)'
+                  }}
+                >
+                  <div style={{ color: 'var(--accent-500)', marginBottom: '12px' }}>
+                    <Sparkles size={36} style={{ margin: '0 auto' }} />
+                  </div>
+                  <h4 style={{ margin: '0 0 6px 0', color: 'var(--text-primary)', fontSize: '1.1rem' }}>
+                    Vuoi analizzare questa commessa con HiPlan AI?
+                  </h4>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '14px', maxWidth: '600px', margin: '0 auto 20px' }}>
+                    HiPlan AI verificherà all'istante eventuali ritardi, conflitti con ferie, sovraccarichi degli addetti (incrociando anche le altre commesse) e ti fornirà consigli pratici di riprogrammazione.
+                  </p>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleRunAiAnalysis}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 22px',
+                      borderRadius: '10px',
+                      fontWeight: '600',
+                      fontSize: '14px'
+                    }}
+                  >
+                    <Sparkles size={18} />
+                    Avvia Analisi Intelligente
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODALE NUOVA / MODIFICA FASE (TASK MODAL) */}
       {showTaskModal && (
         <div className="modal-overlay">
-          <div className="modal task-editor-modal" style={{ maxWidth: 900 }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal task-editor-modal" style={{ maxWidth: 1100, minHeight: '85vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{editingTask ? 'Dettagli Fase Lavorazione' : 'Nuova Fase Lavorazione (Ufficio Tecnico)'}</h2>
+              <h2>{editingTask ? 'Dettagli Fase Lavorazione' : 'Nuova Fase Lavorazione'}</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowTaskModal(false)} aria-label="Chiudi" style={{ marginRight: '-45px' }}>
                 <AppIcon name="close" />
               </button>
@@ -2268,435 +3032,558 @@ export default function ProjectDetailPage() {
             )}
 
             {taskModalTab === 'generale' && (
-              <form onSubmit={handleSaveTaskForm}>
-                {/* Scelta Tipo Fase: Normale o Milestone (Linea Verticale / Evento) */}
-                <div className="task-type-selector">
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Tipo di Voce:</label>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <label className={`task-type-option ${taskForm.taskType !== 'milestone' ? 'selected' : ''}`}>
-                      <input
-                        type="radio"
-                        name="taskType"
-                        value="task"
-                        checked={taskForm.taskType !== 'milestone'}
-                        onChange={() => setTaskForm({ ...taskForm, taskType: 'task' })}
-                      />
-                      <AppIcon name="list" />
-                      Fase di lavorazione
-                      <small>Con durata e budget ore</small>
-                    </label>
-                    <label className={`task-type-option ${taskForm.taskType === 'milestone' ? 'selected' : ''}`}>
-                      <input
-                        type="radio"
-                        name="taskType"
-                        value="milestone"
-                        checked={taskForm.taskType === 'milestone'}
-                        onChange={() => setTaskForm({ ...taskForm, taskType: 'milestone', color: taskForm.color === PHASE_DEFAULT_COLORS[PREDEFINED_PHASES[0]] ? '#f59e0b' : taskForm.color })}
-                      />
-                      <AppIcon name="calendar" />
-                      Evento o scadenza
-                      <small>Milestone nel Gantt</small>
-                    </label>
-                  </div>
-                </div>
-
-                {taskForm.taskType !== 'milestone' && (
-                  <div style={{ marginBottom: 16, padding: '10px 14px', background: 'var(--bg-tertiary)', borderRadius: '8px', border: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <input
-                      type="checkbox"
-                      id="taskCompleted"
-                      checked={Number(taskForm.completed) === 1}
-                      onChange={(e) => {
-                        const isChecked = e.target.checked;
-                        const newCompleted = isChecked ? 1 : -1;
-                        const resetColor = getTaskColor({ ...taskForm, completed: newCompleted });
-                        setTaskForm({
-                          ...taskForm,
-                          completed: newCompleted,
-                          color: !isChecked && taskForm.color === '#10b981' ? resetColor : taskForm.color,
-                        });
-                      }}
-                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                    />
-                    <label htmlFor="taskCompleted" style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)', margin: 0 }}>
-                      Fase completata
-                    </label>
-                  </div>
-                )}
-
-                <div className="input-group" style={{ position: 'relative' }}>
-                  <label>{taskForm.taskType === 'milestone' ? 'Nome Evento / Scadenza *' : 'Fase di Lavorazione *'}</label>
-                  <SearchableCombobox
-                    options={getAvailableTemplates().map(tpl => ({
-                      value: tpl.name,
-                      label: tpl.name,
-                      department: tpl.department || 'tutti',
-                      ...tpl
-                    }))}
-                    value={taskForm.faseSel === '__custom__' ? taskForm.customText : taskForm.faseSel}
-                    onChange={(val, opt) => {
-                      if (opt) {
-                        const newDays = opt.default_days != null ? opt.default_days : taskForm.duration_days;
-                        const newHours = opt.default_hours != null ? opt.default_hours : taskForm.planned_hours;
-                        const sDate = taskForm.start_date || new Date().toISOString().split('T')[0];
-                        const newEnd = addWorkingDays(sDate, newDays);
-                        setTaskForm({
-                          ...taskForm,
-                          faseSel: opt.name,
-                          customText: '',
-                          color: opt.default_color || PHASE_DEFAULT_COLORS[opt.name] || taskForm.color,
-                          duration_days: newDays,
-                          planned_hours: newHours,
-                          end_date: newEnd,
-                        });
-                      } else {
-                        setTaskForm({
-                          ...taskForm,
-                          faseSel: '__custom__',
-                          customText: val
-                        });
-                      }
-                    }}
-                    placeholder="Seleziona o digita una nuova fase..."
-                    allowCustom={true}
-                    groupBy={user?.role === 'admin' ? 'department' : undefined}
-                    groupLabels={{
-                      ufficio_tecnico: 'Ufficio Tecnico',
-                      produzione: 'Produzione',
-                      acquisti: 'Acquisti',
-                      tutti: 'Condivise / Tutti'
-                    }}
-                    renderOption={(opt, searchStr) => (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ width: 12, height: 12, borderRadius: '50%', background: opt.default_color || PHASE_DEFAULT_COLORS[opt.name] || '#3b82f6', border: '1px solid var(--border-default)', flexShrink: 0 }} />
-                          <span style={{ fontWeight: (taskForm.faseSel === opt.name || taskForm.customText === opt.name) ? 600 : 400, color: 'var(--text-primary)' }}>{opt.name}</span>
+              <form onSubmit={handleSaveTaskForm} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '10px 4px', marginRight: -8, paddingRight: 12 }}>
+                  {/* Scelta Tipo Fase: Normale o Milestone (Linea Verticale / Evento) */}
+                  <div className="task-type-selector">
+                    <label>Tipo di Voce:</label>
+                    <div>
+                      <label className={`task-type-option ${taskForm.taskType !== 'milestone' ? 'selected' : ''}`}>
+                        <input
+                          type="radio"
+                          name="taskType"
+                          value="task"
+                          checked={taskForm.taskType !== 'milestone'}
+                          onChange={() => setTaskForm({ ...taskForm, taskType: 'task' })}
+                        />
+                        <div className="option-content">
+                          <div className="option-title">
+                            <AppIcon name="list" size={18} />
+                            Fase di lavorazione
+                          </div>
                         </div>
-                        <button
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleDeleteTemplateFromDropdown(opt);
-                          }}
-                          className="btn-ghost btn-icon"
-                          style={{ padding: '2px 6px', color: 'var(--danger)', fontSize: '0.9rem' }}
-                          title="Elimina dall'elenco a tendina"
-                        >
-                          <AppIcon name="trash" size={14} />
-                        </button>
+                      </label>
+                      <label className={`task-type-option ${taskForm.taskType === 'milestone' ? 'selected' : ''}`}>
+                        <input
+                          type="radio"
+                          name="taskType"
+                          value="milestone"
+                          checked={taskForm.taskType === 'milestone'}
+                          onChange={() => setTaskForm({ ...taskForm, taskType: 'milestone', color: taskForm.color === PHASE_DEFAULT_COLORS[PREDEFINED_PHASES[0]] ? '#f59e0b' : taskForm.color })}
+                        />
+                        <div className="option-content">
+                          <div className="option-title">
+                            <AppIcon name="calendar" size={18} />
+                            Milestone
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="input-group" style={{ position: 'relative' }}>
+                    <label>{taskForm.taskType === 'milestone' ? 'Nome Evento / Scadenza *' : 'Fase di Lavorazione *'}</label>
+                    <SearchableCombobox
+                      options={getAvailableTemplates().map(tpl => ({
+                        value: tpl.name,
+                        label: tpl.name,
+                        department: (tpl.department && tpl.department !== 'tutti') ? tpl.department : 'condivisa',
+                        ...tpl
+                      }))}
+                      value={taskForm.faseSel === '__custom__' ? taskForm.customText : taskForm.faseSel}
+                      onChange={(val, opt) => {
+                        if (opt) {
+                          if (opt.default_budget_mode) {
+                            setBudgetMode(opt.default_budget_mode);
+                          }
+                          const newDays = opt.default_days != null ? opt.default_days : taskForm.duration_days;
+                          const newHours = opt.default_hours != null ? opt.default_hours : taskForm.planned_hours;
+                          const sDate = taskForm.start_date || new Date().toISOString().split('T')[0];
+                          const newEnd = addWorkingDays(sDate, newDays, taskForm.excluded_dates);
+                          setTaskForm({
+                            ...taskForm,
+                            faseSel: opt.name,
+                            customText: '',
+                            color: opt.default_color || PHASE_DEFAULT_COLORS[opt.name] || taskForm.color,
+                            duration_days: newDays,
+                            planned_hours: newHours,
+                            end_date: newEnd,
+                            department: opt.department && opt.department !== 'tutti' ? opt.department : 'condivisa'
+                          });
+                        } else {
+                          setTaskForm({
+                            ...taskForm,
+                            faseSel: '__custom__',
+                            customText: val
+                          });
+                        }
+                      }}
+                      placeholder="Seleziona o digita una nuova fase..."
+                      allowCustom={true}
+                      groupBy={user?.role === 'admin' ? 'department' : undefined}
+                      groupLabels={deptNameMap}
+                      renderOption={(opt, searchStr) => (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ width: 12, height: 12, borderRadius: '50%', background: opt.default_color || PHASE_DEFAULT_COLORS[opt.name] || '#3b82f6', border: '1px solid var(--border-default)', flexShrink: 0 }} />
+                            <span style={{ fontWeight: (taskForm.faseSel === opt.name || taskForm.customText === opt.name) ? 600 : 400, color: 'var(--text-primary)' }}>{opt.name}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleDeleteTemplateFromDropdown(opt);
+                            }}
+                            className="btn-ghost btn-icon"
+                            style={{ padding: '2px 6px', color: 'var(--danger)', fontSize: '0.9rem' }}
+                            title="Elimina dall'elenco a tendina"
+                          >
+                            <AppIcon name="trash" size={14} />
+                          </button>
+                        </div>
+                      )}
+                    />
+                    {taskForm.faseSel === '__custom__' && taskForm.customText && (
+                      <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <AppIcon name="alert" size={14} style={{ color: 'var(--accent-500)' }} /> Questa nuova fase verrà automaticamente aggiunta all'elenco suggerito per il reparto selezionato:
+                        </span>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                          {DEPT_OPTIONS.map(d => {
+                            const currentVal = taskForm.department || user?.department || 'ufficio_tecnico';
+                            const isSelected = currentVal === d.value;
+                            return (
+                              <div
+                                key={d.value}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setTaskForm({
+                                    ...taskForm,
+                                    department: d.value,
+                                    color: d.color === '#6b7280' ? taskForm.color : d.color
+                                  });
+                                }}
+                                style={{
+                                  padding: '4px 12px', borderRadius: 20, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                                  background: isSelected ? (d.color + '22') : 'var(--bg-primary)',
+                                  color: isSelected ? d.color : 'var(--text-secondary)',
+                                  border: `1px solid ${isSelected ? (d.color + '44') : 'var(--border-default)'}`,
+                                  transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 6
+                                }}
+                              >
+                                <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: d.color, opacity: isSelected ? 1 : 0.4 }} />
+                                {d.label}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
-                  />
-                  {taskForm.faseSel === '__custom__' && taskForm.customText && (
-                    <span className="inline-detail-row" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 8 }}>
-                      <AppIcon name="alert" size={13} />Questa nuova fase verrà automaticamente aggiunta all'elenco suggerito per il reparto {user?.role === 'admin' ? 'di competenza' : (user?.department ? user.department.replace('_', ' ') : 'ufficio tecnico')}.
-                    </span>
-                  )}
-                </div>
-
-                {/* Colore personalizzato della fase */}
-                <div className="input-group" style={{ marginTop: 14 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span>Colore Fase (Gantt & Timeline)</span>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 'normal' }}>Personalizzabile</span>
-                  </label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
-                    <input
-                      type="color"
-                      value={taskForm.color || '#3b82f6'}
-                      onChange={(e) => setTaskForm({ ...taskForm, color: e.target.value })}
-                      style={{ width: 44, height: 38, padding: 2, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--bg-tertiary)' }}
-                    />
-                    <input
-                      type="text"
-                      className="input"
-                      value={(taskForm.color || '#3b82f6').toUpperCase()}
-                      onChange={(e) => setTaskForm({ ...taskForm, color: e.target.value })}
-                      style={{ width: 100, fontFamily: 'monospace' }}
-                      maxLength={7}
-                    />
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {Object.values(PHASE_DEFAULT_COLORS).slice(0, 8).map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => setTaskForm({ ...taskForm, color: c })}
-                          style={{
-                            width: 24,
-                            height: 24,
-                            borderRadius: '50%',
-                            backgroundColor: c,
-                            border: taskForm.color === c ? '2px solid #fff' : '1px solid var(--border-subtle)',
-                            boxShadow: taskForm.color === c ? '0 0 0 2px var(--accent-500)' : 'none',
-                            cursor: 'pointer',
-                            padding: 0
-                          }}
-                          title={`Colore preset: ${c}`}
-                        />
-                      ))}
-                    </div>
                   </div>
-                </div>
 
-
-                {/* Sezione Pianificazione Temporale e Durate / Data Evento */}
-                {taskForm.taskType === 'milestone' ? (
-                  <div className="task-form-section milestone-section">
-                    <div className="task-form-section-title">
-                      <AppIcon name="calendar" />
-                      Data evento o milestone
-                    </div>
-                    <div className="input-group" style={{ maxWidth: 260 }}>
-                      <label>Data Evento</label>
+                  {/* Colore personalizzato della fase */}
+                  <div className="input-group" style={{ marginTop: 14 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>Colore Fase (Gantt & Timeline)</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 'normal' }}>Personalizzabile</span>
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
                       <input
-                        type="date"
-                        className="input"
-                        value={taskForm.start_date}
-                        onChange={(e) => setTaskForm({ ...taskForm, start_date: e.target.value, end_date: e.target.value })}
+                        type="color"
+                        value={taskForm.color || '#3b82f6'}
+                        onChange={(e) => setTaskForm({ ...taskForm, color: e.target.value })}
+                        style={{ width: 44, height: 38, padding: 2, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'var(--bg-tertiary)' }}
                       />
+                      <input
+                        type="text"
+                        className="input"
+                        value={(taskForm.color || '#3b82f6').toUpperCase()}
+                        onChange={(e) => setTaskForm({ ...taskForm, color: e.target.value })}
+                        style={{ width: 100, fontFamily: 'monospace' }}
+                        maxLength={7}
+                      />
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {Object.values(PHASE_DEFAULT_COLORS).slice(0, 8).map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => setTaskForm({ ...taskForm, color: c })}
+                            style={{
+                              width: 24,
+                              height: 24,
+                              borderRadius: '50%',
+                              backgroundColor: c,
+                              border: taskForm.color === c ? '2px solid #fff' : '1px solid var(--border-subtle)',
+                              boxShadow: taskForm.color === c ? '0 0 0 2px var(--accent-500)' : 'none',
+                              cursor: 'pointer',
+                              padding: 0
+                            }}
+                            title={`Colore preset: ${c}`}
+                          />
+                        ))}
+                      </div>
                     </div>
                   </div>
-                ) : (
-                  <>
-                    <div className="task-form-section">
+
+
+                  {/* Data di Fine Commessa visibile sopra la pianificazione */}
+                  <div style={{ marginTop: '10px', padding: '10px 14px', background: 'var(--bg-tertiary)', borderRadius: '6px', borderLeft: '3px solid var(--accent-500)', display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.9rem' }}>
+                    <AppIcon name="calendar" size={16} style={{ color: 'var(--accent-500)' }} />
+                    <strong>Fine Commessa:</strong>
+                    <span style={{ color: 'var(--text-primary)' }}>{project?.end_date ? formatDateItalian(project.end_date) : 'Non impostata'}</span>
+                  </div>
+
+                  {/* Sezione Pianificazione Temporale e Durate / Data Evento */}
+                  {taskForm.taskType === 'milestone' ? (
+                    <div className="task-form-section milestone-section">
                       <div className="task-form-section-title">
                         <AppIcon name="calendar" />
-                        Pianificazione e durata
+                        Data evento o milestone
                       </div>
-
-                      {/* Scelta Modalità Budget e Pianificazione Date */}
-                      <div style={{ marginTop: 8, marginBottom: 16, padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
-                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                          Modalità calcolo budget e pianificazione date:
-                        </label>
-                        <select
+                      <div className="input-group" style={{ maxWidth: 260 }}>
+                        <label>Data Evento</label>
+                        <input
+                          type="date"
                           className="input"
-                          style={{ width: '100%', fontWeight: 600, background: 'var(--bg-primary)', borderColor: 'var(--accent-500)', color: 'var(--text-primary)' }}
-                          value={budgetMode}
-                          onChange={(e) => handleBudgetModeChange(e.target.value)}
-                        >
-                          <option value="start_end">Data Inizio / Data Fine (calcola giorni lavorativi ed ore escludendo sab/dom e festivi)</option>
-                          <option value="start_hours">Data Inizio / Ore (calcola data fine escludendo sab/dom e festivi, giorni = ore/8)</option>
-                          <option value="end_hours">Data Fine / Ore (calcola data inizio a ritroso escludendo sab/dom e festivi)</option>
-                          <option value="start_days">Data Inizio / Giorni (calcola data fine escludendo sab/dom e festivi, ore = giorni×8)</option>
-                          <option value="end_days">Data Fine / Giorni (calcola data inizio a ritroso escludendo sab/dom e festivi)</option>
-                          <option value="start_days_hours">Data Inizio / Giorni / Ore (es. 24h spalmate su 10 gg escludendo sab/dom e festivi)</option>
-                          <option value="end_days_hours">Data Fine / Giorni / Ore (es. 24h spalmate a ritroso su 10 gg escludendo sab/dom e festivi)</option>
-                        </select>
+                          value={taskForm.start_date}
+                          onChange={(e) => setTaskForm({ ...taskForm, start_date: e.target.value, end_date: e.target.value })}
+                        />
                       </div>
-
-                      <div style={{ display: 'flex', gap: 12 }}>
-                        <div className="input-group" style={{ flex: 1 }}>
-                          <label>Data Avvio Lavorazione</label>
-                          <input
-                            type="date"
-                            className="input"
-                            value={taskForm.start_date}
-                            onChange={(e) => handleStartDateChange(e.target.value)}
-                            disabled={budgetMode === 'end_hours' || budgetMode === 'end_days' || budgetMode === 'end_days_hours'}
-                            style={{ opacity: (budgetMode === 'end_hours' || budgetMode === 'end_days' || budgetMode === 'end_days_hours') ? 0.6 : 1 }}
-                            title={(budgetMode === 'end_hours' || budgetMode === 'end_days' || budgetMode === 'end_days_hours') ? "Data inizio calcolata automaticamente a ritroso" : ""}
-                          />
-                        </div>
-                        <div className="input-group" style={{ flex: 1 }}>
-                          <label>Data Fine Lavorazione</label>
-                          <input
-                            type="date"
-                            className="input"
-                            value={taskForm.end_date}
-                            onChange={(e) => handleEndDateChange(e.target.value)}
-                            disabled={budgetMode === 'start_hours' || budgetMode === 'start_days' || budgetMode === 'start_days_hours'}
-                            style={{ opacity: (budgetMode === 'start_hours' || budgetMode === 'start_days' || budgetMode === 'start_days_hours') ? 0.6 : 1 }}
-                            title={(budgetMode === 'start_hours' || budgetMode === 'start_days' || budgetMode === 'start_days_hours') ? "Data fine calcolata automaticamente escludendo sab e dom" : ""}
-                          />
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
-                        <div className="input-group" style={{ flex: 1 }}>
-                          <label>Durata in Giorni (Lavorativi: Lun-Ven)</label>
-                          <div style={{ position: 'relative' }}>
-                            <input
-                              type="number"
-                              min="1"
-                              step="1"
-                              className="input"
-                              style={{ fontWeight: 600, color: 'var(--accent-500)', paddingRight: '70px', opacity: (budgetMode === 'start_end' || budgetMode === 'start_hours' || budgetMode === 'end_hours') ? 0.6 : 1 }}
-                              value={taskForm.duration_days}
-                              onChange={(e) => handleDurationDaysChange(e.target.value)}
-                              disabled={budgetMode === 'start_end' || budgetMode === 'start_hours' || budgetMode === 'end_hours'}
-                            />
-                            <span style={{ position: 'absolute', right: 40, top: 9, fontSize: 12, color: 'var(--text-tertiary)', pointerEvents: 'none' }}>giorni</span>
-                          </div>
-                        </div>
-                        <div className="input-group" style={{ flex: 1 }}>
-                          <label>Durata in Ore (Budget Lavoro)</label>
-                          <div style={{ position: 'relative' }}>
-                            <input
-                              type="number"
-                              min="0.5"
-                              step="0.5"
-                              className="input"
-                              style={{ fontWeight: 600, color: 'var(--success)', paddingRight: '60px', opacity: (budgetMode === 'start_days' || budgetMode === 'end_days') ? 0.6 : 1 }}
-                              value={taskForm.planned_hours}
-                              onChange={(e) => handlePlannedHoursChange(e.target.value)}
-                              disabled={budgetMode === 'start_days' || budgetMode === 'end_days'}
-                            />
-                            <span style={{ position: 'absolute', right: 40, top: 9, fontSize: 12, color: 'var(--text-tertiary)', pointerEvents: 'none' }}>ore</span>
-                          </div>
-                        </div>
-                      </div>
-
                     </div>
-                  </>
-                )}
-
-                {/* Reparto */}
-                <div className="input-group" style={{ marginTop: 16 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <AppIcon name="building" size={15} />
-                    Reparto
-                    {user?.role !== 'admin' && taskForm.faseSel !== '__custom__' && (
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(assegnato automaticamente)</span>
-                    )}
-                  </label>
-                  {user?.role === 'admin' || taskForm.faseSel === '__custom__' ? (
-                    <select
-                      className="input"
-                      value={taskForm.department || ''}
-                      onChange={(e) => setTaskForm({ ...taskForm, department: e.target.value || null })}
-                    >
-                      <option value="">— Seleziona reparto —</option>
-                      {DEPT_OPTIONS.map(d => (
-                        <option key={d.value} value={d.value}>{d.label}</option>
-                      ))}
-                    </select>
                   ) : (
-                    <div style={{
-                      padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                      background: taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') + '18' : 'var(--bg-secondary)',
-                      color: taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') : 'var(--text-muted)',
-                      border: `1px solid ${taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') + '44' : 'var(--border-subtle)'}`,
-                      display: 'flex', alignItems: 'center', gap: 8
-                    }}>
-                      {taskForm.department ? DEPT_OPTIONS.find(d => d.value === taskForm.department)?.label || taskForm.department : '— Nessun reparto —'}
-                    </div>
+                    <>
+                      <div className="task-form-section">
+                        <div className="task-form-section-title">
+                          <AppIcon name="calendar" />
+                          Pianificazione e durata
+                        </div>
+
+                        {/* Scelta Modalità Budget e Pianificazione Date */}
+                        <div style={{ marginTop: 8, marginBottom: 16, padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
+                          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                            Modalità calcolo budget e pianificazione date:
+                          </label>
+                          <select
+                            className="input"
+                            style={{ width: '100%', fontWeight: 600, background: 'var(--bg-primary)', borderColor: 'var(--accent-500)', color: 'var(--text-primary)' }}
+                            value={budgetMode}
+                            onChange={(e) => handleBudgetModeChange(e.target.value)}
+                          >
+                            <option value="start_end">Data Inizio / Data Fine (calcola giorni lavorativi ed ore escludendo sab/dom e festivi)</option>
+                            <option value="start_hours">Data Inizio / Ore (calcola data fine escludendo sab/dom e festivi, giorni = ore/8)</option>
+                            <option value="end_hours">Data Fine / Ore (calcola data inizio a ritroso escludendo sab/dom e festivi)</option>
+                            <option value="start_days">Data Inizio / Giorni (calcola data fine escludendo sab/dom e festivi, ore = giorni×8)</option>
+                            <option value="end_days">Data Fine / Giorni (calcola data inizio a ritroso escludendo sab/dom e festivi)</option>
+                            <option value="start_days_hours">Data Inizio / Giorni / Ore (es. 24h spalmate su 10 gg escludendo sab/dom e festivi)</option>
+                            <option value="end_days_hours">Data Fine / Giorni / Ore (es. 24h spalmate a ritroso su 10 gg escludendo sab/dom e festivi)</option>
+                          </select>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          <div className="input-group" style={{ flex: 1 }}>
+                            <label>Data Avvio Lavorazione</label>
+                            <input
+                              type="date"
+                              className="input"
+                              value={taskForm.start_date}
+                              onChange={(e) => handleStartDateChange(e.target.value)}
+                              disabled={budgetMode === 'end_hours' || budgetMode === 'end_days' || budgetMode === 'end_days_hours'}
+                              style={{ opacity: (budgetMode === 'end_hours' || budgetMode === 'end_days' || budgetMode === 'end_days_hours') ? 0.6 : 1 }}
+                              title={(budgetMode === 'end_hours' || budgetMode === 'end_days' || budgetMode === 'end_days_hours') ? "Data inizio calcolata automaticamente a ritroso" : ""}
+                            />
+                          </div>
+                          <div className="input-group" style={{ flex: 1 }}>
+                            <label>Data Fine Lavorazione</label>
+                            <input
+                              type="date"
+                              className="input"
+                              value={taskForm.end_date}
+                              onChange={(e) => handleEndDateChange(e.target.value)}
+                              disabled={budgetMode === 'start_hours' || budgetMode === 'start_days' || budgetMode === 'start_days_hours'}
+                              style={{ opacity: (budgetMode === 'start_hours' || budgetMode === 'start_days' || budgetMode === 'start_days_hours') ? 0.6 : 1 }}
+                              title={(budgetMode === 'start_hours' || budgetMode === 'start_days' || budgetMode === 'start_days_hours') ? "Data fine calcolata automaticamente escludendo sab e dom" : ""}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+                          <div className="input-group" style={{ flex: 1 }}>
+                            <label>Durata in Giorni (Lavorativi: Lun-Ven)</label>
+                            <div style={{ position: 'relative' }}>
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                className="input"
+                                style={{ fontWeight: 600, color: 'var(--accent-500)', paddingRight: '70px', opacity: (budgetMode === 'start_end' || budgetMode === 'start_hours' || budgetMode === 'end_hours') ? 0.6 : 1 }}
+                                value={taskForm.duration_days}
+                                onChange={(e) => handleDurationDaysChange(e.target.value)}
+                                disabled={budgetMode === 'start_end' || budgetMode === 'start_hours' || budgetMode === 'end_hours'}
+                              />
+                              <span style={{ position: 'absolute', right: 40, top: 9, fontSize: 12, color: 'var(--text-tertiary)', pointerEvents: 'none' }}>giorni</span>
+                            </div>
+                          </div>
+                          <div className="input-group" style={{ flex: 1 }}>
+                            <label>Durata in Ore (Budget Lavoro)</label>
+                            <div style={{ position: 'relative' }}>
+                              <input
+                                type="number"
+                                min="0.5"
+                                step="0.5"
+                                className="input"
+                                style={{ fontWeight: 600, color: 'var(--success)', paddingRight: '60px', opacity: (budgetMode === 'start_days' || budgetMode === 'end_days') ? 0.6 : 1 }}
+                                value={taskForm.planned_hours}
+                                onChange={(e) => handlePlannedHoursChange(e.target.value)}
+                                disabled={budgetMode === 'start_days' || budgetMode === 'end_days'}
+                              />
+                              <span style={{ position: 'absolute', right: 40, top: 9, fontSize: 12, color: 'var(--text-tertiary)', pointerEvents: 'none' }}>ore</span>
+                            </div>
+                          </div>
+                        </div>
+
+                      </div>
+                    </>
                   )}
+
+                  {/* Reparto */}
+                  <div className="input-group" style={{ marginTop: 16 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <AppIcon name="building" size={15} />
+                      Reparto
+                      {user?.role !== 'admin' && taskForm.faseSel !== '__custom__' && (
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(assegnato automaticamente)</span>
+                      )}
+                    </label>
+                    {user?.role === 'admin' || taskForm.faseSel === '__custom__' ? (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {DEPT_OPTIONS.map(d => {
+                          const isSelected = taskForm.department === d.value;
+                          return (
+                            <div
+                              key={d.value}
+                              onClick={() => setTaskForm(prev => ({
+                                ...prev,
+                                department: d.value,
+                                color: d.color || prev.color || '#3b82f6'
+                              }))}
+                              style={{
+                                padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                                background: isSelected ? (d.color + '22') : 'var(--bg-primary)',
+                                color: isSelected ? d.color : 'var(--text-secondary)',
+                                border: `1px solid ${isSelected ? (d.color + '44') : 'var(--border-default)'}`,
+                                display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s'
+                              }}
+                            >
+                              <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: d.color, opacity: isSelected ? 1 : 0.4 }} />
+                              {d.label}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div style={{
+                        padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                        background: taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') + '18' : 'var(--bg-secondary)',
+                        color: taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') : 'var(--text-muted)',
+                        border: `1px solid ${taskForm.department ? (DEPT_OPTIONS.find(d => d.value === taskForm.department)?.color || '#6b7280') + '44' : 'var(--border-subtle)'}`,
+                        display: 'flex', alignItems: 'center', gap: 8
+                      }}>
+                        {taskForm.department ? DEPT_OPTIONS.find(d => d.value === taskForm.department)?.label || taskForm.department : '— Nessun reparto —'}
+                      </div>
+                    )}
+                  </div>
+
+                  {(() => {
+                    const isMilestone = taskForm.taskType === 'milestone';
+                    const currentAssignedTotal = taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0);
+                    const sDateForBudget = taskForm.start_date;
+                    const eDateForBudget = taskForm.end_date;
+                    const diffDaysForBudget = sDateForBudget && eDateForBudget ? countWorkingDays(sDateForBudget, eDateForBudget, taskForm.excluded_dates) : 1;
+                    const finalDaysForBudget = Math.max(1, Number(taskForm.duration_days) || diffDaysForBudget);
+                    const currentBudgetTotal = isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDaysForBudget * 8.0));
+
+                    const roundedAssigned = Math.round(currentAssignedTotal * 10) / 10;
+                    const roundedBudget = Math.round(currentBudgetTotal * 10) / 10;
+                    const isOverBudget = !isMilestone && roundedAssigned > roundedBudget;
+
+                    let totalColor = 'var(--text-secondary)';
+                    if (!isMilestone) {
+                      if (roundedAssigned < roundedBudget) totalColor = '#f59e0b';
+                      else if (roundedAssigned === roundedBudget) totalColor = '#10b981';
+                      else totalColor = '#ef4444';
+                    }
+
+                    return (
+                      <>
+                        <div className="input-group" style={{ marginTop: 16 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <label style={{ margin: 0 }}>Addetto Assegnato (Singolo)</label>
+                            {!isMilestone && (
+                              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: totalColor }}>
+                                Totale assegnato: {roundedAssigned}h / {roundedBudget}h
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                            {[...predefinedWorkers]
+                              .filter(w => {
+                                if (taskForm.workers.includes(w)) return true;
+                                if (!taskForm.department || taskForm.department === 'condivisa') return true;
+                                const wUser = usersList.find(u => u.username === w);
+                                return wUser && wUser.department === taskForm.department;
+                              })
+                              .sort((a, b) => a === user?.username ? -1 : b === user?.username ? 1 : a.localeCompare(b))
+                              .map(w => {
+                                const sel = taskForm.workers.includes(w);
+                                const wUser = usersList.find(u => u.username === w);
+                                const wDept = wUser ? wUser.department : null;
+                                const deptColor = wDept ? (DEPT_OPTIONS.find(d => d.value === wDept)?.color || 'var(--accent-600)') : 'var(--accent-600)';
+
+                                return (
+                                  <div
+                                    key={w}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      background: sel ? deptColor : 'var(--bg-primary)',
+                                      color: sel ? '#fff' : 'var(--text-secondary)',
+                                      border: `1px solid ${sel ? deptColor : 'var(--border-default)'}`,
+                                      padding: '6px 12px',
+                                      borderRadius: '16px',
+                                      cursor: 'pointer',
+                                      fontSize: '0.85rem',
+                                      fontWeight: sel ? 600 : 400
+                                    }}
+                                    onClick={() => toggleWorkerSelection(w)}
+                                  >
+                                    <span>{sel ? '✓ ' : '+ '}{w}</span>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </div>
+
+                        {taskForm.workers && taskForm.workers.length > 0 && taskForm.start_date && (
+                          <div style={{ marginTop: 16 }}>
+                            <h4 style={{ marginBottom: 8, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Calendario Ferie</h4>
+                            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 8, marginBottom: 8 }}>
+                              Seleziona i giorni da saltare (ferie o permessi). La durata della fase si estenderà automaticamente.
+                            </p>
+                            <MultiDatePicker
+                              startDate={taskForm.start_date}
+                              allVacations={allVacations}
+                              workers={taskForm.workers}
+                              excludedDates={taskForm.excluded_dates || []}
+                              onChange={(newExcluded) => {
+                                setTaskForm(prev => {
+                                  let updates = { excluded_dates: newExcluded };
+
+                                  if (budgetMode === 'start_end') {
+                                    const days = countWorkingDays(prev.start_date, prev.end_date, newExcluded);
+                                    updates.duration_days = days;
+                                    updates.planned_hours = days * 8.0;
+                                  } else {
+                                    const newDays = Math.max(1, Number(prev.duration_days) || 1);
+                                    if (budgetMode === 'end_days' || budgetMode === 'end_days_hours' || budgetMode === 'end_hours') {
+                                      updates.start_date = subtractWorkingDays(prev.end_date || new Date(), newDays, newExcluded);
+                                    } else {
+                                      updates.end_date = addWorkingDays(prev.start_date || new Date(), newDays, newExcluded);
+                                    }
+                                  }
+
+                                  return { ...prev, ...updates };
+                                });
+                              }}
+                            />
+                          </div>
+                        )}
+
+                        {/* Sezione addetti rimossa e unificata nel blocco superiore */}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 {(() => {
                   const isMilestone = taskForm.taskType === 'milestone';
-                  const currentAssignedTotal = Number(taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0).toFixed(2));
+                  const currentAssignedTotal = taskForm.workers.reduce((sum, w) => sum + (Number(taskForm.worker_hours?.[w]) || 0), 0);
                   const sDateForBudget = taskForm.start_date;
                   const eDateForBudget = taskForm.end_date;
-                  const diffDaysForBudget = sDateForBudget && eDateForBudget ? countWorkingDays(sDateForBudget, eDateForBudget) : 1;
+                  const diffDaysForBudget = sDateForBudget && eDateForBudget ? countWorkingDays(sDateForBudget, eDateForBudget, taskForm.excluded_dates) : 1;
                   const finalDaysForBudget = Math.max(1, Number(taskForm.duration_days) || diffDaysForBudget);
                   const currentBudgetTotal = isMilestone ? 0 : (Number(taskForm.planned_hours) || (finalDaysForBudget * 8.0));
-                  const overBudget = !isMilestone && (currentAssignedTotal > currentBudgetTotal);
+                  const roundedAssigned = Math.round(currentAssignedTotal * 10) / 10;
+                  const roundedBudget = Math.round(currentBudgetTotal * 10) / 10;
+                  const isOverBudget = !isMilestone && roundedAssigned > roundedBudget;
 
                   return (
-                    <div className="input-group" style={{ marginTop: 16 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                        <span>Addetti Assegnati (Multi-selezione)</span>
-                        {!isMilestone && taskForm.workers.length > 0 && (
-                          <span style={{ fontSize: 12, fontWeight: 700, color: overBudget ? '#ef4444' : 'var(--accent-500)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <AppIcon name={overBudget ? 'alert' : 'check'} size={13} />
-                            {taskForm.workers.length} {taskForm.workers.length === 1 ? 'addetto' : 'addetti'} · {currentAssignedTotal}h / {currentBudgetTotal}h
-                          </span>
-                        )}
-                      </label>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                        {predefinedWorkers.map(w => {
-                          const sel = taskForm.workers.includes(w);
-                          if (sel && !isMilestone) {
-                            return (
-                              <div
-                                key={w}
-                                style={{
-                                  display: 'flex', alignItems: 'center', gap: 6,
-                                  background: 'var(--accent-600)', color: '#fff',
-                                  border: '1px solid var(--accent-500)',
-                                  padding: '4px 8px 4px 12px', borderRadius: '16px',
-                                  fontSize: '0.85rem', fontWeight: 600
-                                }}
-                              >
-                                <span style={{ cursor: 'pointer' }} onClick={() => toggleWorkerSelection(w)}>✓ {w}</span>
-                                <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.2)', borderRadius: 12, padding: '2px 6px', marginLeft: 4 }}>
-                                  <span style={{ fontSize: '0.75rem', marginRight: 4, opacity: 0.9 }}>Ore:</span>
-                                  <input
-                                    type="number" min="0.5" step="0.5"
-                                    style={{
-                                      width: 46, height: 20,
-                                      background: '#fff', border: 'none', borderRadius: 4,
-                                      color: '#111827', padding: '0 4px',
-                                      fontSize: '0.8rem', textAlign: 'center', fontWeight: 700
-                                    }}
-                                    value={taskForm.worker_hours?.[w] || ''}
-                                    onChange={(e) => {
-                                      const val = parseFloat(e.target.value) || 0;
-                                      setTaskForm({
-                                        ...taskForm,
-                                        worker_hours: { ...taskForm.worker_hours, [w]: val }
-                                      });
-                                    }}
-                                  />
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => toggleWorkerSelection(w, true)}
-                                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.8)', cursor: 'pointer', fontSize: '1rem', marginLeft: 2, padding: '0 4px' }}
-                                  title="Rimuovi addetto"
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            );
-                          }
-                          return (
+                    <div className="modal-footer" style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '16px 24px',
+                      borderTop: '1px solid var(--border-default)',
+                      background: 'var(--bg-secondary)',
+                      margin: 0,
+                      flexShrink: 0
+                    }}>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                        {editingTask && (user?.role === 'admin' || user?.role === 'editor') && (
+                          <>
                             <button
                               type="button"
-                              key={w}
-                              onClick={() => toggleWorkerSelection(w)}
-                              style={{
-                                background: sel ? 'var(--accent-600)' : 'var(--bg-primary)',
-                                color: sel ? '#fff' : 'var(--text-secondary)',
-                                border: `1px solid ${sel ? 'var(--accent-500)' : 'var(--border-default)'}`,
-                                padding: '6px 12px',
-                                borderRadius: '16px',
-                                cursor: 'pointer',
-                                fontSize: '0.85rem',
-                                fontWeight: sel ? 600 : 400
+                              className="btn btn-danger"
+                              onClick={async () => {
+                                setShowTaskModal(false);
+                                await handleTaskDelete(editingTask.id);
                               }}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                              title={isMilestone ? "Elimina milestone" : "Elimina fase"}
                             >
-                              {sel ? '✓ ' : '+ '}{w}
+                              <AppIcon name="trash" size={15} />
+                              <span>{isMilestone ? 'Elimina Milestone' : 'Elimina Fase'}</span>
                             </button>
-                          );
-                        })}
+
+                            <button
+                              type="button"
+                              className="btn"
+                              onClick={async () => {
+                                const success = await handleToggleTaskCompleted(editingTask, isTaskCompleted(editingTask));
+                                if (success) {
+                                  setShowTaskModal(false);
+                                }
+                              }}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                background: isTaskCompleted(editingTask) ? 'var(--bg-tertiary)' : '#10b981',
+                                color: isTaskCompleted(editingTask) ? 'var(--text-primary)' : '#ffffff',
+                                border: isTaskCompleted(editingTask) ? '1px solid var(--border-default)' : '1px solid #059669',
+                                fontWeight: 600
+                              }}
+                              title={isTaskCompleted(editingTask) ? "Riapri fase (segna in corso)" : "Segna come completata"}
+                            >
+                              <AppIcon name={isTaskCompleted(editingTask) ? "undo" : "check"} size={15} />
+                              <span>{isTaskCompleted(editingTask) ? 'Riapri Fase' : (isMilestone ? 'Completa Milestone' : 'Completa Fase')}</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                        <button type="button" className="btn btn-secondary" onClick={() => setShowTaskModal(false)}>
+                          Annulla
+                        </button>
+                        <button type="submit" className="btn btn-primary" disabled={isOverBudget}>
+                          {editingTask ? 'Salva Modifiche' : 'Aggiungi Fase'}
+                        </button>
                       </div>
                     </div>
                   );
                 })()}
-
-                <div className="modal-footer" style={{ marginTop: 24 }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => setShowTaskModal(false)}>
-                    Annulla
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    {editingTask ? 'Salva Modifiche' : 'Aggiungi Fase'}
-                  </button>
-                </div>
               </form>
             )}
 
             {taskModalTab === 'checklist' && editingTask && (
-              <div style={{ height: 400 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', padding: '10px 4px', marginRight: -8, paddingRight: 12 }}>
                 <TaskChecklist projectId={id} taskId={editingTask.id} />
               </div>
             )}
 
             {taskModalTab === 'commenti' && editingTask && (
-              <div style={{ height: 400 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', padding: '10px 4px', marginRight: -8, paddingRight: 12 }}>
                 <TaskComments projectId={id} taskId={editingTask.id} currentUser={user} />
               </div>
             )}
@@ -2723,37 +3610,30 @@ export default function ProjectDetailPage() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 {/* Date picker per data specifica — auto-aggiunge al cambio data */}
-                <label
-                  className="btn btn-secondary btn-sm"
+                <div
                   title="Clicca per scegliere una data specifica da aggiungere"
                   style={{
                     display: 'flex', alignItems: 'center', gap: 6,
+                    background: specificExtraDate ? 'var(--bg-tertiary)' : 'transparent',
+                    border: `1px solid ${specificExtraDate ? 'var(--border-default)' : 'transparent'}`,
+                    borderRadius: 8, padding: '4px 10px',
                     opacity: specificExtraDate ? 1 : 0.45,
-                    transition: 'opacity 0.2s',
+                    transition: 'opacity 0.2s, background 0.2s, border-color 0.2s',
                     cursor: 'pointer',
-                    fontWeight: 600,
-                    margin: 0,
-                    position: 'relative'
                   }}
                   onMouseEnter={e => { if (!specificExtraDate) e.currentTarget.style.opacity = '0.8'; }}
                   onMouseLeave={e => { if (!specificExtraDate) e.currentTarget.style.opacity = '0.45'; }}
                 >
                   <AppIcon name="calendar" size={14} style={{ color: specificExtraDate ? 'var(--accent-500)' : 'var(--text-muted)', flexShrink: 0 }} />
-                  {!specificExtraDate && <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Aggiungi giorno con data specifica</span>}
                   <input
                     type="date"
                     value={specificExtraDate}
                     onChange={e => handleSpecificDateChange(e.target.value)}
-                    style={{
-                      border: 'none', background: 'transparent', fontSize: '0.82rem', color: 'var(--text-primary)', outline: 'none', cursor: 'pointer',
-                      ...(specificExtraDate
-                        ? { width: 'auto' }
-                        : { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0 }
-                      )
-                    }}
+                    style={{ border: 'none', background: 'transparent', fontSize: '0.82rem', color: 'var(--text-primary)', outline: 'none', cursor: 'pointer', width: specificExtraDate ? 'auto' : 100 }}
                     title="Scegli una data specifica da aggiungere — si inserisce subito"
                   />
-                </label>
+                  {!specificExtraDate && <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Aggiungi giorno con data specifica</span>}
+                </div>
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
@@ -2789,13 +3669,19 @@ export default function ProjectDetailPage() {
               const dates = Array.from(datesSet).sort();
               const plannedSet = new Set(plannedDates);
 
-              const workers = Array.isArray(selectedTaskForHours.workers) && selectedTaskForHours.workers.length > 0
+              const assignedWorkers = Array.isArray(selectedTaskForHours.workers) && selectedTaskForHours.workers.length > 0
                 ? selectedTaskForHours.workers
                 : ['Addetto Generico'];
+              const allWorkersSet = new Set(assignedWorkers);
+              Object.keys(actualHoursMap).forEach(w => {
+                if (w !== '__extra__') allWorkersSet.add(w);
+              });
+              const workers = Array.from(allWorkersSet);
+
               const oreGgTotale = plannedDates.length > 0 ? workers.reduce((acc, w) => {
                 const wAssigned = (selectedTaskForHours.worker_hours && selectedTaskForHours.worker_hours[w] !== undefined && selectedTaskForHours.worker_hours[w] !== '')
                   ? Number(selectedTaskForHours.worker_hours[w])
-                  : (Number(selectedTaskForHours.planned_hours || 8) / workers.length);
+                  : (assignedWorkers.includes(w) ? (Number(selectedTaskForHours.planned_hours || 8) / assignedWorkers.length) : 0);
                 return acc + (wAssigned / plannedDates.length);
               }, 0) : (Number(selectedTaskForHours.planned_hours || 8));
 
@@ -2806,30 +3692,48 @@ export default function ProjectDetailPage() {
                       <thead>
                         <tr>
                           <th style={{ minWidth: 130, textAlign: 'left' }}>Addetto / Giorno</th>
-                          {dates.map(d => (
-                            <th key={d} style={{ minWidth: 85, background: !plannedSet.has(d) ? 'rgba(239, 68, 68, 0.08)' : undefined }}>
-                              {d.split('-')[2]}/{d.split('-')[1]}<br />
-                              <span style={{ fontSize: 11, fontWeight: 400, color: !plannedSet.has(d) ? '#ef4444' : 'var(--text-tertiary)' }}>
-                                {plannedSet.has(d) ? `(${oreGgTotale.toFixed(1)}h prev)` : '(extra)'}
-                              </span>
-                            </th>
-                          ))}
-                          <th style={{ minWidth: 90, background: 'rgba(245, 158, 11, 0.1)' }}>
-                            Ore extra<br />
-                            <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-tertiary)' }}>(ritardo/straord.)</span>
-                          </th>
+                          {dates.map(d => {
+                            const dateObj = new Date(d + 'T00:00:00');
+                            const isFestivo = isWeekendOrHoliday(dateObj);
+                            const shortDay = dateObj.toLocaleDateString('it-IT', { weekday: 'short' });
+                            const dayName = shortDay.charAt(0).toUpperCase() + shortDay.slice(1);
+
+                            return (
+                              <th key={d} style={{ minWidth: 85, background: !plannedSet.has(d) ? 'rgba(239, 68, 68, 0.08)' : (isFestivo ? '#fef08a' : undefined) }}>
+                                <span style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: isFestivo ? '#b45309' : 'var(--text-primary)', marginBottom: '2px' }}>
+                                  {dayName}
+                                </span>
+                                {d.split('-')[2]}/{d.split('-')[1]}<br />
+                                {!plannedSet.has(d) && (
+                                  <span style={{ fontSize: 11, fontWeight: 400, color: '#ef4444' }}>
+                                    Extra
+                                  </span>
+                                )}
+                              </th>
+                            );
+                          })}
                           <th style={{ minWidth: 135 }}>Totale Addetto</th>
                         </tr>
                       </thead>
                       <tbody>
                         {workers.map(w => {
                           let totW = 0;
-                          let extraW = 0;
                           const assignedH = (selectedTaskForHours.worker_hours && selectedTaskForHours.worker_hours[w] !== undefined && selectedTaskForHours.worker_hours[w] !== '')
                             ? Number(selectedTaskForHours.worker_hours[w])
                             : null;
-                          const targetH = assignedH !== null ? assignedH : Number((Number(selectedTaskForHours.planned_hours || 8) / workers.length).toFixed(1));
-                          const workerDailyTarget = dates.length > 0 ? (targetH / dates.length) : targetH;
+                          const targetH = assignedH !== null ? assignedH : (assignedWorkers.includes(w) ? Number((Number(selectedTaskForHours.planned_hours || 8) / assignedWorkers.length).toFixed(1)) : 0);
+
+                          const excludedDays = Array.isArray(selectedTaskForHours.excluded_dates) ? selectedTaskForHours.excluded_dates :
+                            (typeof selectedTaskForHours.excluded_dates === 'string' ? JSON.parse(selectedTaskForHours.excluded_dates || '[]') : []);
+
+                          const activeDates = dates.filter(d => {
+                            if (!plannedSet.has(d)) return false;
+                            if (excludedDays.includes(d)) return false;
+                            if (allVacations.some(v => v.username === w && d >= v.start_date && d <= v.end_date)) return false;
+                            return true;
+                          });
+
+                          const workerDailyTarget = activeDates.length > 0 ? (targetH / activeDates.length) : 0;
 
                           const isCurrentUser = (w === user?.username || w === (user?.full_name || user?.username));
                           return (
@@ -2841,6 +3745,11 @@ export default function ProjectDetailPage() {
                                 const val = (actualHoursMap[w] && actualHoursMap[w][d]) || '';
                                 totW += Number(val) || 0;
                                 const isHoliday = allVacations.some(v => v.username === w && d >= v.start_date && d <= v.end_date);
+                                const isExcluded = excludedDays.includes(d);
+                                const isExtra = !plannedSet.has(d);
+                                const isActiveDay = !isExtra && !isExcluded && !isHoliday;
+                                const dayPrevHours = isActiveDay ? workerDailyTarget : 0;
+
                                 return (
                                   <td key={d}>
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
@@ -2850,10 +3759,10 @@ export default function ProjectDetailPage() {
                                         min="0"
                                         max="24"
                                         className="ore-input"
-                                        style={isHoliday ? { backgroundColor: '#fef08a' } : {}}
+                                        style={isHoliday || isExcluded ? { backgroundColor: '#fef08a' } : {}}
                                         disabled={user?.role !== 'admin' && w !== user?.username && w !== (user?.full_name || user?.username)}
                                         value={val}
-                                        placeholder={`${workerDailyTarget.toFixed(1)}h`}
+                                        placeholder={`${dayPrevHours.toFixed(1)}h`}
                                         onChange={(e) => {
                                           const newVal = e.target.value;
                                           setActualHoursMap(prev => {
@@ -2864,44 +3773,21 @@ export default function ProjectDetailPage() {
                                         }}
                                       />
                                       {isHoliday && <span style={{ fontSize: '0.65rem', color: '#b45309', fontWeight: 'bold' }}>Ferie</span>}
-                                      <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-tertiary)' }}>
-                                        ({workerDailyTarget.toFixed(1)}h prev)
-                                      </span>
+                                      {isExcluded && !isHoliday && <span style={{ fontSize: '0.65rem', color: '#b45309', fontWeight: 'bold' }}>Saltato</span>}
+                                      {!isHoliday && !isExcluded && (
+                                        <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-tertiary)' }}>
+                                          ({dayPrevHours.toFixed(1)}h prev)
+                                        </span>
+                                      )}
                                     </div>
                                   </td>
                                 );
                               })}
-                              <td style={{ background: 'rgba(245, 158, 11, 0.05)' }}>
-                                <input
-                                  type="number"
-                                  step="0.5"
-                                  min="0"
-                                  max="24"
-                                  className="ore-input"
-                                  disabled={user?.role !== 'admin' && w !== user?.username && w !== (user?.full_name || user?.username)}
-                                  value={(actualHoursMap[w] && actualHoursMap[w]['__extra__']) || ''}
-                                  placeholder="0h"
-                                  onChange={(e) => {
-                                    const newVal = e.target.value;
-                                    setActualHoursMap(prev => {
-                                      const next = { ...prev };
-                                      next[w] = { ...(next[w] || {}), '__extra__': newVal };
-                                      return next;
-                                    });
-                                  }}
-                                />
-                              </td>
                               <td style={{ fontWeight: 700 }}>
-                                {(() => {
-                                  const extraVal = (actualHoursMap[w] && actualHoursMap[w]['__extra__']) ? Number(actualHoursMap[w]['__extra__']) : 0;
-                                  extraW = extraVal;
-                                  return (
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                                      <span style={{ color: 'var(--accent-500)' }}>{totW + extraW} h</span>
-                                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>/ {targetH} h prev</span>
-                                    </div>
-                                  );
-                                })()}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                                  <span style={{ color: 'var(--accent-500)' }}>{totW} h</span>
+                                  <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>/ {targetH} h prev</span>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -2913,16 +3799,11 @@ export default function ProjectDetailPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, background: 'var(--bg-primary)', padding: 12, borderRadius: 6, border: '1px solid var(--border-color)' }}>
                     <div>
                       {(() => {
-                        let totAll = 0;
-                        workers.forEach(w => {
-                          if (actualHoursMap[w]) {
-                            Object.values(actualHoursMap[w]).forEach(h => { totAll += Number(h) || 0; });
-                          }
-                        });
                         const tempTask = {
                           ...selectedTaskForHours,
                           actual_hours: actualHoursMap
                         };
+                        const totAll = calculateTaskEffHours(tempTask);
                         const st = computeStato(tempTask);
                         const plannedH = Number(selectedTaskForHours.planned_hours || 8);
                         const isModalCompleted = isTaskCompleted(tempTask);
@@ -2936,16 +3817,43 @@ export default function ProjectDetailPage() {
                             {st === 'ritardo_ferie' && <span className="semaforo-ritardo"><span className="status-dot danger" />Rischio ritardo (ferie)</span>}
                             {st === 'ritardo' && <span className="semaforo-ritardo"><span className="status-dot danger" />Stato ritardo</span>}
                             {st === 'sforamento' && <span className="semaforo-ritardo" style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#ef4444', border: '1px solid #dc2626', padding: '3px 10px', borderRadius: '12px', fontWeight: 700 }}><span className="status-dot danger" />Sforamento ore</span>}
+                            {st === 'mancata_consuntivazione' && <span className="semaforo-mancata-consuntivazione"><span className="status-dot" style={{ background: '#8b5cf6' }} />Mancata consuntivazione</span>}
                             {isModalCompleted && (
                               <span style={{ background: 'rgba(16, 185, 129, 0.18)', color: '#10b981', padding: '3px 10px', borderRadius: '12px', fontWeight: 600, fontSize: '0.82rem', border: '1px solid #059669' }}>
-                                ✓ Fase Completata (100% Ore / Flaggata)
+                                ✓ Fase Completata
                               </span>
                             )}
                           </div>
                         );
                       })()}
                     </div>
-                    <div style={{ display: 'flex', gap: 10 }}>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        className={`btn ${Number(selectedTaskForHours.completed) === 1 ? '' : 'btn-secondary'}`}
+                        style={{
+                          marginRight: 16,
+                          borderColor: Number(selectedTaskForHours.completed) === 1 ? '#10b981' : undefined,
+                          color: Number(selectedTaskForHours.completed) === 1 ? '#10b981' : undefined,
+                          background: Number(selectedTaskForHours.completed) === 1 ? 'rgba(16, 185, 129, 0.1)' : undefined,
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          fontWeight: 600
+                        }}
+                        onClick={() => {
+                          const isCurrentlyCompleted = Number(selectedTaskForHours.completed) === 1;
+                          handleToggleTaskCompleted(selectedTaskForHours, isCurrentlyCompleted).then((success) => {
+                            if (success) {
+                              setSelectedTaskForHours(prev => ({ ...prev, completed: isCurrentlyCompleted ? -1 : 1 }));
+                            }
+                          });
+                        }}
+                      >
+                        {Number(selectedTaskForHours.completed) === 1 ? (
+                          <><AppIcon name="check" size={16} /> Fase Completata</>
+                        ) : (
+                          <><AppIcon name="checkCircle" size={16} /> Segna Completata</>
+                        )}
+                      </button>
                       <button type="button" className="btn btn-secondary" onClick={() => setShowOreModal(false)}>
                         Annulla
                       </button>
@@ -2964,173 +3872,320 @@ export default function ProjectDetailPage() {
       {/* Modale Modifica Dati Commessa */}
       {showEditProjectModal && (
         <div className="modal-overlay">
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
+          <div className="modal" style={{ maxWidth: 1200, width: '95vw', maxHeight: '92vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header" style={{ marginBottom: 16 }}>
               <h2>Modifica Dati Commessa</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowEditProjectModal(false)} aria-label="Chiudi">
                 <AppIcon name="close" />
               </button>
             </div>
             <form onSubmit={handleSaveProject}>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="edit-proj-code">Codice Commessa *</label>
-                  <input
-                    id="edit-proj-code"
-                    className="input"
-                    value={projectForm.code}
-                    onChange={(e) => setProjectForm({ ...projectForm, code: e.target.value })}
-                    required
-                    placeholder="es. UT-COMM"
-                  />
-                </div>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="edit-proj-client">Cliente</label>
-                  <input
-                    id="edit-proj-client"
-                    className="input"
-                    value={projectForm.client}
-                    onChange={(e) => setProjectForm({ ...projectForm, client: e.target.value })}
-                    placeholder="es. HiWay s.r.l."
-                  />
-                </div>
-              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: 32, alignItems: 'start' }}>
+                {/* COLONNA SINISTRA: Informazioni e Tempistiche */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="edit-proj-code">Codice Commessa *</label>
+                      <input
+                        id="edit-proj-code"
+                        className="input"
+                        value={projectForm.code}
+                        onChange={(e) => setProjectForm({ ...projectForm, code: e.target.value })}
+                        required
+                        placeholder="es. UT-COMM"
+                      />
+                    </div>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="edit-proj-client">Cliente *</label>
+                      <input
+                        id="edit-proj-client"
+                        className="input"
+                        value={projectForm.client}
+                        onChange={(e) => setProjectForm({ ...projectForm, client: e.target.value })}
+                        required
+                        placeholder="es. HiWay s.r.l."
+                      />
+                    </div>
+                  </div>
 
-              <div className="input-group">
-                <label htmlFor="edit-proj-name">Titolo Commessa *</label>
-                <input
-                  id="edit-proj-name"
-                  className="input"
-                  value={projectForm.name}
-                  onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
-                  required
-                  placeholder="es. Lancio ERP e HiPlan Q3"
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="edit-proj-start">Data di Inizio</label>
-                  <input
-                    id="edit-proj-start"
-                    type="date"
-                    className="input"
-                    value={projectForm.start_date}
-                    onChange={(e) => setProjectForm({ ...projectForm, start_date: e.target.value })}
-                  />
-                </div>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="edit-proj-end">Data di Fine</label>
-                  <input
-                    id="edit-proj-end"
-                    type="date"
-                    className="input"
-                    value={projectForm.end_date}
-                    onChange={(e) => setProjectForm({ ...projectForm, end_date: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="edit-proj-color">Colore Identificativo</label>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div className="input-group">
+                    <label htmlFor="edit-proj-name">Titolo Commessa *</label>
                     <input
-                      id="edit-proj-color"
-                      type="color"
-                      value={projectForm.color}
-                      onChange={(e) => setProjectForm({ ...projectForm, color: e.target.value })}
-                      style={{ width: 44, height: 38, padding: 2, borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', cursor: 'pointer', flexShrink: 0 }}
-                    />
-                    <input
+                      id="edit-proj-name"
                       className="input"
-                      value={projectForm.color}
-                      onChange={(e) => setProjectForm({ ...projectForm, color: e.target.value })}
-                      placeholder="#185FA5"
-                      style={{ flex: 1, minWidth: 0 }}
+                      value={projectForm.name}
+                      onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
+                      required
+                      placeholder="es. Lancio ERP e HiPlan Q3"
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="edit-proj-start">Data di Inizio</label>
+                      <input
+                        id="edit-proj-start"
+                        type="date"
+                        className="input"
+                        value={projectForm.start_date}
+                        onChange={(e) => setProjectForm({ ...projectForm, start_date: e.target.value })}
+                      />
+                    </div>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="edit-proj-end">Data di Fine</label>
+                      <input
+                        id="edit-proj-end"
+                        type="date"
+                        className="input"
+                        value={projectForm.end_date}
+                        onChange={(e) => setProjectForm({ ...projectForm, end_date: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="edit-proj-color">Colore Identificativo</label>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                          id="edit-proj-color"
+                          type="color"
+                          value={projectForm.color}
+                          onChange={(e) => setProjectForm({ ...projectForm, color: e.target.value })}
+                          style={{ width: 44, height: 38, padding: 2, borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', cursor: 'pointer', flexShrink: 0 }}
+                        />
+                        <input
+                          className="input"
+                          value={projectForm.color}
+                          onChange={(e) => setProjectForm({ ...projectForm, color: e.target.value })}
+                          placeholder="#185FA5"
+                          style={{ flex: 1, minWidth: 0 }}
+                        />
+                      </div>
+                    </div>
+                    <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
+                      <label htmlFor="edit-proj-status">Stato Commessa</label>
+                      <select
+                        id="edit-proj-status"
+                        className="input"
+                        value={projectForm.status}
+                        onChange={(e) => setProjectForm({ ...projectForm, status: e.target.value })}
+                      >
+                        {STATUS_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="input-group">
+                    <label htmlFor="edit-proj-responsible">Referente di Commessa</label>
+                    <select
+                      id="edit-proj-responsible"
+                      className="input"
+                      value={projectForm.responsible_id || ''}
+                      onChange={(e) => setProjectForm({ ...projectForm, responsible_id: e.target.value })}
+                    >
+                      <option value="">-- Nessun referente predefinito --</option>
+                      {usersList.map(u => (
+                        <option key={u.id} value={u.id}>{u.full_name || u.username} ({u.username})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="input-group">
+                    <label htmlFor="edit-proj-desc">Descrizione / Note</label>
+                    <textarea
+                      id="edit-proj-desc"
+                      className="input"
+                      rows={3}
+                      value={projectForm.description}
+                      onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
+                      placeholder="Dettagli e obiettivo della commessa..."
+                      style={{ resize: 'vertical' }}
                     />
                   </div>
                 </div>
-                <div className="input-group" style={{ flex: 1, minWidth: 0 }}>
-                  <label htmlFor="edit-proj-status">Stato Commessa</label>
-                  <select
-                    id="edit-proj-status"
-                    className="input"
-                    value={projectForm.status}
-                    onChange={(e) => setProjectForm({ ...projectForm, status: e.target.value })}
-                  >
-                    {STATUS_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
 
-              <div className="input-group">
-                <label htmlFor="edit-proj-responsible">Responsabile di Commessa</label>
-                <select
-                  id="edit-proj-responsible"
-                  className="input"
-                  value={projectForm.responsible_id || ''}
-                  onChange={(e) => setProjectForm({ ...projectForm, responsible_id: e.target.value })}
-                >
-                  <option value="">-- Nessuno / Predefinito --</option>
-                  {usersList.map(u => (
-                    <option key={u.id} value={u.id}>{u.full_name || u.username} ({u.username})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="input-group">
-                <label>Addetti della Commessa (Multi-selezione)</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                  {usersList.map(u => {
-                    const selected = (projectForm.assigned_workers || []).includes(u.username);
-                    return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => toggleProjectWorkerSelection(u.username)}
+                {/* COLONNA DESTRA: Tipologia Commessa e Addetti Team */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {/* Tipologia Commessa */}
+                  <div className="input-group">
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
+                      <span style={{ fontWeight: 600 }}>Tipologia Commessa</span>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        ATEX e Alimentare selezionabili insieme
+                      </span>
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(125px, 1fr))', gap: 8, marginTop: 4 }}>
+                      {/* Opzione STANDARD */}
+                      <div
+                        onClick={() => setProjectForm({ ...projectForm, is_atex: false, is_alimentare: false })}
                         style={{
-                          padding: '6px 12px',
-                          borderRadius: 20,
-                          border: selected ? '2px solid #3b82f6' : '1px solid var(--border-color)',
-                          background: selected ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-tertiary)',
-                          color: selected ? '#60a5fa' : 'var(--text-secondary)',
-                          fontSize: 13,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 10,
                           cursor: 'pointer',
-                          fontWeight: selected ? 600 : 400
+                          border: (!projectForm.is_atex && !projectForm.is_alimentare) ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                          background: (!projectForm.is_atex && !projectForm.is_alimentare) ? 'rgba(59, 130, 246, 0.12)' : 'var(--bg-tertiary)',
+                          color: (!projectForm.is_atex && !projectForm.is_alimentare) ? '#2563eb' : 'var(--text-primary)',
+                          transition: 'all 0.15s ease',
+                          userSelect: 'none'
                         }}
                       >
-                        {selected ? '✓ ' : '+ '}{u.full_name || u.username}
-                      </button>
-                    );
-                  })}
+                        <input
+                          type="radio"
+                          checked={!projectForm.is_atex && !projectForm.is_alimentare}
+                          onChange={() => setProjectForm({ ...projectForm, is_atex: false, is_alimentare: false })}
+                          style={{ accentColor: '#3b82f6', cursor: 'pointer' }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>Standard</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Nessun vincolo spec.</div>
+                        </div>
+                      </div>
+
+                      {/* Opzione ATEX */}
+                      <div
+                        onClick={() => setProjectForm({ ...projectForm, is_atex: !projectForm.is_atex })}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          cursor: 'pointer',
+                          border: projectForm.is_atex ? '2px solid #f59e0b' : '1px solid var(--border-color)',
+                          background: projectForm.is_atex ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-tertiary)',
+                          color: projectForm.is_atex ? '#d97706' : 'var(--text-primary)',
+                          transition: 'all 0.15s ease',
+                          userSelect: 'none'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(projectForm.is_atex)}
+                          onChange={(e) => setProjectForm({ ...projectForm, is_atex: e.target.checked })}
+                          style={{ accentColor: '#f59e0b', cursor: 'pointer' }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>ATEX</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Rischio esplosione</div>
+                        </div>
+                      </div>
+
+                      {/* Opzione ALIMENTARE */}
+                      <div
+                        onClick={() => setProjectForm({ ...projectForm, is_alimentare: !projectForm.is_alimentare })}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          cursor: 'pointer',
+                          border: projectForm.is_alimentare ? '2px solid #10b981' : '1px solid var(--border-color)',
+                          background: projectForm.is_alimentare ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-tertiary)',
+                          color: projectForm.is_alimentare ? '#059669' : 'var(--text-primary)',
+                          transition: 'all 0.15s ease',
+                          userSelect: 'none'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(projectForm.is_alimentare)}
+                          onChange={(e) => setProjectForm({ ...projectForm, is_alimentare: e.target.checked })}
+                          style={{ accentColor: '#10b981', cursor: 'pointer' }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>Alimentare</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Settore Food Grade</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Addetti della Commessa */}
+                  <div className="input-group">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <label style={{ margin: 0 }}>Addetti della Commessa (Multi-selezione)</label>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        {projectForm.assigned_workers?.length || 0} selezionati
+                      </span>
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                      padding: 12,
+                      borderRadius: 10,
+                      border: '1px solid var(--border-color)',
+                      background: 'var(--bg-tertiary)',
+                      maxHeight: 250,
+                      overflowY: 'auto'
+                    }}>
+                      {usersList.map(u => {
+                        const selected = (projectForm.assigned_workers || []).includes(u.username);
+                        const wDept = u.department;
+                        const deptColor = wDept ? (DEPT_OPTIONS.find(d => d.value === wDept)?.color || '#3b82f6') : '#3b82f6';
+                        return (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => toggleProjectWorkerSelection(u.username)}
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: 20,
+                              border: selected ? `2px solid ${deptColor}` : '1px solid var(--border-color)',
+                              background: selected ? `${deptColor}26` : 'var(--bg-primary)',
+                              color: selected ? deptColor : 'var(--text-secondary)',
+                              fontSize: 12.5,
+                              cursor: 'pointer',
+                              fontWeight: selected ? 600 : 400,
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            {selected ? '✓ ' : '+ '}{u.full_name || u.username}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="input-group">
-                <label htmlFor="edit-proj-desc">Descrizione / Note</label>
-                <textarea
-                  id="edit-proj-desc"
-                  className="input"
-                  rows={3}
-                  value={projectForm.description}
-                  onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
-                  placeholder="Dettagli e obiettivo della commessa..."
-                  style={{ resize: 'vertical' }}
-                />
-              </div>
-
-              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 20 }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowEditProjectModal(false)}>
-                  Annulla
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Salva Modifiche
-                </button>
+              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
+                {(user?.role === 'admin' || user?.role === 'editor') ? (
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    onClick={async () => {
+                      if (!window.confirm(`Vuoi spostare la commessa "${project?.name || project?.code}" nel cestino? Verrà conservata per 90 giorni prima dell'eliminazione definitiva.`)) return;
+                      try {
+                        await api.delete(`/projects/${id}`);
+                        toast.success('Commessa spostata nel cestino');
+                        navigate('/projects');
+                      } catch {
+                        toast.error("Errore nello spostamento nel cestino");
+                      }
+                    }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#ef4444', color: '#fff' }}
+                  >
+                    <AppIcon name="trash" size={14} /> Elimina Commessa
+                  </button>
+                ) : <div />}
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowEditProjectModal(false)}>
+                    Annulla
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    Salva Modifiche
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -3140,6 +4195,29 @@ export default function ProjectDetailPage() {
       {activeTab === 'activity_log' && (
         <ActivityLogPanel projectId={id} />
       )}
+      {/* MODAL ELIMINA DIPENDENZA */}
+      {linkToDelete && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 450 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Elimina dipendenza</h2>
+              <button className="btn-ghost btn-icon" onClick={() => setLinkToDelete(null)} aria-label="Chiudi">
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <div style={{ padding: '24px 20px', textAlign: 'center' }}>
+              <p style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>
+                Sei sicuro di voler eliminare questa dipendenza tra le fasi?
+              </p>
+            </div>
+            <div className="modal-footer" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'flex-end', gap: 12, borderTop: '1px solid var(--border-color)' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setLinkToDelete(null)}>Annulla</button>
+              <button type="button" className="btn btn-danger" onClick={() => handleLinkDelete(linkToDelete, true)}>Elimina</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

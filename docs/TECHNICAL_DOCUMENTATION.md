@@ -144,6 +144,11 @@ Campi principali:
 
 Una commessa contiene codice, cliente testuale, colore, nome, descrizione, note, date, allegati, stato, proprietario, responsabile e addetti assegnati. `project_members` rappresenta membri espliciti con ruolo di progetto.
 
+**Tipologia Commessa:**
+- `is_atex` (Booleano): identifica commesse con apparecchiature destinate ad atmosfere potenzialmente esplosive soggette alla Direttiva ATEX 2014/34/UE e a stringenti collaudi di sicurezza.
+- `is_alimentare` (Booleano): identifica commesse destinate al settore alimentare soggette a certificazioni MOCA (Materiali a Contatto con Alimenti) e standard igienico-sanitari (HACCP).
+- `Standard`: classificazione di default quando entrambi i flag sono disattivati (`0` / `false`). I flag possono coesistere (`is_atex = 1 AND is_alimentare = 1`) per commesse ibride ad alta complessità.
+
 Gli addetti della commessa sono attualmente serializzati come lista JSON nel campo testuale `assigned_workers`.
 
 ### `tasks`
@@ -164,8 +169,6 @@ I campi `workers`, `worker_hours` e `actual_hours` sono memorizzati come JSON in
 - `actual_hours`: ore consuntive per addetto e data.
 
 `has_vacation_conflict` mantiene il flag di sovrapposizione con periodi di ferie.
-
-In creazione e modifica, una sovrapposizione con le ferie non produce un errore di validazione. `schedule_assignment_at_earliest_capacity` costruisce la capacità giornaliera già occupata sulle commesse operative, distribuisce `worker_hours` nei primi slot da massimo 8 ore disponibili e salta ferie e giorni non lavorativi. Le date della fase vengono ampliate o traslate in base alla prima e all'ultima allocazione; l'eventuale slittamento viene propagato alle dipendenze come delta temporale.
 
 ### `links`
 
@@ -234,15 +237,7 @@ Tutte le rotte applicative usano il prefisso `/api`. La specifica completa e agg
 | `POST` | `/api/projects/{id}/links` | crea dipendenza |
 | `DELETE` | `/api/projects/{id}/links/{link_id}` | elimina dipendenza |
 | `GET` | `/api/projects/{id}/activity_logs` | registro attività |
-| `GET` | `/api/projects/{id}/rescheduling` | criticità della commessa, dry-run globale con modifiche proposte e storico ripianificazioni |
-| `POST` | `/api/projects/{id}/rescheduling/apply` | rianalizza lo scenario globale e applica subito il batch, includendo manualmente la commessa corrente anche se in pausa |
-| `POST` | `/api/projects/{id}/rescheduling/pause` | sospende o riattiva l'agente sulla commessa |
-| `POST` | `/api/projects/{id}/rescheduling/{run_id}/undo` | rollback controllato |
 | `GET` | `/api/workload/heatmap` | carichi di lavoro |
-
-L'`AsyncIOScheduler`, configurato sul fuso `Europe/Rome`, avvia l'agente poco dopo l'avvio del backend e ogni giorno alle 01:15. `analyze_all_projects` raccoglie gli scenari di tutte le commesse operative non in pausa e `run_daily_rescheduling` li applica in un'unica transazione globale. L'analisi considera esclusivamente giornate concluse e filtra le ore consuntivate per data, impedendo a registrazioni odierne o future di coprire deficit precedenti. Ogni deficit incrementale viene aggregato per addetto e convertito in giorni di capacità da 8 ore; una seconda esecuzione senza nuovi deficit non crea un altro batch. Le fasi correnti e future dell'addetto vengono spostate su tutte le commesse `planning` o `active`. Le dipendenze propagano il delta temporale effettivo della sorgente, inclusi gli ulteriori giorni saltati per ferie, preservando offset e sovrapposizioni. Le commesse con `planning_agent_paused` sono escluse e protette. Le righe `planning_runs` prodotte sulle diverse commesse condividono un `batch_id`, usato per audit e rollback atomico dell'intervento completo.
-
-`preview_rescheduling` richiama lo stesso motore con `dry_run=True`: costruisce modifiche, allocazioni e riepilogo multi-commessa, quindi esegue il rollback della sessione prima di restituire l'anteprima. L'endpoint `GET` può quindi essere richiamato ogni volta che il box viene visualizzato senza produrre effetti persistenti. L'applicazione manuale esegue comunque una nuova analisi globale immediatamente prima del commit.
 
 ### Collaborazione e operatività
 
@@ -269,8 +264,71 @@ L'`AsyncIOScheduler`, configurato sul fuso `Europe/Rome`, avvia l'agente poco do
 | `GET/PUT` | `/api/settings/ticket_phases` | configurazione ticket |
 | `GET` | `/api/settings/backup/status` | ultimo backup |
 | `GET` | `/api/admin/email-logs/` | registro email |
+| `POST` | `/api/chat/` | assistente virtuale HiPlan AI (conversazione & Text-to-SQL) |
+| `POST` | `/api/chat/admin-report` | resoconto direzionale esecutivo con KPI e analisi carichi |
+| `POST` | `/api/projects/{id}/ai-analysis` | audit operativo commessa, conformità e riprogrammazione |
 
-## 6. Autenticazione e autorizzazione
+## 6. Architettura HiPlan AI & Intelligence
+
+L'ecosistema include un motore di Intelligenza Artificiale basato su LangChain e Groq LLM (`openai/gpt-oss-120b`), progettato per affiancare project manager e amministratori nella gestione operativa quotidiana.
+
+```mermaid
+flowchart TD
+    subgraph Client
+        SPA["Frontend SPA React"]
+    end
+
+    subgraph Backend Services
+        PAI["project_ai_service.py"]
+        CS["chat_service.py"]
+    end
+
+    subgraph Moduli AI
+        Audit["Analisi Operativa Commessa"]
+        Report["Reportistica Esecutiva Admin"]
+        Chatbot["Assistente Virtuale Text-to-SQL"]
+    end
+
+    subgraph Data Sources
+        DB[("Database SQLite / PostgreSQL")]
+        LLM["Groq Cloud LLM"]
+    end
+
+    SPA -->|"/projects/{id}/ai-analysis"| PAI
+    SPA -->|"/chat/admin-report"| CS
+    SPA -->|"/chat"| CS
+
+    PAI --> Audit
+    CS --> Report
+    CS --> Chatbot
+
+    Audit --> DB
+    Audit --> LLM
+    Report --> DB
+    Report --> LLM
+    Chatbot --> DB
+    Chatbot --> LLM
+```
+
+### Componenti Principali
+
+1. **Analisi Operativa di Commessa (`project_ai_service.py`)**:
+   - **Calcolo avanzamento reale ponderato**: calcola la percentuale effettiva della commessa come media ponderata degli avanzamenti delle singole fasi operative ($\sum \text{progress} / N_{\text{fasi operative}}$), escludendo milestone e contenitori, in perfetta coerenza con la vista Gantt e le card di commessa.
+   - **Audit di conformità normativa**: analizza la tipologia contrattuale della commessa (**Standard**, **ATEX**, **Alimentare** o combinata **ATEX + Alimentare**), verificando scadenze e requisiti tecnici specifici (es. direttiva ATEX 2014/34/UE e schede tecniche componenti antideflagranti; disciplina MOCA, ISO 22000 e standard igienici per l'alimentare).
+   - **Riprogrammazione e divieto di consigli generalisti**: vietate categoricamente formule vaghe (es. *"monitorare costantemente"*, *"fare riunioni"*). L'AI individua con precisione la causa dei colli di bottiglia e propone tabelle di riassegnazione oraria nominative (addetto sostituito, addetto sostituto dello stesso reparto, ore e date), nel rigoroso rispetto del tetto massimo delle 8 ore giornaliere e delle ferie.
+   - **Assenza di criticità**: se il piano rispetta i vincoli, l'AI dichiara asciuttamente la conformità senza inventare raccomandazioni fittizie.
+
+2. **Reportistica Esecutiva Direzionale Admin (`chat_service.py:generate_admin_report`)**:
+   - Calcola indicatori sintetici (KPI) in tempo reale: commesse totali, attive, in pianificazione, completate, fasi operative, fasi in ritardo, addetti attivi, scadenze a 7 giorni, e ripartizione per tipologia (`atex_projects`, `alimentare_projects`, `standard_projects`).
+   - Genera un resoconto strutturato in 4 sezioni: *Sintesi Esecutiva & Stato Commesse*, *Analisi Carico di Lavoro & Distribuzione Addetti*, *Criticità, Ritardi & Scadenze Imminenti*, *Raccomandazioni Strategiche & Operative*.
+   - Include un solido meccanismo di fallback deterministico con raccomandazioni concrete in caso di indisponibilità temporanea delle chiavi API esterne.
+
+3. **Assistente Virtuale HiPlan AI (`chat_service.py`)**:
+   - Motore Text-to-SQL con dizionario di dominio che comprende commesse soft-deleted, tipologie contrattuali (`is_atex`, `is_alimentare`), carichi operativi e ticket.
+   - Include un **Self-Correction Loop** che corregge automaticamente eventuali errori di sintassi SQL in caso di fallimento della query iniziale.
+   - Tool nativi per la consultazione rapida di panoramica commesse, scadenze imminenti con badge di tipologia, bilanciamento del team e morning briefing personale.
+
+## 7. Autenticazione e autorizzazione
 
 Al login vengono emessi:
 
@@ -292,7 +350,7 @@ Prima del deployment:
 - esporre l'applicazione tramite HTTPS;
 - proteggere database, backup e directory degli allegati.
 
-## 7. Scheduler, email e backup
+## 8. Scheduler, email e backup
 
 Nel lifespan di FastAPI viene avviato APScheduler:
 
@@ -307,7 +365,7 @@ Il job automatico crea uno ZIP con `backend/ganttflow.db` e `backend/uploads`, m
 
 L'esecuzione dello scheduler all'interno del processo web è adatta all'installazione corrente a singola istanza. Con più worker o repliche produrrebbe job duplicati: in quel caso occorre spostare i job in un worker dedicato o adottare un lock distribuito.
 
-## 8. Allegati
+## 9. Allegati
 
 FastAPI espone `/uploads` come contenuto statico. I file vengono salvati nella directory `uploads` relativa al processo backend.
 
@@ -318,7 +376,7 @@ Considerazioni operative:
 - dimensione, estensioni e scansione antivirus vanno configurate in base all'ambiente;
 - in installazioni distribuite è preferibile uno storage condiviso o object storage.
 
-## 9. Configurazione
+## 10. Configurazione
 
 Le variabili principali sono:
 
@@ -341,7 +399,7 @@ SMTP_USE_TLS=true
 
 Usare `backend/.env.example` come riferimento e non committare segreti reali.
 
-## 10. Sviluppo locale
+## 11. Sviluppo locale
 
 ### Backend
 
@@ -381,11 +439,9 @@ Le dipendenze dirette vengono mantenute sulle versioni compatibili più recenti 
 
 Al 29 luglio 2026 `npm audit` segnala ancora `GHSA-qwww-vcr4-c8h2` per React Router. L'avviso riguarda l'uso di React Server Components e Server Actions; HiPlan usa `BrowserRouter` come SPA client-side e non espone quelle funzionalità, quindi il percorso vulnerabile non è attivo nell'applicazione. Non esiste ancora una release pubblica successiva non segnalata: l'eccezione va rivalutata a ogni aggiornamento del lockfile.
 
-## 11. Database e migrazioni
+## 12. Modifiche al database
 
-All'avvio, l'applicazione esegue `Base.metadata.create_all()` e alcune aggiunte di colonne compatibili con installazioni precedenti. Il repository include Alembic tra le dipendenze, ma il flusso di migrazione non è ancora applicato uniformemente.
-
-Per evoluzioni del modello dati:
+Il progetto usa SQLAlchemy con `metadata.create_all` per l'ambiente iniziale. Per modificare lo schema:
 
 1. creare una migrazione esplicita e reversibile;
 2. provarla su una copia del database;
@@ -393,23 +449,25 @@ Per evoluzioni del modello dati:
 4. documentare eventuali conversioni dei campi JSON testuali;
 5. predisporre backup e procedura di rollback.
 
-## 12. Test e qualità
+## 13. Test e qualità
 
 ```bash
 cd backend
-pytest
+venv/bin/python -m pytest
 
 cd ../frontend
 npm run lint
 npm run build
 ```
 
-I test backend coprono autenticazione, utenti, progetti e conflitti ferie. Ogni nuova funzione dovrebbe aggiungere test per autorizzazione, validazione, casi limite temporali e migrazioni.
+I test backend coprono autenticazione, utenti, progetti, conflitti ferie, calcolo avanzamenti coerenti, tipologia commessa e intelligenza artificiale. Ogni nuova funzione dovrebbe aggiungere test per autorizzazione, validazione, casi limite temporali e migrazioni.
 
 Prima di una release è inoltre consigliato verificare:
 
 - login, refresh e ruoli;
-- CRUD commessa e fase;
+- CRUD commessa con selezione tipologia (Standard, ATEX, Alimentare);
+- calcolo avanzamento e rispetto dei limiti di 8h/giorno nell'analisi AI;
+- reportistica direzionale admin con KPI corretti;
 - dipendenze del Gantt;
 - ore pianificate e consuntive;
 - ferie e conflitti;

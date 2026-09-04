@@ -66,3 +66,16 @@ async def delete_link(
     current_user: User = Depends(get_current_user),
 ):
     await task_service.delete_link(db, link_id, current_user)
+
+
+from app.schemas.task import LogHoursRequest
+@router.post("/tasks/{task_id}/log-hours", response_model=TaskOut)
+async def log_task_hours_endpoint(
+    project_id: str,
+    task_id: str,
+    data: LogHoursRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await task_service.log_task_hours(db, task_id, data.date, data.hours, current_user)
+

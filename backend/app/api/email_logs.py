@@ -1,5 +1,8 @@
+# pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends
+# pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
+# pyrefly: ignore [missing-import]
 from sqlalchemy import select
 from typing import List
 from app.core.dependencies import get_current_user, get_db
@@ -15,6 +18,7 @@ async def get_email_logs(
     current_user: User = Depends(get_current_user),
 ):
     if current_user.role != "admin":
+        # pyrefly: ignore [missing-import]
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Non autorizzato")
         
@@ -27,10 +31,13 @@ async def get_scheduled_emails(
     current_user: User = Depends(get_current_user),
 ):
     if current_user.role != "admin":
+        # pyrefly: ignore [missing-import]
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Non autorizzato")
         
     from app.models.todo import Todo
+    from app.models.calendar_event import CalendarEvent
+    # pyrefly: ignore [missing-import]
     from sqlalchemy import or_
     from datetime import datetime
     import json
@@ -66,7 +73,7 @@ async def get_scheduled_emails(
             
         if t.notify_date and t.notify_date >= now and not t.notify_sent:
             scheduled.append({
-                "id": t.id,
+                "id": f"todo_{t.id}",
                 "date": t.notify_date,
                 "type": "Notifica programmata",
                 "subject": f"Promemoria TODO: {t.title}",
@@ -74,35 +81,104 @@ async def get_scheduled_emails(
             })
             
         if t.due_date and t.due_date >= now and not t.due_reminder_sent: 
-            # In main.py il reminder è 24 ore prima. Qui mostriamo semplicemente che c'è una scadenza.
             scheduled.append({
-                "id": t.id,
-                "date": t.due_date, # Verrà inviata il giorno prima
+                "id": f"todo_{t.id}",
+                "date": t.due_date, 
                 "type": "Promemoria scadenza",
                 "subject": f"Scadenza TODO: {t.title}",
                 "recipients": ", ".join(recipients)
             })
             
+    # Recupera Eventi Calendario
+    cal_query = select(CalendarEvent).where(
+        CalendarEvent.reminder_sent == False,
+        CalendarEvent.reminder_type != "none",
+        CalendarEvent.reminder_time >= now
+    )
+    cal_result = await db.execute(cal_query)
+    cal_events = cal_result.scalars().all()
+
+    for ev in cal_events:
+        try:
+            shared = json.loads(ev.shared_with) if ev.shared_with else []
+        except Exception:
+            shared = []
+            
+        # Per gli eventi, i recipients sono il creatore + shared_with (username)
+        # Troviamo gli username dei recipients
+        event_users = []
+        if ev.user_id in user_dict:
+            event_users.append(user_dict[ev.user_id])
+            
+        for u in users:
+            if u.username in shared and u.email:
+                event_users.append(u.email)
+                
+        # Deduplicazione
+        event_users = list(set(event_users))
+                
+        scheduled.append({
+            "id": f"cal_{ev.id}",
+            "date": ev.reminder_time,
+            "type": "Promemoria evento",
+            "subject": f"Promemoria Evento: {ev.title}",
+            "recipients": ", ".join(event_users)
+        })
+
     scheduled.sort(key=lambda x: x["date"])
     return scheduled
 
-@router.delete("/scheduled/{todo_id}")
+@router.delete("/scheduled/{item_id}")
 async def cancel_scheduled_email(
-    todo_id: str,
+    item_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     if current_user.role != "admin":
+        # pyrefly: ignore [missing-import]
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Non autorizzato")
         
-    from app.models.todo import Todo
-    result = await db.execute(select(Todo).where(Todo.id == todo_id))
-    todo = result.scalar_one_or_none()
-    if not todo:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="TODO non trovato")
+    if item_id.startswith("todo_"):
+        real_id = int(item_id.split("_")[1])
+        from app.models.todo import Todo
+        result = await db.execute(select(Todo).where(Todo.id == real_id))
+        todo = result.scalar_one_or_none()
+        if not todo:
+            # pyrefly: ignore [missing-import]
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="TODO non trovato")
+            
+        todo.notify_email = False
+        await db.commit()
+        return {"message": "Notifica programmata TODO annullata"}
         
-    todo.notify_email = False
-    await db.commit()
-    return {"message": "Notifiche programmate annullate"}
+    elif item_id.startswith("cal_"):
+        real_id = int(item_id.split("_")[1])
+        from app.models.calendar_event import CalendarEvent
+        result = await db.execute(select(CalendarEvent).where(CalendarEvent.id == real_id))
+        ev = result.scalar_one_or_none()
+        if not ev:
+            # pyrefly: ignore [missing-import]
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Evento non trovato")
+            
+        ev.reminder_type = "none"
+        ev.reminder_sent = True
+        await db.commit()
+        return {"message": "Notifica programmata Evento annullata"}
+        
+    else:
+        # Retrocompatibilità se l'id è solo numerico (vecchi record a schermo prima del reload)
+        real_id = int(item_id)
+        from app.models.todo import Todo
+        result = await db.execute(select(Todo).where(Todo.id == real_id))
+        todo = result.scalar_one_or_none()
+        if todo:
+            todo.notify_email = False
+            await db.commit()
+            return {"message": "Notifica programmata annullata"}
+            
+        # pyrefly: ignore [missing-import]
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Elemento non trovato")

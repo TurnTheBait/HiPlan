@@ -16,9 +16,19 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Interceptor: gestisce 401 con refresh automatico
+// Interceptor: gestisce 401 con refresh automatico e triggera eventi globali
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Se la richiesta ha modificato task, commesse o ferie, avvisa l'app
+    const method = response.config.method?.toLowerCase();
+    if (['post', 'put', 'patch', 'delete'].includes(method)) {
+      const url = response.config.url || '';
+      if (url.includes('/tasks') || url.includes('/projects') || url.includes('/vacations') || url.includes('/replanning')) {
+        window.dispatchEvent(new Event('agent-data-modified'));
+      }
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
     if (

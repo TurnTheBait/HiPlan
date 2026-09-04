@@ -50,6 +50,14 @@ async def update_me(
             from fastapi import HTTPException, status
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username già in uso")
 
+    if "email" in update_data and update_data["email"] and update_data["email"] != current_user.email:
+        # Check if email already exists
+        existing = await db.execute(select(User).where(User.email == update_data["email"]))
+        if existing.scalar_one_or_none():
+            # pyrefly: ignore [missing-import]
+            from fastapi import HTTPException, status
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email già in uso")
+
     for key, value in update_data.items():
         setattr(current_user, key, value)
         
@@ -168,6 +176,32 @@ async def get_my_tasks_today(
                 except:
                     pass
                     
+            actual_h = {}
+            if getattr(task, 'actual_hours', None):
+                try:
+                    actual_h = json.loads(task.actual_hours)
+                except:
+                    pass
+            actual_hours_today = actual_h.get(user_name, {}).get(today_date.strftime("%Y-%m-%d"), "")
+
+            expected_hours_today = ""
+            if task.start_date and task.end_date:
+                from app.services.replanning_service import get_working_days_count
+                try:
+                    excluded = json.loads(task.excluded_dates) if task.excluded_dates else []
+                except:
+                    excluded = []
+                wdays = get_working_days_count(task.start_date, task.end_date, excluded)
+                if wdays > 0:
+                    try:
+                        val = worker_hours.get(user_name)
+                        if val is None:
+                            raise ValueError()
+                        tot_worker = float(val)
+                    except:
+                        tot_worker = float(task.planned_hours or 0) / max(1, len(workers_list))
+                    expected_hours_today = round(tot_worker / wdays, 1)
+
             t_out = task_service._task_to_out(task)
             my_tasks.append({
                 "id": task.id,
@@ -176,7 +210,10 @@ async def get_my_tasks_today(
                 "project_name": task.project.name if task.project else "Sconosciuto",
                 "progress": round((t_out.progress or 0) * 100),
                 "planned_hours": task.planned_hours,
-                "my_assigned_hours": worker_hours.get(user_name, None)
+                "my_assigned_hours": worker_hours.get(user_name, None),
+                "actual_hours_today": actual_hours_today,
+                "expected_hours_today": expected_hours_today,
+                "color": task.color
             })
             
     return my_tasks
@@ -190,9 +227,11 @@ async def get_worker_conflicts(
     # We join with project to get project name
     # pyrefly: ignore [missing-import]
     from sqlalchemy.orm import selectinload
+    from app.services.replanning_service import is_weekend_or_holiday, get_working_days_count
     result = await db.execute(
         select(Task).options(selectinload(Task.project))
         .where(Task.type != TaskType.PROJECT)
+        .where(Task.type != TaskType.MILESTONE)
         .where(Task.start_date.isnot(None))
         .where(Task.end_date.isnot(None))
     )
@@ -202,6 +241,11 @@ async def get_worker_conflicts(
     worker_timeline = defaultdict(lambda: defaultdict(list))
     
     for task in tasks:
+        if task.project:
+            p_status = task.project.status.value if hasattr(task.project.status, 'value') else str(task.project.status)
+            if p_status in ("completed", "archived", "ProjectStatus.COMPLETED", "ProjectStatus.ARCHIVED"):
+                continue
+
         try:
             workers_list = json.loads(task.workers) if task.workers else []
         except:
@@ -210,30 +254,45 @@ async def get_worker_conflicts(
         if not workers_list:
             continue
             
+        try:
+            excluded_dates = json.loads(task.excluded_dates) if getattr(task, 'excluded_dates', None) else []
+        except:
+            excluded_dates = []
+
         current_date = task.start_date
-        end_date = task.end_date
+        inclusive_end = task.end_date
         
         try:
             worker_hours_map = json.loads(getattr(task, 'worker_hours', '{}')) or {}
         except:
             worker_hours_map = {}
             
-        while current_date <= end_date:
-            date_str = current_date.isoformat()
-            duration_days = task.duration if task.duration and task.duration > 0 else 1
+        duration_days = get_working_days_count(task.start_date, inclusive_end, excluded_dates)
             
-            for worker_name in workers_list:
-                base_hours = worker_hours_map.get(worker_name, task.planned_hours or 0.0)
-                daily_hours = base_hours / duration_days
+        while current_date <= inclusive_end:
+            if not is_weekend_or_holiday(current_date) and current_date.strftime("%Y-%m-%d") not in excluded_dates:
+                date_str = current_date.isoformat()
                 
-                worker_timeline[worker_name][date_str].append({
-                    "task_id": task.id,
-                    "task_name": task.text,
-                    "project_id": task.project_id,
-                    "project_name": task.project.name if task.project else "Sconosciuto",
-                    "project_code": task.project.code if task.project else "—",
-                    "daily_hours": round(daily_hours, 1)
-                })
+                for worker_name in workers_list:
+                    base_hours = worker_hours_map.get(worker_name)
+                    if base_hours is not None:
+                        try:
+                            base_hours = float(base_hours)
+                        except:
+                            base_hours = float(task.planned_hours or 0.0) / len(workers_list)
+                    else:
+                        base_hours = float(task.planned_hours or 0.0) / len(workers_list)
+                        
+                    daily_hours = base_hours / duration_days
+                    
+                    worker_timeline[worker_name][date_str].append({
+                        "task_id": task.id,
+                        "task_name": task.text,
+                        "project_id": task.project_id,
+                        "project_name": task.project.name if task.project else "Sconosciuto",
+                        "project_code": task.project.code if task.project else "—",
+                        "daily_hours": round(daily_hours, 1)
+                    })
             current_date += timedelta(days=1)
             
     # Now find conflicts

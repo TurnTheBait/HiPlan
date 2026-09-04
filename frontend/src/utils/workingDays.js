@@ -60,13 +60,26 @@ export function isWeekendOrHoliday(date) {
   return false;
 }
 
-// Controlla se una data (Date o stringa YYYY-MM-DD) è un effettivo giorno lavorativo (esclusi sab, dom e festivi)
-export function isWorkingDay(d) {
-  return !isWeekendOrHoliday(d);
+// Controlla se una data (Date o stringa YYYY-MM-DD) è un effettivo giorno lavorativo (esclusi sab, dom e festivi e le date escluse)
+export function isWorkingDay(d, excludedDates = []) {
+  if (isWeekendOrHoliday(d)) return false;
+  if (!excludedDates || excludedDates.length === 0) return true;
+  
+  let dObj = d;
+  if (typeof d === 'string') {
+    const cleanStr = d.split(' ')[0].split('T')[0];
+    dObj = new Date(cleanStr + 'T00:00:00');
+  }
+  const y = dObj.getFullYear();
+  const m = String(dObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dObj.getDate()).padStart(2, '0');
+  const dStr = `${y}-${m}-${day}`;
+  
+  return !excludedDates.includes(dStr);
 }
 
-// Aggiunge N giorni lavorativi a partire da startDate (esclude sabato, domenica e festivi)
-export function addWorkingDays(startDate, workingDays) {
+// Aggiunge N giorni lavorativi a partire da startDate (esclude sabato, domenica, festivi e date escluse)
+export function addWorkingDays(startDate, workingDays, excludedDates = []) {
   if (!startDate) return '';
   const start = typeof startDate === 'string' ? new Date(startDate.split(' ')[0].split('T')[0] + 'T00:00:00') : new Date(startDate);
   if (isNaN(start)) return '';
@@ -75,14 +88,14 @@ export function addWorkingDays(startDate, workingDays) {
   let cur = new Date(start);
 
   // Se il giorno iniziale non è lavorativo, avanza fino al primo giorno lavorativo
-  while (!isWorkingDay(cur)) {
+  while (!isWorkingDay(cur, excludedDates)) {
     cur.setDate(cur.getDate() + 1);
   }
 
   let daysCounted = 1;
   while (daysCounted < totalDays) {
     cur.setDate(cur.getDate() + 1);
-    if (isWorkingDay(cur)) {
+    if (isWorkingDay(cur, excludedDates)) {
       daysCounted++;
     }
   }
@@ -93,8 +106,8 @@ export function addWorkingDays(startDate, workingDays) {
   return `${y}-${m}-${day}`;
 }
 
-// Sottrae N giorni lavorativi a ritroso a partire da endDate (esclude sabato, domenica e festivi)
-export function subtractWorkingDays(endDate, workingDays) {
+// Sottrae N giorni lavorativi a ritroso a partire da endDate (esclude sabato, domenica, festivi e date escluse)
+export function subtractWorkingDays(endDate, workingDays, excludedDates = []) {
   if (!endDate) return '';
   const end = typeof endDate === 'string' ? new Date(endDate.split(' ')[0].split('T')[0] + 'T00:00:00') : new Date(endDate);
   if (isNaN(end)) return '';
@@ -103,14 +116,14 @@ export function subtractWorkingDays(endDate, workingDays) {
   let cur = new Date(end);
 
   // Se il giorno finale non è lavorativo, torna indietro fino al primo giorno lavorativo
-  while (!isWorkingDay(cur)) {
+  while (!isWorkingDay(cur, excludedDates)) {
     cur.setDate(cur.getDate() - 1);
   }
 
   let daysCounted = 1;
   while (daysCounted < totalDays) {
     cur.setDate(cur.getDate() - 1);
-    if (isWorkingDay(cur)) {
+    if (isWorkingDay(cur, excludedDates)) {
       daysCounted++;
     }
   }
@@ -121,8 +134,8 @@ export function subtractWorkingDays(endDate, workingDays) {
   return `${y}-${m}-${day}`;
 }
 
-// Conta i giorni lavorativi (esclusi sab, dom e festivi) tra startDate e endDate incluse
-export function countWorkingDays(startDateStr, endDateStr) {
+// Conta i giorni lavorativi (esclusi sab, dom, festivi e date escluse) tra startDate e endDate incluse
+export function countWorkingDays(startDateStr, endDateStr, excludedDates = []) {
   if (!startDateStr || !endDateStr) return 1;
   const start = typeof startDateStr === 'string' ? new Date(startDateStr.split(' ')[0].split('T')[0] + 'T00:00:00') : new Date(startDateStr);
   const end = typeof endDateStr === 'string' ? new Date(endDateStr.split(' ')[0].split('T')[0] + 'T00:00:00') : new Date(endDateStr);
@@ -132,7 +145,7 @@ export function countWorkingDays(startDateStr, endDateStr) {
   let count = 0;
   let cur = new Date(start);
   while (cur <= end) {
-    if (isWorkingDay(cur)) {
+    if (isWorkingDay(cur, excludedDates)) {
       count++;
     }
     cur.setDate(cur.getDate() + 1);

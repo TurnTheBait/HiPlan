@@ -8,10 +8,49 @@ import json
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import get_db, get_current_user, require_role
 from app.models.user import User, UserRole
-from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectOut, ProjectDetail, MemberAdd, MemberOut
+from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectOut, ProjectDetail, MemberAdd, MemberOut, ProjectTrashOut
 from app.services import project_service
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
+
+
+@router.get("/trash", response_model=List[ProjectTrashOut])
+async def list_trash(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Restituisce le commesse nel cestino con giorni rimanenti."""
+    return await project_service.get_trash_projects(db, current_user)
+
+
+@router.delete("/trash/empty", status_code=204)
+async def empty_trash(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Svuota completamente il cestino."""
+    await project_service.empty_trash(db, current_user)
+
+
+@router.post("/trash/{project_id}/restore")
+async def restore_project(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Ripristina una commessa dal cestino."""
+    await project_service.restore_project(db, project_id, current_user)
+    return {"status": "ok", "message": "Commessa ripristinata con successo"}
+
+
+@router.delete("/trash/{project_id}", status_code=204)
+async def hard_delete_project(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Elimina definitivamente una commessa dal database."""
+    await project_service.hard_delete_project(db, project_id, current_user)
 
 
 @router.get("", response_model=List[ProjectOut])
@@ -59,6 +98,8 @@ async def create_project(
         responsible_name=project.responsible.full_name if project.responsible else (project.responsible.username if project.responsible else None),
         assigned_workers=assigned_workers_list,
         is_assigned=(current_user.id == project.owner_id or current_user.id == project.responsible_id or current_user.username in assigned_workers_list),
+        is_atex=bool(getattr(project, 'is_atex', False) or False),
+        is_alimentare=bool(getattr(project, 'is_alimentare', False) or False),
         attachments=attachments_list,
         created_at=project.created_at, updated_at=project.updated_at,
     )
@@ -126,6 +167,8 @@ async def get_project(
         responsible_name=project.responsible.full_name if project.responsible else (project.responsible.username if project.responsible else None),
         assigned_workers=assigned_workers_list,
         is_assigned=is_assigned,
+        is_atex=bool(getattr(project, 'is_atex', False) or False),
+        is_alimentare=bool(getattr(project, 'is_alimentare', False) or False),
         attachments=attachments_list,
         created_at=project.created_at, updated_at=project.updated_at,
         members=members,
@@ -170,6 +213,8 @@ async def update_project(
         responsible_name=project.responsible.full_name if project.responsible else (project.responsible.username if project.responsible else None),
         assigned_workers=assigned_workers_list,
         is_assigned=(current_user.id == project.owner_id or current_user.id == project.responsible_id or current_user.username in assigned_workers_list),
+        is_atex=bool(getattr(project, 'is_atex', False) or False),
+        is_alimentare=bool(getattr(project, 'is_alimentare', False) or False),
         attachments=attachments_list,
         created_at=project.created_at, updated_at=project.updated_at,
     )
@@ -307,3 +352,17 @@ async def delete_project_attachment(
     project.attachments = json.dumps(new_attachments)
     await db.commit()
     return {"status": "ok"}
+
+
+@router.post("/{project_id}/ai-analysis")
+async def get_project_ai_analysis(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.project_ai_service import analyze_project_ai
+    result = await analyze_project_ai(db, project_id, current_user)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Errore durante l'analisi AI"))
+    return result
+

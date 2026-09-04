@@ -14,7 +14,7 @@ function getSystemTheme() {
 export function ThemeProvider({ children }) {
   const [theme, setThemeState] = useState(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return stored || 'system';
+    return stored || 'light';
   });
 
   const resolvedTheme = theme === 'system' ? getSystemTheme() : theme;

@@ -1,7 +1,12 @@
+# pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends
+# pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
+# pyrefly: ignore [missing-import]
 from app.core.dependencies import get_db
+# pyrefly: ignore [missing-import]
 from app.schemas.user import UserCreate, UserLogin, UserOut, TokenPair, TokenRefresh
+# pyrefly: ignore [missing-import]
 from app.services import auth_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])

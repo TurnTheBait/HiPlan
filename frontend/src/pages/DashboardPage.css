@@ -446,7 +446,7 @@
   left: 0;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: var(--accent-500);
+  background: var(--task-color, var(--accent-500));
   content: '';
 }
 

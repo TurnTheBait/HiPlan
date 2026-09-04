@@ -31,14 +31,14 @@ Creare o clonare un progetto con fasi, milestone, dipendenze, reparti, checklist
 
 ### Ripianificazione delle dipendenze
 
-Prima versione completata: l'agente propaga lo spostamento alle attività dipendenti tenendo conto di:
+Propagare lo spostamento di una fase alle attività dipendenti, tenendo conto di:
 
 - tipo e ritardo della dipendenza;
 - giorni lavorativi;
 - ferie degli addetti;
 - limiti temporali della commessa.
 
-La funzione conserva motivazione, soluzione e snapshot delle date, invia notifiche e permette un rollback protetto. Come evoluzione rimane un'anteprima grafica interattiva prima dell'applicazione.
+La ripianificazione dovrebbe mostrare un'anteprima prima di applicare le modifiche.
 
 ### Timesheet con approvazione
 

@@ -29,6 +29,15 @@ function fmtDateTime(dt) {
   return new Date(dt).toLocaleString('it-IT', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+function buildCommessaOptions(projects) {
+  return projects
+    .filter(p => p.status !== 'archived')
+    .map(p => ({
+      value: p.id,
+      label: p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name),
+    }));
+}
+
 function cleanActionLabel(value) {
   const label = String(value || 'Nota interna');
   const [first, ...rest] = label.split(' ');
@@ -244,8 +253,8 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
       const { data } = await api.post('/tickets', {
         title: form.title.trim(),
         description: form.description,
-        project_id: form.project_id === 'custom' ? null : (form.project_id || null),
-        custom_project_code: form.project_id === 'custom' ? form.custom_project_code.trim() : null,
+        project_id: form.project_id ? form.project_id : null,
+        custom_project_code: form.project_id ? null : (form.custom_project_code ? form.custom_project_code.trim() : null),
         responsible_id: form.responsible_id || null,
         priority: form.priority,
         assigned_to: form.assigned_to,
@@ -314,24 +323,16 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
           </div>
           <div className="tkt-field-row">
             <div className="tkt-field">
-              <label>Commessa</label>
+              <label>Commessa (opzionale)</label>
               <SearchableCombobox
-                options={[
-                  { value: '', label: '\u00A0' },
-                  ...projects.filter(p => p.status !== 'archived').map(p => ({
-                    value: p.id,
-                    label: p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name)
-                  }))
-                ]}
-                value={form.project_id === 'custom' ? form.custom_project_code : form.project_id}
+                value={form.project_id || form.custom_project_code || ''}
                 onChange={(val, opt) => {
-                  if (opt) {
-                    setForm(f => ({ ...f, project_id: opt.value, custom_project_code: '' }));
-                  } else {
-                    setForm(f => ({ ...f, project_id: 'custom', custom_project_code: val }));
-                  }
+                  if (opt) setForm(f => ({ ...f, project_id: opt.value, custom_project_code: '' }));
+                  else setForm(f => ({ ...f, project_id: '', custom_project_code: val }));
                 }}
-                placeholder="Cerca o inserisci manualmente..."
+                options={buildCommessaOptions(projects)}
+                placeholder="Scrivi per cercare una commessa…"
+                allowCustom
               />
             </div>
             <div className="tkt-field">
@@ -345,7 +346,7 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
           </div>
           <div className="tkt-field-row">
             <div className="tkt-field">
-              <label>Responsabile</label>
+              <label>Referente</label>
               <select value={form.responsible_id} onChange={e => setForm(f => ({ ...f, responsible_id: e.target.value }))}>
                 <option value="">— Nessuno —</option>
                 {users.map(u => (
@@ -396,12 +397,115 @@ function NewTicketModal({ onClose, onCreated, projects, users, currentUser }) {
   );
 }
 
+/* ─── Ticket Calendar Modal ─── */
+function TicketCalendarModal({ ticket, onClose, users, currentUser }) {
+  const [form, setForm] = useState(() => {
+    const defaultShared = new Set();
+    defaultShared.add(currentUser.username);
+    if (ticket.responsible_id) {
+      const resp = users.find(u => String(u.id) === String(ticket.responsible_id));
+      if (resp) defaultShared.add(resp.username);
+    }
+    if (Array.isArray(ticket.assigned_to)) {
+      ticket.assigned_to.forEach(u => defaultShared.add(u));
+    }
+
+    return {
+      date: new Date().toISOString().slice(0, 10),
+      time: '09:00',
+      shared_with: Array.from(defaultShared)
+    };
+  });
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const start = new Date(`${form.date}T${form.time}:00`);
+      const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 ora di durata default
+      await api.post('/calendar/events', {
+        title: `Ticket: ${ticket.title}`,
+        description: ticket.description || '',
+        start_date: start.toISOString(),
+        end_date: end.toISOString(),
+        is_all_day: false,
+        color: '#6366f1', // Indigo
+        shared_with: form.shared_with,
+        reminder_type: 'none'
+      });
+      toast.success('Promemoria aggiunto al calendario');
+      onClose();
+    } catch (err) {
+      toast.error('Errore durante la creazione del promemoria');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function toggleSharedWith(username) {
+    setForm(prev => {
+      const isSelected = prev.shared_with.includes(username);
+      if (isSelected) return { ...prev, shared_with: prev.shared_with.filter(u => u !== username) };
+      return { ...prev, shared_with: [...prev.shared_with, username] };
+    });
+  }
+
+  return (
+    <div className="tickets-modal-overlay">
+      <div className="tickets-modal" style={{ maxWidth: 600 }}>
+        <div className="tickets-modal-header">
+          <h2 className="tickets-modal-title">Aggiungi al calendario</h2>
+          <button type="button" className="tickets-modal-close" onClick={onClose} aria-label="Chiudi"><AppIcon name="close" /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="tickets-modal-body">
+          <div className="tkt-field-row">
+            <div className="tkt-field">
+              <label>Data</label>
+              <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} required />
+            </div>
+            <div className="tkt-field">
+              <label>Ora</label>
+              <input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} required />
+            </div>
+          </div>
+          <div className="tkt-field">
+            <label>Condividi con (Opzionale)</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+              {users.map(u => {
+                const isActive = form.shared_with.includes(u.username);
+                return (
+                  <label key={u.id} className={`filter-chip ${isActive ? 'active' : ''}`} style={{ '--chip-color': '#1281ffff', margin: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={isActive}
+                      onChange={() => toggleSharedWith(u.username)}
+                    />
+                    {u.full_name || u.username}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+          <div className="tkt-modal-footer">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onClose} disabled={saving}>Annulla</button>
+            <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
+              {saving ? 'Salvataggio...' : 'Aggiungi'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Edit Ticket Modal ─── */
 function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentUser }) {
   const [form, setForm] = useState({
     title: ticket.title,
     description: ticket.description || '',
-    project_id: ticket.project_id ? ticket.project_id : (ticket.custom_project_code ? 'custom' : ''),
+    project_id: ticket.project_id || '',
     custom_project_code: ticket.custom_project_code || '',
     responsible_id: ticket.responsible_id || '',
     priority: ticket.priority,
@@ -417,8 +521,8 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
     try {
       await api.patch(`/tickets/${ticket.id}`, {
         ...form,
-        project_id: form.project_id === 'custom' ? null : (form.project_id || null),
-        custom_project_code: form.project_id === 'custom' ? form.custom_project_code.trim() : null,
+        project_id: form.project_id ? form.project_id : null,
+        custom_project_code: form.project_id ? null : (form.custom_project_code ? form.custom_project_code.trim() : null),
         responsible_id: form.responsible_id || null
       });
       toast.success('Ticket aggiornato!');
@@ -451,24 +555,16 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
           </div>
           <div className="tkt-field-row">
             <div className="tkt-field">
-              <label>Commessa</label>
+              <label>Commessa (opzionale)</label>
               <SearchableCombobox
-                options={[
-                  { value: '', label: '\u00A0' },
-                  ...projects.filter(p => p.status !== 'archived').map(p => ({
-                    value: p.id,
-                    label: p.code ? `${p.code} – ${p.client || p.name}` : (p.client || p.name)
-                  }))
-                ]}
-                value={form.project_id === 'custom' ? form.custom_project_code : form.project_id}
+                value={form.project_id || form.custom_project_code || ''}
                 onChange={(val, opt) => {
-                  if (opt) {
-                    setForm(f => ({ ...f, project_id: opt.value, custom_project_code: '' }));
-                  } else {
-                    setForm(f => ({ ...f, project_id: 'custom', custom_project_code: val }));
-                  }
+                  if (opt) setForm(f => ({ ...f, project_id: opt.value, custom_project_code: '' }));
+                  else setForm(f => ({ ...f, project_id: '', custom_project_code: val }));
                 }}
-                placeholder="Cerca o inserisci manualmente..."
+                options={buildCommessaOptions(projects)}
+                placeholder="Scrivi per cercare una commessa…"
+                allowCustom
               />
             </div>
             <div className="tkt-field">
@@ -482,7 +578,7 @@ function EditTicketModal({ ticket, onClose, onUpdated, projects, users, currentU
           </div>
           <div className="tkt-field-row">
             <div className="tkt-field">
-              <label>Responsabile</label>
+              <label>Referente</label>
               <select value={form.responsible_id} onChange={e => setForm(f => ({ ...f, responsible_id: e.target.value }))}>
                 <option value="">— Nessuno —</option>
                 {users.map(u => (
@@ -684,10 +780,19 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
     }
   }
 
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
   const ticketAtts = Array.isArray(ticket.attachments) ? ticket.attachments : [];
 
   return (
     <div className="tickets-detail">
+      {showCalendarModal && (
+        <TicketCalendarModal
+          ticket={ticket}
+          currentUser={currentUser}
+          onClose={() => setShowCalendarModal(false)}
+          users={users}
+        />
+      )}
       {showEdit && (
         <EditTicketModal
           ticket={ticket}
@@ -706,7 +811,9 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
           <div className="ticket-detail-actions">
             {canEdit && (
               <>
-
+                <button className="btn btn-ghost btn-icon" onClick={() => setShowCalendarModal(true)} title="Aggiungi reminder in calendario personale" aria-label="Aggiungi al calendario">
+                  <AppIcon name="calendar" size={16} />
+                </button>
                 <button className="btn btn-ghost btn-icon" onClick={() => setShowEdit(true)} title="Modifica" aria-label="Modifica ticket">
                   <AppIcon name="edit" size={16} />
                 </button>
@@ -754,7 +861,7 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
                         style={{ width: '100%', marginBottom: 16, background: '#10a37f', color: '#fff', border: 'none', display: 'flex', justifyContent: 'center', gap: 8 }}
                         onClick={() => {
                           const repliesText = (ticket.replies || []).map(r => `- ${r.author_full_name || r.author_username}: ${r.content}`).join('\n');
-                          const prompt = `Analizza questo ticket tecnico e forniscimi un riassunto dei punti chiave e delle possibili soluzioni. \n\nTitolo: ${ticket.title}\nDescrizione: ${ticket.description}\nStato: ${ticket.status}\nPriorità: ${ticket.priority}\nCreato da: ${ticket.author_full_name || ticket.author_username}\nResponsabile: ${ticket.responsible_full_name || ticket.responsible_username || 'Nessuno'}\n\nRisposte/Commenti:\n${repliesText}`;
+                          const prompt = `Analizza questo ticket tecnico e forniscimi un riassunto dei punti chiave e delle possibili soluzioni. \n\nTitolo: ${ticket.title}\nDescrizione: ${ticket.description}\nStato: ${ticket.status}\nPriorità: ${ticket.priority}\nCreato da: ${ticket.author_full_name || ticket.author_username}\nReferente: ${ticket.responsible_full_name || ticket.responsible_username || 'Nessuno'}\n\nRisposte/Commenti:\n${repliesText}`;
                           window.open(`https://chatgpt.com/?q=${encodeURIComponent(prompt)}`, '_blank');
                           setShowExportMenu(false);
                         }}
@@ -829,7 +936,7 @@ function TicketDetail({ ticket, currentUser, onRefresh, users, projects, phases 
           <span style={{ color: 'var(--border-default)' }}>·</span>
           <span className="ticket-detail-meta-item">
             <AppIcon name="user" size={14} />
-            Responsabile: {ticket.responsible_full_name || ticket.responsible_username || 'Nessuno'}
+            Referente: {ticket.responsible_full_name || ticket.responsible_username || 'Nessuno'}
           </span>
           <span style={{ color: 'var(--border-default)' }}>·</span>
           <span className="ticket-detail-meta-item">

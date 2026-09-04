@@ -1,6 +1,6 @@
 import enum
 # pyrefly: ignore [missing-import]
-from sqlalchemy import Boolean, Column, String, Text, Date, Enum, ForeignKey
+from sqlalchemy import Column, String, Text, Date, DateTime, Enum, ForeignKey, Boolean
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import relationship
 from app.models.base import Base, TimestampMixin, uuid_pk, uuid_fk
@@ -36,7 +36,9 @@ class Project(Base, TimestampMixin):
     owner_id = Column(uuid_fk(), ForeignKey("users.id"), nullable=False)
     responsible_id = Column(uuid_fk(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     assigned_workers = Column(Text, nullable=True, default="[]")  # JSON list di addetti assegnati alla commessa
-    planning_agent_paused = Column(Boolean, nullable=False, default=False)
+    is_atex = Column(Boolean, default=False, nullable=False)  # Commessa conforme ATEX
+    is_alimentare = Column(Boolean, default=False, nullable=False)  # Commessa conforme Alimentare
+    deleted_at = Column(DateTime, nullable=True, default=None)
 
     owner = relationship("User", foreign_keys=[owner_id])
     responsible = relationship("User", foreign_keys=[responsible_id])

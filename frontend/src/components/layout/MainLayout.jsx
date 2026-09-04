@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useToast } from '../../context/ToastContext';
 import api from '../../api/client';
 import './MainLayout.css';
 import GlobalSearch from './GlobalSearch';
@@ -67,6 +68,12 @@ function AppIcon({ name, size = 19 }) {
       <>
         <path d="M3.5 7.5h6l2-2h9a1.5 1.5 0 0 1 1.5 1.5v11.5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-9a2 2 0 0 1 1.5-2Z" />
         <path d="M2.5 10h19" />
+      </>
+    ),
+    alert: (
+      <>
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+        <path d="M12 9v4M12 17h.01" />
       </>
     ),
     calendar: (
@@ -137,6 +144,26 @@ function AppIcon({ name, size = 19 }) {
         <line x1="10" y1="14" x2="21" y2="3" />
       </>
     ),
+    robot: (
+      <>
+        <rect x="3" y="11" width="18" height="10" rx="2" />
+        <circle cx="12" cy="5" r="2" />
+        <path d="M12 7v4" />
+        <line x1="8" y1="16" x2="8.01" y2="16" />
+        <line x1="16" y1="16" x2="16.01" y2="16" />
+      </>
+    ),
+    messageSquare: (
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    ),
+    timeline: (
+      <>
+        <path d="M4 6h16M4 12h16M4 18h16" />
+        <circle cx="8" cy="6" r="2" fill="currentColor" stroke="none" />
+        <circle cx="15" cy="12" r="2" fill="currentColor" stroke="none" />
+        <circle cx="11" cy="18" r="2" fill="currentColor" stroke="none" />
+      </>
+    ),
   };
 
   return <svg {...commonProps}>{icons[name]}</svg>;
@@ -147,9 +174,13 @@ export default function MainLayout() {
   const { theme, cycleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('hiplan-sidebar-collapsed') === 'true');
+  const [collapsed, setCollapsed] = useState(() => {
+    const saved = localStorage.getItem('hiplan-sidebar-collapsed');
+    return saved ? saved === 'true' : true;
+  });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [agentSuggestionsCount, setAgentSuggestionsCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -166,56 +197,87 @@ export default function MainLayout() {
   }, []);
 
   useEffect(() => {
-    fetchUnread();
-    const interval = setInterval(fetchUnread, 30000);
-    window.addEventListener('notifications-changed', fetchUnread);
+    localStorage.setItem('hiplan-sidebar-collapsed', collapsed);
+  }, [collapsed]);
+
+  const notifiedIdsRef = useRef(new Set());
+  const initialLoadRef = useRef(true);
+
+  useEffect(() => {
+    fetchNotificationsData();
+    fetchAgentCount();
+    const interval = setInterval(() => {
+      fetchNotificationsData();
+      fetchAgentCount();
+    }, 60000);
+    window.addEventListener('notifications-changed', fetchNotificationsData);
+    window.addEventListener('agent-suggestions-changed', fetchAgentCount);
+    window.addEventListener('agent-data-modified', fetchAgentCount);
     return () => {
       clearInterval(interval);
-      window.removeEventListener('notifications-changed', fetchUnread);
+      window.removeEventListener('notifications-changed', fetchNotificationsData);
+      window.removeEventListener('agent-suggestions-changed', fetchAgentCount);
+      window.removeEventListener('agent-data-modified', fetchAgentCount);
     };
-  }, []);
+  }, [user]);
 
-  async function fetchUnread() {
+  async function fetchAgentCount() {
+    if (user?.role === 'viewer') return;
     try {
-      const { data } = await api.get('/notifications/unread-count');
-      setUnreadCount(data.count);
+      const { data } = await api.get('/replanning/suggestions');
+      const archived = JSON.parse(localStorage.getItem('hiplan-archived-suggestions') || '[]');
+      const active = data.filter(s => {
+        const key = `${s.project_id}_${s.task_id}_${s.action_type}`;
+        return !archived.includes(key);
+      });
+      setAgentSuggestionsCount(active.length);
     } catch { /* ignore */ }
   }
 
-  async function fetchNotifications() {
+  async function fetchNotificationsData() {
     try {
       const { data } = await api.get('/notifications');
       setNotifications(data);
+      setUnreadCount(data.filter(n => !n.is_read).length);
+
+      if (initialLoadRef.current) {
+        data.forEach(n => notifiedIdsRef.current.add(n.id));
+        initialLoadRef.current = false;
+      } else {
+        data.forEach(n => {
+          if (!n.is_read && !notifiedIdsRef.current.has(n.id)) {
+            toast.info(`Nuova notifica: ${n.title}`);
+            notifiedIdsRef.current.add(n.id);
+          }
+        });
+      }
     } catch { /* ignore */ }
   }
 
   useEffect(() => {
     if (showNotifications) {
-      fetchNotifications();
+      fetchNotificationsData();
     }
   }, [showNotifications]);
 
   async function markAsRead(id) {
     try {
       await api.patch(`/notifications/${id}/read`);
-      fetchNotifications();
-      fetchUnread();
+      fetchNotificationsData();
     } catch { /* ignore */ }
   }
 
   async function deleteNotification(id) {
     try {
       await api.delete(`/notifications/${id}`);
-      fetchNotifications();
-      fetchUnread();
+      fetchNotificationsData();
     } catch { /* ignore */ }
   }
 
   async function deleteAllNotifications() {
     try {
       await api.delete('/notifications');
-      fetchNotifications();
-      fetchUnread();
+      fetchNotificationsData();
     } catch { /* ignore */ }
   }
 
@@ -235,13 +297,16 @@ export default function MainLayout() {
     : {
       '/dashboard': { title: 'Dashboard', subtitle: 'Il tuo spazio di lavoro' },
       '/projects': { title: 'Commesse', subtitle: 'Pianificazione e avanzamento' },
-      '/calendar': { title: 'Calendario', subtitle: 'Attività e disponibilità' },
+      '/calendar': { title: 'Calendario Commesse', subtitle: 'Attività e disponibilità' },
+      '/personal-calendar': { title: 'Calendario personale', subtitle: 'I tuoi impegni e attività assegnate' },
       '/notes': { title: 'Blocchi Note', subtitle: 'Appunti e documenti condivisi' },
       '/todo': { title: 'TODO', subtitle: 'Priorità personali e di team' },
       '/conflicts': { title: 'Panoramica addetti', subtitle: 'Carichi e sovrapposizioni' },
+      '/replanning': { title: 'Rilevatore Conflitti', subtitle: 'Analisi e conflitti' },
       '/tickets': { title: 'Ticket', subtitle: 'Richieste e supporto operativo' },
       '/admin': { title: 'Amministrazione', subtitle: 'Utenti e configurazione' },
       '/me': { title: 'Il mio profilo', subtitle: 'Profilo, reparto e ferie' },
+      '/chat': { title: 'HiPlan AI', subtitle: 'Assistente Virtuale' },
     }[location.pathname] || { title: 'HiPlan', subtitle: 'Workspace operativo' };
 
   useEffect(() => {
@@ -250,11 +315,7 @@ export default function MainLayout() {
     document.querySelectorAll('.gantt_tooltip').forEach(t => t.remove());
   }, [location.pathname]);
 
-  function toggleSidebar() {
-    const next = !collapsed;
-    setCollapsed(next);
-    localStorage.setItem('hiplan-sidebar-collapsed', String(next));
-  }
+
 
   return (
     <div className={`app-layout ${collapsed ? 'sidebar-collapsed' : ''} ${mobileOpen ? 'sidebar-mobile-open' : ''}`}>
@@ -283,7 +344,12 @@ export default function MainLayout() {
               </div>
             )}
           </div>
-          <button className="sidebar-toggle" onClick={toggleSidebar} title={collapsed ? 'Espandi' : 'Comprimi'} aria-label={collapsed ? 'Espandi menu' : 'Comprimi menu'}>
+          <button
+            className="sidebar-toggle"
+            onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? 'Espandi menu' : 'Riduci menu'}
+            title={collapsed ? 'Espandi menu' : 'Riduci menu'}
+          >
             <AppIcon name={collapsed ? 'chevronRight' : 'chevronLeft'} size={17} />
           </button>
         </div>
@@ -299,8 +365,8 @@ export default function MainLayout() {
             {showSidebarText && <span>Commesse</span>}
           </NavLink>
           <NavLink to="/calendar" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-            <span className="sidebar-link-icon"><AppIcon name="calendar" /></span>
-            {showSidebarText && <span>Calendario</span>}
+            <span className="sidebar-link-icon"><AppIcon name="timeline" /></span>
+            {showSidebarText && <span>Calendario Commesse</span>}
           </NavLink>
           <span className="sidebar-section-label">Collaborazione</span>
           <NavLink to="/notes" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
@@ -315,11 +381,30 @@ export default function MainLayout() {
             <span className="sidebar-link-icon"><AppIcon name="ticket" /></span>
             {showSidebarText && <span>Ticket</span>}
           </NavLink>
+          <NavLink to="/personal-calendar" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon"><AppIcon name="calendar" /></span>
+            {showSidebarText && <span>Calendario Personale</span>}
+          </NavLink>
+          <NavLink to="/chat" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+            <span className="sidebar-link-icon"><AppIcon name="robot" /></span>
+            {showSidebarText && <span>HiPlan AI</span>}
+          </NavLink>
           <span className="sidebar-section-label">Controllo</span>
           <NavLink to="/conflicts" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon"><AppIcon name="users" /></span>
             {showSidebarText && <span>Panoramica addetti</span>}
           </NavLink>
+          {user?.role !== 'viewer' && (
+            <NavLink to="/replanning" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+              <span className="sidebar-link-icon"><AppIcon name="alert" /></span>
+              {showSidebarText && <span>Rilevatore Conflitti</span>}
+              {agentSuggestionsCount > 0 && (
+                <span className="sidebar-badge">
+                  {agentSuggestionsCount}
+                </span>
+              )}
+            </NavLink>
+          )}
           {user?.role === 'admin' && (
             <NavLink to="/admin" end className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <span className="sidebar-link-icon"><AppIcon name="settings" /></span>
@@ -475,7 +560,12 @@ export default function MainLayout() {
                         <div className="notification-title">{n.title}</div>
                         <div className="notification-message">{n.message}</div>
                         <div className="notification-time">
-                          {new Date(n.created_at).toLocaleString('it-IT')}
+                          {(() => {
+                            // Se il backend non restituisce informazioni sul fuso orario, assumiamo UTC (SQLite standard)
+                            // per far sì che il browser lo converta correttamente nell'ora locale
+                            const dateStr = n.created_at.endsWith('Z') ? n.created_at : n.created_at + 'Z';
+                            return new Date(dateStr).toLocaleString('it-IT');
+                          })()}
                         </div>
                       </div>
                       <div className="notification-actions">
@@ -505,9 +595,9 @@ export default function MainLayout() {
         </div>
       )}
 
-      <GlobalSearch 
-        isOpen={showGlobalSearch} 
-        onClose={() => setShowGlobalSearch(false)} 
+      <GlobalSearch
+        isOpen={showGlobalSearch}
+        onClose={() => setShowGlobalSearch(false)}
       />
     </div>
   );

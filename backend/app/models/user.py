@@ -1,4 +1,5 @@
 import enum
+# pyrefly: ignore [missing-import]
 from sqlalchemy import Column, String, Boolean, Enum
 from app.models.base import Base, TimestampMixin, uuid_pk
 
@@ -13,6 +14,8 @@ DEPARTMENT_LABELS = {
     "ufficio_tecnico": "Ufficio Tecnico",
     "produzione": "Produzione",
     "acquisti": "Acquisti",
+    "commerciale": "Commerciale",
+    "amministrazione": "Amministrazione",
     "admin": "Admin",
 }
 

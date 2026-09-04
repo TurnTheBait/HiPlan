@@ -11,8 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api import (
     auth, users, projects, tasks, notes, export, 
     notifications, phase_templates, workload, vacations, 
-    tickets, task_collaboration, websockets, settings as api_settings, activity_logs, todos, email_logs, search,
-    rescheduling
+    tickets, task_collaboration, websockets, settings as api_settings, activity_logs, todos, email_logs, search, replanning, chat, calendar
 )
 
 @asynccontextmanager
@@ -65,6 +64,9 @@ async def lifespan(app: FastAPI):
                 ("Attesa consegna materiali", "acquisti", "#64748b"),
                 ("Controllo arrivo merce e smistamento", "acquisti", "#10b981"),
                 ("Sollecito fornitori per ritardi", "acquisti", "#e11d48"),
+                # Amministrazione
+                ("Fatturazione", "amministrazione", "#64748b"),
+                ("Gestione pagamenti", "amministrazione", "#475569"),
             ]
             for name, dept, col in default_templates:
                 session.add(PhaseTemplate(name=name, department=dept, default_color=col, is_custom=False))
@@ -87,8 +89,8 @@ async def lifespan(app: FastAPI):
             await session.commit()
             print("[INIT] Creato utente admin predefinito (username: admin / password: admin)")
         else:
-            if not verify_password("admin", admin_user.hashed_password):
-                admin_user.hashed_password = hash_password("admin")
+            if not verify_password("admin", str(admin_user.hashed_password)): # type: ignore
+                admin_user.hashed_password = hash_password("admin") # type: ignore
                 await session.commit()
                 print("[INIT] Password utente admin sincronizzata a 'admin'")
 
@@ -96,8 +98,8 @@ async def lifespan(app: FastAPI):
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from app.services.backup_service import run_backup
 
-    scheduler = AsyncIOScheduler(timezone="Europe/Rome")
-    scheduler.add_job(run_backup, 'cron', day_of_week='sun', hour=3, minute=0)
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(run_backup, 'cron', hour=20, minute=0)
 
     # Scheduler: invia notifiche TODO regolarmente controllando la data e ora esatta
     async def run_todo_notifications():
@@ -132,9 +134,9 @@ async def lifespan(app: FastAPI):
                 )
             )
             for todo in todos_notify.scalars().all():
-                todo.notify_sent = True
+                todo.notify_sent = True # type: ignore
                 try:
-                    assignees = json.loads(todo.assignees) if todo.assignees else []
+                    assignees = json.loads(str(todo.assignees)) if todo.assignees else []
                 except Exception:
                     assignees = []
 
@@ -157,15 +159,15 @@ async def lifespan(app: FastAPI):
                     emails = [u.email for u in users_list if u.email]
                     # Aggiungi email default admin se configurata e non già presente
                     if default_notification_email and default_notification_email not in emails:
-                        emails.append(default_notification_email)
+                        emails.append(default_notification_email) # type: ignore
                     creator_res = await session.execute(select(User).where(User.id == todo.creator_id))
                     creator = creator_res.scalar_one_or_none()
                     if emails:
                         await send_todo_notification_email(
-                            to_addresses=emails,
-                            todo_title=todo.title,
-                            todo_content=todo.content,
-                            creator_name=creator.full_name or creator.username if creator else "HiPlan",
+                            to_addresses=emails, # type: ignore
+                            todo_title=str(todo.title),
+                            todo_content=str(todo.content) if todo.content else None,
+                            creator_name=str(creator.full_name or creator.username) if creator else "HiPlan",
                             notify_type="notification",
                         )
 
@@ -182,9 +184,9 @@ async def lifespan(app: FastAPI):
                 )
             )
             for todo in todos_due.scalars().all():
-                todo.due_reminder_sent = True
+                todo.due_reminder_sent = True # type: ignore
                 try:
-                    assignees = json.loads(todo.assignees) if todo.assignees else []
+                    assignees = json.loads(str(todo.assignees)) if todo.assignees else []
                 except Exception:
                     assignees = []
 
@@ -207,40 +209,94 @@ async def lifespan(app: FastAPI):
                     emails = [u.email for u in users_list if u.email]
                     # Aggiungi email default admin se configurata e non già presente
                     if default_notification_email and default_notification_email not in emails:
-                        emails.append(default_notification_email)
+                        emails.append(default_notification_email) # type: ignore
                     creator_res = await session.execute(select(User).where(User.id == todo.creator_id))
                     creator = creator_res.scalar_one_or_none()
                     if emails:
                         await send_todo_notification_email(
-                            to_addresses=emails,
-                            todo_title=todo.title,
-                            todo_content=todo.content,
-                            creator_name=creator.full_name or creator.username if creator else "HiPlan",
+                            to_addresses=emails, # type: ignore
+                            todo_title=str(todo.title),
+                            todo_content=str(todo.content) if todo.content else None,
+                            creator_name=str(creator.full_name or creator.username) if creator else "HiPlan",
                             notify_type="due_reminder",
                         )
 
             await session.commit()
 
+    async def run_calendar_notifications():
+        from app.models.base import AsyncSessionLocal
+        from app.models.calendar_event import CalendarEvent
+        from app.models.user import User
+        from app.services.email_service import send_calendar_reminder_email
+        import json
+        from datetime import datetime
+        # pyrefly: ignore [missing-import]
+        from sqlalchemy import select, or_
+
+        now = datetime.now()
+
+        async with AsyncSessionLocal() as session:
+            # Eventi da notificare
+            events_to_notify = await session.execute(
+                select(CalendarEvent).where(
+                    CalendarEvent.reminder_sent == False,
+                    CalendarEvent.reminder_type != "none",
+                    CalendarEvent.reminder_time <= now
+                )
+            )
+            for ev in events_to_notify.scalars().all():
+                ev.reminder_sent = True # type: ignore
+                
+                # Trova utenti a cui notificare: autore + condivisi
+                try:
+                    shared = json.loads(str(ev.shared_with)) if ev.shared_with else []
+                except:
+                    shared = []
+                
+                users_res = await session.execute(
+                    select(User).where(
+                        or_(
+                            User.id == ev.user_id,
+                            User.username.in_(shared)
+                        ),
+                        User.is_active == True
+                    )
+                )
+                users_list = users_res.scalars().all()
+                emails = [u.email for u in users_list if u.email]
+                
+                creator = next((u for u in users_list if u.id == ev.user_id), None)
+                if not creator:
+                    creator_res = await session.execute(select(User).where(User.id == ev.user_id))
+                    creator = creator_res.scalar_one_or_none()
+
+                if emails:
+                    await send_calendar_reminder_email(
+                        to_addresses=emails, # type: ignore
+                        event_title=str(ev.title),
+                        event_description=str(ev.description) if ev.description else None,
+                        event_start_date=ev.start_date, # type: ignore
+                        creator_name=str(creator.full_name or creator.username) if creator else "HiPlan"
+                    )
+
+            await session.commit()
+
+    # Scheduler: Generazione report AI giornaliero alle ore 7:00
+    async def run_daily_ai_report():
+        try:
+            from app.models.base import AsyncSessionLocal
+            from app.services.chat_service import chat_service
+            async with AsyncSessionLocal() as session:
+                await chat_service.generate_admin_report(session)
+                print("[SCHEDULER] Report AI giornaliero delle ore 07:00 generato con successo.")
+        except Exception as e:
+            print(f"[SCHEDULER] Errore generazione report AI ore 07:00: {e}")
+
+    scheduler.add_job(run_daily_ai_report, 'cron', hour=7, minute=0)
     scheduler.add_job(run_todo_notifications, 'interval', minutes=5)
-    from app.services.rescheduling_service import run_daily_rescheduling
-    scheduler.add_job(
-        run_daily_rescheduling,
-        'cron',
-        hour=1,
-        minute=15,
-        id='daily_planning_agent',
-        max_instances=1,
-        coalesce=True,
-    )
-    from datetime import datetime as scheduler_datetime, timedelta as scheduler_timedelta
-    scheduler.add_job(
-        run_daily_rescheduling,
-        'date',
-        run_date=scheduler_datetime.now() + scheduler_timedelta(seconds=10),
-        id='startup_planning_agent',
-    )
+    scheduler.add_job(run_calendar_notifications, 'interval', minutes=5)
     scheduler.start()
-    print("[INIT] Scheduler avviato (TODO ogni 5 minuti, agente pianificazione ogni giorno alle 01:15)")
+    print("[INIT] Scheduler avviato (Report AI ore 07:00, controllo TODO ed Eventi ogni 5 minuti)")
 
     yield
     await engine.dispose()
@@ -291,7 +347,9 @@ app.include_router(websockets.router)
 app.include_router(todos.router)
 app.include_router(email_logs.router, prefix="/api/admin/email-logs", tags=["Admin"])
 app.include_router(search.router)
-app.include_router(rescheduling.router)
+app.include_router(replanning.router)
+app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
+app.include_router(calendar.router, prefix="/api/calendar", tags=["Calendar"])
 
 @app.get("/api/health")
 async def health_check():

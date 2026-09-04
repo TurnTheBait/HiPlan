@@ -1,4 +1,5 @@
 from typing import List, Optional
+from datetime import datetime, timedelta
 # pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
 # pyrefly: ignore [missing-import]
@@ -6,7 +7,7 @@ from sqlalchemy import select, func
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import selectinload
 from app.models.project import Project, ProjectMember, MemberRole
-from app.models.task import Task
+from app.models.task import Task, TaskType
 from app.models.user import User, UserRole
 from app.schemas.project import ProjectCreate, ProjectUpdate, MemberAdd, ProjectOut, MemberOut
 from app.models.notification import Notification, NotificationType
@@ -16,20 +17,26 @@ from app.core.websocket_manager import manager
 
 
 async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
-    result = await db.execute(select(Project).options(selectinload(Project.responsible)).order_by(Project.created_at.desc()))
+    result = await db.execute(
+        select(Project)
+        .options(selectinload(Project.responsible))
+        .where(Project.deleted_at.is_(None))
+        .order_by(Project.created_at.desc())
+    )
     projects = result.scalars().all()
 
     output = []
     import json
     for p in projects:
         tasks_data = await db.execute(
-            select(Task.id, Task.progress, Task.workers)
+            select(Task.id, Task.progress, Task.workers, Task.type)
             .where(Task.project_id == p.id)
         )
         tasks_rows = tasks_data.all()
         
-        task_count = len(tasks_rows)
-        avg_progress = sum((row.progress or 0) for row in tasks_rows) / task_count if task_count > 0 else 0.0
+        progress_tasks = [row for row in tasks_rows if row.type != TaskType.MILESTONE]
+        task_count = len(progress_tasks)
+        avg_progress = sum((row.progress or 0) for row in progress_tasks) / task_count if task_count > 0 else 0.0
         
         unique_workers = set()
         for row in tasks_rows:
@@ -86,6 +93,8 @@ async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
             task_count=task_count, member_count=worker_count,
             progress=round(avg_progress, 2),
             attachments=attachments_list,
+            is_atex=bool(getattr(p, 'is_atex', False) or False),
+            is_alimentare=bool(getattr(p, 'is_alimentare', False) or False),
         )
         output.append(out)
     return output
@@ -93,13 +102,24 @@ async def get_user_projects(db: AsyncSession, user: User) -> List[ProjectOut]:
 
 async def create_project(db: AsyncSession, data: ProjectCreate, owner: User) -> Project:
     import json
+    project_code = (data.code or "").strip() if data.code else None
+    project_name = (data.name or "").strip() or project_code or "Nuova Commessa"
+    project_client = (data.client or "").strip() if data.client else None
+
     project = Project(
-        name=data.name or "", code=data.code, client=data.client, color=data.color or "#185FA5",
+        name=project_name,
+        code=project_code,
+        client=project_client,
+        color=data.color or "#185FA5",
         description=data.description,
-        start_date=data.start_date, end_date=data.end_date,
-        status=data.status, owner_id=owner.id,
-        responsible_id=data.responsible_id or owner.id,
+        start_date=data.start_date,
+        end_date=data.end_date,
+        status=data.status,
+        owner_id=owner.id,
+        responsible_id=data.responsible_id if data.responsible_id else None,
         assigned_workers=json.dumps(data.assigned_workers) if data.assigned_workers else "[]",
+        is_atex=bool(data.is_atex),
+        is_alimentare=bool(data.is_alimentare),
     )
     db.add(project)
     await db.flush()
@@ -114,14 +134,22 @@ async def create_project(db: AsyncSession, data: ProjectCreate, owner: User) -> 
     db.add(log)
     
     await db.commit()
-    await db.refresh(project)
-    return project
-
-
-async def get_project(db: AsyncSession, project_id: str, user: User) -> Project:
+    
     result = await db.execute(
-        select(Project).options(selectinload(Project.members), selectinload(Project.responsible)).where(Project.id == project_id).execution_options(populate_existing=True)
+        select(Project).options(selectinload(Project.responsible)).where(Project.id == project.id)
     )
+    return result.scalar_one()
+
+
+async def get_project(db: AsyncSession, project_id: str, user: User, allow_deleted: bool = False) -> Project:
+    query = (
+        select(Project)
+        .options(selectinload(Project.members), selectinload(Project.responsible))
+        .where(Project.id == project_id)
+    )
+    if not allow_deleted:
+        query = query.where(Project.deleted_at.is_(None))
+    result = await db.execute(query.execution_options(populate_existing=True))
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Progetto non trovato")
@@ -161,11 +189,93 @@ async def update_project(db: AsyncSession, project_id: str, data: ProjectUpdate,
 
 
 async def delete_project(db: AsyncSession, project_id: str, user: User):
+    """Sposta la commessa nel cestino (Soft Delete)."""
     project = await get_project(db, project_id, user)
-    if user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'amministratore può eliminare le commesse")
+    if user.role not in (UserRole.ADMIN, UserRole.EDITOR):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo admin ed editor possono eliminare le commesse")
+    project.deleted_at = datetime.utcnow()
+    await db.commit()
+
+
+async def purge_expired_trash(db: AsyncSession):
+    """Elimina definitivamente le commesse nel cestino da più di 90 giorni."""
+    cutoff = datetime.utcnow() - timedelta(days=90)
+    res = await db.execute(select(Project).where(Project.deleted_at.isnot(None), Project.deleted_at <= cutoff))
+    expired = res.scalars().all()
+    for p in expired:
+        await db.delete(p)
+    if expired:
+        await db.commit()
+
+
+async def get_trash_projects(db: AsyncSession, user: User) -> List[dict]:
+    """Restituisce l'elenco delle commesse nel cestino con giorni rimanenti."""
+    if user.role not in (UserRole.ADMIN, UserRole.EDITOR):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Non hai i permessi per accedere al cestino")
+
+    # Pulizia automatica preventiva dei record > 90 giorni
+    await purge_expired_trash(db)
+
+    res = await db.execute(
+        select(Project)
+        .where(Project.deleted_at.isnot(None))
+        .order_by(Project.deleted_at.desc())
+    )
+    trashed = res.scalars().all()
+    now = datetime.utcnow()
+    items = []
+    for p in trashed:
+        tasks_res = await db.execute(select(func.count(Task.id)).where(Task.project_id == p.id))
+        task_count = tasks_res.scalar_one() or 0
+
+        deleted_dt = p.deleted_at or now
+        elapsed_days = (now - deleted_dt).days
+        days_left = max(0, 90 - elapsed_days)
+
+        items.append({
+            "id": str(p.id),
+            "name": p.name,
+            "code": p.code,
+            "client": p.client,
+            "color": p.color,
+            "status": p.status,
+            "deleted_at": p.deleted_at,
+            "days_left": days_left,
+            "task_count": task_count,
+        })
+    return items
+
+
+async def restore_project(db: AsyncSession, project_id: str, user: User) -> Project:
+    """Ripristina una commessa dal cestino."""
+    if user.role not in (UserRole.ADMIN, UserRole.EDITOR):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo admin ed editor possono ripristinare le commesse")
+    project = await get_project(db, project_id, user, allow_deleted=True)
+    if project.deleted_at:
+        project.deleted_at = None
+        await db.commit()
+    return project
+
+
+async def hard_delete_project(db: AsyncSession, project_id: str, user: User):
+    """Elimina definitivamente una commessa dal database."""
+    if user.role not in (UserRole.ADMIN, UserRole.EDITOR):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo admin ed editor possono eliminare definitivamente le commesse")
+    project = await get_project(db, project_id, user, allow_deleted=True)
     await db.delete(project)
     await db.commit()
+
+
+async def empty_trash(db: AsyncSession, user: User):
+    """Svuota completamente il cestino."""
+    if user.role not in (UserRole.ADMIN, UserRole.EDITOR):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo admin ed editor possono svuotare il cestino")
+    res = await db.execute(select(Project).where(Project.deleted_at.isnot(None)))
+    trashed = res.scalars().all()
+    for p in trashed:
+        await db.delete(p)
+    if trashed:
+        await db.commit()
 
 
 async def add_member(db: AsyncSession, project_id: str, data: MemberAdd, user: User) -> ProjectMember:

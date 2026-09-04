@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     SMTP_FROM: str = ""
     SMTP_USE_TLS: bool = True
 
+    # AI
+    GEMINI_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
+    COHERE_API_KEY: str = ""
+
     @property
     def cors_origins_list(self) -> List[str]:
         return json.loads(self.CORS_ORIGINS)

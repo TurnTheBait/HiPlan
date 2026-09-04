@@ -14,7 +14,7 @@ I ruoli applicativi sono:
 | `editor` | Creazione e aggiornamento dei dati operativi consentiti |
 | `viewer` | Consultazione e operazioni personali o collaborative autorizzate |
 
-Ogni utente può essere associato a un reparto: **Ufficio Tecnico**, **Produzione**, **Acquisti** oppure **Admin**. Ruolo e reparto sono concetti distinti: il ruolo determina i permessi, il reparto organizza il lavoro.
+Ogni utente può essere associato a un reparto: **Ufficio Tecnico**, **Produzione**, **Acquisti**, **Commerciale** oppure **Admin**. Ruolo e reparto sono concetti distinti: il ruolo determina i permessi, il reparto organizza il lavoro.
 
 Il primo account registrato riceve il ruolo di amministratore. L'installazione corrente crea inoltre un account amministrativo iniziale all'avvio: in produzione è indispensabile sostituirne immediatamente le credenziali predefinite.
 
@@ -27,8 +27,10 @@ Il menu laterale contiene:
 - **Calendario**: vista mensile delle attività.
 - **Blocchi Note**: documenti privati e condivisi.
 - **TODO**: attività personali o assegnate.
-- **Panoramica addetti**: sovrapposizioni e carico delle persone.
 - **Ticket**: richieste e conversazioni operative.
+- **HiPlan AI**: assistente virtuale intelligente per interrogare commesse e dati.
+- **Panoramica addetti**: carico e sovrapposizioni (visibile a tutti).
+- **Rilevatore Conflitti**: analisi proattiva di ritardi e conflitti (visibile agli editor e admin).
 - **Admin**: configurazione riservata agli amministratori.
 
 Nella parte inferiore sono disponibili le notifiche, la scelta del tema, il profilo e il logout. La pagina **Il mio profilo** permette di aggiornare i propri dati e gestire le ferie.
@@ -50,36 +52,37 @@ La Dashboard mostra:
 
 ## 4. Commesse
 
-### Creazione
+### Creazione e Modifica
 
-Dalla pagina **Commesse**, selezionare **Nuova Commessa** e compilare i dati necessari:
+Dalla pagina **Commesse**, selezionare **Nuova Commessa** (oppure cliccare su *Modifica Commessa* dalla scheda di dettaglio). Il popup moderno a due colonne consente una gestione spaziosa e ordinata:
 
-- nome e codice;
-- cliente;
-- colore identificativo;
-- descrizione;
-- data di inizio e fine;
-- stato;
-- responsabile;
-- addetti di commessa.
+- **Colonna sinistra**: Codice e Cliente, Titolo commessa, Data di Inizio e Fine, Colore identificativo e Stato (*In Pianificazione*, *In Corso*, *Completata*, *Archiviata*), Referente e Note/Descrizione.
+- **Colonna destra**:
+  - **Tipologia Commessa**:
+    - **Standard**: commessa ordinaria senza vincoli normativi speciali (selezionata automaticamente se non vi sono altri flag attivi).
+    - **ATEX**: per apparecchiature destinate ad atmosfere potenzialmente esplosive soggette a direttiva ATEX e certificazioni di conformità.
+    - **Alimentare**: per commesse destinate all'industria alimentare soggette a idoneità MOCA (materiali a contatto con alimenti) e protocolli igienico-sanitari.
+    - *Nota*: le tipologie **ATEX** e **Alimentare** possono essere selezionate contemporaneamente per commesse ibride complesse.
+  - **Addetti della Commessa**: selezione multipla rapida con badge e ricerca istantanea delle risorse del team.
 
-Il cliente è attualmente un campo della commessa, non un'anagrafica separata.
+Le etichette di tipologia (*Standard*, *ATEX*, *Alimentare*) compaiono con badge dedicati nelle tessere della schermata principale e nella scheda di dettaglio.
 
 ### Filtri ed export
 
-L'elenco consente di filtrare e cercare le commesse. La vista personale include i progetti nei quali l'utente è responsabile o assegnato alla commessa o a una fase.
+L'elenco consente di filtrare per stato e cercare per testo. La vista personale include i progetti nei quali l'utente è responsabile o assegnato alla commessa o a una fase.
 
 È possibile selezionare più commesse ed esportarne l'elenco in PDF o Excel.
 
 ### Dettaglio della commessa
 
-La scheda contiene più aree:
+La scheda contiene più aree operative:
 
-- **Gantt**: pianificazione temporale e dipendenze;
+- **Gantt**: pianificazione temporale interattiva, avanzamenti e dipendenze tra fasi;
+- **Analisi Commessa - HiPlan AI**: audit intelligente della commessa che verifica all'istante ritardi, sovrapposizioni, conflitti con ferie e conformità normativa (ATEX/MOCA). Riporta la percentuale reale di avanzamento e suggerisce riprogrammazioni nominative e orarie precise;
 - **Commessa**: informazioni generali e riepiloghi;
-- **Note e allegati**: documentazione collegata;
-- **Alert**: elementi che richiedono attenzione;
-- **Registro attività**: cronologia delle azioni rilevanti.
+- **Note e allegati**: documentazione e file caricati;
+- **Alert**: elementi critici che richiedono attenzione;
+- **Registro attività**: cronologia completa e tracciabilità delle modifiche.
 
 Dal dettaglio è possibile modificare i dati generali, caricare allegati ed esportare sezioni selezionate in PDF o Excel.
 
@@ -102,8 +105,6 @@ Una fase può includere:
 
 Le modalità di calcolo permettono di partire da date, giorni oppure ore. I calcoli operativi escludono i giorni non lavorativi previsti dall'applicazione.
 
-Se uno degli addetti selezionati è in ferie nel periodo richiesto, l'assegnazione non viene bloccata. HiPlan considera il carico già pianificato dell'addetto su tutte le commesse operative e distribuisce le sue ore nei primi slot lavorativi disponibili, saltando ferie e giorni non lavorativi. Se necessario, le date della fase vengono adeguate automaticamente e l'interfaccia mostra il nuovo intervallo.
-
 ### Template di fase
 
 Quando si crea una fase è possibile usare un modello predefinito per reparto. Gli editor autorizzati possono salvare una nuova denominazione come template personalizzato; gli amministratori gestiscono l'elenco completo dal pannello Admin.
@@ -121,19 +122,7 @@ Nel Gantt è possibile collegare le fasi con quattro tipi di dipendenza:
 - `FF`: le due fasi terminano in relazione;
 - `SF`: la fine della fase target dipende dall'inizio della sorgente.
 
-Il collegamento può includere un ritardo (`lag`). Nel Gantt le barre non possono essere spostate o ridimensionate tramite trascinamento: date e durata si modificano dal menu della fase. Il trascinamento rimane disponibile esclusivamente per creare le dipendenze.
-
-### Ripianificazione automatica
-
-L'agente di pianificazione esegue automaticamente l'analisi all'avvio di HiPlan e ogni giorno alle 01:15 sulle commesse in pianificazione o attive. Tutte le commesse vengono analizzate insieme in un unico batch: ritardi, ferie sovrapposte e ore non consuntivate nelle giornate concluse sono aggregati per addetto prima di modificare il Gantt. Le ore registrate su oggi o su date future non compensano un deficit già maturato nei giorni precedenti. La capacità persa appartiene all'addetto e non alla singola commessa: tutte le sue fasi correnti e future vengono quindi riallineate su tutte le commesse operative, rispettando giorni lavorativi e ferie. Per esempio, 8 ore previste ma non consuntivate producono uno slittamento di un giorno lavorativo; 16 ore producono due giorni. Il medesimo scostamento effettivo, inclusi eventuali giorni di ferie incontrati durante il recupero, viene propagato a cascata alle fasi dipendenti, conservando gli offset e le eventuali sovrapposizioni esistenti. Le ore di recupero già pianificate vengono sottratte dalle analisi successive, evitando duplicazioni.
-
-Nella sezione **Ritardi**, ogni apertura o espansione del box dell'agente avvia una simulazione aggiornata. L'anteprima mostra, per ciascuna commessa coinvolta, le date attuali e proposte di tutte le fasi che cambierebbero, comprese le dipendenze a cascata; la simulazione non salva date, log o notifiche. Editor e amministratori possono applicare le modifiche mostrate oppure mettere l'agente in pausa per la sola commessa corrente. **Applica ora** rilegge nuovamente lo stato corrente di tutte le commesse operative prima di salvare, evitando di applicare un'anteprima diventata obsoleta. Una commessa in pausa resta protetta dagli slittamenti automatici; quando il comando viene avviato dalla commessa in pausa, questa viene inclusa esplicitamente nell'analisi manuale.
-
-Per ogni esecuzione restano visibili motivazione, soluzione, date precedenti e nuove date. Le persone coinvolte ricevono una notifica HiPlan. Le modifiche sulle diverse commesse condividono lo stesso intervento: l'annullamento ripristina atomicamente tutte le commesse coinvolte. Il rollback viene bloccato per l'intero intervento se nel frattempo una delle date interessate è stata modificata manualmente, così da non sovrascrivere lavoro successivo.
-
-Gli utenti viewer possono consultare in sola lettura lo stato dell'agente e tutte le modifiche applicate, incluse motivazioni e date prima/dopo. Non possono applicare soluzioni, sospendere l'agente o annullare una ripianificazione.
-
-Le esecuzioni e gli annullamenti sono registrati nella scheda **Cronologia → Agente di pianificazione**, disponibile solo agli amministratori.
+Il collegamento può includere un ritardo (`lag`). Le dipendenze sono visualizzate e modificabili nel Gantt; la ripianificazione automatica dell'intera catena è indicata come sviluppo futuro nella roadmap.
 
 ### Stato e avanzamento
 
@@ -169,7 +158,7 @@ La campanella nella barra laterale consente di:
 - eliminarne una;
 - eliminare l'intero elenco.
 
-## 8. Calendario, addetti e ferie
+## 8. Calendario, addetti, ferie e intelligenza artificiale
 
 ### Calendario operativo
 
@@ -179,17 +168,37 @@ Il Calendario mostra le fasi sulle giornate del mese. È possibile filtrare per 
 
 Questa sezione identifica le giornate nelle quali la stessa persona risulta impegnata su più attività. Per ogni conflitto vengono mostrate le fasi e le commesse coinvolte.
 
+### Rilevatore Conflitti
+
+Il **Rilevatore Conflitti** (precedentemente *Agent*) è un sistema proattivo che analizza le commesse in background, segnalando automaticamente la mancata consuntivazione delle ore, ritardi rispetto al Gantt, dati mancanti o sovraccarichi critici di lavoro. Consente all'utente di passare rapidamente alla commessa in oggetto per risolvere l'anomalia.
+
+### HiPlan AI (Assistente Virtuale e Reportistica)
+
+L'applicazione integra una suite completa di Intelligenza Artificiale progettata per ottimizzare la pianificazione:
+
+1. **Assistente Virtuale (Chatbot)**:
+   - Accessibile dalla barra laterale (**HiPlan AI**), permette di interrogare il sistema in linguaggio naturale.
+   - Fornisce tabelle e statistiche in tempo reale su commesse attive, carichi di lavoro, scadenze imminenti e ticket.
+   - Riconosce la tipologia delle commesse (*"Quali commesse sono ATEX o alimentari?"*, *"Mostrami le commesse standard del cliente Alfa"*).
+   - Offre tool rapidi come il **Morning Briefing** personalizzato con le attività urgenti della giornata e le prossime scadenze.
+   - Fornisce consigli operativi e chiari senza formule generaliste o superflue.
+
+2. **Reportistica Esecutiva Direzionale (Pannello Admin)**:
+   - Riservato agli amministratori, genera un resoconto strategico ad alto impatto sullo stato complessivo dell'azienda.
+   - Mostra KPI sintetici con le commesse attive, in pianificazione, fasi aperte, addetti coinvolti e scadenze a 7 giorni.
+   - Analizza la concentrazione dei carichi di lavoro, evidenzia criticità e ritardi reali e formula raccomandazioni decisionali mirate e nominative (es. riassegnazione carichi tra colleghi dello stesso reparto).
+
 ### Ferie
 
 Dal profilo personale è possibile inserire un intervallo di ferie con una motivazione facoltativa e rimuovere periodi non più validi.
 
-Quando una fase già assegnata si sovrappone a ferie inserite successivamente:
+Quando una fase assegnata si sovrappone alle ferie:
 
 - la fase può essere segnalata come in conflitto;
 - l'utente visualizza il periodo e le attività coinvolte;
 - al rientro può comparire un promemoria delle attività da recuperare.
 
-La registrazione delle ferie segnala il conflitto; durante l'analisi giornaliera l'agente applica automaticamente la soluzione, salvo che sia stato messo in pausa per quella commessa.
+La registrazione delle ferie non sposta automaticamente le fasi.
 
 ## 9. TODO
 
@@ -232,7 +241,7 @@ Le note possono essere:
 - **private**, visibili al proprietario;
 - **condivise**, accessibili al team autorizzato.
 
-L'editor supporta formattazione visuale, titoli, enfasi, citazioni, codice e checklist. È possibile cercare le note, filtrarle per visibilità e aggiungere allegati.
+L'editor supporta formattazione visuale, titoli, enfasi, citazioni, codice e checklist. Grazie al layout a due colonne introdotto di recente, l'area di scrittura è separata dalla gestione degli allegati (sulla destra). È possibile caricare file trascinandoli ovunque all'interno della pagina (drag and drop) o cercare/filtrare le note in base alla loro visibilità.
 
 Le modifiche vengono salvate sul server; prima di uscire da una nota è comunque opportuno verificare l'indicatore di salvataggio.
 

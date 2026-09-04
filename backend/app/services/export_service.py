@@ -1,12 +1,13 @@
 import io
 import json
 from typing import List, Tuple, Optional, Any, cast
-from datetime import timedelta
+from datetime import timedelta, date, datetime
+from app.utils.working_days import is_italian_holiday
 # pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
 # pyrefly: ignore [missing-import]
 from sqlalchemy import select
-from app.models.task import Task
+from app.models.task import Task, TaskType
 from app.models.project import Project
 from app.models.ticket import Ticket, TicketReply
 from app.models.user import User
@@ -30,6 +31,19 @@ from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 # pyrefly: ignore [missing-import]
 from openpyxl.utils import get_column_letter
+
+
+def _get_project_tipologia(proj: Any) -> str:
+    """Restituisce la stringa di tipologia commessa: Standard, ATEX, Alimentare o combinata"""
+    is_atex = bool(getattr(proj, "is_atex", False))
+    is_alim = bool(getattr(proj, "is_alimentare", False))
+    if is_atex and is_alim:
+        return "ATEX + Alimentare"
+    elif is_atex:
+        return "ATEX"
+    elif is_alim:
+        return "Alimentare"
+    return "Standard"
 
 
 def _extract_task_info(task: Any) -> Tuple[str, float, float, float]:
@@ -153,6 +167,7 @@ async def export_excel(db: AsyncSession, project_id: str, sections: Optional[Lis
     ws_info.append([f"COMMESSA: {proj.code or ''} - {proj.name}"])
     ws_info.cell(row=1, column=1).font = Font(size=14, bold=True, color="1E3A8A")
 
+    tipologia_str = _get_project_tipologia(proj)
     resp_str = proj.responsible.full_name or proj.responsible.username if proj.responsible else "-"
     addetti_list = []
     if proj.assigned_workers:
@@ -163,12 +178,15 @@ async def export_excel(db: AsyncSession, project_id: str, sections: Optional[Lis
         except:
             pass
     addetti_str = ", ".join(addetti_list) if addetti_list else "-"
-    ws_info.append([f"Cliente: {proj.client or '-'} | Stato: {proj.status.value if proj.status else '-'}"])
+    ws_info.append([f"Cliente: {proj.client or '-'} | Tipologia: {tipologia_str} | Stato: {proj.status.value if proj.status else '-'}"])
     ws_info.cell(row=2, column=1).font = Font(size=11, italic=True)
     ws_info.append([f"Periodo: {proj.start_date or '-'} al {proj.end_date or '-'} | Responsabile: {resp_str}"])
     ws_info.cell(row=3, column=1).font = Font(size=11, italic=True)
     ws_info.append([f"Addetti Commessa: {addetti_str}"])
     ws_info.cell(row=4, column=1).font = Font(size=11, italic=True)
+    if proj.description:
+        ws_info.append([f"Descrizione: {proj.description}"])
+        ws_info.cell(row=5, column=1).font = Font(size=10, italic=True)
     ws_info.column_dimensions["A"].width = 120
 
     # ========== SHEET 2: GANTT DIAGRAM ==========
@@ -177,131 +195,132 @@ async def export_excel(db: AsyncSession, project_id: str, sections: Optional[Lis
         has_tasks_section = "tasks" in sections
         has_hours_section = "hours" in sections
 
-        # Find min/max dates
-        all_dates = []
-        for t in task_list:
-            if t.start_date:
-                all_dates.append(t.start_date)
-            if t.end_date:
-                all_dates.append(t.end_date)
-        if not all_dates:
-            all_dates = [proj.start_date or proj.created_at, proj.end_date or proj.start_date]
+        # Find min/max dates: prioritize project boundaries
+        min_date = proj.start_date
+        max_date = proj.end_date
+
+        if not min_date or not max_date:
+            all_dates = []
+            for t in task_list:
+                if t.start_date:
+                    all_dates.append(t.start_date)
+                if t.end_date:
+                    all_dates.append(t.end_date)
+            
+            if not min_date:
+                min_date = min(all_dates) if all_dates else (proj.created_at.date() if hasattr(proj.created_at, 'date') else proj.created_at)
+            if not max_date:
+                max_date = max(all_dates) if all_dates else min_date
         
-        min_date = min(all_dates) if all_dates else proj.start_date
-        max_date = max(all_dates) if all_dates else proj.end_date
-        
-        # Generate month columns
-        current = min_date.replace(day=1)
-        months = []
-        while current <= max_date:
-            months.append(current)
-            if current.month == 12:
-                current = current.replace(year=current.year + 1, month=1)
-            else:
-                current = current.replace(month=current.month + 1)
+        # Generate list of days from min_date to max_date
+        delta = max_date - min_date
+        num_days = max(1, delta.days + 1)
+        all_days = [min_date + timedelta(days=i) for i in range(num_days)]
 
         ws_gantt.append(["DIAGRAMMA GANTT - " + (proj.code or proj.name)])
         ws_gantt.cell(row=1, column=1).font = Font(size=14, bold=True, color="1E3A8A")
         ws_gantt.append([])
 
-        # Row 1: project bar header
+        # Row 3: Months header
         row = 3
         ws_gantt.cell(row=row, column=1, value="Commessa").font = Font(bold=True, size=10)
         ws_gantt.cell(row=row, column=1).fill = PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid")
         ws_gantt.cell(row=row, column=1).border = THIN_BORDER
 
         col = 2
-        for m in months:
-            month_label = m.strftime("%b %Y")
-            days_in_month = (m.replace(month=m.month % 12 + 1, day=1) - timedelta(days=1)).day if m.month < 12 else 31
-            ws_gantt.merge_cells(start_row=row, start_column=col, end_row=row, end_column=col + days_in_month - 1)
+        from itertools import groupby
+        for (year, month), g in groupby(all_days, key=lambda d: (d.year, d.month)):
+            days_in_this_group = len(list(g))
+            month_label = date(year, month, 1).strftime("%b %Y")
+            ws_gantt.merge_cells(start_row=row, start_column=col, end_row=row, end_column=col + days_in_this_group - 1)
             cell = ws_gantt.cell(row=row, column=col, value=month_label)
             cell.font = Font(bold=True, size=9, color="2563EB")
             cell.fill = PatternFill(start_color="EFF6FF", end_color="EFF6FF", fill_type="solid")
             cell.border = THIN_BORDER
             cell.alignment = Alignment(horizontal="center")
-            col += days_in_month
+            col += days_in_this_group
+
+        # Row 4 & 5: Day of week and day number headers
+        row_dow = 4
+        row_days = 5
+        ws_gantt.cell(row=row_dow, column=1, value="").border = THIN_BORDER
+        ws_gantt.cell(row=row_days, column=1, value="").border = THIN_BORDER
+        
+        ita_weekdays = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
+        holiday_cols = set()
+        col_days = 2
+        for cur_date in all_days:
+            is_festivo = is_italian_holiday(cur_date)
+            
+            if is_festivo:
+                holiday_cols.add(col_days)
+                
+            bg_color = "FEE2E2" if is_festivo else "F9FAFB"
+            text_color = "DC2626" if is_festivo else "6B7280"
+            
+            cell_dow = ws_gantt.cell(row=row_dow, column=col_days, value=ita_weekdays[cur_date.weekday()])
+            cell_dow.font = Font(size=8, color=text_color, bold=is_festivo)
+            cell_dow.fill = PatternFill(start_color=bg_color, end_color=bg_color, fill_type="solid")
+            cell_dow.border = THIN_BORDER
+            cell_dow.alignment = Alignment(horizontal="center")
+            
+            cell_day = ws_gantt.cell(row=row_days, column=col_days, value=f"{cur_date.day:02d}")
+            cell_day.font = Font(size=8, color=text_color, bold=is_festivo)
+            cell_day.fill = PatternFill(start_color=bg_color, end_color=bg_color, fill_type="solid")
+            cell_day.border = THIN_BORDER
+            cell_day.alignment = Alignment(horizontal="center")
+            col_days += 1
 
         # Determine total columns used
-        total_cols = col - 1
+        total_cols = col_days - 1
 
         # Project bar
-        row = 4
+        row = 6
         ws_gantt.cell(row=row, column=1, value=f"{proj.code or ''} {proj.name}").font = Font(size=9, bold=True)
         ws_gantt.cell(row=row, column=1).border = THIN_BORDER
+        
+        for c in range(2, total_cols + 1):
+            bg = "FEE2E2" if c in holiday_cols else "FFFFFF"
+            cell_bg = ws_gantt.cell(row=row, column=c)
+            cell_bg.border = THIN_BORDER
+            cell_bg.fill = PatternFill(start_color=bg, end_color=bg, fill_type="solid")
         
         if proj.start_date and proj.end_date:
             p_start = proj.start_date
             p_end = proj.end_date
-            first_month = months[0]
-            # Calculate offsets
-            start_offset = 0
-            cur_check = first_month
-            while cur_check < p_start.replace(day=1):
-                if cur_check.month == 12:
-                    cur_check = cur_check.replace(year=cur_check.year + 1, month=1)
-                else:
-                    cur_check = cur_check.replace(month=cur_check.month + 1)
-                days_m = (cur_check.replace(day=1) - timedelta(days=1)).day if cur_check.month > 1 else 31
-                start_offset += days_m
-            # add days from start month
-            start_offset += (p_start.day - 1)
-            
-            end_offset = 0
-            cur_check2 = first_month
-            while cur_check2 < p_end.replace(day=1):
-                if cur_check2.month == 12:
-                    cur_check2 = cur_check2.replace(year=cur_check2.year + 1, month=1)
-                else:
-                    cur_check2 = cur_check2.replace(month=cur_check2.month + 1)
-                days_m = (cur_check2.replace(day=1) - timedelta(days=1)).day if cur_check2.month > 1 else 31
-                end_offset += days_m
-            end_offset += (p_end.day - 1)
+            start_offset = (p_start - min_date).days if p_start >= min_date else 0
+            end_offset = (p_end - min_date).days if p_end >= min_date else 0
 
             bar_width = max(1, end_offset - start_offset + 1)
             start_col = 2 + start_offset
             end_col = min(start_col + bar_width - 1, total_cols)
             
-            ws_gantt.merge_cells(start_row=row, start_column=start_col, end_row=row, end_column=end_col)
-            bar_cell = ws_gantt.cell(row=row, column=start_col, value=f"{proj.code or ''} {proj.name}")
-            bar_cell.fill = PatternFill(start_color="3B82F6", end_color="3B82F6", fill_type="solid")
-            bar_cell.font = Font(color="FFFFFF", bold=True, size=8)
-            bar_cell.border = THIN_BORDER
-            bar_cell.alignment = Alignment(horizontal="center")
+            if end_col >= start_col:
+                ws_gantt.merge_cells(start_row=row, start_column=start_col, end_row=row, end_column=end_col)
+                bar_cell = ws_gantt.cell(row=row, column=start_col, value=f"{proj.code or ''} {proj.name}")
+                bar_cell.fill = PatternFill(start_color="3B82F6", end_color="3B82F6", fill_type="solid")
+                bar_cell.font = Font(color="FFFFFF", bold=True, size=8)
+                bar_cell.border = THIN_BORDER
+                bar_cell.alignment = Alignment(horizontal="center")
 
         # Task bars
-        row = 5
+        row = 7
         for task in task_list:
             ws_gantt.cell(row=row, column=1, value=task.text).font = Font(size=9)
             ws_gantt.cell(row=row, column=1).border = THIN_BORDER
             ws_gantt.cell(row=row, column=1).fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
 
+            for c in range(2, total_cols + 1):
+                bg = "FEE2E2" if c in holiday_cols else "FFFFFF"
+                cell_bg = ws_gantt.cell(row=row, column=c)
+                cell_bg.border = THIN_BORDER
+                cell_bg.fill = PatternFill(start_color=bg, end_color=bg, fill_type="solid")
+
             if task.start_date and task.end_date:
                 t_start = task.start_date
                 t_end = task.end_date
-                first_month = months[0]
-                
-                start_offset = 0
-                cur_check = first_month
-                while cur_check < t_start.replace(day=1):
-                    if cur_check.month == 12:
-                        cur_check = cur_check.replace(year=cur_check.year + 1, month=1)
-                    else:
-                        cur_check = cur_check.replace(month=cur_check.month + 1)
-                    days_m = (cur_check.replace(day=1) - timedelta(days=1)).day if cur_check.month > 1 else 31
-                    start_offset += days_m
-                start_offset += (t_start.day - 1)
-                
-                end_offset = 0
-                cur_check2 = first_month
-                while cur_check2 < t_end.replace(day=1):
-                    if cur_check2.month == 12:
-                        cur_check2 = cur_check2.replace(year=cur_check2.year + 1, month=1)
-                    else:
-                        cur_check2 = cur_check2.replace(month=cur_check2.month + 1)
-                    days_m = (cur_check2.replace(day=1) - timedelta(days=1)).day if cur_check2.month > 1 else 31
-                    end_offset += days_m
-                end_offset += (t_end.day - 1)
+                start_offset = (t_start - min_date).days if t_start >= min_date else 0
+                end_offset = (t_end - min_date).days if t_end >= min_date else 0
 
                 bar_width = max(1, end_offset - start_offset + 1)
                 start_col = 2 + start_offset
@@ -392,10 +411,18 @@ async def export_excel(db: AsyncSession, project_id: str, sections: Optional[Lis
         ws_tasks.column_dimensions["C"].width = 13
         ws_tasks.column_dimensions["D"].width = 13
         ws_tasks.column_dimensions["E"].width = 13
+        
+        col_offset = 5
         if has_hours_t:
             ws_tasks.column_dimensions["F"].width = 16
             ws_tasks.column_dimensions["G"].width = 20
             ws_tasks.column_dimensions["H"].width = 15
+            col_offset = 8
+            
+        ws_tasks.column_dimensions[get_column_letter(col_offset + 1)].width = 20  # Reparto
+        ws_tasks.column_dimensions[get_column_letter(col_offset + 2)].width = 30  # Addetti
+        ws_tasks.column_dimensions[get_column_letter(col_offset + 3)].width = 15  # Progresso
+        ws_tasks.column_dimensions[get_column_letter(col_offset + 4)].width = 15  # Priorità
 
     # ========== SHEET 3 o 4: CONSUNTIVO ORE ==========
     if "hours" in sections:
@@ -412,7 +439,19 @@ async def export_excel(db: AsyncSession, project_id: str, sections: Optional[Lis
             if not workers:
                 workers = ["Addetto Generico"]
             actual_hours = _get_actual_hours_map(task)
-            work_dates = _compute_work_dates(task.start_date, task.end_date)
+            
+            base_dates = _compute_work_dates(task.start_date, task.end_date)
+            date_set = set(base_dates)
+            for w, dates_dict in actual_hours.items():
+                if isinstance(dates_dict, dict):
+                    for date_str in dates_dict.keys():
+                        try:
+                            extra_d = datetime.strptime(date_str, "%Y-%m-%d").date()
+                            date_set.add(extra_d)
+                        except ValueError:
+                            pass
+            work_dates = sorted(list(date_set))
+            
             worker_hours_map = _get_worker_hours_map(task)
             planned_total = float(task.planned_hours or 8.0)
 
@@ -516,6 +555,7 @@ async def export_pdf(db: AsyncSession, project_id: str, sections: Optional[List[
     # ===== INTESTAZIONE (solo sulla prima pagina) =====
     elements.append(Paragraph(f"<b>{proj.code or ''} {proj.name}</b> — Report Commessa", title_style))
 
+    tipologia_str = _get_project_tipologia(proj)
     resp_str = proj.responsible.full_name or proj.responsible.username if proj.responsible else "-"
     addetti_list = []
     if proj.assigned_workers:
@@ -526,7 +566,7 @@ async def export_pdf(db: AsyncSession, project_id: str, sections: Optional[List[
         except: pass
     addetti_str = ", ".join(addetti_list) if addetti_list else "-"
 
-    info_str = (f"<b>Cliente:</b> {proj.client or '-'} | <b>Stato:</b> {proj.status.value if proj.status else '-'} | "
+    info_str = (f"<b>Cliente:</b> {proj.client or '-'} | <b>Tipologia:</b> {tipologia_str} | <b>Stato:</b> {proj.status.value if proj.status else '-'} | "
                 f"<b>Periodo:</b> {proj.start_date or '-'} → {proj.end_date or '-'}<br/>"
                 f"<b>Responsabile:</b> {resp_str} | <b>Addetti:</b> {addetti_str}")
     if proj.description:
@@ -785,7 +825,19 @@ async def export_pdf(db: AsyncSession, project_id: str, sections: Optional[List[
             if not workers:
                 workers = ["Addetto Generico"]
             actual_hours = _get_actual_hours_map(task)
-            work_dates = _compute_work_dates(task.start_date, task.end_date)
+            
+            base_dates = _compute_work_dates(task.start_date, task.end_date)
+            date_set = set(base_dates)
+            for w, dates_dict in actual_hours.items():
+                if isinstance(dates_dict, dict):
+                    for date_str in dates_dict.keys():
+                        try:
+                            extra_d = datetime.strptime(date_str, "%Y-%m-%d").date()
+                            date_set.add(extra_d)
+                        except ValueError:
+                            pass
+            work_dates = sorted(list(date_set))
+            
             worker_hours_map = _get_worker_hours_map(task)
             planned_total = float(task.planned_hours or 8.0)
 
@@ -849,7 +901,7 @@ async def export_projects_list_excel(db: AsyncSession, project_ids: List[str]) -
     ws = cast(Worksheet, wb.active)
     ws.title = "Elenco Commesse"
 
-    headers = ["Codice", "Nome Commessa", "Cliente", "Responsabile", "Stato", "Avanzamento", "Addetti"]
+    headers = ["Codice", "Nome Commessa", "Cliente", "Tipologia", "Responsabile", "Stato", "Avanzamento", "Addetti"]
     header_fill = PatternFill("solid", fgColor="1F2937")
     header_font = Font(bold=True, color="FFFFFF")
     
@@ -877,15 +929,21 @@ async def export_projects_list_excel(db: AsyncSession, project_ids: List[str]) -
         res_tasks = await db.execute(select(Task).where(Task.project_id == p.id))
         tasks = res_tasks.scalars().all()
         
-        total_tasks = len(tasks)
-        completed_tasks = sum(1 for t in tasks if t.completed)
-        progress = f"{int((completed_tasks / total_tasks) * 100)}%" if total_tasks > 0 else "0%"
+        op_tasks = [t for t in tasks if getattr(t, 'type', None) not in [TaskType.PROJECT, TaskType.MILESTONE]]
+        if not op_tasks:
+            op_tasks = tasks
+        if op_tasks:
+            tot_p = sum(float(t.progress or 0) * (100 if (t.progress is not None and t.progress <= 1.0) else 1) for t in op_tasks)
+            progress = f"{round(tot_p / len(op_tasks))}%"
+        else:
+            progress = "0%"
         
         workers = set()
         for t in tasks:
             workers.update(_get_workers_from_task(t))
         workers_str = ", ".join(sorted(workers)) if workers else "-"
         
+        tipologia_str = _get_project_tipologia(p)
         status_it = {"planning": "Pianificazione", "active": "In Corso", "completed": "Completata", "archived": "Archiviata"}.get(p.status, p.status)
         resp_name = user_map.get(p.responsible_id, "-") if p.responsible_id else "-"
 
@@ -893,6 +951,7 @@ async def export_projects_list_excel(db: AsyncSession, project_ids: List[str]) -
             p.code or "-",
             p.name,
             p.client or "-",
+            tipologia_str,
             resp_name,
             status_it,
             progress,
@@ -902,13 +961,14 @@ async def export_projects_list_excel(db: AsyncSession, project_ids: List[str]) -
         for col_idx, val in enumerate(row_data, 1):
             cell = ws.cell(row=idx, column=col_idx, value=val)
             cell.border = thin_border
-            if col_idx in [1, 4, 5, 6]:
+            if col_idx in [1, 4, 5, 6, 7]:
                 cell.alignment = Alignment(horizontal="center")
 
     for col_idx in range(1, len(headers) + 1):
         ws.column_dimensions[get_column_letter(col_idx)].width = 20
     ws.column_dimensions["B"].width = 35
-    ws.column_dimensions["G"].width = 40
+    ws.column_dimensions["D"].width = 22
+    ws.column_dimensions["H"].width = 40
 
     wb.save(buffer)
     buffer.seek(0)
@@ -944,6 +1004,7 @@ async def export_projects_list_pdf(db: AsyncSession, project_ids: List[str]) -> 
             Paragraph("Codice", header_style),
             Paragraph("Nome Commessa", header_style),
             Paragraph("Cliente", header_style),
+            Paragraph("Tipologia", header_style),
             Paragraph("Resp.", header_style),
             Paragraph("Stato", header_style),
             Paragraph("Avanz.", header_style),
@@ -957,15 +1018,21 @@ async def export_projects_list_pdf(db: AsyncSession, project_ids: List[str]) -> 
         res_tasks = await db.execute(select(Task).where(Task.project_id == p.id))
         tasks = res_tasks.scalars().all()
         
-        total_tasks = len(tasks)
-        completed_tasks = sum(1 for t in tasks if t.completed)
-        progress = f"{int((completed_tasks / total_tasks) * 100)}%" if total_tasks > 0 else "0%"
+        op_tasks = [t for t in tasks if getattr(t, 'type', None) not in [TaskType.PROJECT, TaskType.MILESTONE]]
+        if not op_tasks:
+            op_tasks = tasks
+        if op_tasks:
+            tot_p = sum(float(t.progress or 0) * (100 if (t.progress is not None and t.progress <= 1.0) else 1) for t in op_tasks)
+            progress = f"{round(tot_p / len(op_tasks))}%"
+        else:
+            progress = "0%"
         
         workers = set()
         for t in tasks:
             workers.update(_get_workers_from_task(t))
         workers_str = ", ".join(sorted(workers)) if workers else "-"
         
+        tipologia_str = _get_project_tipologia(p)
         status_it = {"planning": "Pianificazione", "active": "In Corso", "completed": "Completata", "archived": "Archiviata"}.get(p.status, p.status)
         resp_name = user_map.get(p.responsible_id, "-") if p.responsible_id else "-"
         
@@ -973,18 +1040,19 @@ async def export_projects_list_pdf(db: AsyncSession, project_ids: List[str]) -> 
             Paragraph(p.code or "-", cell_style),
             Paragraph(p.name, cell_style),
             Paragraph(p.client or "-", cell_style),
+            Paragraph(tipologia_str, cell_style),
             Paragraph(resp_name, cell_style),
             Paragraph(status_it, cell_style),
             Paragraph(progress, cell_style),
             Paragraph(workers_str, cell_style)
         ])
 
-    table = Table(data, colWidths=[65, 160, 110, 85, 75, 45, 190])
+    table = Table(data, colWidths=[55, 145, 95, 80, 75, 75, 45, 175])
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F2937")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
         ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-        ("ALIGN", (5, 0), (5, -1), "CENTER"), # Avanzamento
+        ("ALIGN", (6, 0), (6, -1), "CENTER"), # Avanzamento
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
         ("TOPPADDING", (0, 0), (-1, 0), 8),
@@ -1204,6 +1272,226 @@ async def export_ticket_pdf(db: AsyncSession, ticket_id: str) -> io.BytesIO:
     ]))
     elements.append(replies_table)
 
+    doc.build(elements)
+    output.seek(0)
+    return output
+
+def _is_vacation(date_str, user_dict):
+    for v in user_dict.get("vacations", []):
+        if v.get("start_date") and v.get("end_date"):
+            if v["start_date"] <= date_str <= v["end_date"]:
+                return True
+    return False
+
+async def export_workload_excel(heatmap_data: dict, mode: str = "both") -> io.BytesIO:
+    # pyrefly: ignore [missing-import]
+    import openpyxl
+    import datetime
+    # pyrefly: ignore [missing-import]
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from app.utils.working_days import is_italian_holiday
+    
+    wb = openpyxl.Workbook()
+    
+    sheets = []
+    if mode in ["planned", "both"]:
+        ws_planned = wb.active if len(sheets) == 0 else wb.create_sheet()
+        ws_planned.title = "Ore Pianificate"
+        sheets.append((ws_planned, "planned"))
+    
+    if mode in ["actual", "both"]:
+        ws_actual = wb.active if len(sheets) == 0 else wb.create_sheet()
+        ws_actual.title = "Ore Consuntivate"
+        sheets.append((ws_actual, "actual"))
+    
+    today = datetime.date.today()
+    start_date = today - datetime.timedelta(days=365)
+    end_date = today + datetime.timedelta(days=365)
+    sorted_dates = [(start_date + datetime.timedelta(days=i)).strftime("%Y-%m-%d") for i in range((end_date - start_date).days + 1)]
+    
+    headers = ["Addetto", "Reparto"] + sorted_dates
+    for ws, _ in sheets:
+        ws.append(headers)
+    
+    header_fill = PatternFill(start_color="1F2937", end_color="1F2937", fill_type="solid")
+    holiday_fill = PatternFill(start_color="EF4444", end_color="EF4444", fill_type="solid")
+    holiday_col_fill = PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+    
+    for ws, _ in sheets:
+        for col_idx, h_text in enumerate(headers):
+            cell = ws.cell(row=1, column=col_idx + 1)
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            if col_idx >= 2:
+                d = datetime.datetime.strptime(h_text, "%Y-%m-%d").date()
+                if is_italian_holiday(d):
+                    cell.fill = holiday_fill
+                else:
+                    cell.fill = header_fill
+            else:
+                cell.fill = header_fill
+        
+    for user_id, u in heatmap_data.items():
+        workload = u.get("workload", {})
+        actual_workload = u.get("actual_workload", {})
+        
+        for ws, sheet_type in sheets:
+            row = [u.get("full_name") or u.get("username"), u.get("department") or "-"]
+            
+            for d in sorted_dates:
+                prev_data = workload.get(d, {})
+                eff_data = actual_workload.get(d, {})
+                prev_val = prev_data.get("hours", 0) if isinstance(prev_data, dict) else 0
+                eff_val = eff_data.get("hours", 0) if isinstance(eff_data, dict) else 0
+                
+                p_val = float(prev_val)
+                e_val = float(eff_val)
+                
+                if _is_vacation(d, u):
+                    if sheet_type == "planned":
+                        row.append("Ferie" if p_val == 0 else f"Ferie ({p_val})")
+                    else:
+                        row.append("Ferie" if e_val == 0 else f"Ferie ({e_val})")
+                else:
+                    if sheet_type == "planned":
+                        row.append(p_val)
+                    else:
+                        row.append(e_val)
+                        
+            ws.append(row)
+        
+    for ws, _ in sheets:
+        for row_idx in range(2, ws.max_row + 1):
+            for col_idx in range(3, len(headers) + 1):
+                d_str = headers[col_idx - 1]
+                d = datetime.datetime.strptime(d_str, "%Y-%m-%d").date()
+                if is_italian_holiday(d):
+                    ws.cell(row=row_idx, column=col_idx).fill = holiday_col_fill
+        
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
+async def export_workload_pdf(heatmap_data: dict, mode: str = "both") -> io.BytesIO:
+    # pyrefly: ignore [missing-import]
+    from reportlab.lib import colors
+    # pyrefly: ignore [missing-import]
+    from reportlab.lib.pagesizes import A4, landscape
+    # pyrefly: ignore [missing-import]
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    # pyrefly: ignore [missing-import]
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    import datetime
+    from collections import defaultdict
+    
+    output = io.BytesIO()
+    doc = SimpleDocTemplate(
+        output,
+        pagesize=landscape(A4),
+        rightMargin=15,
+        leftMargin=15,
+        topMargin=15,
+        bottomMargin=15
+    )
+    
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("Title", parent=styles["Heading1"], fontSize=16, spaceAfter=10)
+    elements = []
+    
+    title_text = "Saturazione Carichi di Lavoro (Pianificate vs Consuntivate)"
+    if mode == "planned":
+        title_text = "Saturazione Carichi di Lavoro (Ore Pianificate)"
+    elif mode == "actual":
+        title_text = "Saturazione Carichi di Lavoro (Ore Consuntivate)"
+        
+    elements.append(Paragraph(title_text, title_style))
+    elements.append(Spacer(1, 10))
+    
+    today = datetime.date.today()
+    start_date = today - datetime.timedelta(days=365)
+    end_date = today + datetime.timedelta(days=365)
+    
+    week_map = {}
+    week_to_month = {}
+    for i in range((end_date - start_date).days + 1):
+        d = start_date + datetime.timedelta(days=i)
+        iso_year, iso_week, _ = d.isocalendar()
+        key = (iso_year, iso_week)
+        if key not in week_map:
+            week_map[key] = f"W{iso_week:02d}"
+            # Use Thursday to determine the month of the ISO week
+            thursday = d + datetime.timedelta(days=(3 - d.weekday()))
+            week_to_month[key] = (thursday.year, thursday.month)
+            
+    sorted_week_keys = sorted(week_map.keys())
+    
+    user_weeks = {}
+    for uid, u in heatmap_data.items():
+        user_weeks[uid] = defaultdict(lambda: {"prev": 0.0, "eff": 0.0})
+        
+        for d_str, data in u.get("workload", {}).items():
+            if d_str != '__extra__':
+                dt = datetime.datetime.strptime(d_str, "%Y-%m-%d").date()
+                if start_date <= dt <= end_date:
+                    iso_year, iso_week, _ = dt.isocalendar()
+                    key = (iso_year, iso_week)
+                    val = data.get("hours", 0) if isinstance(data, dict) else 0
+                    user_weeks[uid][key]["prev"] += float(val)
+                    
+        for d_str, data in u.get("actual_workload", {}).items():
+            if d_str != '__extra__':
+                dt = datetime.datetime.strptime(d_str, "%Y-%m-%d").date()
+                if start_date <= dt <= end_date:
+                    iso_year, iso_week, _ = dt.isocalendar()
+                    key = (iso_year, iso_week)
+                    val = data.get("hours", 0) if isinstance(data, dict) else 0
+                    user_weeks[uid][key]["eff"] += float(val)
+                    
+    month_to_weeks = defaultdict(list)
+    for key in sorted_week_keys:
+        month_to_weeks[week_to_month[key]].append(key)
+        
+    sorted_months = sorted(month_to_weeks.keys())
+    month_names = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"]
+    
+    for m_year, m_month in sorted_months:
+        week_keys = month_to_weeks[(m_year, m_month)]
+        m_name = month_names[m_month - 1]
+        
+        elements.append(Paragraph(f"{m_name} {m_year}", ParagraphStyle("Sub", parent=styles["Heading2"], spaceAfter=10)))
+        
+        headers = ["Addetto", "Reparto"] + [week_map[k] for k in week_keys]
+        sub_data = [headers]
+        
+        for uid, u in heatmap_data.items():
+            row = [u.get("full_name") or u.get("username"), u.get("department") or "-"]
+            for k in week_keys:
+                prev = user_weeks[uid][k]["prev"]
+                eff = user_weeks[uid][k]["eff"]
+                
+                if mode == "planned":
+                    row.append(f"{prev:.1f} h")
+                elif mode == "actual":
+                    row.append(f"{eff:.1f} h")
+                else:
+                    row.append(f"{eff:.1f} / {prev:.1f} h")
+            sub_data.append(row)
+            
+        t = Table(sub_data)
+        style_cmds = [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F2937")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ]
+        t.setStyle(TableStyle(style_cmds))
+        elements.append(t)
+        elements.append(Spacer(1, 20))
+        
     doc.build(elements)
     output.seek(0)
     return output

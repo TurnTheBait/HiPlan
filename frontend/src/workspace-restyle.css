@@ -124,13 +124,21 @@
   grid-row: 2;
   gap: 4px;
   padding: 4px;
+  flex-wrap: nowrap !important;
+  white-space: nowrap !important;
 }
 
 .projects-command-stack .filter-chip {
-  min-height: 34px;
-  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 10px;
   border-radius: 9px;
   font-size: 0.71rem;
+  line-height: 1;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .projects-command-stack .hiway-search-bar .input {
@@ -218,7 +226,8 @@
    Projects
    --------------------------------------------------------- */
 
-.projects-page .projects-filters {
+.projects-page .projects-filters,
+.replanning-page .projects-filters {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -227,31 +236,133 @@
   border-radius: 13px;
   background: var(--bg-card);
   box-shadow: var(--shadow-xs);
+  flex-wrap: nowrap !important;
+  white-space: nowrap !important;
 }
 
-.projects-page .filter-chip {
-  min-height: 34px;
-  padding: 6px 12px;
+/* Agent command stack: same look as projects-command-stack */
+.replanning-page .agent-command-stack {
+  margin-bottom: 0;
+}
+
+.replanning-page .agent-command-stack .btn-primary {
+  min-height: 36px;
+}
+
+.projects-page .filter-chip,
+.replanning-page .filter-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: normal;
+  height: 34px;
+  padding: 0 11px;
+  gap: 6px;
+  margin: 0;
+  box-sizing: border-box;
   border: 1px solid transparent;
   border-radius: 9px;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 0.71rem;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 0.75rem;
   font-weight: 650;
 }
 
-.projects-page .filter-chip:hover {
+.projects-page .filter-chip:hover,
+.replanning-page .filter-chip:hover {
   border-color: transparent;
   background: var(--bg-hover);
   color: var(--text-primary);
   transform: none;
 }
 
-.projects-page .filter-chip.active {
+.projects-page .filter-chip.active,
+.replanning-page .filter-chip.active {
   border-color: rgba(7, 151, 211, 0.16);
   background: var(--accent-soft);
   color: var(--accent-700);
   box-shadow: none;
+}
+
+.projects-page .filter-chip .filter-chip-count,
+.replanning-page .filter-chip .filter-chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--text-secondary);
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.projects-page .filter-chip:hover .filter-chip-count,
+.replanning-page .filter-chip:hover .filter-chip-count {
+  background: rgba(148, 163, 184, 0.26);
+  color: var(--text-primary);
+}
+
+.projects-page .filter-chip.active .filter-chip-count,
+.replanning-page .filter-chip.active .filter-chip-count {
+  background: rgba(7, 151, 211, 0.22);
+  color: var(--accent-700);
+}
+
+.trash-badge-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--danger, #ef4444);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  border: 1.5px solid var(--bg-card);
+}
+
+.trash-modal {
+  background: var(--bg-card, #ffffff) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-default) !important;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.35) !important;
+  border-radius: 16px !important;
+}
+
+[data-theme="dark"] .trash-modal {
+  background: #182234 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+[data-theme="light"] .trash-modal,
+:root:not([data-theme="dark"]) .trash-modal {
+  background: #ffffff !important;
+  border-color: var(--border-default, #e2e8f0) !important;
+}
+
+.trash-project-card {
+  transition: all 0.2s ease;
+}
+
+.trash-project-card:hover {
+  border-color: var(--border-focus, rgba(99, 102, 241, 0.35)) !important;
+  background: var(--bg-hover) !important;
+  box-shadow: var(--shadow-xs);
 }
 
 .projects-page .hiway-search-bar .input {
@@ -685,11 +796,11 @@
 }
 
 .activity-log-entry-body span {
+  overflow: hidden;
   color: var(--text-secondary);
   font-size: 0.7rem;
-  line-height: 1.4;
-  white-space: normal;
-  word-break: break-word;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .activity-log-entry time {
@@ -741,45 +852,80 @@
   text-transform: uppercase;
 }
 
+.task-type-selector {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.task-type-selector>label {
+  display: block;
+  margin-bottom: 12px !important;
+  font-weight: 700 !important;
+  font-size: 0.75rem !important;
+  color: var(--text-secondary) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .task-type-selector>div {
-  display: grid !important;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px !important;
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 12px !important;
 }
 
 .task-type-option {
-  display: grid !important;
-  grid-template-columns: auto auto 1fr;
-  align-items: center !important;
-  gap: 8px !important;
-  min-height: 54px;
-  padding: 9px 11px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-card);
-  color: var(--text-secondary) !important;
-  font-size: 0.72rem !important;
-  font-weight: 700 !important;
+  flex: 1;
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 12px !important;
+  min-height: auto;
+  padding: 16px !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: 10px !important;
+  background: var(--bg-primary) !important;
   cursor: pointer;
+  transition: all 0.2s;
 }
 
 .task-type-option.selected {
-  border-color: rgba(7, 151, 211, 0.34);
-  background: var(--accent-soft);
-  color: var(--accent-700) !important;
+  border-color: rgba(7, 151, 211, 0.4) !important;
+  background: var(--accent-soft) !important;
 }
 
 .task-type-option input {
-  width: 15px;
-  height: 15px;
+  margin-top: 2px;
+  width: 16px !important;
+  height: 16px !important;
   accent-color: var(--accent-600);
 }
 
+.task-type-option .option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-type-option .option-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.task-type-option.selected .option-title {
+  color: var(--accent-700);
+}
+
 .task-type-option small {
-  grid-column: 3;
-  color: var(--text-tertiary);
-  font-size: 0.6rem;
-  font-weight: 500;
+  color: var(--text-secondary) !important;
+  font-size: 0.75rem !important;
+  font-weight: 400 !important;
+  margin-left: 24px;
 }
 
 .task-editor-modal label[for="taskCompleted"] {
@@ -935,6 +1081,18 @@
   border-radius: var(--radius-lg);
   background: var(--bg-card);
   box-shadow: var(--shadow-sm);
+}
+
+.alert-card.attenzione {
+  background: var(--warning-bg) !important;
+  border-color: rgba(253, 171, 61, 0.3) !important;
+}
+
+.alert-card.ritardo,
+.alert-card.ritardo_ferie,
+.alert-card.sforamento {
+  background: var(--danger-bg) !important;
+  border-color: rgba(226, 68, 92, 0.3) !important;
 }
 
 .commessa-stats-grid {
@@ -1709,8 +1867,9 @@
 }
 
 .weekend-header {
-  background: var(--danger-bg) !important;
-  color: var(--danger) !important;
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: #dc2626 !important;
+  border-bottom: 2px solid #dc2626 !important;
 }
 
 .heatmap-cell.under-capacity {
@@ -1737,10 +1896,12 @@
     repeating-linear-gradient(-45deg,
       transparent,
       transparent 6px,
-      rgba(209, 67, 67, 0.05) 6px,
-      rgba(209, 67, 67, 0.05) 12px),
-    var(--bg-tertiary) !important;
-  color: var(--text-muted) !important;
+      rgba(239, 68, 68, 0.06) 6px,
+      rgba(239, 68, 68, 0.06) 12px),
+    rgba(239, 68, 68, 0.06) !important;
+  color: #dc2626 !important;
+  border-left: 1px solid rgba(239, 68, 68, 0.1) !important;
+  border-right: 1px solid rgba(239, 68, 68, 0.1) !important;
 }
 
 .conflict-card {

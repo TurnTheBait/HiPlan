@@ -95,7 +95,7 @@
 }
 
 .global-search-item.selected .global-search-item-icon {
-  background: var(--primary);
+  background: var(--accent-600);
   color: white;
 }
 
@@ -132,7 +132,7 @@
 .global-search-item.selected .global-search-item-arrow {
   opacity: 1;
   transform: translateX(0);
-  color: var(--primary);
+  color: var(--accent-600);
 }
 
 .global-search-empty {

@@ -14,16 +14,16 @@ from app.schemas.task import TaskCreate, TaskUpdate, TaskOut, LinkCreate, LinkOu
 # pyrefly: ignore [missing-import]
 from fastapi import HTTPException, status
 from app.core.websocket_manager import manager
-from app.utils.working_days import count_working_days_in_range, is_working_day
 
 
-def find_vacation_conflicts(task_start, task_end, vacations):
+def find_vacation_conflicts(task_start, task_end, vacations, excluded_dates=None):
     if not vacations:
         return []
+    excluded_dates = excluded_dates or []
     conflict_days = 0
     current = task_start
     while current <= task_end:
-        if is_working_day(current):
+        if current.weekday() < 5 and current.strftime("%Y-%m-%d") not in excluded_dates:
             for vacation in vacations:
                 if vacation.get("start_date") and vacation.get("end_date"):
                     start = vacation["start_date"]
@@ -33,23 +33,6 @@ def find_vacation_conflicts(task_start, task_end, vacations):
                         break
         current = current + timedelta(days=1)
     return [{"date": task_start, "workdays": conflict_days}] if conflict_days else []
-
-
-def _shift_working_days(value: date, amount: int) -> date:
-    current = value
-    direction = 1 if amount >= 0 else -1
-    remaining = abs(amount)
-    while remaining:
-        current += timedelta(days=direction)
-        if is_working_day(current):
-            remaining -= 1
-    return current
-
-
-def _forward_working_day_distance(start: date, end: date) -> int:
-    if not start or not end or end <= start:
-        return 0
-    return count_working_days_in_range(start + timedelta(days=1), end)
 
 
 def _parse_json(val, default):
@@ -118,6 +101,7 @@ def _task_to_out(task: Task) -> TaskOut:
         budget_mode=task.budget_mode,
         completed=is_comp,
         has_vacation_conflict=task.has_vacation_conflict or 0,
+        excluded_dates=_parse_json(task.excluded_dates, []),
     )
 
 
@@ -143,34 +127,44 @@ def _compute_task_progress_and_completed(task: Task, update_data: Optional[dict]
 
     explicit_completed = update_data.get("completed") if update_data and "completed" in update_data else None
 
-    if explicit_completed is not None and int(explicit_completed) == 1:
-        task.completed = 1
+    if explicit_completed is not None:
+        task.completed = int(explicit_completed)
+
+    if task.completed == 1:
         task.progress = 1.0
-    elif explicit_completed is not None and int(explicit_completed) == -1:
-        task.completed = -1
+    elif task.completed == -1:
         task.progress = min(0.99, calc_progress) if calc_progress >= 1.0 else calc_progress
-    elif explicit_completed is not None and int(explicit_completed) == 0:
-        if task.completed != -1 and calc_progress >= 1.0 and planned > 0:
-            task.completed = 1
-            task.progress = 1.0
-        elif task.completed == 1 and calc_progress < 1.0:
-            task.completed = 0
-            task.progress = calc_progress
-        elif task.completed != 1:
-            if task.completed != -1:
-                task.completed = 0
-            task.progress = min(0.99, calc_progress) if calc_progress >= 1.0 else calc_progress
     else:
-        if task.completed != -1 and calc_progress >= 1.0 and planned > 0:
+        # task.completed == 0
+        if explicit_completed is None and calc_progress >= 1.0 and planned > 0:
             task.completed = 1
             task.progress = 1.0
-        elif calc_progress < 1.0:
-            if task.completed == 1:
-                task.completed = 0
-            if task.completed != 1:
-                task.progress = calc_progress
-            else:
-                task.progress = 1.0
+        else:
+            task.progress = min(0.99, calc_progress) if calc_progress >= 1.0 else calc_progress
+
+    # Modifica commentata per mantenere le date originali preventivate:
+    # if task.completed == 1 and isinstance(actual_map, dict):
+    #     dates_with_hours = set()
+    #     for day_map in actual_map.values():
+    #         if isinstance(day_map, dict):
+    #             for d, h in day_map.items():
+    #                 if d != "__extra__":
+    #                     try:
+    #                         if float(h or 0) > 0:
+    #                             dates_with_hours.add(d)
+    #                     except (ValueError, TypeError):
+    #                         pass
+    #     
+    #     if dates_with_hours:
+    #         from datetime import datetime
+    #         first_date_str = min(dates_with_hours)
+    #         last_date_str = max(dates_with_hours)
+    #         first_date = datetime.strptime(first_date_str, "%Y-%m-%d").date()
+    #         last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
+    #         if getattr(task, "start_date", None) != first_date or getattr(task, "end_date", None) != last_date:
+    #             task.start_date = first_date
+    #             task.end_date = last_date
+    #             task.duration = (last_date - first_date).days + 1
 
 
 def _link_to_out(link: Link) -> LinkOut:
@@ -237,6 +231,7 @@ async def create_task(db: AsyncSession, project_id: str, data: TaskCreate, user=
         workers=json.dumps(data.workers),
         worker_hours=json.dumps(data.worker_hours),
         actual_hours=json.dumps(data.actual_hours),
+        excluded_dates=json.dumps(data.excluded_dates) if getattr(data, 'excluded_dates', None) else "[]",
         color=data.color,
         department=data.department,
         budget_mode=data.budget_mode,
@@ -259,30 +254,17 @@ async def create_task(db: AsyncSession, project_id: str, data: TaskCreate, user=
         vac_res = await db.execute(select(Vacation).where(Vacation.user_id == worker_user.id))
         vacs = vac_res.scalars().all()
         vacation_payloads = [{"start_date": v.start_date, "end_date": v.end_date} for v in vacs]
-        conflicts = find_vacation_conflicts(task.start_date, task.end_date or task.start_date, vacation_payloads)
+        conflicts = find_vacation_conflicts(task.start_date, task.end_date or task.start_date, vacation_payloads, data.excluded_dates)
         total_shift_days = max(total_shift_days, conflicts[0]["workdays"] if conflicts else 0)
 
-    vacation_plan = None
-    rescheduled_days = 0
     if total_shift_days > 0:
-        from app.services.rescheduling_service import schedule_assignment_at_earliest_capacity
-
-        original_duration = max(1, int(task.duration or 1))
-        original_end = task.end_date or _shift_working_days(task.start_date, original_duration - 1)
-        vacation_plan = await schedule_assignment_at_earliest_capacity(db, task)
-        task.start_date = vacation_plan["start_date"]
-        task.end_date = vacation_plan["end_date"]
-        task.duration = max(1, count_working_days_in_range(task.start_date, task.end_date or task.start_date))
-        task.has_vacation_conflict = 0
-        rescheduled_days = _forward_working_day_distance(original_end, task.end_date)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assegnazione bloccata: esistono ferie nel periodo della fase")
 
     db.add(task)
     
     from app.models.activity_log import ActivityLog, ActivityCategory
     details = _format_task_details(task)
     action_text = f"Fase creata: '{task.text}'" + (f" ({details})" if details else "")
-    if vacation_plan:
-        action_text += " · ore assegnate automaticamente nei primi slot disponibili evitando le ferie"
     log = ActivityLog(
         project_id=project_id,
         user_id=user.id if user else None,
@@ -297,42 +279,9 @@ async def create_task(db: AsyncSession, project_id: str, data: TaskCreate, user=
     # Broadcast websocket
     await manager.broadcast(project_id, {"action": "task_created", "task": _task_to_out(task).model_dump()})
 
-    # Notifiche per ferie sovrapposte
-    if total_shift_days > 0:
-        from app.models.project import Project
-        proj_res = await db.execute(select(Project).where(Project.id == project_id))
-        project = proj_res.scalar_one_or_none()
-        for worker_name in (data.workers or []):
-            u_res = await db.execute(select(User).where(User.username == worker_name))
-            worker_user = u_res.scalar_one_or_none()
-            if not worker_user:
-                continue
-            note = Notification(
-                user_id=worker_user.id,
-                title="Ore ripianificate per ferie",
-                message=(
-                    f"Le ore della fase '{task.text}' sono state assegnate nei primi slot disponibili "
-                    f"evitando le ferie{f'; fine fase posticipata di {rescheduled_days} giorni lavorativi' if rescheduled_days else ''}."
-                ),
-                type=NotificationType.ASSIGNMENT,
-                project_id=project.id if project else None,
-            )
-            db.add(note)
-        if project:
-            resp_id = project.responsible_id or project.owner_id
-            if resp_id:
-                note = Notification(
-                    user_id=resp_id,
-                    title="Assegnazione ripianificata per ferie",
-                    message=(
-                        f"Le ore della fase '{task.text}' nel progetto '{project.name}' sono state "
-                        f"ripianificate automaticamente{f' con uno slittamento di {rescheduled_days} giorni lavorativi' if rescheduled_days else ''}."
-                    ),
-                    type=NotificationType.UPDATE,
-                    project_id=project.id,
-                )
-                db.add(note)
-        await db.commit()
+    # Esegui ripianificazione in background (non blocca se fallisce)
+    import asyncio
+
 
     return _task_to_out(task)
 
@@ -407,8 +356,8 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
     for key, value in update_data.items():
         if key == "parent_id" and value == "0":
             value = None
-        if key in ("workers", "worker_hours", "actual_hours"):
-            value = json.dumps(value)
+        if key in ("workers", "worker_hours", "actual_hours", "excluded_dates"):
+            value = json.dumps(value) if value is not None else "[]"
         setattr(task, key, value)
     _compute_task_progress_and_completed(task, update_data)
     # Se cambiano workers o date, ricalcoliamo impatti ferie
@@ -426,30 +375,23 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
         vac_res = await db.execute(select(Vacation).where(Vacation.user_id == worker_user.id))
         vacs = vac_res.scalars().all()
         vacation_payloads = [{"start_date": v.start_date, "end_date": v.end_date} for v in vacs]
-        conflicts = find_vacation_conflicts(task.start_date, task.end_date or task.start_date, vacation_payloads)
+        try:
+            excluded_dates_list = json.loads(task.excluded_dates) if getattr(task, 'excluded_dates', None) else []
+        except Exception:
+            excluded_dates_list = []
+        conflicts = find_vacation_conflicts(task.start_date, task.end_date or task.start_date, vacation_payloads, excluded_dates_list)
         total_shift_days = max(total_shift_days, conflicts[0]["workdays"] if conflicts else 0)
 
     # Salta il controllo ferie se si stanno solo aggiornando ore consuntivate o stato completamento
     # (non stiamo cambiando date o addetti, solo registrando ore effettive)
     _consuntivo_only_keys = {"actual_hours", "completed", "progress"}
     _changed_keys = set(update_data.keys())
-    vacation_plan = None
-    rescheduled_days = 0
     if not _changed_keys.issubset(_consuntivo_only_keys) and total_shift_days > 0:
-        from app.services.rescheduling_service import schedule_assignment_at_earliest_capacity
-
-        duration_before_rescheduling = max(1, int(task.duration or 1))
-        requested_end = task.end_date or _shift_working_days(task.start_date, duration_before_rescheduling - 1)
-        vacation_plan = await schedule_assignment_at_earliest_capacity(db, task, str(task.id))
-        task.start_date = vacation_plan["start_date"]
-        task.end_date = vacation_plan["end_date"]
-        task.duration = max(1, count_working_days_in_range(task.start_date, task.end_date or task.start_date))
-        task.has_vacation_conflict = 0
-        rescheduled_days = _forward_working_day_distance(requested_end, task.end_date)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assegnazione bloccata: esistono ferie nel periodo della fase")
 
     # Propagazione a catena quando la data della fase viene modificata esplicitamente
-    if "start_date" in update_data or "end_date" in update_data or vacation_plan:
-        async def propagate_shift(current_task, shift_days, visited=None, shift_current=False):
+    if "start_date" in update_data or "end_date" in update_data:
+        async def propagate_shift(current_task, shift_days, visited=None):
             if shift_days <= 0:
                 return
             if visited is None:
@@ -457,25 +399,36 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
             if current_task.id in visited:
                 return
             visited.add(current_task.id)
-            if shift_current:
-                current_task.start_date = _shift_working_days(current_task.start_date, shift_days) if current_task.start_date else current_task.start_date
-                if current_task.end_date:
-                    current_task.end_date = _shift_working_days(current_task.end_date, shift_days)
+            current_task.start_date = current_task.start_date + timedelta(days=shift_days) if current_task.start_date else current_task.start_date
+            if current_task.end_date:
+                current_task.end_date = current_task.end_date + timedelta(days=shift_days)
+            if getattr(current_task, "duration", None) is not None:
+                current_task.duration = (current_task.duration or 0) + shift_days
             await db.flush()
             links_result = await db.execute(select(Link).where(Link.source == current_task.id))
             for link in links_result.scalars().all():
                 child_res = await db.execute(select(Task).where(Task.id == link.target))
                 child = child_res.scalar_one_or_none()
                 if child and child.id not in visited:
-                    await propagate_shift(child, shift_days, visited, True)
+                    await propagate_shift(child, shift_days, visited)
 
-        delta_days = rescheduled_days
-        if not vacation_plan and "start_date" in update_data and old_start and task.start_date:
+        delta_days = 0
+        if "start_date" in update_data and old_start and task.start_date:
             delta_days = (task.start_date - old_start).days
-        elif not vacation_plan and "end_date" in update_data and old_end and task.end_date:
+            # If end_date was not explicitly updated (e.g. drag and drop from Gantt), shift it by the same amount
+            if "end_date" not in update_data and old_end:
+                task.end_date = old_end + timedelta(days=delta_days)
+        elif "end_date" in update_data and old_end and task.end_date:
             delta_days = (task.end_date - old_end).days
+
         if delta_days != 0:
-            await propagate_shift(task, delta_days)
+            visited_for_shift = {task.id}
+            links_result = await db.execute(select(Link).where(Link.source == task.id))
+            for link in links_result.scalars().all():
+                child_res = await db.execute(select(Task).where(Task.id == link.target))
+                child = child_res.scalar_one_or_none()
+                if child:
+                    await propagate_shift(child, delta_days, visited_for_shift)
 
         # Se ci sono ore consuntivate nella finestra di ferie, segnala criticità
         try:
@@ -507,23 +460,6 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
         from app.models.project import Project
         proj_res = await db.execute(select(Project).where(Project.id == task.project_id))
         project = proj_res.scalar_one_or_none()
-        if vacation_plan:
-            for worker_name in workers_list:
-                u_res = await db.execute(select(User).where(User.username == worker_name))
-                worker_user = u_res.scalar_one_or_none()
-                if not worker_user:
-                    continue
-                note = Notification(
-                    user_id=worker_user.id,
-                    title="Ore ripianificate per ferie",
-                    message=(
-                        f"Le ore della fase '{task.text}' sono state assegnate nei primi slot disponibili "
-                        f"evitando le ferie{f'; fine fase posticipata di {rescheduled_days} giorni lavorativi' if rescheduled_days else ''}."
-                    ),
-                    type=NotificationType.ASSIGNMENT,
-                    project_id=project.id if project else None,
-                )
-                db.add(note)
 
         if had_hours_in_vac and project:
             resp_id = project.responsible_id or project.owner_id
@@ -572,8 +508,6 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
         cat = ActivityCategory.PHASE_PROJECT_EDIT
         details = _format_task_details(task)
         action_text = f"Fase modificata: '{task.text}'" + (f" ({details})" if details else "")
-        if vacation_plan:
-            action_text += " · ore assegnate automaticamente nei primi slot disponibili evitando le ferie"
         
     log = ActivityLog(
         project_id=task.project_id,
@@ -586,8 +520,10 @@ async def update_task(db: AsyncSession, task_id: str, data: TaskUpdate, user=Non
     await db.commit()
     await db.refresh(task)
 
-    # Broadcast websocket
     await manager.broadcast(task.project_id, {"action": "task_updated", "task": _task_to_out(task).model_dump()})
+
+    import asyncio
+
 
     return _task_to_out(task)
 
@@ -624,6 +560,9 @@ async def delete_task(db: AsyncSession, task_id: str, user=None):
 
     # Broadcast websocket
     await manager.broadcast(task.project_id, {"action": "task_deleted", "task_id": task_id})
+
+    import asyncio
+
 
 
 async def create_link(db: AsyncSession, project_id: str, data: LinkCreate, user=None) -> LinkOut:
@@ -664,8 +603,39 @@ async def delete_link(db: AsyncSession, link_id: str, user=None):
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link non trovato")
     await _check_task_manage_permissions(db, link.project_id, user)
+    project_id = link.project_id
     await db.delete(link)
     await db.commit()
 
     # Broadcast websocket
-    await manager.broadcast(link.project_id, {"action": "link_deleted", "link_id": link_id})
+    await manager.broadcast(project_id, {"action": "link_deleted", "link_id": link_id})
+
+
+async def log_task_hours(db: AsyncSession, task_id: str, date_str: str, hours: float, user):
+    result = await db.execute(select(Task).where(Task.id == task_id))
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task non trovato")
+        
+    actual_hours = {}
+    if task.actual_hours:
+        try:
+            actual_hours = json.loads(task.actual_hours)
+        except:
+            pass
+            
+    worker_key = user.username
+    if worker_key not in actual_hours:
+        actual_hours[worker_key] = {}
+        
+    actual_hours[worker_key][date_str] = str(hours)
+    
+    task.actual_hours = json.dumps(actual_hours)
+    await db.commit()
+    await db.refresh(task)
+    
+    # Broadcast websocket
+    await manager.broadcast(task.project_id, {"action": "task_updated", "task": _task_to_out(task).model_dump()})
+    
+    return _task_to_out(task)
+

@@ -369,285 +369,63 @@
   border-color: rgba(253, 171, 61, 0.3);
 }
 
-.planning-agent-panel {
-  margin-bottom: 16px;
-  padding: 20px;
-  border: 1px solid color-mix(in srgb, var(--accent-500) 30%, var(--border-default));
-  border-radius: 16px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-500) 8%, var(--bg-secondary)), var(--bg-secondary) 58%);
-  box-shadow: var(--shadow-sm);
+.alert-card.ritardo,
+.alert-card.ritardo_ferie,
+.alert-card.sforamento {
+  background: var(--danger-bg);
+  border-color: rgba(226, 68, 92, 0.3);
 }
 
-.planning-agent-panel.compact {
-  padding: 14px 16px;
+.alert-card.mancata_consuntivazione {
+  background: rgba(139, 92, 246, 0.05); /* very light purple for card background */
+  border-color: rgba(139, 92, 246, 0.3);
 }
 
-.planning-agent-header,
-.planning-run-heading,
-.planning-scenario-title,
-.planning-scenario-card small,
-.planning-change-list > div {
-  display: flex;
-  align-items: center;
+.alert-card.no_responsible {
+  background: rgba(14, 165, 233, 0.05); /* very light blue for card background */
+  border-color: rgba(14, 165, 233, 0.3);
 }
-
-.planning-agent-header,
-.planning-run-heading {
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.planning-agent-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.planning-agent-controls {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.planning-agent-expand {
-  width: 40px;
-  min-width: 40px;
-  height: 38px;
-  padding: 0;
-  justify-content: center;
-}
-
-.planning-agent-readonly {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  padding: 8px 11px;
-  border: 1px solid var(--border-default);
-  border-radius: 10px;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.planning-agent-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--accent-600);
-  font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.planning-agent-live-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--success);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 14%, transparent);
-}
-
-.planning-agent-kicker.paused { color: var(--warning); }
-.planning-agent-kicker.paused .planning-agent-live-dot {
-  background: var(--warning);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--warning) 14%, transparent);
-}
-
-.planning-agent-header h3 {
-  margin: 5px 0 4px;
-  color: var(--text-primary);
-}
-
-.planning-agent-header p,
-.planning-scenario-card p,
-.planning-run-reason {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 0.86rem;
-  line-height: 1.5;
-}
-
-.planning-scenario-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.planning-scenario-card,
-.planning-run-card {
-  padding: 14px;
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  background: var(--bg-secondary);
-}
-
-.planning-scenario-title {
-  gap: 8px;
-  color: var(--text-primary);
-}
-
-.planning-scenario-title span {
-  margin-left: auto;
+.semaforo-mancata-consuntivazione {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.3);
   padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--warning-bg);
-  color: var(--warning);
+  border-radius: 12px;
   font-size: 0.75rem;
-  font-weight: 800;
-}
-
-.planning-scenario-card p { margin: 8px 0; }
-.planning-scenario-card small { gap: 5px; color: var(--text-tertiary); }
-.planning-scenario-card .planning-scenario-schedule {
-  margin-top: 7px;
-  color: var(--accent-600);
   font-weight: 700;
-}
-
-.planning-agent-empty {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 7px;
-  margin-top: 14px;
-  padding: 12px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--success) 8%, var(--bg-secondary));
-  color: var(--text-secondary);
+  gap: 4px;
 }
 
-.planning-agent-empty.preview-error {
-  background: var(--warning-bg);
-  color: var(--warning);
-}
-
-.planning-runs {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.planning-runs h4 { margin: 0 0 10px; color: var(--text-primary); }
-.planning-runs-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-.planning-runs-title h4 { margin: 0; }
-.planning-runs-title .planning-agent-readonly { padding: 5px 8px; }
-.planning-run-card + .planning-run-card { margin-top: 10px; }
-.planning-run-heading > div { display: grid; gap: 4px; }
-.planning-run-heading small { color: var(--text-tertiary); }
-
-.planning-run-status {
-  width: max-content;
+.semaforo-dato-mancante {
+  background: rgba(14, 165, 233, 0.15);
+  color: #0ea5e9;
+  border: 1px solid rgba(14, 165, 233, 0.3);
   padding: 3px 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--success) 12%, transparent);
-  color: var(--success);
-  font-size: 0.72rem;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.planning-run-status.undone {
-  background: var(--bg-tertiary);
-  color: var(--text-tertiary);
-}
-
-.planning-run-status.preview {
-  background: color-mix(in srgb, var(--accent-500) 12%, transparent);
-  color: var(--accent-600);
-}
-
-.planning-preview {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.planning-preview-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.planning-preview-heading h4 {
-  margin: 7px 0 0;
-  color: var(--text-primary);
-}
-
-.planning-preview-heading > strong {
-  max-width: 55%;
-  color: var(--text-secondary);
-  font-size: 0.82rem;
-  text-align: right;
-}
-
-.planning-preview-projects {
-  display: grid;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.planning-preview-project {
-  padding: 12px;
-  border: 1px solid var(--border-default);
   border-radius: 12px;
-  background: var(--bg-secondary);
-}
-
-.planning-preview-project h5 {
-  display: flex;
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 0.86rem;
+  gap: 4px;
 }
 
-.planning-preview-project h5 span {
-  padding: 3px 7px;
-  border-radius: 7px;
-  background: var(--bg-tertiary);
-  color: var(--accent-600);
-  font-size: 0.72rem;
+.task-editor-modal {
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
 }
 
-.planning-run-reason { margin-top: 12px; }
-.planning-change-list { margin-top: 10px; display: grid; gap: 6px; }
-
-.planning-change-list > div {
-  flex-wrap: wrap;
-  gap: 7px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  font-size: 0.78rem;
+.task-editor-modal > .modal-header {
+  padding: 24px 24px 20px 24px !important;
+  margin-bottom: 0 !important;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
 }
 
-.planning-change-list > div strong { color: var(--text-primary); }
-.planning-change-list > div small { flex-basis: 100%; color: var(--text-tertiary); }
 
-@media (max-width: 760px) {
-  .planning-agent-header,
-  .planning-run-heading { align-items: stretch; flex-direction: column; }
-  .planning-agent-header .btn,
-  .planning-run-heading .btn { width: 100%; justify-content: center; }
-  .planning-agent-actions { width: 100%; flex-direction: column; }
-  .planning-agent-controls { width: 100%; align-items: stretch; }
-  .planning-agent-expand { height: auto; }
-  .planning-preview-heading { align-items: flex-start; flex-direction: column; }
-  .planning-preview-heading > strong { max-width: none; text-align: left; }
-}
+
+
+
