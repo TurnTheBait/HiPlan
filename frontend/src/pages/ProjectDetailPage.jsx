@@ -2760,16 +2760,18 @@ export default function ProjectDetailPage() {
             )}
           </div>
 
-          {/* SEZIONE OTTIMIZZATORE & REBALANCE CARICHI */}
-          <SmartReplanningSection
-            projectId={id}
-            user={user}
-            onReloadTasks={loadGanttDataOnly}
-            tasks={ganttData.tasks}
-            links={ganttData.links}
-            projectStartDate={project?.start_date}
-            projectEndDate={project?.end_date}
-          />
+          {/* SEZIONE OTTIMIZZATORE & REBALANCE CARICHI (Solo Admin ed Editor) */}
+          {(user?.role === 'admin' || user?.role === 'editor') && (
+            <SmartReplanningSection
+              projectId={id}
+              user={user}
+              onReloadTasks={loadGanttDataOnly}
+              tasks={ganttData.tasks}
+              links={ganttData.links}
+              projectStartDate={project?.start_date}
+              projectEndDate={project?.end_date}
+            />
+          )}
         </div>
       )}
 

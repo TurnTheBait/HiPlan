@@ -12,6 +12,7 @@ from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 
 from app.models.task import Task, TaskType
+from app.models.project import Project, ProjectStatus
 from app.models.link import Link, LinkType
 from app.models.vacation import Vacation
 from app.models.user import User
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 async def check_replanning_enabled(db: AsyncSession) -> bool:
     res = await db.execute(select(Setting).where(Setting.key == "replanning_agent_enabled"))
     setting = res.scalar_one_or_none()
-    return setting is not None and setting.value == "true"
+    return bool(setting is not None and setting.value == "true")
 
 
 def is_weekend_or_holiday(d: date) -> bool:
@@ -63,21 +64,26 @@ async def get_replanning_suggestions(db: AsyncSession, current_user=None):
     today = date.today()
     suggestions: List[Dict[str, Any]] = []
     
-    # 1. Fetch data
+    # 1. Fetch data - solo per commesse attive (in pianificazione o in corso), escludendo eliminate e archiviate
     tasks_res = await db.execute(
         select(Task)
+        .join(Project, Task.project_id == Project.id)
         .options(selectinload(Task.project))
         .where(Task.type != TaskType.PROJECT)
         .where(Task.type != TaskType.MILESTONE)
         .where(Task.completed != 1)
+        .where(Project.deleted_at.is_(None))
+        .where(Project.status.in_([ProjectStatus.PLANNING, ProjectStatus.ACTIVE, "planning", "active", "PLANNING", "ACTIVE"]))
     )
     all_tasks_raw = tasks_res.scalars().all()
     all_tasks = []
     for t in all_tasks_raw:
-        if t.project:
-            p_status = t.project.status.value if hasattr(t.project.status, 'value') else str(t.project.status)
-            if p_status in ("completed", "archived", "ProjectStatus.COMPLETED", "ProjectStatus.ARCHIVED"):
-                continue
+        if not t.project or getattr(t.project, 'deleted_at', None) is not None:
+            continue
+        p_status = t.project.status.value if hasattr(t.project.status, 'value') else str(t.project.status)
+        p_status_clean = p_status.lower().replace("projectstatus.", "").strip()
+        if p_status_clean not in ("planning", "active"):
+            continue
         all_tasks.append(t)
     
     vacs_res = await db.execute(select(Vacation))

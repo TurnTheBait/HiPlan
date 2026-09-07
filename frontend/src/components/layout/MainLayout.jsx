@@ -222,7 +222,7 @@ export default function MainLayout() {
   }, [user]);
 
   async function fetchAgentCount() {
-    if (user?.role === 'viewer') return;
+    if (user?.role !== 'admin' && user?.role !== 'editor') return;
     try {
       const { data } = await api.get('/replanning/suggestions');
       const archived = JSON.parse(localStorage.getItem('hiplan-archived-suggestions') || '[]');
@@ -394,7 +394,7 @@ export default function MainLayout() {
             <span className="sidebar-link-icon"><AppIcon name="users" /></span>
             {showSidebarText && <span>Panoramica addetti</span>}
           </NavLink>
-          {user?.role !== 'viewer' && (
+          {(user?.role === 'admin' || user?.role === 'editor') && (
             <NavLink to="/replanning" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <span className="sidebar-link-icon"><AppIcon name="alert" /></span>
               {showSidebarText && <span>Rilevatore Conflitti</span>}

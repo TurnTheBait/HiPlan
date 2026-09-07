@@ -41,7 +41,7 @@ export default function ReplanningAgentPage() {
   }
 
   useEffect(() => {
-    if (user?.role === 'viewer') {
+    if (user?.role !== 'admin' && user?.role !== 'editor') {
       navigate('/dashboard', { replace: true });
       return;
     }

@@ -42,7 +42,7 @@ export default function SmartReplanningSection({
   const canManage = user?.role === 'admin' || user?.role === 'editor';
 
   const fetchSuggestions = useCallback(async () => {
-    if (!projectId) return;
+    if (!projectId || !canManage) return;
     setLoading(true);
     try {
       const res = await api.get(`/replanning/project/${projectId}/suggestions`);
@@ -53,11 +53,13 @@ export default function SmartReplanningSection({
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, canManage]);
 
   useEffect(() => {
-    fetchSuggestions();
-  }, [fetchSuggestions]);
+    if (canManage) {
+      fetchSuggestions();
+    }
+  }, [fetchSuggestions, canManage]);
 
   const handleApply = async (suggestion) => {
     if (!canManage) {
@@ -115,6 +117,10 @@ export default function SmartReplanningSection({
       setRevertingId(null);
     }
   };
+
+  if (!canManage) {
+    return null;
+  }
 
   const suggestions = replanData?.suggestions || [];
   const history = replanData?.history || [];
@@ -284,9 +290,9 @@ export default function SmartReplanningSection({
                     }}
                   >
                     {/* Header Singolo Suggerimento */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
                           <span
                             style={{
                               fontSize: 11,
@@ -301,22 +307,17 @@ export default function SmartReplanningSection({
                           >
                             {item.badge || item.strategy_label}
                           </span>
-                          {(item.is_alternative || item.badge === 'Opzione Alternativa') && (
-                            <span style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>
-                              Secondaria • Non inclusa nella combinazione generale
-                            </span>
-                          )}
                           <h4 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary, #1e293b)' }}>
                             {item.title}
                           </h4>
                         </div>
-                        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary, #475569)' }}>
+                        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary, #475569)', lineHeight: 1.5 }}>
                           {item.description}
                         </p>
                       </div>
 
-                      {/* Bottoni di Azione */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {/* Bottoni di Azione (Sempre in alto a destra) */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 12 }}>
                         {item.proposed_changes && (
                           <button
                             className="btn btn-secondary"
@@ -328,7 +329,8 @@ export default function SmartReplanningSection({
                               display: 'flex',
                               alignItems: 'center',
                               gap: 6,
-                              color: '#334155'
+                              color: '#334155',
+                              whiteSpace: 'nowrap'
                             }}
                             title="Simula l'effetto di questa singola riprogrammazione nel Gantt"
                           >
@@ -350,7 +352,8 @@ export default function SmartReplanningSection({
                               alignItems: 'center',
                               gap: 6,
                               background: '#2563eb',
-                              boxShadow: '0 2px 8px rgba(37, 99, 235, 0.2)'
+                              boxShadow: '0 2px 8px rgba(37, 99, 235, 0.2)',
+                              whiteSpace: 'nowrap'
                             }}
                           >
                             <CheckCircle size={15} />
