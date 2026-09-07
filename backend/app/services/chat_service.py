@@ -643,9 +643,9 @@ class ChatService:
                 
             if my_urgent_tasks:
                 lines.append(f"\n🎯 **Priorità a brevissimo termine (prossime 48 ore):**")
-                for t, p_code, p_name, p_id, days_left in my_urgent_tasks:
+                for t, p_code, p_name, p_id, days_left, tipo_tag in my_urgent_tasks:
                     badge = "🔴 Scade OGGI" if days_left == 0 else f"🟡 Scade tra {days_left} gg"
-                    lines.append(f"- {badge}: **{t.text}** su [**{p_code or p_name}**](/projects/{p_id}) ({normalize_progress(t.progress)}% completato)")
+                    lines.append(f"- {badge}: **{t.text}**{tipo_tag} su [**{p_code or p_name}**](/projects/{p_id}) ({normalize_progress(t.progress)}% completato)")
             else:
                 lines.append("\n🎯 **Priorità:** Nessuna scadenza personale imminente nelle prossime 48 ore.")
                 
@@ -679,7 +679,7 @@ class ChatService:
             proj_summary = []
             for p in projects:
                 end_str = p.end_date.strftime("%d/%m/%Y") if p.end_date else "N/D"
-                proj_summary.append(f"- Commessa: {p.code or p.name} (ID: {p.id}, Scadenza contrattuale: {end_str}, Stato: {getattr(p.status, 'value', p.status)})")
+                proj_summary.append(f"- Commessa: {p.code or p.name} (ID: {p.id}, Scadenza Commessa: {end_str}, Stato: {getattr(p.status, 'value', p.status)})")
                 
             v_stmt = select(Vacation, User.full_name, User.username).join(User, Vacation.user_id == User.id)
             v_res = await session.execute(v_stmt)

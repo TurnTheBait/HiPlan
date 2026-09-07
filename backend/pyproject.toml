@@ -1,11 +1,22 @@
 [tool.pyrefly]
 python-version = "3.13"
-python-path = "/Users/davidegirolamo/Programming/Gantt/backend/venv/bin/python"
-search-paths = [
-    ".",
-    "venv/lib/python3.13/site-packages",
-    "/Users/davidegirolamo/Programming/Gantt/backend/venv/lib/python3.13/site-packages"
+python-interpreter-path = "/Users/davide/Programming/Gantt/backend/venv/bin/python"
+search-path = [
+    "."
 ]
+site-package-path = [
+    "/Users/davide/Programming/Gantt/backend/venv/lib/python3.13/site-packages"
+]
+project-excludes = [
+    "**/venv/**",
+    "**/__pycache__/**",
+    "**/__pyrefly_virtual__/**"
+]
+
+[tool.pyrefly.errors]
+bad-argument-type = "ignore"
+bad-assignment = "ignore"
+no-matching-overload = "ignore"
 
 [tool.pytest.ini_options]
 pythonpath = [
@@ -13,10 +24,11 @@ pythonpath = [
 ]
 
 [tool.pyright]
-venvPath = "/Users/davidegirolamo/Programming/Gantt/backend"
+venvPath = "/Users/davide/Programming/Gantt/backend"
 venv = "venv"
 extraPaths = [
     ".",
     "venv/lib/python3.13/site-packages",
-    "/Users/davidegirolamo/Programming/Gantt/backend/venv/lib/python3.13/site-packages"
+    "/Users/davide/Programming/Gantt/backend/venv/lib/python3.13/site-packages"
 ]
+

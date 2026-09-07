@@ -187,7 +187,7 @@ async def build_global_schedule_context(db: AsyncSession) -> Dict[str, Any]:
                     total_assigned_h = w_hours_map.get(norm_w)
                     if total_assigned_h is None:
                         total_assigned_h = float(t.planned_hours or 8.0) / len(workers)
-                    daily_h = float(total_assigned_h) / max(1, duration_days)
+                    daily_h = total_assigned_h / max(1, duration_days)
 
                     worker_daily_hours.setdefault(norm_w, {}).setdefault(c, []).append({
                         "task_id": str(t.id),
@@ -579,7 +579,7 @@ async def generate_project_smart_suggestions(
             if isinstance(day_map, dict):
                 for h in day_map.values():
                     try:
-                        tot_actual_h += float(h)
+                        tot_actual_h += h
                     except Exception:
                         pass
 
@@ -617,7 +617,7 @@ async def generate_project_smart_suggestions(
                 )
 
                 if not cascade["exceeds_project_deadline"]:
-                    # L'addetto stesso recupera il lavoro al rientro senza violare la scadenza contrattuale
+                    # L'addetto stesso recupera il lavoro al rientro senza violare la scadenza commessa
                     shift_days = get_working_days_count(task.start_date, target_start) - 1
                     sugg_id = f"vac_shift_{task.id}_{w_uid}_{target_start.strftime('%Y%m%d')}"
                     daily_needed_h = float(task.planned_hours or 8.0) / max(1, len(workers) * duration_days)
@@ -723,7 +723,7 @@ async def generate_project_smart_suggestions(
                         "type": "vacation_conflict",
                         "severity": "high",
                         "title": f"Salva Scadenza per Ferie: {w} → {alt_worker['worker_name']}",
-                        "description": f"Lo slittamento al rientro di {w} violerebbe la scadenza contrattuale ({proj_end_date.strftime('%d/%m/%Y')}). Per salvare la consegna, la fase viene riassegnata a {alt_worker['worker_name']} a parità di date.",
+                        "description": f"Lo slittamento al rientro di {w} violerebbe la scadenza commessa ({proj_end_date.strftime('%d/%m/%Y')}). Per salvare la consegna, la fase viene riassegnata a {alt_worker['worker_name']} a parità di date.",
                         "task_id": str(task.id),
                         "task_name": task.text,
                         "strategy": "reassign_worker",
@@ -885,7 +885,7 @@ async def generate_project_smart_suggestions(
 
             if not cascade["exceeds_project_deadline"]:
                 remaining_h = max(1.0, planned_h - tot_actual_h)
-                daily_needed_h = float(remaining_h) / max(1, len(workers) * needed_days)
+                daily_needed_h = remaining_h / max(1, len(workers) * needed_days)
                 cross_proj_impact = detect_cross_project_impact(
                     workers, target_start, target_end, project_id, context,
                     needed_daily_h=daily_needed_h,

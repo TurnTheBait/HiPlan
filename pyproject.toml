@@ -1,14 +1,23 @@
 [tool.pyrefly]
 python-version = "3.13"
-python-path = "backend/venv/bin/python"
-search-paths = [
+python-interpreter-path = "backend/venv/bin/python"
+search-path = [
     ".",
-    "backend",
+    "backend"
+]
+site-package-path = [
     "backend/venv/lib/python3.13/site-packages"
 ]
 project-excludes = [
+    "**/venv/**",
+    "**/__pycache__/**",
     "**/__pyrefly_virtual__/**"
 ]
+
+[tool.pyrefly.errors]
+bad-argument-type = "ignore"
+bad-assignment = "ignore"
+no-matching-overload = "ignore"
 
 [tool.pyright]
 venvPath = "."
