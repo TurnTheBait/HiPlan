@@ -672,6 +672,9 @@ export default function SmartReplanningSection({
           tasks={tasks}
           links={links}
           suggestions={suggestions}
+          projectName={replanData?.project_name}
+          projectCode={replanData?.project_code}
+          relatedProjects={replanData?.related_projects || {}}
           projectStartDate={projectStartDate || replanData?.project_start_date}
           projectEndDate={projectEndDate || replanData?.project_end_date}
           onApplySuggestion={(sugg) => {

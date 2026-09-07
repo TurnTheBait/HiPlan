@@ -61,6 +61,9 @@ export default function ReplanningGanttPreview({
   tasks = [],
   links = [],
   suggestions = [],
+  projectName = '',
+  projectCode = '',
+  relatedProjects = {},
   projectStartDate,
   projectEndDate,
   onApplySuggestion,
@@ -69,6 +72,7 @@ export default function ReplanningGanttPreview({
   initialSuggestionId = 'all'
 }) {
   const [selectedSuggestionId, setSelectedSuggestionId] = useState(initialSuggestionId || 'all');
+  const [activeProjectId, setActiveProjectId] = useState('main');
   const [showOnlyImpacted, setShowOnlyImpacted] = useState(false);
   const [dayWidth, setDayWidth] = useState(22); // px per day (zoom)
 
@@ -89,7 +93,49 @@ export default function ReplanningGanttPreview({
     return actionableSuggestions.find((s) => s.id === selectedSuggestionId) || null;
   }, [selectedSuggestionId, actionableSuggestions]);
 
-  // Calcolo della simulazione dei task
+  // Calcolo delle commesse correlate impattate dalla simulazione corrente
+  const impactedRelatedProjects = useMemo(() => {
+    const targets = activeSuggestion ? [activeSuggestion] : primaryCombinedSuggestions;
+    const projMap = new Map();
+
+    targets.forEach((sugg) => {
+      const otherList = sugg.cascade_impact?.other_projects || [];
+      otherList.forEach((op) => {
+        if (!op.project_id) return;
+        const pId = String(op.project_id);
+        const relData = relatedProjects[pId] || {};
+        const pName = op.project_name || relData.project_name || 'Altra Commessa';
+        const pCode = relData.project_code || '';
+
+        if (!projMap.has(pId)) {
+          projMap.set(pId, {
+            project_id: pId,
+            project_name: pName,
+            project_code: pCode,
+            color: relData.color || '#f59e0b',
+            tasks: relData.tasks || [],
+            project_start_date: relData.project_start_date,
+            project_end_date: relData.project_end_date,
+            impacts: []
+          });
+        }
+        projMap.get(pId).impacts.push(op);
+      });
+    });
+
+    return Array.from(projMap.values());
+  }, [activeSuggestion, primaryCombinedSuggestions, relatedProjects]);
+
+  // Commessa correlata attiva (o null per commessa principale)
+  const activeRelatedProject = useMemo(() => {
+    if (activeProjectId === 'main') return null;
+    return impactedRelatedProjects.find((p) => p.project_id === activeProjectId) || null;
+  }, [activeProjectId, impactedRelatedProjects]);
+
+  const effectiveActiveProjectId = activeRelatedProject ? activeProjectId : 'main';
+  const isViewingRelated = effectiveActiveProjectId !== 'main' && activeRelatedProject !== null;
+
+  // Calcolo della simulazione dei task della commessa principale
   const simulatedTasks = useMemo(() => {
     const directModMap = new Map();
     const cascadeModMap = new Map();
@@ -160,17 +206,83 @@ export default function ReplanningGanttPreview({
     });
   }, [tasks, activeSuggestion, primaryCombinedSuggestions]);
 
+  // Calcolo dei task per commessa correlata (quando attiva)
+  const relatedSimulatedTasks = useMemo(() => {
+    if (!isViewingRelated || !activeRelatedProject) return [];
+    const impacts = activeRelatedProject.impacts || [];
+
+    return (activeRelatedProject.tasks || []).map((t) => {
+      const origStart = parseDateSafe(t.start_date);
+      const origEnd = parseDateSafe(t.end_date) || origStart;
+      const origWorkers = parseWorkers(t.workers);
+      const tId = String(t.id);
+
+      // Trova impatto corrispondente
+      const impact = impacts.find(
+        (imp) => String(imp.task_id) === tId || (imp.task_name && imp.task_name.toLowerCase() === (t.text || '').toLowerCase())
+      );
+
+      let status = 'unchanged';
+      let peakHours = null;
+      let impactedWorker = null;
+      let impactMessage = null;
+
+      if (impact) {
+        status = impact.status === 'warning' ? 'warning' : 'safe';
+        peakHours = impact.peak_hours;
+        impactedWorker = impact.worker;
+        impactMessage = impact.message;
+      } else {
+        const workerMatch = impacts.find((imp) => origWorkers.includes(imp.worker));
+        if (workerMatch) {
+          status = workerMatch.status === 'warning' ? 'warning' : 'safe';
+          peakHours = workerMatch.peak_hours;
+          impactedWorker = workerMatch.worker;
+          impactMessage = workerMatch.message;
+        }
+      }
+
+      return {
+        id: tId,
+        text: t.text,
+        origStart,
+        origEnd,
+        origWorkers,
+        simStart: origStart,
+        simEnd: origEnd,
+        simWorkers: origWorkers,
+        status,
+        shiftDays: 0,
+        peakHours,
+        impactedWorker,
+        impactMessage,
+        isCascade: false,
+        isDirect: false,
+        isRelatedImpact: status === 'warning',
+        changes: null,
+        cascadeInfo: null,
+        duration: t.duration,
+        progress: t.progress
+      };
+    });
+  }, [isViewingRelated, activeRelatedProject]);
+
+  // Dati attivi per la visualizzazione corrente
+  const activeProjectTasks = isViewingRelated ? relatedSimulatedTasks : simulatedTasks;
+  const activeProjectStart = isViewingRelated ? activeRelatedProject?.project_start_date : projectStartDate;
+  const activeProjectEnd = isViewingRelated ? activeRelatedProject?.project_end_date : projectEndDate;
+
   // Calcolo intervallo temporale armonizzato a settimane piene (Lunedì - Domenica)
   const { timelineStart, totalDays, monthsList, weeksList } = useMemo(() => {
-    let minD = parseDateSafe(projectStartDate) || new Date();
-    let maxD = parseDateSafe(projectEndDate) || new Date();
+    let minD = parseDateSafe(activeProjectStart) || new Date();
+    let maxD = parseDateSafe(activeProjectEnd) || new Date();
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     if (today < minD) minD = new Date(today);
     if (today > maxD) maxD = new Date(today);
 
-    simulatedTasks.forEach((t) => {
+    activeProjectTasks.forEach((t) => {
       if (t.origStart && t.origStart < minD) minD = new Date(t.origStart);
       if (t.origEnd && t.origEnd > maxD) maxD = new Date(t.origEnd);
       if (t.simStart && t.simStart < minD) minD = new Date(t.simStart);
@@ -237,7 +349,7 @@ export default function ReplanningGanttPreview({
     }
 
     return { timelineStart: startMon, totalDays: totDays, monthsList: months, weeksList: weeks };
-  }, [projectStartDate, projectEndDate, simulatedTasks]);
+  }, [activeProjectStart, activeProjectEnd, activeProjectTasks]);
 
   // Coordinate di posizionamento in pixel
   const getDayOffset = (d) => {
@@ -264,19 +376,20 @@ export default function ReplanningGanttPreview({
   }, []);
   const todayLeftPx = getLeftPx(today);
 
-  const deadlineDate = parseDateSafe(projectEndDate);
+  const deadlineDate = parseDateSafe(activeProjectEnd);
   const deadlineLeftPx = deadlineDate ? getLeftPx(deadlineDate) : null;
 
   // Filtraggio task visualizzati
   const displayedTasks = useMemo(() => {
     if (showOnlyImpacted) {
-      return simulatedTasks.filter((t) => t.status !== 'unchanged');
+      return activeProjectTasks.filter((t) => t.status !== 'unchanged');
     }
-    return simulatedTasks;
-  }, [simulatedTasks, showOnlyImpacted]);
+    return activeProjectTasks;
+  }, [activeProjectTasks, showOnlyImpacted]);
 
   const directCount = simulatedTasks.filter((t) => t.status === 'direct').length;
   const cascadeCount = simulatedTasks.filter((t) => t.status === 'cascade').length;
+  const relatedImpactCount = relatedSimulatedTasks.filter((t) => t.isRelatedImpact).length;
   const totalTimelineWidth = totalDays * dayWidth;
 
   return (
@@ -464,6 +577,146 @@ export default function ReplanningGanttPreview({
           </div>
         </div>
 
+        {/* BARRA DI NAVIGAZIONE SCHEDE COMMESSE (SE CI SONO COMMESSE CORRELATE IMPATTATE) */}
+        {impactedRelatedProjects.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 24px',
+              background: '#f8fafc',
+              borderBottom: '1px solid #e2e8f0',
+              overflowX: 'auto'
+            }}
+          >
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginRight: 4 }}>
+              Commesse:
+            </span>
+
+            {/* Scheda Commessa Principale */}
+            <button
+              type="button"
+              onClick={() => setActiveProjectId('main')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 14px',
+                borderRadius: '8px',
+                border: effectiveActiveProjectId === 'main' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                background: effectiveActiveProjectId === 'main' ? '#eff6ff' : '#ffffff',
+                color: effectiveActiveProjectId === 'main' ? '#1e40af' : '#475569',
+                fontWeight: effectiveActiveProjectId === 'main' ? 700 : 500,
+                fontSize: 12,
+                cursor: 'pointer',
+                boxShadow: effectiveActiveProjectId === 'main' ? '0 2px 5px rgba(37, 99, 235, 0.15)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Layers size={14} color={effectiveActiveProjectId === 'main' ? '#2563eb' : '#64748b'} />
+              <span>🏢 {projectName || 'Commessa Principale'}</span>
+              <span
+                style={{
+                  fontSize: 10,
+                  padding: '1px 6px',
+                  borderRadius: '10px',
+                  background: effectiveActiveProjectId === 'main' ? '#2563eb' : '#f1f5f9',
+                  color: effectiveActiveProjectId === 'main' ? '#ffffff' : '#64748b',
+                  fontWeight: 700
+                }}
+              >
+                Principale
+              </span>
+            </button>
+
+            {/* Schede Commesse Correlate Impattate */}
+            {impactedRelatedProjects.map((relProj) => {
+              const isActive = effectiveActiveProjectId === relProj.project_id;
+              const warningCount = relProj.impacts.filter((imp) => imp.status === 'warning').length;
+              return (
+                <button
+                  key={relProj.project_id}
+                  type="button"
+                  onClick={() => setActiveProjectId(relProj.project_id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 14px',
+                    borderRadius: '8px',
+                    border: isActive ? '2px solid #f59e0b' : '1px solid #fcd34d',
+                    background: isActive ? '#fffbeb' : '#ffffff',
+                    color: isActive ? '#92400e' : '#78350f',
+                    fontWeight: isActive ? 700 : 500,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    boxShadow: isActive ? '0 2px 5px rgba(245, 158, 11, 0.2)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <AlertTriangle size={14} color="#d97706" />
+                  <span>{relProj.project_name}</span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                      background: warningCount > 0 ? '#f59e0b' : '#10b981',
+                      color: '#ffffff',
+                      fontWeight: 700
+                    }}
+                  >
+                    {warningCount > 0 ? `${warningCount} impattat${warningCount === 1 ? 'a' : 'e'}` : 'Correlata'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* BANNER CONTESTUALE COMMESSA CORRELATA */}
+        {isViewingRelated && activeRelatedProject && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 24px',
+              background: '#fffbeb',
+              borderBottom: '1px solid #fde68a',
+              color: '#92400e',
+              fontSize: 12,
+              gap: 12
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertTriangle size={16} color="#d97706" style={{ flexShrink: 0 }} />
+              <span>
+                Stai visualizzando l'anteprima della commessa correlata <strong>'{activeRelatedProject.project_name}'</strong>. Le fasi evidenziate presentano sovrapposizioni orarie (&gt;8h/giorno) causate dalla riprogrammazione di <strong>{projectName || 'Commessa Principale'}</strong>.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveProjectId('main')}
+              style={{
+                border: '1px solid #f59e0b',
+                background: '#ffffff',
+                color: '#b45309',
+                padding: '4px 12px',
+                borderRadius: '6px',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+                flexShrink: 0,
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}
+            >
+              ← Torna a {projectName || 'Commessa Principale'}
+            </button>
+          </div>
+        )}
+
         {/* METRICHE E FILTRI */}
         <div
           style={{
@@ -479,17 +732,33 @@ export default function ReplanningGanttPreview({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#6366f1' }} />
-              <span style={{ color: '#475569' }}>Riprogrammazioni Dirette:</span>
-              <strong style={{ color: '#0f172a' }}>{directCount}</strong>
-            </div>
+            {isViewingRelated ? (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <AlertTriangle size={15} color="#d97706" />
+                  <span style={{ color: '#475569' }}>Fasi in Sovraccarico:</span>
+                  <strong style={{ color: '#b45309' }}>{relatedImpactCount}</strong>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ color: '#64748b' }}>Totale Fasi Commessa:</span>
+                  <strong style={{ color: '#0f172a' }}>{activeProjectTasks.length}</strong>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#6366f1' }} />
+                  <span style={{ color: '#475569' }}>Riprogrammazioni Dirette:</span>
+                  <strong style={{ color: '#0f172a' }}>{directCount}</strong>
+                </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b' }} />
-              <span style={{ color: '#475569' }}>Slittamenti a Cascata:</span>
-              <strong style={{ color: '#0f172a' }}>{cascadeCount}</strong>
-            </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b' }} />
+                  <span style={{ color: '#475569' }}>Slittamenti a Cascata:</span>
+                  <strong style={{ color: '#0f172a' }}>{cascadeCount}</strong>
+                </div>
+              </>
+            )}
 
             {deadlineDate && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -517,10 +786,10 @@ export default function ReplanningGanttPreview({
                 onChange={(e) => setShowOnlyImpacted(e.target.checked)}
                 style={{ cursor: 'pointer', accentColor: '#2563eb' }}
               />
-              <span>Mostra solo fasi impattate ({directCount + cascadeCount})</span>
+              <span>Mostra solo fasi impattate ({isViewingRelated ? relatedImpactCount : directCount + cascadeCount})</span>
             </label>
 
-            {activeSuggestion && canManage && (
+            {!isViewingRelated && activeSuggestion && canManage && (
               <button
                 className="btn btn-primary"
                 onClick={() => {
@@ -607,9 +876,11 @@ export default function ReplanningGanttPreview({
                       flexDirection: 'column',
                       justifyContent: 'center',
                       backgroundColor: isDirect
-                        ? 'rgba(99, 102, 241, 0.04)'
-                        : isCascade
-                          ? 'rgba(245, 158, 11, 0.04)'
+                      ? 'rgba(99, 102, 241, 0.04)'
+                      : isCascade
+                        ? 'rgba(245, 158, 11, 0.04)'
+                        : task.isRelatedImpact
+                          ? 'rgba(245, 158, 11, 0.06)'
                           : '#ffffff'
                     }}
                   >
@@ -617,8 +888,8 @@ export default function ReplanningGanttPreview({
                       <span
                         style={{
                           fontSize: 13,
-                          fontWeight: isModified ? 700 : 500,
-                          color: isModified ? '#0f172a' : '#334155',
+                          fontWeight: (isModified || task.isRelatedImpact) ? 700 : 500,
+                          color: task.isRelatedImpact ? '#92400e' : isModified ? '#0f172a' : '#334155',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap'
@@ -657,6 +928,21 @@ export default function ReplanningGanttPreview({
                           Cascata
                         </span>
                       )}
+                      {task.isRelatedImpact && (
+                        <span
+                          style={{
+                            fontSize: 9,
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            background: '#fef3c7',
+                            color: '#b45309',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          Sovraccarico
+                        </span>
+                      )}
                     </div>
 
                     <div
@@ -678,16 +964,33 @@ export default function ReplanningGanttPreview({
                             </span>{' '}
                             → <strong style={{ color: '#2563eb' }}>{task.simWorkers.join(', ')}</strong>
                           </>
+                        ) : task.isRelatedImpact && task.impactedWorker ? (
+                          <span>
+                            {task.origWorkers.map((w, idx) => (
+                              <React.Fragment key={idx}>
+                                {idx > 0 && ', '}
+                                {w === task.impactedWorker ? (
+                                  <strong style={{ color: '#b45309' }}>{w}</strong>
+                                ) : (
+                                  w
+                                )}
+                              </React.Fragment>
+                            ))}
+                          </span>
                         ) : (
                           <span>{task.simWorkers?.join(', ') || 'Nessuno'}</span>
                         )}
                       </span>
 
-                      {task.shiftDays > 0 && (
+                      {task.shiftDays > 0 ? (
                         <span style={{ color: '#d97706', fontWeight: 700, fontSize: 10 }}>
                           +{task.shiftDays} gg
                         </span>
-                      )}
+                      ) : task.isRelatedImpact && task.peakHours ? (
+                        <span style={{ color: '#b45309', fontWeight: 700, fontSize: 10 }}>
+                          Picco {task.peakHours}h/gg
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -969,6 +1272,52 @@ export default function ReplanningGanttPreview({
                             </div>
                           </div>
                         </>
+                      ) : task.isRelatedImpact ? (
+                        /* FASE IN SOVRACCARICO SU COMMESSA CORRELATA */
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: `${origLeft}px`,
+                            width: `${origWidth}px`,
+                            height: '26px',
+                            borderRadius: '6px',
+                            background: 'linear-gradient(90deg, #f59e0b, #d97706)',
+                            border: '1px solid #b45309',
+                            boxShadow: '0 2px 6px rgba(245, 158, 11, 0.25)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0 8px',
+                            color: '#ffffff',
+                            fontSize: 11,
+                            fontWeight: 600,
+                            zIndex: 8,
+                            overflow: 'hidden',
+                            whiteSpace: 'nowrap'
+                          }}
+                          title={task.impactMessage || `Sovraccarico: ${task.peakHours}h/gg con ${projectName || 'Commessa Principale'}`}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <AlertTriangle size={12} color="#ffffff" />
+                            {task.text}
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                            <span style={{ fontSize: 9, opacity: 0.9 }}>
+                              {formatShortDate(task.origStart)} - {formatShortDate(task.origEnd)}
+                            </span>
+                            <span
+                              style={{
+                                padding: '1px 5px',
+                                borderRadius: '3px',
+                                background: 'rgba(0, 0, 0, 0.3)',
+                                fontSize: 9,
+                                fontWeight: 700
+                              }}
+                            >
+                              ⚠️ {task.peakHours ? `${task.peakHours}h/gg` : 'Sovraccarico'}
+                            </span>
+                          </div>
+                        </div>
                       ) : (
                         /* FASE INVARIATA (SINGOLA CORSIA) */
                         <div
@@ -989,9 +1338,10 @@ export default function ReplanningGanttPreview({
                             fontWeight: 500,
                             zIndex: 6,
                             overflow: 'hidden',
-                            whiteSpace: 'nowrap'
+                            whiteSpace: 'nowrap',
+                            opacity: isViewingRelated ? 0.85 : 0.95
                           }}
-                          title={`Fase Invariata: ${formatDateIt(task.origStart)} → ${formatDateIt(task.origEnd)} (${task.origWorkers.join(', ')})`}
+                          title={`Fase: ${formatDateIt(task.origStart)} → ${formatDateIt(task.origEnd)} (${task.origWorkers.join(', ')})`}
                         >
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {task.text}
@@ -1024,25 +1374,40 @@ export default function ReplanningGanttPreview({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 14, height: 14, borderRadius: 3, background: 'linear-gradient(90deg, #6366f1, #4f46e5)' }} />
-              <span style={{ color: '#334155', fontWeight: 600 }}>Nuova Proposta (Diretta)</span>
-            </div>
+            {isViewingRelated ? (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 14, height: 14, borderRadius: 3, background: 'linear-gradient(90deg, #f59e0b, #d97706)', border: '1px solid #b45309' }} />
+                  <span style={{ color: '#92400e', fontWeight: 700 }}>Fase in Sovraccarico (&gt;8h/gg)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 14, height: 14, borderRadius: 3, background: 'linear-gradient(90deg, #3b82f6, #2563eb)' }} />
+                  <span style={{ color: '#334155' }}>Altre Fasi Commessa</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 14, height: 14, borderRadius: 3, background: 'linear-gradient(90deg, #6366f1, #4f46e5)' }} />
+                  <span style={{ color: '#334155', fontWeight: 600 }}>Nuova Proposta (Diretta)</span>
+                </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 14, height: 14, borderRadius: 3, background: 'linear-gradient(90deg, #f59e0b, #d97706)' }} />
-              <span style={{ color: '#334155', fontWeight: 600 }}>Slittamento a Cascata</span>
-            </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 14, height: 14, borderRadius: 3, background: 'linear-gradient(90deg, #f59e0b, #d97706)' }} />
+                  <span style={{ color: '#334155', fontWeight: 600 }}>Slittamento a Cascata</span>
+                </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 14, height: 14, borderRadius: 3, border: '1px dashed #94a3b8', background: 'rgba(226, 232, 240, 0.8)' }} />
-              <span style={{ color: '#64748b' }}>Stato Originale (Ghost)</span>
-            </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 14, height: 14, borderRadius: 3, border: '1px dashed #94a3b8', background: 'rgba(226, 232, 240, 0.8)' }} />
+                  <span style={{ color: '#64748b' }}>Stato Originale (Ghost)</span>
+                </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 14, height: 14, borderRadius: 3, background: 'linear-gradient(90deg, #3b82f6, #2563eb)' }} />
-              <span style={{ color: '#334155' }}>Fase Invariata</span>
-            </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 14, height: 14, borderRadius: 3, background: 'linear-gradient(90deg, #3b82f6, #2563eb)' }} />
+                  <span style={{ color: '#334155' }}>Fase Invariata</span>
+                </div>
+              </>
+            )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 12, height: 0, borderBottom: '2px dashed #dc2626', display: 'inline-block' }} />

@@ -255,3 +255,85 @@ async def test_apply_and_revert_flow(db_session: AsyncSession, test_user: User):
     # Lo stato deve essere ritornato a quello originale!
     assert task.start_date == original_start
     assert task.end_date == original_end
+
+
+@pytest.mark.asyncio
+async def test_smart_replanning_cross_project_preview(db_session: AsyncSession, test_user: User):
+    """
+    Test: Verifica che quando una proposta di riprogrammazione su Commessa 1
+    impatta un addetto condiviso con Commessa 2, il payload restituisca
+    'related_projects' con i dati completi di Commessa 2 per l'anteprima Gantt.
+    """
+    u_shared = User(
+        email="shared@example.com",
+        username="worker_shared",
+        hashed_password="pwd",
+        full_name="Worker Shared",
+        role=UserRole.VIEWER,
+        department="ufficio_tecnico"
+    )
+    db_session.add(u_shared)
+    await db_session.commit()
+    await db_session.refresh(u_shared)
+
+    # Commessa 1
+    p1 = Project(
+        name="Commessa Alfa Preview",
+        code="COMM-ALFA",
+        status=ProjectStatus.ACTIVE,
+        owner_id=test_user.id,
+        start_date=date(2026, 8, 1),
+        end_date=date(2026, 10, 30)
+    )
+    # Commessa 2
+    p2 = Project(
+        name="Commessa Beta Impattata",
+        code="COMM-BETA",
+        status=ProjectStatus.ACTIVE,
+        owner_id=test_user.id,
+        start_date=date(2026, 8, 1),
+        end_date=date(2026, 11, 15)
+    )
+    db_session.add_all([p1, p2])
+    await db_session.commit()
+    await db_session.refresh(p1)
+    await db_session.refresh(p2)
+
+    # Task su Commessa 1 scaduto nel passato (oggi = 2026-09-07)
+    t1 = Task(
+        project_id=p1.id,
+        text="Progettazione Alfa",
+        start_date=date(2026, 8, 20),
+        end_date=date(2026, 9, 2),  # scaduto
+        duration=10,
+        planned_hours=80.0,
+        workers=json.dumps(["Worker Shared"]),
+        worker_hours=json.dumps({"Worker Shared": 80.0}),
+        completed=0
+    )
+    # Task su Commessa 2 nel presente
+    t2 = Task(
+        project_id=p2.id,
+        text="Progettazione Beta",
+        start_date=date(2026, 9, 7),
+        end_date=date(2026, 9, 14),
+        duration=6,
+        planned_hours=48.0,
+        workers=json.dumps(["Worker Shared"]),
+        worker_hours=json.dumps({"Worker Shared": 48.0}),
+        completed=0
+    )
+    db_session.add_all([t1, t2])
+    await db_session.commit()
+
+    # Genera suggerimenti per Commessa 1
+    result = await generate_project_smart_suggestions(db_session, str(p1.id))
+    assert "related_projects" in result
+    assert str(p2.id) in result["related_projects"]
+
+    p2_data = result["related_projects"][str(p2.id)]
+    assert p2_data["project_name"] == "Commessa Beta Impattata"
+    assert len(p2_data["tasks"]) == 1
+    assert p2_data["tasks"][0]["text"] == "Progettazione Beta"
+    assert p2_data["tasks"][0]["workers"] == ["Worker Shared"]
+

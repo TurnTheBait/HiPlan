@@ -300,6 +300,7 @@ def detect_cross_project_impact(
     """
     worker_daily_hours = context.get("worker_daily_hours", {})
     all_tasks = context.get("all_tasks", [])
+    all_tasks_by_id = {str(t.id): t for t in all_tasks}
     other_proj_impacts = []
     seen_combos = set()
 
@@ -314,18 +315,30 @@ def detect_cross_project_impact(
                     op_id = str(e.get("project_id"))
                     if op_id != current_project_id:
                         op_name = e.get("project_name") or "Altra Commessa"
-                        combo_key = (w, op_id)
+                        e_task_id = str(e.get("task_id"))
+                        combo_key = (w, op_id, e_task_id)
                         if combo_key not in seen_combos:
                             seen_combos.add(combo_key)
                             booked_h = e.get("daily_hours", 0.0)
                             tot_h = booked_h + needed_daily_h
+                            t_other = all_tasks_by_id.get(e_task_id)
+                            task_name = e.get("task_name") or (t_other.text if t_other else "Fase Commessa")
+                            t_start = t_other.start_date.isoformat() if t_other and t_other.start_date else None
+                            t_end = t_other.end_date.isoformat() if t_other and t_other.end_date else None
+
                             if tot_h > MAX_DAILY_HOURS:
                                 other_proj_impacts.append({
                                     "worker": w,
                                     "status": "warning",
                                     "project_id": op_id,
                                     "project_name": op_name,
-                                    "message": f"Attenzione: Lo slittamento sovrappone {w} con la commessa '{op_name}' portando il carico a {round(tot_h, 1)}h/gg (>8h)."
+                                    "task_id": e_task_id,
+                                    "task_name": task_name,
+                                    "task_start": t_start,
+                                    "task_end": t_end,
+                                    "daily_hours": round(booked_h, 1),
+                                    "peak_hours": round(tot_h, 1),
+                                    "message": f"Attenzione: Lo slittamento sovrappone {w} con la fase '{task_name}' della commessa '{op_name}' portando il carico a {round(tot_h, 1)}h/gg (>8h)."
                                 })
                             else:
                                 other_proj_impacts.append({
@@ -333,7 +346,13 @@ def detect_cross_project_impact(
                                     "status": "safe",
                                     "project_id": op_id,
                                     "project_name": op_name,
-                                    "message": f"{w} è impegnato anche sulla commessa '{op_name}' ({round(booked_h, 1)}h/gg), ma la sovrapposizione rientra nella capienza massima (totale {round(tot_h, 1)}h/gg)."
+                                    "task_id": e_task_id,
+                                    "task_name": task_name,
+                                    "task_start": t_start,
+                                    "task_end": t_end,
+                                    "daily_hours": round(booked_h, 1),
+                                    "peak_hours": round(tot_h, 1),
+                                    "message": f"{w} è impegnato anche sulla fase '{task_name}' di '{op_name}' ({round(booked_h, 1)}h/gg), ma la sovrapposizione rientra nella capienza massima (totale {round(tot_h, 1)}h/gg)."
                                 })
             c += timedelta(days=1)
 
@@ -362,18 +381,31 @@ def detect_cross_project_impact(
                                 op_id = str(e.get("project_id"))
                                 if op_id != current_project_id:
                                     op_name = e.get("project_name") or "Altra Commessa"
-                                    combo_key = (dw, op_id)
+                                    e_task_id = str(e.get("task_id"))
+                                    combo_key = (dw, op_id, e_task_id)
                                     if combo_key not in seen_combos:
                                         seen_combos.add(combo_key)
                                         booked_h = e.get("daily_hours", 0.0)
                                         tot_h = booked_h + dt_needed_h
+                                        t_other = all_tasks_by_id.get(e_task_id)
+                                        task_name = e.get("task_name") or (t_other.text if t_other else "Fase Commessa")
+                                        t_start = t_other.start_date.isoformat() if t_other and t_other.start_date else None
+                                        t_end = t_other.end_date.isoformat() if t_other and t_other.end_date else None
+
                                         if tot_h > MAX_DAILY_HOURS:
                                             other_proj_impacts.append({
                                                 "worker": dw,
                                                 "status": "warning",
                                                 "project_id": op_id,
                                                 "project_name": op_name,
-                                                "message": f"Cascata: {dw} sulla fase '{orig_task.text}' si sovrappone alla commessa '{op_name}' portando il carico a {round(tot_h, 1)}h/gg (>8h)."
+                                                "task_id": e_task_id,
+                                                "task_name": task_name,
+                                                "task_start": t_start,
+                                                "task_end": t_end,
+                                                "daily_hours": round(booked_h, 1),
+                                                "peak_hours": round(tot_h, 1),
+                                                "source_task_name": orig_task.text,
+                                                "message": f"Cascata: {dw} sulla fase '{orig_task.text}' si sovrappone a '{task_name}' della commessa '{op_name}' portando il carico a {round(tot_h, 1)}h/gg (>8h)."
                                             })
                                         else:
                                             other_proj_impacts.append({
@@ -381,7 +413,14 @@ def detect_cross_project_impact(
                                                 "status": "safe",
                                                 "project_id": op_id,
                                                 "project_name": op_name,
-                                                "message": f"Cascata: {dw} sulla fase '{orig_task.text}' ha capienza compatibile con la commessa '{op_name}'."
+                                                "task_id": e_task_id,
+                                                "task_name": task_name,
+                                                "task_start": t_start,
+                                                "task_end": t_end,
+                                                "daily_hours": round(booked_h, 1),
+                                                "peak_hours": round(tot_h, 1),
+                                                "source_task_name": orig_task.text,
+                                                "message": f"Cascata: {dw} sulla fase '{orig_task.text}' ha capienza compatibile con '{task_name}' di '{op_name}'."
                                             })
                         cur += timedelta(days=1)
 
@@ -943,6 +982,69 @@ async def generate_project_smart_suggestions(
             "reverted_by_name": log.reverted_by_user.full_name if log.reverted_by_user else None
         })
 
+    # Estrai commesse correlate impattate dalle proposte
+    related_proj_ids = set()
+    for s in suggestions:
+        for op in s.get("cascade_impact", {}).get("other_projects", []):
+            if op.get("project_id"):
+                related_proj_ids.add(str(op["project_id"]))
+
+    related_projects: Dict[str, Dict[str, Any]] = {}
+    if related_proj_ids:
+        rel_tasks_res = await db.execute(
+            select(Task)
+            .where(Task.project_id.in_(list(related_proj_ids)))
+            .where(Task.type != TaskType.PROJECT)
+            .where(Task.type != TaskType.MILESTONE)
+            .order_by(Task.sort_order, Task.start_date)
+        )
+        rel_tasks = rel_tasks_res.scalars().all()
+        rel_tasks_by_proj: Dict[str, List[Dict[str, Any]]] = {}
+        for rt in rel_tasks:
+            rel_tasks_by_proj.setdefault(str(rt.project_id), []).append({
+                "id": str(rt.id),
+                "text": rt.text,
+                "start_date": rt.start_date.isoformat() if rt.start_date else None,
+                "end_date": rt.end_date.isoformat() if rt.end_date else None,
+                "duration": rt.duration,
+                "progress": rt.progress or 0.0,
+                "workers": parse_workers_list(rt.workers),
+                "worker_hours": parse_worker_hours_map(rt.worker_hours),
+                "planned_hours": rt.planned_hours or 0.0,
+                "actual_hours": parse_actual_hours_map(rt.actual_hours),
+                "department": rt.department,
+                "completed": rt.completed or 0
+            })
+
+        rel_links_res = await db.execute(
+            select(Link).where(Link.project_id.in_(list(related_proj_ids)))
+        )
+        rel_links = rel_links_res.scalars().all()
+        rel_links_by_proj: Dict[str, List[Dict[str, Any]]] = {}
+        for rl in rel_links:
+            rel_links_by_proj.setdefault(str(rl.project_id), []).append({
+                "id": str(rl.id),
+                "source": str(rl.source),
+                "target": str(rl.target),
+                "type": rl.type.value if hasattr(rl.type, 'value') else str(rl.type),
+                "lag": rl.lag or 0
+            })
+
+        for r_pid in related_proj_ids:
+            proj_obj = context["active_projects"].get(r_pid)
+            if proj_obj:
+                related_projects[r_pid] = {
+                    "project_id": str(proj_obj.id),
+                    "project_name": proj_obj.name,
+                    "project_code": proj_obj.code or "",
+                    "project_start_date": proj_obj.start_date.isoformat() if proj_obj.start_date else None,
+                    "project_end_date": proj_obj.end_date.isoformat() if proj_obj.end_date else None,
+                    "color": proj_obj.color or "#2563eb",
+                    "client": proj_obj.client or "",
+                    "tasks": rel_tasks_by_proj.get(r_pid, []),
+                    "links": rel_links_by_proj.get(r_pid, [])
+                }
+
     return {
         "project_id": str(target_project.id),
         "project_name": target_project.name,
@@ -952,6 +1054,7 @@ async def generate_project_smart_suggestions(
         "conflicts_count": len(suggestions),
         "actionable_suggestions_count": len([s for s in suggestions if s.get("proposed_changes")]),
         "suggestions": suggestions,
+        "related_projects": related_projects,
         "history": history_logs
     }
 
