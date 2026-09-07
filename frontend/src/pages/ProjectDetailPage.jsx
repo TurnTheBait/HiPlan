@@ -2317,7 +2317,7 @@ export default function ProjectDetailPage() {
               <div className="stat-box">
                 <div className="stat-box-label">Referente Commessa</div>
                 <div className="stat-box-value" style={{ fontSize: '0.95rem' }}>
-                  {project?.responsible?.full_name || project?.responsible?.username || 'N/D'}
+                  {project?.responsible_name || project?.responsible_username || project?.responsible?.full_name || project?.responsible?.username || 'N/D'}
                 </div>
               </div>
               <div className="stat-box">
