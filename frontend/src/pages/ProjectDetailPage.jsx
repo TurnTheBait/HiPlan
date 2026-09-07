@@ -15,6 +15,7 @@ import TaskChecklist from '../components/tasks/TaskChecklist';
 import ActivityLogPanel from '../components/projects/ActivityLogModal';
 import AppIcon from '../components/ui/AppIcon';
 import MultiDatePicker from '../components/ui/MultiDatePicker';
+import SmartReplanningSection from '../components/projects/SmartReplanningSection';
 import SearchableCombobox from '../components/ui/SearchableCombobox';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -2566,7 +2567,7 @@ export default function ProjectDetailPage() {
             {/* AREA NOTE */}
             <div className="commessa-summary-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h4 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>Note Commessa</h4>
+                <h4 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>Note Commessa Condivise</h4>
               </div>
               <textarea
                 value={notesText}
@@ -2758,6 +2759,17 @@ export default function ProjectDetailPage() {
               </div>
             )}
           </div>
+
+          {/* SEZIONE OTTIMIZZATORE & REBALANCE CARICHI */}
+          <SmartReplanningSection
+            projectId={id}
+            user={user}
+            onReloadTasks={loadGanttDataOnly}
+            tasks={ganttData.tasks}
+            links={ganttData.links}
+            projectStartDate={project?.start_date}
+            projectEndDate={project?.end_date}
+          />
         </div>
       )}
 
