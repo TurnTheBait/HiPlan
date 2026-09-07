@@ -194,6 +194,7 @@ async def build_global_schedule_context(db: AsyncSession) -> Dict[str, Any]:
                         "task_name": t.text,
                         "project_id": p_id,
                         "project_name": t.project.name if t.project else "Commessa",
+                        "project_code": t.project.code if (t.project and t.project.code) else "",
                         "daily_hours": daily_h
                     })
             c += timedelta(days=1)
@@ -205,6 +206,7 @@ async def build_global_schedule_context(db: AsyncSession) -> Dict[str, Any]:
         "user_by_name": user_by_name,
         "vacation_days_by_uid": vacation_days_by_uid,
         "all_tasks": all_tasks,
+        "all_tasks_by_id": {str(t.id): t for t in all_tasks},
         "links_by_source": links_by_source,
         "links_by_target": links_by_target,
         "worker_daily_hours": worker_daily_hours,
@@ -285,148 +287,6 @@ def find_alternative_worker(
     return best_candidate
 
 
-def detect_cross_project_impact(
-    workers: List[str],
-    start_d: date,
-    end_d: date,
-    current_project_id: str,
-    context: Dict[str, Any],
-    needed_daily_h: float = 8.0,
-    downstream_tasks: Optional[List[Dict[str, Any]]] = None
-) -> List[Dict[str, Any]]:
-    """
-    Rileva se lo slittamento temporale o il riposizionamento impatta
-    i carichi degli addetti su ALTRE commesse attive contemporanee.
-    """
-    worker_daily_hours = context.get("worker_daily_hours", {})
-    all_tasks = context.get("all_tasks", [])
-    all_tasks_by_id = {str(t.id): t for t in all_tasks}
-    other_proj_impacts = []
-    seen_combos = set()
-
-    # 1. Controlla per i worker della fase principale
-    for w in workers:
-        w_hours = worker_daily_hours.get(w, {})
-        c = start_d
-        while c <= end_d:
-            if not is_weekend_or_holiday(c):
-                entries = w_hours.get(c, [])
-                for e in entries:
-                    op_id = str(e.get("project_id"))
-                    if op_id != current_project_id:
-                        op_name = e.get("project_name") or "Altra Commessa"
-                        e_task_id = str(e.get("task_id"))
-                        combo_key = (w, op_id, e_task_id)
-                        if combo_key not in seen_combos:
-                            seen_combos.add(combo_key)
-                            booked_h = e.get("daily_hours", 0.0)
-                            tot_h = booked_h + needed_daily_h
-                            t_other = all_tasks_by_id.get(e_task_id)
-                            task_name = e.get("task_name") or (t_other.text if t_other else "Fase Commessa")
-                            t_start = t_other.start_date.isoformat() if t_other and t_other.start_date else None
-                            t_end = t_other.end_date.isoformat() if t_other and t_other.end_date else None
-
-                            if tot_h > MAX_DAILY_HOURS:
-                                other_proj_impacts.append({
-                                    "worker": w,
-                                    "status": "warning",
-                                    "project_id": op_id,
-                                    "project_name": op_name,
-                                    "task_id": e_task_id,
-                                    "task_name": task_name,
-                                    "task_start": t_start,
-                                    "task_end": t_end,
-                                    "daily_hours": round(booked_h, 1),
-                                    "peak_hours": round(tot_h, 1),
-                                    "message": f"Attenzione: Lo slittamento sovrappone {w} con la fase '{task_name}' della commessa '{op_name}' portando il carico a {round(tot_h, 1)}h/gg (>8h)."
-                                })
-                            else:
-                                other_proj_impacts.append({
-                                    "worker": w,
-                                    "status": "safe",
-                                    "project_id": op_id,
-                                    "project_name": op_name,
-                                    "task_id": e_task_id,
-                                    "task_name": task_name,
-                                    "task_start": t_start,
-                                    "task_end": t_end,
-                                    "daily_hours": round(booked_h, 1),
-                                    "peak_hours": round(tot_h, 1),
-                                    "message": f"{w} è impegnato anche sulla fase '{task_name}' di '{op_name}' ({round(booked_h, 1)}h/gg), ma la sovrapposizione rientra nella capienza massima (totale {round(tot_h, 1)}h/gg)."
-                                })
-            c += timedelta(days=1)
-
-    # 2. Controlla anche per i worker delle fasi a valle che slittano a catena
-    if downstream_tasks:
-        for dt in downstream_tasks:
-            dt_id = dt.get("task_id")
-            orig_task = next((t for t in all_tasks if str(t.id) == dt_id), None)
-            if orig_task:
-                dt_workers = parse_workers_list(orig_task.workers)
-                try:
-                    dt_start = date.fromisoformat(dt["proposed_start"])
-                    dt_end = date.fromisoformat(dt["proposed_end"])
-                except Exception:
-                    continue
-                dt_dur = get_working_days_count(dt_start, dt_end)
-                dt_needed_h = float(orig_task.planned_hours or 8.0) / max(1, len(dt_workers) * dt_dur)
-
-                for dw in dt_workers:
-                    dw_hours = worker_daily_hours.get(dw, {})
-                    cur = dt_start
-                    while cur <= dt_end:
-                        if not is_weekend_or_holiday(cur):
-                            entries = dw_hours.get(cur, [])
-                            for e in entries:
-                                op_id = str(e.get("project_id"))
-                                if op_id != current_project_id:
-                                    op_name = e.get("project_name") or "Altra Commessa"
-                                    e_task_id = str(e.get("task_id"))
-                                    combo_key = (dw, op_id, e_task_id)
-                                    if combo_key not in seen_combos:
-                                        seen_combos.add(combo_key)
-                                        booked_h = e.get("daily_hours", 0.0)
-                                        tot_h = booked_h + dt_needed_h
-                                        t_other = all_tasks_by_id.get(e_task_id)
-                                        task_name = e.get("task_name") or (t_other.text if t_other else "Fase Commessa")
-                                        t_start = t_other.start_date.isoformat() if t_other and t_other.start_date else None
-                                        t_end = t_other.end_date.isoformat() if t_other and t_other.end_date else None
-
-                                        if tot_h > MAX_DAILY_HOURS:
-                                            other_proj_impacts.append({
-                                                "worker": dw,
-                                                "status": "warning",
-                                                "project_id": op_id,
-                                                "project_name": op_name,
-                                                "task_id": e_task_id,
-                                                "task_name": task_name,
-                                                "task_start": t_start,
-                                                "task_end": t_end,
-                                                "daily_hours": round(booked_h, 1),
-                                                "peak_hours": round(tot_h, 1),
-                                                "source_task_name": orig_task.text,
-                                                "message": f"Cascata: {dw} sulla fase '{orig_task.text}' si sovrappone a '{task_name}' della commessa '{op_name}' portando il carico a {round(tot_h, 1)}h/gg (>8h)."
-                                            })
-                                        else:
-                                            other_proj_impacts.append({
-                                                "worker": dw,
-                                                "status": "safe",
-                                                "project_id": op_id,
-                                                "project_name": op_name,
-                                                "task_id": e_task_id,
-                                                "task_name": task_name,
-                                                "task_start": t_start,
-                                                "task_end": t_end,
-                                                "daily_hours": round(booked_h, 1),
-                                                "peak_hours": round(tot_h, 1),
-                                                "source_task_name": orig_task.text,
-                                                "message": f"Cascata: {dw} sulla fase '{orig_task.text}' ha capienza compatibile con '{task_name}' di '{op_name}'."
-                                            })
-                        cur += timedelta(days=1)
-
-    return other_proj_impacts
-
-
 def calculate_cascade_impact(
     task: Task,
     new_start_date: date,
@@ -444,7 +304,7 @@ def calculate_cascade_impact(
         visited = set()
     visited.add(str(task.id))
 
-    links_by_source = context["links_by_source"]
+    links_by_source = context.get("links_by_source", {})
     downstream_links = links_by_source.get(str(task.id), [])
     
     affected_successors = []
@@ -452,7 +312,7 @@ def calculate_cascade_impact(
     max_reach_date = new_end_date
 
     for link in downstream_links:
-        succ_task = link.target_task
+        succ_task = context.get("all_tasks_by_id", {}).get(str(link.target)) or link.target_task
         if not succ_task or str(succ_task.id) in visited:
             continue
         if succ_task.completed == 1:
@@ -512,6 +372,230 @@ def calculate_cascade_impact(
         "max_reach_date": str(max_reach_date),
         "exceeds_project_deadline": exceeds_deadline
     }
+
+
+def calculate_cross_project_correction(
+    t_other: Task,
+    conflict_worker: str,
+    conflict_end_date: date,
+    context: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Calcola la correzione a catena (slittamento e propagazione a valle) per una fase
+    di un'altra commessa impattata da un sovraccarico con un addetto condiviso.
+    """
+    op_id = str(t_other.project_id)
+    op_proj = context.get("active_projects", {}).get(op_id)
+    op_deadline = op_proj.end_date if op_proj else None
+    op_code = op_proj.code if op_proj and op_proj.code else ""
+    raw_op_name = op_proj.name if op_proj else "Altra Commessa"
+    display_op_name = f"[{op_code}] {raw_op_name}" if op_code else raw_op_name
+
+    t_start = t_other.start_date
+    t_end = t_other.end_date
+    duration = t_other.duration or max(1, get_working_days_count(t_start, t_end))
+
+    # La fase impattata slitta per iniziare al termine del conflitto sull'addetto
+    proposed_start = max(t_start, add_working_days(conflict_end_date, 1))
+    proposed_end = add_working_days(proposed_start, duration - 1)
+    shift_days = get_working_days_count(t_start, proposed_start) - 1
+
+    # Calcola l'effetto a cascata su tutte le fasi successive collegate in quella commessa
+    cascade_res = calculate_cascade_impact(t_other, proposed_start, proposed_end, op_deadline, context)
+    cascade_tasks = cascade_res.get("affected_successors", [])
+    exceeds_deadline = cascade_res.get("exceeds_project_deadline", False)
+    if op_deadline and proposed_end > op_deadline:
+        exceeds_deadline = True
+
+    # Sintesi leggibile della correzione
+    summary = f"Slittamento a catena al termine del picco: {proposed_start.strftime('%d/%m')} → {proposed_end.strftime('%d/%m')} (+{shift_days} gg)"
+    if cascade_tasks:
+        succ_names = ", ".join([f"'{s['task_name']}' (+{s['shift_working_days']} gg)" for s in cascade_tasks])
+        summary += f" con propagazione a cascata su: {succ_names}."
+    else:
+        summary += " senza ritardo su ulteriori fasi."
+
+    if exceeds_deadline:
+        summary += f" Attenzione: supera la scadenza di '{display_op_name}' ({op_deadline.strftime('%d/%m/%Y') if op_deadline else 'N.D.'})."
+    else:
+        summary += f" Rispetta la consegna di '{display_op_name}'."
+
+    return {
+        "task_id": str(t_other.id),
+        "task_name": t_other.text,
+        "project_id": op_id,
+        "project_name": raw_op_name,
+        "project_code": op_code,
+        "worker": conflict_worker,
+        "action": "shift",
+        "original_start": t_start.isoformat(),
+        "original_end": t_end.isoformat(),
+        "proposed_start": proposed_start.isoformat(),
+        "proposed_end": proposed_end.isoformat(),
+        "shift_working_days": shift_days,
+        "exceeds_deadline": exceeds_deadline,
+        "cascade_tasks": cascade_tasks,
+        "summary": summary
+    }
+
+
+def detect_cross_project_impact(
+    workers: List[str],
+    start_d: date,
+    end_d: date,
+    current_project_id: str,
+    context: Dict[str, Any],
+    needed_daily_h: float = 8.0,
+    downstream_tasks: Optional[List[Dict[str, Any]]] = None
+) -> List[Dict[str, Any]]:
+    """
+    Rileva se lo slittamento temporale o il riposizionamento impatta
+    i carichi degli addetti su ALTRE commesse attive contemporanee,
+    calcolando contestualmente la proposta di correzione a catena.
+    """
+    worker_daily_hours = context.get("worker_daily_hours", {})
+    all_tasks = context.get("all_tasks", [])
+    all_tasks_by_id = context.get("all_tasks_by_id", {str(t.id): t for t in all_tasks})
+    other_proj_impacts = []
+    seen_combos = set()
+
+    # 1. Controlla per i worker della fase principale
+    for w in workers:
+        w_hours = worker_daily_hours.get(w, {})
+        c = start_d
+        while c <= end_d:
+            if not is_weekend_or_holiday(c):
+                entries = w_hours.get(c, [])
+                for e in entries:
+                    op_id = str(e.get("project_id"))
+                    if op_id != current_project_id:
+                        op_proj = context.get("active_projects", {}).get(op_id)
+                        op_code = (op_proj.code if op_proj and op_proj.code else "") or e.get("project_code", "")
+                        raw_op_name = e.get("project_name") or (op_proj.name if op_proj else "Altra Commessa")
+                        display_op_name = f"[{op_code}] {raw_op_name}" if op_code else raw_op_name
+                        e_task_id = str(e.get("task_id"))
+                        combo_key = (w, op_id, e_task_id)
+                        if combo_key not in seen_combos:
+                            seen_combos.add(combo_key)
+                            booked_h = e.get("daily_hours", 0.0)
+                            tot_h = booked_h + needed_daily_h
+                            t_other = all_tasks_by_id.get(e_task_id)
+                            task_name = e.get("task_name") or (t_other.text if t_other else "Fase Commessa")
+                            t_start = t_other.start_date.isoformat() if t_other and t_other.start_date else None
+                            t_end = t_other.end_date.isoformat() if t_other and t_other.end_date else None
+
+                            if tot_h > MAX_DAILY_HOURS:
+                                corr = calculate_cross_project_correction(t_other, w, end_d, context) if (t_other and t_other.start_date and t_other.end_date) else None
+                                other_proj_impacts.append({
+                                    "worker": w,
+                                    "status": "warning",
+                                    "project_id": op_id,
+                                    "project_name": raw_op_name,
+                                    "project_code": op_code,
+                                    "task_id": e_task_id,
+                                    "task_name": task_name,
+                                    "task_start": t_start,
+                                    "task_end": t_end,
+                                    "daily_hours": round(booked_h, 1),
+                                    "peak_hours": round(tot_h, 1),
+                                    "message": f"Attenzione: Lo slittamento sovrappone {w} con la fase '{task_name}' della commessa '{display_op_name}' portando il carico a {round(tot_h, 1)}h/gg (>8h).",
+                                    "proposed_correction": corr
+                                })
+                            else:
+                                other_proj_impacts.append({
+                                    "worker": w,
+                                    "status": "safe",
+                                    "project_id": op_id,
+                                    "project_name": raw_op_name,
+                                    "project_code": op_code,
+                                    "task_id": e_task_id,
+                                    "task_name": task_name,
+                                    "task_start": t_start,
+                                    "task_end": t_end,
+                                    "daily_hours": round(booked_h, 1),
+                                    "peak_hours": round(tot_h, 1),
+                                    "message": f"{w} è impegnato anche sulla fase '{task_name}' di '{display_op_name}' ({round(booked_h, 1)}h/gg), ma la sovrapposizione rientra nella capienza massima (totale {round(tot_h, 1)}h/gg).",
+                                    "proposed_correction": None
+                                })
+            c += timedelta(days=1)
+
+    # 2. Controlla anche per i worker delle fasi a valle che slittano a catena
+    if downstream_tasks:
+        for dt in downstream_tasks:
+            dt_id = dt.get("task_id")
+            orig_task = next((t for t in all_tasks if str(t.id) == dt_id), None)
+            if orig_task:
+                dt_workers = parse_workers_list(orig_task.workers)
+                try:
+                    dt_start = date.fromisoformat(dt["proposed_start"])
+                    dt_end = date.fromisoformat(dt["proposed_end"])
+                except Exception:
+                    continue
+                dt_dur = get_working_days_count(dt_start, dt_end)
+                dt_needed_h = float(orig_task.planned_hours or 8.0) / max(1, len(dt_workers) * dt_dur)
+
+                for dw in dt_workers:
+                    dw_hours = worker_daily_hours.get(dw, {})
+                    cur = dt_start
+                    while cur <= dt_end:
+                        if not is_weekend_or_holiday(cur):
+                            entries = dw_hours.get(cur, [])
+                            for e in entries:
+                                op_id = str(e.get("project_id"))
+                                if op_id != current_project_id:
+                                    op_proj = context.get("active_projects", {}).get(op_id)
+                                    op_code = (op_proj.code if op_proj and op_proj.code else "") or e.get("project_code", "")
+                                    raw_op_name = e.get("project_name") or (op_proj.name if op_proj else "Altra Commessa")
+                                    display_op_name = f"[{op_code}] {raw_op_name}" if op_code else raw_op_name
+                                    e_task_id = str(e.get("task_id"))
+                                    combo_key = (dw, op_id, e_task_id)
+                                    if combo_key not in seen_combos:
+                                        seen_combos.add(combo_key)
+                                        booked_h = e.get("daily_hours", 0.0)
+                                        tot_h = booked_h + dt_needed_h
+                                        t_other = all_tasks_by_id.get(e_task_id)
+                                        task_name = e.get("task_name") or (t_other.text if t_other else "Fase Commessa")
+                                        t_start = t_other.start_date.isoformat() if t_other and t_other.start_date else None
+                                        t_end = t_other.end_date.isoformat() if t_other and t_other.end_date else None
+
+                                        if tot_h > MAX_DAILY_HOURS:
+                                            corr = calculate_cross_project_correction(t_other, dw, dt_end, context) if (t_other and t_other.start_date and t_other.end_date) else None
+                                            other_proj_impacts.append({
+                                                "worker": dw,
+                                                "status": "warning",
+                                                "project_id": op_id,
+                                                "project_name": raw_op_name,
+                                                "project_code": op_code,
+                                                "task_id": e_task_id,
+                                                "task_name": task_name,
+                                                "task_start": t_start,
+                                                "task_end": t_end,
+                                                "daily_hours": round(booked_h, 1),
+                                                "peak_hours": round(tot_h, 1),
+                                                "source_task_name": orig_task.text,
+                                                "message": f"Cascata: {dw} sulla fase '{orig_task.text}' si sovrappone a '{task_name}' della commessa '{display_op_name}' portando il carico a {round(tot_h, 1)}h/gg (>8h).",
+                                                "proposed_correction": corr
+                                            })
+                                        else:
+                                            other_proj_impacts.append({
+                                                "worker": dw,
+                                                "status": "safe",
+                                                "project_id": op_id,
+                                                "project_name": raw_op_name,
+                                                "project_code": op_code,
+                                                "task_id": e_task_id,
+                                                "task_name": task_name,
+                                                "task_start": t_start,
+                                                "task_end": t_end,
+                                                "daily_hours": round(booked_h, 1),
+                                                "peak_hours": round(tot_h, 1),
+                                                "source_task_name": orig_task.text,
+                                                "message": f"Cascata: {dw} sulla fase '{orig_task.text}' ha capienza compatibile con '{task_name}' di '{display_op_name}'.",
+                                                "proposed_correction": None
+                                            })
+                        cur += timedelta(days=1)
+
+    return other_proj_impacts
 
 
 async def generate_project_smart_suggestions(
@@ -1162,6 +1246,69 @@ async def apply_smart_replanning_proposal(
                     reverted=False
                 )
                 db.add(s_log)
+
+    # 5. Aggiorna le correzioni a catena su commesse correlate
+    related_corrections = proposal_payload.get("related_project_corrections", [])
+    for rel_corr in related_corrections:
+        r_id = rel_corr.get("task_id")
+        r_start_str = rel_corr.get("proposed_start")
+        r_end_str = rel_corr.get("proposed_end")
+        if r_id and r_start_str and r_end_str:
+            r_res = await db.execute(select(Task).where(Task.id == r_id))
+            r_task = r_res.scalar_one_or_none()
+            if r_task:
+                r_old_start = r_task.start_date
+                r_old_end = r_task.end_date
+                r_task.start_date = datetime.strptime(r_start_str[:10], "%Y-%m-%d").date()
+                r_task.end_date = datetime.strptime(r_end_str[:10], "%Y-%m-%d").date()
+                r_task.duration = get_working_days_count(r_task.start_date, r_task.end_date)
+
+                r_log = ReplanLog(
+                    id=str(uuid4()),
+                    action_type=ReplanActionType.SHIFT_CASCADE,
+                    task_id=r_task.id,
+                    project_id=r_task.project_id,
+                    worker_name=r_task.workers,
+                    reason=f"Correzione a catena da '{task.text}': {rel_corr.get('summary', '')}",
+                    old_start_date=r_old_start,
+                    old_end_date=r_old_end,
+                    new_start_date=r_task.start_date,
+                    new_end_date=r_task.end_date,
+                    shift_days=int(rel_corr.get("shift_working_days", 0)),
+                    reverted=False
+                )
+                db.add(r_log)
+
+                # Gestione eventuali sub-successori a cascata della commessa correlata
+                for sub_s in rel_corr.get("cascade_tasks", []):
+                    sub_id = sub_s.get("task_id")
+                    sub_start_s = sub_s.get("proposed_start")
+                    sub_end_s = sub_s.get("proposed_end")
+                    if sub_id and sub_start_s and sub_end_s:
+                        sub_res = await db.execute(select(Task).where(Task.id == sub_id))
+                        sub_t = sub_res.scalar_one_or_none()
+                        if sub_t:
+                            s_old_st = sub_t.start_date
+                            s_old_en = sub_t.end_date
+                            sub_t.start_date = datetime.strptime(sub_start_s[:10], "%Y-%m-%d").date()
+                            sub_t.end_date = datetime.strptime(sub_end_s[:10], "%Y-%m-%d").date()
+                            sub_t.duration = get_working_days_count(sub_t.start_date, sub_t.end_date)
+
+                            sub_l = ReplanLog(
+                                id=str(uuid4()),
+                                action_type=ReplanActionType.SHIFT_CASCADE,
+                                task_id=sub_t.id,
+                                project_id=sub_t.project_id,
+                                worker_name=sub_t.workers,
+                                reason=f"Slittamento a catena secondario su '{sub_t.text}'",
+                                old_start_date=s_old_st,
+                                old_end_date=s_old_en,
+                                new_start_date=sub_t.start_date,
+                                new_end_date=sub_t.end_date,
+                                shift_days=int(sub_s.get("shift_working_days", 0)),
+                                reverted=False
+                            )
+                            db.add(sub_l)
 
     await db.commit()
     await db.refresh(task)

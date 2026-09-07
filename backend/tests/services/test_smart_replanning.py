@@ -323,7 +323,32 @@ async def test_smart_replanning_cross_project_preview(db_session: AsyncSession, 
         worker_hours=json.dumps({"Worker Shared": 48.0}),
         completed=0
     )
-    db_session.add_all([t1, t2])
+    # Task successore collegato in Commessa 2
+    t3 = Task(
+        project_id=p2.id,
+        text="Montaggio Beta",
+        start_date=date(2026, 9, 15),
+        end_date=date(2026, 9, 22),
+        duration=6,
+        planned_hours=48.0,
+        workers=json.dumps(["Giovanni Prod"]),
+        worker_hours=json.dumps({"Giovanni Prod": 48.0}),
+        completed=0
+    )
+    db_session.add_all([t1, t2, t3])
+    await db_session.commit()
+    await db_session.refresh(t2)
+    await db_session.refresh(t3)
+
+    # Link FS da t2 a t3
+    link_beta = Link(
+        project_id=p2.id,
+        source=t2.id,
+        target=t3.id,
+        type=LinkType.FS,
+        lag=0
+    )
+    db_session.add(link_beta)
     await db_session.commit()
 
     # Genera suggerimenti per Commessa 1
@@ -333,7 +358,23 @@ async def test_smart_replanning_cross_project_preview(db_session: AsyncSession, 
 
     p2_data = result["related_projects"][str(p2.id)]
     assert p2_data["project_name"] == "Commessa Beta Impattata"
-    assert len(p2_data["tasks"]) == 1
-    assert p2_data["tasks"][0]["text"] == "Progettazione Beta"
-    assert p2_data["tasks"][0]["workers"] == ["Worker Shared"]
+    assert len(p2_data["tasks"]) == 2
+
+    # Verifica che la proposta contenga la correzione a catena calcolata
+    sugg = result["suggestions"][0]
+    other_impacts = sugg["cascade_impact"]["other_projects"]
+    assert len(other_impacts) >= 1
+    impact = other_impacts[0]
+    assert impact["status"] == "warning"
+    assert impact["proposed_correction"] is not None
+
+    corr = impact["proposed_correction"]
+    assert corr["task_id"] == str(t2.id)
+    assert corr["task_name"] == "Progettazione Beta"
+    assert corr["shift_working_days"] > 0
+    assert "Slittamento a catena" in corr["summary"]
+    # Verifica propagazione a cascata su t3 (Montaggio Beta)
+    assert len(corr["cascade_tasks"]) >= 1
+    assert corr["cascade_tasks"][0]["task_name"] == "Montaggio Beta"
+
 

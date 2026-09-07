@@ -8,7 +8,8 @@ import {
   Eye,
   ZoomIn,
   ZoomOut,
-  Calendar
+  Calendar,
+  Sparkles
 } from 'lucide-react';
 
 const parseDateSafe = (d) => {
@@ -57,6 +58,15 @@ const isAlternativeOption = (sugg) => {
   if (sugg.title && String(sugg.title).toLowerCase().includes('opzione alternativa')) return true;
   if (String(sugg.id).startsWith('vac_reassign_alt_')) return true;
   return false;
+};
+
+// Funzione helper per formattare il codice prima del titolo della commessa
+const formatProjectTitleWithCode = (name, code) => {
+  const cleanName = name || 'Commessa';
+  if (code) {
+    return `[${code}] ${cleanName}`;
+  }
+  return cleanName;
 };
 
 export default function ReplanningGanttPreview({
@@ -119,7 +129,7 @@ export default function ReplanningGanttPreview({
         const pId = String(op.project_id);
         const relData = relatedProjects[pId] || {};
         const pName = op.project_name || relData.project_name || 'Altra Commessa';
-        const pCode = relData.project_code || '';
+        const pCode = op.project_code || relData.project_code || '';
 
         if (!projMap.has(pId)) {
           projMap.set(pId, {
@@ -220,10 +230,45 @@ export default function ReplanningGanttPreview({
     });
   }, [tasks, activeSuggestion, primaryCombinedSuggestions]);
 
-  // Calcolo dei task per commessa correlata (quando attiva)
+  // Calcolo dei task per commessa correlata (quando attiva) con simulazione correzioni a catena
   const relatedSimulatedTasks = useMemo(() => {
     if (!isViewingRelated || !activeRelatedProject) return [];
     const impacts = activeRelatedProject.impacts || [];
+
+    // 1. Mappe per correzioni dirette e a cascata per questa commessa correlata
+    const directCorrectionMap = new Map();
+    const cascadeCorrectionMap = new Map();
+
+    const addCascadeTasks = (cascadeList, parentCorr, parentImpact) => {
+      if (!cascadeList || !Array.isArray(cascadeList)) return;
+      cascadeList.forEach((cItem) => {
+        if (cItem.task_id) {
+          cascadeCorrectionMap.set(String(cItem.task_id), {
+            cascadeItem: cItem,
+            parentCorr,
+            parentImpact
+          });
+        }
+        if (cItem.sub_successors && Array.isArray(cItem.sub_successors)) {
+          addCascadeTasks(cItem.sub_successors, parentCorr, parentImpact);
+        }
+      });
+    };
+
+    impacts.forEach((imp) => {
+      if (imp.proposed_correction) {
+        const corr = imp.proposed_correction;
+        const cTaskId = String(corr.task_id || imp.task_id);
+        directCorrectionMap.set(cTaskId, {
+          corr,
+          impact: imp
+        });
+
+        if (corr.cascade_tasks && Array.isArray(corr.cascade_tasks)) {
+          addCascadeTasks(corr.cascade_tasks, corr, imp);
+        }
+      }
+    });
 
     return (activeRelatedProject.tasks || []).map((t) => {
       const origStart = parseDateSafe(t.start_date);
@@ -231,17 +276,45 @@ export default function ReplanningGanttPreview({
       const origWorkers = parseWorkers(t.workers);
       const tId = String(t.id);
 
-      // Trova impatto corrispondente
+      // Trova impatto warning originario (se presente)
       const impact = impacts.find(
         (imp) => String(imp.task_id) === tId || (imp.task_name && imp.task_name.toLowerCase() === (t.text || '').toLowerCase())
       );
 
+      const directCorr = directCorrectionMap.get(tId);
+      const cascadeCorr = cascadeCorrectionMap.get(tId);
+
       let status = 'unchanged';
+      let simStart = origStart;
+      let simEnd = origEnd;
+      let shiftDays = 0;
+      let isDirect = false;
+      let isCascade = false;
       let peakHours = null;
       let impactedWorker = null;
       let impactMessage = null;
+      let changes = null;
+      let cascadeInfo = null;
 
-      if (impact) {
+      if (directCorr) {
+        isDirect = true;
+        status = 'direct';
+        simStart = parseDateSafe(directCorr.corr.proposed_start) || origStart;
+        simEnd = parseDateSafe(directCorr.corr.proposed_end) || simStart;
+        shiftDays = directCorr.corr.shift_working_days || 0;
+        peakHours = directCorr.impact.peak_hours;
+        impactedWorker = directCorr.impact.worker;
+        impactMessage = directCorr.corr.summary || directCorr.impact.message;
+        changes = directCorr.corr;
+      } else if (cascadeCorr) {
+        isCascade = true;
+        status = 'cascade';
+        simStart = parseDateSafe(cascadeCorr.cascadeItem.proposed_start) || origStart;
+        simEnd = parseDateSafe(cascadeCorr.cascadeItem.proposed_end) || simStart;
+        shiftDays = cascadeCorr.cascadeItem.shift_working_days || 0;
+        cascadeInfo = cascadeCorr.cascadeItem;
+        impactMessage = `Slittamento a cascata a catena (+${shiftDays} gg)`;
+      } else if (impact) {
         status = impact.status === 'warning' ? 'warning' : 'safe';
         peakHours = impact.peak_hours;
         impactedWorker = impact.worker;
@@ -262,19 +335,19 @@ export default function ReplanningGanttPreview({
         origStart,
         origEnd,
         origWorkers,
-        simStart: origStart,
-        simEnd: origEnd,
+        simStart,
+        simEnd,
         simWorkers: origWorkers,
         status,
-        shiftDays: 0,
+        shiftDays,
         peakHours,
         impactedWorker,
         impactMessage,
-        isCascade: false,
-        isDirect: false,
-        isRelatedImpact: status === 'warning',
-        changes: null,
-        cascadeInfo: null,
+        isCascade,
+        isDirect,
+        isRelatedImpact: !isDirect && !isCascade && status === 'warning',
+        changes,
+        cascadeInfo,
         duration: t.duration,
         progress: t.progress
       };
@@ -443,14 +516,24 @@ export default function ReplanningGanttPreview({
   // Filtraggio task visualizzati
   const displayedTasks = useMemo(() => {
     if (showOnlyImpacted) {
-      return activeProjectTasks.filter((t) => t.status !== 'unchanged');
+      return activeProjectTasks.filter(
+        (t) => t.status !== 'unchanged' || t.isDirect || t.isCascade || t.isRelatedImpact
+      );
     }
     return activeProjectTasks;
   }, [activeProjectTasks, showOnlyImpacted]);
 
-  const directCount = simulatedTasks.filter((t) => t.status === 'direct').length;
-  const cascadeCount = simulatedTasks.filter((t) => t.status === 'cascade').length;
-  const relatedImpactCount = relatedSimulatedTasks.filter((t) => t.isRelatedImpact).length;
+  const directCount = useMemo(() => {
+    return activeProjectTasks.filter((t) => t.status === 'direct' || t.isDirect).length;
+  }, [activeProjectTasks]);
+
+  const cascadeCount = useMemo(() => {
+    return activeProjectTasks.filter((t) => t.status === 'cascade' || t.isCascade).length;
+  }, [activeProjectTasks]);
+
+  const relatedImpactCount = useMemo(() => {
+    return relatedSimulatedTasks.filter((t) => t.isDirect || t.isCascade || t.isRelatedImpact).length;
+  }, [relatedSimulatedTasks]);
   const totalTimelineWidth = totalDays * dayWidth;
 
   return (
@@ -741,7 +824,7 @@ export default function ReplanningGanttPreview({
               }}
             >
               <Layers size={14} color={effectiveActiveProjectId === 'main' ? '#2563eb' : '#64748b'} />
-              <span>{projectName || 'Commessa Principale'}</span>
+              <span>{formatProjectTitleWithCode(projectName || 'Commessa Principale', projectCode)}</span>
               <span
                 style={{
                   fontSize: 10,
@@ -771,29 +854,29 @@ export default function ReplanningGanttPreview({
                     gap: 6,
                     padding: '6px 14px',
                     borderRadius: '8px',
-                    border: isActive ? '2px solid #f59e0b' : '1px solid #fcd34d',
-                    background: isActive ? '#fffbeb' : '#ffffff',
-                    color: isActive ? '#92400e' : '#78350f',
+                    border: isActive ? '2px solid #7c3aed' : '1px solid #ddd6fe',
+                    background: isActive ? '#f5f3ff' : '#ffffff',
+                    color: isActive ? '#5b21b6' : '#6d28d9',
                     fontWeight: isActive ? 700 : 500,
                     fontSize: 12,
                     cursor: 'pointer',
-                    boxShadow: isActive ? '0 2px 5px rgba(245, 158, 11, 0.2)' : 'none',
+                    boxShadow: isActive ? '0 2px 5px rgba(124, 58, 237, 0.15)' : 'none',
                     transition: 'all 0.15s ease'
                   }}
                 >
-                  <AlertTriangle size={14} color="#d97706" />
-                  <span>{relProj.project_name}</span>
+                  <Sparkles size={14} color={isActive ? '#7c3aed' : '#8b5cf6'} />
+                  <span>{formatProjectTitleWithCode(relProj.project_name, relProj.project_code)}</span>
                   <span
                     style={{
                       fontSize: 10,
                       padding: '1px 6px',
                       borderRadius: '10px',
-                      background: warningCount > 0 ? '#f59e0b' : '#10b981',
+                      background: warningCount > 0 ? '#7c3aed' : '#10b981',
                       color: '#ffffff',
                       fontWeight: 700
                     }}
                   >
-                    {warningCount > 0 ? `${warningCount} impattat${warningCount === 1 ? 'a' : 'e'}` : 'Correlata'}
+                    {warningCount > 0 ? `${warningCount} con correzione` : 'Correlata'}
                   </span>
                 </button>
               );
@@ -809,26 +892,26 @@ export default function ReplanningGanttPreview({
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '10px 24px',
-              background: '#fffbeb',
-              borderBottom: '1px solid #fde68a',
-              color: '#92400e',
+              background: '#f5f3ff',
+              borderBottom: '1px solid #ddd6fe',
+              color: '#5b21b6',
               fontSize: 12,
               gap: 12
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <AlertTriangle size={16} color="#d97706" style={{ flexShrink: 0 }} />
+              <Sparkles size={16} color="#7c3aed" style={{ flexShrink: 0 }} />
               <span>
-                Stai visualizzando l'anteprima della commessa correlata <strong>'{activeRelatedProject.project_name}'</strong>. Le fasi evidenziate presentano sovrapposizioni orarie (&gt;8h/giorno) causate dalla riprogrammazione di <strong>{projectName || 'Commessa Principale'}</strong>.
+                Stai visualizzando l'anteprima della commessa correlata <strong>'{formatProjectTitleWithCode(activeRelatedProject.project_name, activeRelatedProject.project_code)}'</strong> con la <strong>simulazione delle correzioni a catena</strong> (stato originale tratteggiato e nuovo posizionamento) per riassorbire le sovrapposizioni orarie (&gt;8h/giorno) causate da <strong>{formatProjectTitleWithCode(projectName || 'Commessa Principale', projectCode)}</strong>.
               </span>
             </div>
             <button
               type="button"
               onClick={() => setActiveProjectId('main')}
               style={{
-                border: '1px solid #f59e0b',
+                border: '1px solid #7c3aed',
                 background: '#ffffff',
-                color: '#b45309',
+                color: '#6d28d9',
                 padding: '4px 12px',
                 borderRadius: '6px',
                 fontSize: 11,
@@ -838,7 +921,7 @@ export default function ReplanningGanttPreview({
                 boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
               }}
             >
-              ← Torna a {projectName || 'Commessa Principale'}
+              ← Torna a {formatProjectTitleWithCode(projectName || 'Commessa Principale', projectCode)}
             </button>
           </div>
         )}
@@ -861,10 +944,17 @@ export default function ReplanningGanttPreview({
             {isViewingRelated ? (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <AlertTriangle size={15} color="#d97706" />
-                  <span style={{ color: '#475569' }}>Fasi in Sovraccarico:</span>
-                  <strong style={{ color: '#b45309' }}>{relatedImpactCount}</strong>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#7c3aed' }} />
+                  <span style={{ color: '#475569' }}>Correzioni a Catena:</span>
+                  <strong style={{ color: '#6d28d9' }}>{directCount}</strong>
                 </div>
+                {cascadeCount > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b' }} />
+                    <span style={{ color: '#475569' }}>Cascata Correlata:</span>
+                    <strong style={{ color: '#b45309' }}>{cascadeCount}</strong>
+                  </div>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ color: '#64748b' }}>Totale Fasi Commessa:</span>
                   <strong style={{ color: '#0f172a' }}>{activeProjectTasks.length}</strong>
@@ -1048,7 +1138,7 @@ export default function ReplanningGanttPreview({
                             whiteSpace: 'nowrap'
                           }}
                         >
-                          Modifica
+                          {isViewingRelated ? 'Correzione' : 'Modifica'}
                         </span>
                       )}
                       {isCascade && (
@@ -1066,15 +1156,15 @@ export default function ReplanningGanttPreview({
                           Cascata
                         </span>
                       )}
-                      {task.isRelatedImpact && (
+                      {task.isRelatedImpact && !isModified && (
                         <span
                           style={{
                             fontSize: 9,
                             fontWeight: 700,
                             padding: '1px 6px',
                             borderRadius: '4px',
-                            background: '#fef3c7',
-                            color: '#b45309',
+                            background: '#fee2e2',
+                            color: '#b91c1c',
                             whiteSpace: 'nowrap'
                           }}
                         >
@@ -1403,7 +1493,9 @@ export default function ReplanningGanttPreview({
                               height: '24px',
                               borderRadius: '5px',
                               background: isDirect
-                                ? 'linear-gradient(90deg, #6366f1, #4f46e5)'
+                                ? isViewingRelated
+                                  ? 'linear-gradient(90deg, #7c3aed, #6366f1)'
+                                  : 'linear-gradient(90deg, #6366f1, #4f46e5)'
                                 : 'linear-gradient(90deg, #f59e0b, #d97706)',
                               boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
                               display: 'flex',
@@ -1417,7 +1509,7 @@ export default function ReplanningGanttPreview({
                               overflow: 'hidden',
                               whiteSpace: 'nowrap'
                             }}
-                            title={`Nuovo Stato Proposto: ${formatDateIt(task.simStart)} → ${formatDateIt(task.simEnd)} (${task.simWorkers.join(', ')})`}
+                            title={task.impactMessage ? `${task.impactMessage} | Nuovo Stato: ${formatDateIt(task.simStart)} → ${formatDateIt(task.simEnd)}` : `Nuovo Stato Proposto: ${formatDateIt(task.simStart)} → ${formatDateIt(task.simEnd)} (${task.simWorkers.join(', ')})`}
                           >
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {task.text}
@@ -1465,7 +1557,7 @@ export default function ReplanningGanttPreview({
                             overflow: 'hidden',
                             whiteSpace: 'nowrap'
                           }}
-                          title={task.impactMessage || `Sovraccarico: ${task.peakHours}h/gg con ${projectName || 'Commessa Principale'}`}
+                          title={task.impactMessage || `Sovraccarico: ${task.peakHours}h/gg con ${formatProjectTitleWithCode(projectName || 'Commessa Principale', projectCode)}`}
                         >
                           <span style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             <AlertTriangle size={12} color="#ffffff" />
@@ -1547,8 +1639,16 @@ export default function ReplanningGanttPreview({
             {isViewingRelated ? (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ width: 14, height: 14, borderRadius: 3, background: 'linear-gradient(90deg, #f59e0b, #d97706)', border: '1px solid #b45309' }} />
-                  <span style={{ color: '#92400e', fontWeight: 700 }}>Fase in Sovraccarico (&gt;8h/gg)</span>
+                  <span style={{ width: 14, height: 14, borderRadius: 3, background: 'linear-gradient(90deg, #7c3aed, #6366f1)' }} />
+                  <span style={{ color: '#5b21b6', fontWeight: 700 }}>Correzione a Catena (+X gg)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 14, height: 14, borderRadius: 3, background: 'linear-gradient(90deg, #f59e0b, #d97706)' }} />
+                  <span style={{ color: '#92400e', fontWeight: 600 }}>Cascata Correlata</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 14, height: 14, borderRadius: 3, border: '1px dashed #94a3b8', background: 'rgba(226, 232, 240, 0.8)' }} />
+                  <span style={{ color: '#64748b' }}>Stato Originale (Ghost)</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ width: 14, height: 14, borderRadius: 3, background: 'linear-gradient(90deg, #3b82f6, #2563eb)' }} />

@@ -70,11 +70,16 @@ export default function SmartReplanningSection({
 
     setApplyingId(suggestion.id);
     try {
+      const relatedCorrections = (suggestion.cascade_impact?.other_projects || [])
+        .filter((op) => op.proposed_correction)
+        .map((op) => op.proposed_correction);
+
       const payload = {
         proposal_payload: {
           ...suggestion.proposed_changes,
           reason: suggestion.action_label || suggestion.title,
-          cascade_successors: suggestion.cascade_impact?.same_project_tasks || []
+          cascade_successors: suggestion.cascade_impact?.same_project_tasks || [],
+          related_project_corrections: relatedCorrections
         }
       };
 
@@ -472,15 +477,36 @@ export default function SmartReplanningSection({
                           )}
                         </div>
 
-                        {/* Altre commesse */}
+                        {/* Altre commesse e correzioni a catena */}
                         {item.cascade_impact.other_projects && item.cascade_impact.other_projects.length > 0 && (
-                          <div style={{ marginBottom: 4 }}>
-                            • <strong>Impatto su altre commesse attive:</strong>{' '}
-                            {item.cascade_impact.other_projects.map((op, opIdx) => (
-                              <span key={opIdx} style={{ color: op.status === 'relieved' || op.status === 'safe' ? '#059669' : '#b45309' }}>
-                                {op.message}{' '}
-                              </span>
-                            ))}
+                          <div style={{ marginBottom: 6 }}>
+                            <div style={{ fontWeight: 600, color: '#334155', marginBottom: 2 }}>
+                              • <strong>Impatto su altre commesse attive e correzioni a catena:</strong>
+                            </div>
+                            <div style={{ paddingLeft: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              {item.cascade_impact.other_projects.map((op, opIdx) => (
+                                <div key={opIdx} style={{ fontSize: 11 }}>
+                                  <span style={{ color: op.status === 'relieved' || op.status === 'safe' ? '#059669' : '#b45309' }}>
+                                    {op.message}
+                                  </span>
+                                  {op.proposed_correction && (
+                                    <div
+                                      style={{
+                                        marginTop: 3,
+                                        padding: '4px 8px',
+                                        borderRadius: '4px',
+                                        backgroundColor: '#f5f3ff',
+                                        border: '1px solid #ddd6fe',
+                                        color: '#5b21b6',
+                                        fontWeight: 500
+                                      }}
+                                    >
+                                      <strong>↪ Correzione a catena:</strong> {op.proposed_correction.summary}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
 
@@ -630,6 +656,22 @@ export default function SmartReplanningSection({
                           ↳ <strong>{st.task_name}</strong>: {st.proposed_start ? new Date(st.proposed_start).toLocaleDateString('it-IT') : '-'} → {st.proposed_end ? new Date(st.proposed_end).toLocaleDateString('it-IT') : '-'}
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+                {confirmModalSuggestion.cascade_impact?.other_projects?.some((op) => op.proposed_correction) && (
+                  <div style={{ marginTop: 8, color: '#6d28d9' }}>
+                    • Correzioni a catena su altre commesse:
+                    <div style={{ marginTop: 4, marginLeft: 10, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      {confirmModalSuggestion.cascade_impact.other_projects
+                        .filter((op) => op.proposed_correction)
+                        .map((op, i) => (
+                          <div key={i} style={{ fontSize: 11, color: '#4c1d95' }}>
+                            ↳ <strong>{op.proposed_correction.task_name}</strong> ({op.project_code || op.proposed_correction?.project_code ? `[${op.project_code || op.proposed_correction?.project_code}] ` : ''}{op.project_name}):{' '}
+                            {op.proposed_correction.proposed_start ? new Date(op.proposed_correction.proposed_start).toLocaleDateString('it-IT') : '-'} → {op.proposed_correction.proposed_end ? new Date(op.proposed_correction.proposed_end).toLocaleDateString('it-IT') : '-'}{' '}
+                            (+{op.proposed_correction.shift_working_days} gg)
+                          </div>
+                        ))}
                     </div>
                   </div>
                 )}
