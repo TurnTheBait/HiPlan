@@ -30,12 +30,6 @@ if defined ESC (
     set "C_GRAY="
 )
 
-rem Barre di avanzamento testuali
-set "BAR_0=[░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   0%%"
-set "BAR_33=[██████████░░░░░░░░░░░░░░░░░░░░]  33%%"
-set "BAR_66=[████████████████████░░░░░░░░░░]  66%%"
-set "BAR_100=[██████████████████████████████] 100%%"
-
 rem Evita che una variabile DEBUG globale sovrascriva backend\.env.
 set "DEBUG="
 
@@ -64,13 +58,13 @@ goto parse_args
 
 :args_done
 echo.
-echo !C_CYAN!╔══════════════════════════════════════════════════════════════════╗!C_RESET!
-echo !C_CYAN!║!C_BOLD!!C_WHITE!                    H I P L A N  -  S E T U P                     !C_RESET!!C_CYAN!║!C_RESET!
-echo !C_CYAN!║!C_GRAY!          Installazione Iniziale & Preparazione Ambiente          !C_RESET!!C_CYAN!║!C_RESET!
-echo !C_CYAN!╚══════════════════════════════════════════════════════════════════╝!C_RESET!
+echo !C_CYAN!╭──────────────────────────────────────────────────────────────────╮!C_RESET!
+echo !C_CYAN!│!C_RESET!  !C_BOLD!!C_WHITE!⚙  H I P L A N  ·  C O N F I G U R A Z I O N E                  !C_RESET!!C_CYAN!│!C_RESET!
+echo !C_CYAN!│!C_RESET!     !C_GRAY!Installazione Iniziale & Preparazione Ambiente               !C_RESET!!C_CYAN!│!C_RESET!
+echo !C_CYAN!╰──────────────────────────────────────────────────────────────────╯!C_RESET!
 echo.
 
-echo !C_BOLD!─── Verifica Prerequisiti di Sistema ─────────────────────────────!C_RESET!
+echo !C_BOLD!─── [ 1/4 ] Verifica Prerequisiti ─────────────────────────────────!C_RESET!
 
 where py >nul 2>&1
 if not errorlevel 1 (
@@ -97,7 +91,6 @@ if errorlevel 1 (
 )
 
 for /f "usebackq delims=" %%v in (`%PYTHON_CMD% --version 2^>^&1`) do set "PY_VER=%%v"
-echo !C_GREEN![✔]!C_RESET! !PY_VER! trovato.
 
 where node >nul 2>&1
 if errorlevel 1 (
@@ -110,10 +103,13 @@ if errorlevel 1 (
 
 where npm.cmd >nul 2>&1
 if errorlevel 1 (
-    set "FAILED_STEP=Verifica npm"
-    set "FAILED_CMD=where npm.cmd"
-    echo [ERRORE] Gestore pacchetti npm non trovato nel sistema. > "%TEMP_LOG%"
-    goto step_error
+    where npm >nul 2>&1
+    if errorlevel 1 (
+        set "FAILED_STEP=Verifica npm"
+        set "FAILED_CMD=where npm"
+        echo [ERRORE] Gestore pacchetti npm non trovato nel sistema. > "%TEMP_LOG%"
+        goto step_error
+    )
 )
 
 for /f "usebackq delims=" %%v in (`node --version 2^>^&1`) do set "NODE_VER=%%v"
@@ -124,8 +120,6 @@ if errorlevel 1 (
     echo [ERRORE] E' richiesto Node.js 20.x o successivo. Versione attuale: !NODE_VER! > "%TEMP_LOG%"
     goto step_error
 )
-echo !C_GREEN![✔]!C_RESET! Node.js !NODE_VER! trovato.
-echo !C_GREEN![✔]!C_RESET! npm package manager disponibile.
 
 if not exist "backend\.env" (
     copy /Y "backend\.env.example" "backend\.env" >nul 2>&1
@@ -135,14 +129,13 @@ if not exist "backend\.env" (
         echo [ERRORE] Impossibile creare backend\.env da .env.example. > "%TEMP_LOG%"
         goto step_error
     )
-    echo !C_GREEN![✔]!C_RESET! File di configurazione backend\.env generato da .env.example.
-) else (
-    echo !C_GREEN![✔]!C_RESET! File di configurazione backend\.env presente.
 )
 
+call :draw_bar 15 done "Prerequisiti !PY_VER! e Node.js !NODE_VER! verificati"
+
 echo.
-echo !C_BOLD!─── [ 1/3 ] Preparazione Ambiente Python ──────────────────────────!C_RESET!
-echo        !C_CYAN!!BAR_33!!C_RESET!  !C_GRAY!Configurazione venv e pip...!C_RESET!
+echo !C_BOLD!─── [ 2/4 ] Preparazione Ambiente Python ──────────────────────────!C_RESET!
+call :draw_bar 25 run "Creazione virtualenv ed installazione wheel/pip..."
 
 if not exist "backend\venv\Scripts\python.exe" (
     echo [INFO] Creazione venv in corso... >> "%SETUP_LOG%"
@@ -154,40 +147,45 @@ if not exist "backend\venv\Scripts\python.exe" (
     )
 )
 
-echo [INFO] Aggiornamento pip e wheel... >> "%SETUP_LOG%"
 "backend\venv\Scripts\python.exe" -m pip install --upgrade pip setuptools wheel > "%TEMP_LOG%" 2>&1
 if errorlevel 1 (
     set "FAILED_STEP=Aggiornamento pip / wheel"
     set "FAILED_CMD=pip install --upgrade pip setuptools wheel"
     goto step_error
 )
+call :draw_bar 35 done "Virtualenv Python configurato e pip aggiornato"
 
-echo [INFO] Installazione backend\requirements.txt... >> "%SETUP_LOG%"
+call :draw_bar 40 run "Installazione librerie da backend\requirements.txt..."
 "backend\venv\Scripts\python.exe" -m pip install -r "backend\requirements.txt" > "%TEMP_LOG%" 2>&1
 if errorlevel 1 (
     set "FAILED_STEP=Installazione librerie Python (requirements.txt)"
     set "FAILED_CMD=pip install -r backend\requirements.txt"
     goto step_error
 )
-echo        !C_GREEN![✔] Ambiente Python configurato con successo.!C_RESET!
+call :draw_bar 55 done "Dipendenze Python installate con successo"
 
 echo.
-echo !C_BOLD!─── [ 2/3 ] Installazione Dipendenze Frontend ──────────────────────!C_RESET!
-echo        !C_CYAN!!BAR_66!!C_RESET!  !C_GRAY!Installazione pacchetti npm (npm ci)...!C_RESET!
+echo !C_BOLD!─── [ 3/4 ] Installazione Dipendenze Frontend ──────────────────────!C_RESET!
+call :draw_bar 60 run "Installazione pacchetti npm..."
+
 pushd "frontend"
 call npm ci --prefer-offline --no-audit --no-fund > "%TEMP_LOG%" 2>&1
 if errorlevel 1 (
+    echo        !C_YELLOW![!] 'npm ci' non riuscito, ritento con 'npm install'...!C_RESET!
+    call npm install --prefer-offline --no-audit --no-fund > "%TEMP_LOG%" 2>&1
+)
+if errorlevel 1 (
     popd
-    set "FAILED_STEP=Installazione pacchetti npm (npm ci)"
-    set "FAILED_CMD=cd frontend && npm ci"
+    set "FAILED_STEP=Installazione pacchetti npm (npm ci / npm install)"
+    set "FAILED_CMD=cd frontend && npm install"
     goto step_error
 )
 popd
-echo        !C_GREEN![✔] Dipendenze frontend installate con successo.!C_RESET!
+call :draw_bar 75 done "Dipendenze frontend installate con successo"
 
 echo.
-echo !C_BOLD!─── [ 3/3 ] Verifica e Compilazione ────────────────────────────────!C_RESET!
-echo        !C_CYAN!!BAR_100!!C_RESET!  !C_GRAY!Verifica import FastAPI e build Vite...!C_RESET!
+echo !C_BOLD!─── [ 4/4 ] Verifica Integrita' & Compilazione ────────────────────!C_RESET!
+call :draw_bar 80 run "Verifica import backend FastAPI..."
 
 pushd "backend"
 "venv\Scripts\python.exe" -c "import app.main" > "%TEMP_LOG%" 2>&1
@@ -198,7 +196,9 @@ if errorlevel 1 (
     goto step_error
 )
 popd
+call :draw_bar 88 done "Backend FastAPI verificato con successo"
 
+call :draw_bar 90 run "Compilazione bundle frontend (npm run build)..."
 pushd "frontend"
 call npm run build > "%TEMP_LOG%" 2>&1
 if errorlevel 1 (
@@ -208,11 +208,12 @@ if errorlevel 1 (
     goto step_error
 )
 popd
-echo        !C_GREEN![✔] Moduli verificati e frontend compilato.!C_RESET!
+call :draw_bar 95 done "Frontend Vite compilato con successo"
 
 if "%RUN_SEED%"=="1" (
     echo.
-    echo !C_BOLD!─── [EXTRA] Inserimento Dati Dimostrativi ─────────────────────────────!C_RESET!
+    echo !C_BOLD!─── [EXTRA] Inserimento Dati Dimostrativi ─────────────────────────!C_RESET!
+    call :draw_bar 96 run "Esecuzione seed.py..."
     pushd "backend"
     "venv\Scripts\python.exe" seed.py > "%TEMP_LOG%" 2>&1
     if errorlevel 1 (
@@ -222,8 +223,10 @@ if "%RUN_SEED%"=="1" (
         goto step_error
     )
     popd
-    echo        !C_GREEN![✔] Dati dimostrativi inseriti con successo.!C_RESET!
+    call :draw_bar 99 done "Database popolato con dati dimostrativi"
 )
+
+call :draw_bar 100 done "Tutti i componenti installati e verificati!"
 
 if exist "%TEMP_LOG%" (
     type "%TEMP_LOG%" >> "%SETUP_LOG%"
@@ -231,25 +234,25 @@ if exist "%TEMP_LOG%" (
 )
 
 echo.
-echo !C_GREEN!╔══════════════════════════════════════════════════════════════════╗!C_RESET!
-echo !C_GREEN!║!C_BOLD!!C_WHITE!              CONFIGURAZIONE COMPLETATA CON SUCCESSO              !C_RESET!!C_GREEN!║!C_RESET!
-echo !C_GREEN!╚══════════════════════════════════════════════════════════════════╝!C_RESET!
+echo !C_GREEN!╭──────────────────────────────────────────────────────────────────╮!C_RESET!
+echo !C_GREEN!│!C_RESET!  !C_BOLD!!C_WHITE!✔  CONFIGURAZIONE COMPLETATA CON SUCCESSO                       !C_RESET!!C_GREEN!│!C_RESET!
+echo !C_GREEN!╰──────────────────────────────────────────────────────────────────╯!C_RESET!
 echo.
-echo !C_BOLD!  Prossimi passi:!C_RESET!
+echo !C_BOLD!  Prossimi Passi:!C_RESET!
 echo     !C_GREEN!➜!C_RESET!  Avvia subito il server eseguendo:
 echo        !C_CYAN!!C_BOLD!start_windows.bat!C_RESET!
 echo.
-echo     !C_GRAY!•  File impostazioni e configurazioni: backend\.env!C_RESET!
-echo     !C_GRAY!•  Log completo salvato in: logs\setup.log!C_RESET!
+echo     !C_GRAY!·  File impostazioni e variabili: backend\.env!C_RESET!
+echo     !C_GRAY!·  Log completo dell'installazione: logs\setup.log!C_RESET!
 echo.
 if "%NO_PAUSE%"=="0" pause
 exit /b 0
 
 :step_error
 echo.
-echo !C_RED!╔══════════════════════════════════════════════════════════════════╗!C_RESET!
-echo !C_RED!║!C_BOLD!!C_WHITE!                   ERRORE DURANTE L'ESECUZIONE                    !C_RESET!!C_RED!║!C_RESET!
-echo !C_RED!╚══════════════════════════════════════════════════════════════════╝!C_RESET!
+echo !C_RED!╭──────────────────────────────────────────────────────────────────╮!C_RESET!
+echo !C_RED!│!C_RESET!  !C_BOLD!!C_WHITE!✖  ERRORE DURANTE LA CONFIGURAZIONE                             !C_RESET!!C_RED!│!C_RESET!
+echo !C_RED!╰──────────────────────────────────────────────────────────────────╯!C_RESET!
 echo.
 echo   !C_BOLD!Fase fallita:!C_RESET! !C_YELLOW!!FAILED_STEP!!C_RESET!
 echo   !C_BOLD!Comando:!C_RESET!      !C_GRAY!!FAILED_CMD!!C_RESET!
@@ -268,3 +271,33 @@ echo   !C_BOLD!Log completo disponibile in:!C_RESET! !C_CYAN!logs\setup.log!C_RE
 echo.
 if "%NO_PAUSE%"=="0" pause
 exit /b 1
+
+rem ------------------------------------------------------------------
+rem Subroutine: Barra di progresso grafica moderna
+rem %1 = percentuale (0-100), %2 = stato (run|done|error), %3 = testo
+rem ------------------------------------------------------------------
+:draw_bar
+setlocal EnableDelayedExpansion
+set "PCT=%~1"
+set "STATE=%~2"
+set "TEXT=%~3"
+set /a "NUM_F=PCT * 22 / 100"
+set /a "NUM_E=22 - NUM_F"
+set "BAR_F="
+set "BAR_E="
+for /L %%x in (1,1,!NUM_F!) do set "BAR_F=!BAR_F!█"
+for /L %%x in (1,1,!NUM_E!) do set "BAR_E=!BAR_E!░"
+
+set "SP= "
+if !PCT! LSS 100 set "SP=  "
+if !PCT! LSS 10 set "SP=   "
+
+if "!STATE!"=="done" (
+    echo   !C_GREEN![✔]!C_RESET! !C_GRAY![!C_RESET!!C_GREEN!!BAR_F!!C_RESET!!C_GRAY!!BAR_E!]!C_RESET! !C_BOLD!!C_WHITE!!PCT!%%!C_RESET!!SP!!TEXT!
+) else if "!STATE!"=="error" (
+    echo   !C_RED![✖]!C_RESET! !C_GRAY![!C_RESET!!C_RED!!BAR_F!!C_RESET!!C_GRAY!!BAR_E!]!C_RESET! !C_BOLD!!C_WHITE!!PCT!%%!C_RESET!!SP!!TEXT!
+) else (
+    echo   !C_CYAN![➜]!C_RESET! !C_GRAY![!C_RESET!!C_CYAN!!BAR_F!!C_RESET!!C_GRAY!!BAR_E!]!C_RESET! !C_BOLD!!C_WHITE!!PCT!%%!C_RESET!!SP!!C_GRAY!!TEXT!!C_RESET!
+)
+endlocal
+exit /b 0
