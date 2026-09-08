@@ -86,7 +86,8 @@ export default function ReplanningGanttPreview({
 }) {
   const [selectedSuggestionId, setSelectedSuggestionId] = useState(initialSuggestionId || 'all');
   const [activeProjectId, setActiveProjectId] = useState('main');
-  const [showOnlyImpacted, setShowOnlyImpacted] = useState(false);
+  const [hoveredLinkId, setHoveredLinkId] = useState(null);
+  const [hoveredTaskId, setHoveredTaskId] = useState(null);
   const [dayWidth, setDayWidth] = useState(22); // px per day (zoom)
 
   const scrollContainerRef = useRef(null);
@@ -139,6 +140,7 @@ export default function ReplanningGanttPreview({
             project_code: pCode,
             color: relData.color || '#f59e0b',
             tasks: relData.tasks || [],
+            links: relData.links || [],
             project_start_date: relData.project_start_date,
             project_end_date: relData.project_end_date,
             impacts: []
@@ -577,15 +579,8 @@ export default function ReplanningGanttPreview({
     }
   };
 
-  // Filtraggio task visualizzati
-  const displayedTasks = useMemo(() => {
-    if (showOnlyImpacted) {
-      return activeProjectTasks.filter(
-        (t) => t.status !== 'unchanged' || t.isDirect || t.isCascade || t.isRelatedImpact
-      );
-    }
-    return activeProjectTasks;
-  }, [activeProjectTasks, showOnlyImpacted]);
+  // Visualizza sempre tutte le fasi
+  const displayedTasks = activeProjectTasks;
 
   const directCount = useMemo(() => {
     return activeProjectTasks.filter((t) => t.status === 'direct' || t.isDirect).length;
@@ -599,6 +594,171 @@ export default function ReplanningGanttPreview({
     return relatedSimulatedTasks.filter((t) => t.isDirect || t.isCascade || t.isRelatedImpact).length;
   }, [relatedSimulatedTasks]);
   const totalTimelineWidth = totalDays * dayWidth;
+
+  // Collegamenti / Dipendenze della commessa attiva
+  const activeProjectLinks = useMemo(() => {
+    return isViewingRelated ? (activeRelatedProject?.links || []) : (links || []);
+  }, [isViewingRelated, activeRelatedProject, links]);
+
+  // Mappa predecessori per ciascun task (utile per sidebar e visualizzazione)
+  const predecessorsMap = useMemo(() => {
+    const map = new Map();
+    const allTasksMap = new Map();
+    activeProjectTasks.forEach((t) => allTasksMap.set(String(t.id), t));
+
+    (activeProjectLinks || []).forEach((l, idx) => {
+      const targetId = String(l.target);
+      const sourceId = String(l.source);
+      const predTask = allTasksMap.get(sourceId);
+      if (predTask) {
+        if (!map.has(targetId)) {
+          map.set(targetId, []);
+        }
+        map.get(targetId).push({
+          id: predTask.id,
+          text: predTask.text,
+          isDirect: predTask.status === 'direct' || predTask.isDirect,
+          isCascade: predTask.status === 'cascade' || predTask.isCascade,
+          linkType: l.type !== undefined ? l.type : '0',
+          lag: l.lag || 0,
+          linkId: l.id ? String(l.id) : `link-${sourceId}-${targetId}-${idx}`
+        });
+      }
+    });
+    return map;
+  }, [activeProjectTasks, activeProjectLinks]);
+
+  // Altezza riga uniforme tra Sidebar, Griglia Canvas e Overlay SVG
+  const getRowHeight = (task) => {
+    const isDirect = task.status === 'direct' || task.isDirect;
+    const isCascade = task.status === 'cascade' || task.isCascade;
+    return (isDirect || isCascade) ? 68 : 46;
+  };
+
+  // Mappa coordinate pixel esatte di ciascuna riga e barra visualizzata
+  const taskLayoutMap = useMemo(() => {
+    const map = new Map();
+    let currentTop = 0;
+    displayedTasks.forEach((task, index) => {
+      const isDirect = task.status === 'direct' || task.isDirect;
+      const isCascade = task.status === 'cascade' || task.isCascade;
+      const isModified = isDirect || isCascade;
+      const rowHeight = getRowHeight(task);
+
+      const simLeft = getLeftPx(task.simStart);
+      const simWidth = getWidthPx(task.simStart, task.simEnd);
+      const simRight = simLeft + simWidth;
+
+      const origLeft = getLeftPx(task.origStart);
+      const origWidth = getWidthPx(task.origStart, task.origEnd);
+      const origRight = origLeft + origWidth;
+
+      const barTop = isModified ? 36 : Math.round((rowHeight - 24) / 2);
+      const centerY = currentTop + barTop + 12;
+
+      map.set(String(task.id), {
+        task,
+        index,
+        rowTop: currentTop,
+        rowHeight,
+        barTop,
+        isModified,
+        isDirect,
+        isCascade,
+        simLeft,
+        simRight,
+        simWidth,
+        origLeft,
+        origRight,
+        origWidth,
+        centerY
+      });
+
+      currentTop += rowHeight;
+    });
+    return { map, totalHeight: currentTop };
+  }, [displayedTasks, dayWidth, timelineStart, predecessorsMap]);
+
+  // Calcolo percorso ortogonale SVG per collegamento dipendenze
+  const getLinkPath = (x1, y1, x2, y2, linkType = '0') => {
+    const typeStr = String(linkType);
+    const arrowGap = 4;
+    const targetX = Math.max(0, x2 - arrowGap);
+
+    if (typeStr === '1' || typeStr === 'SS') {
+      const minX = Math.min(x1, targetX) - 16;
+      return `M ${x1} ${y1} L ${minX} ${y1} L ${minX} ${y2} L ${targetX} ${y2}`;
+    }
+
+    if (typeStr === '2' || typeStr === 'FF') {
+      const maxX = Math.max(x1, x2) + 16;
+      return `M ${x1} ${y1} L ${maxX} ${y1} L ${maxX} ${y2} L ${x2 + arrowGap} ${y2}`;
+    }
+
+    // Finish to Start (FS)
+    if (targetX >= x1 + 14) {
+      const midX = Math.round(x1 + (targetX - x1) / 2);
+      return `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${targetX} ${y2}`;
+    } else {
+      const exitX = x1 + 12;
+      const enterX = Math.max(8, targetX - 12);
+      const midY = Math.round((y1 + y2) / 2);
+      return `M ${x1} ${y1} L ${exitX} ${y1} L ${exitX} ${midY} L ${enterX} ${midY} L ${enterX} ${y2} L ${targetX} ${y2}`;
+    }
+  };
+
+  // Tracciati SVG calcolati per tutte le dipendenze
+  const renderedLinks = useMemo(() => {
+    const list = [];
+    (activeProjectLinks || []).forEach((link, idx) => {
+      const sId = String(link.source);
+      const tId = String(link.target);
+      const sourcePos = taskLayoutMap.map.get(sId);
+      const targetPos = taskLayoutMap.map.get(tId);
+
+      if (sourcePos && targetPos) {
+        const linkType = String(link.type !== undefined ? link.type : '0');
+        let x1 = sourcePos.simRight;
+        let y1 = sourcePos.centerY;
+        let x2 = targetPos.simLeft;
+        let y2 = targetPos.centerY;
+
+        if (linkType === '1' || linkType === 'SS') {
+          x1 = sourcePos.simLeft;
+          x2 = targetPos.simLeft;
+        } else if (linkType === '2' || linkType === 'FF') {
+          x1 = sourcePos.simRight;
+          x2 = targetPos.simRight;
+        }
+
+        const d = getLinkPath(x1, y1, x2, y2, linkType);
+        const isTargetCascade = targetPos.isCascade;
+        const isTargetDirect = targetPos.isDirect;
+        const isSourceModified = sourcePos.isModified;
+        const linkKey = link.id ? String(link.id) : `link-${sId}-${tId}-${idx}`;
+        const isHovered =
+          hoveredLinkId === linkKey ||
+          hoveredTaskId === sId ||
+          hoveredTaskId === tId;
+
+        list.push({
+          id: linkKey,
+          sourceId: sId,
+          targetId: tId,
+          sourcePos,
+          targetPos,
+          linkType,
+          lag: link.lag || 0,
+          d,
+          isTargetCascade,
+          isTargetDirect,
+          isSourceModified,
+          isHovered
+        });
+      }
+    });
+    return list;
+  }, [activeProjectLinks, taskLayoutMap, hoveredLinkId, hoveredTaskId]);
 
   return (
     <div
@@ -1058,24 +1218,6 @@ export default function ReplanningGanttPreview({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                color: '#334155',
-                cursor: 'pointer',
-                userSelect: 'none'
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={showOnlyImpacted}
-                onChange={(e) => setShowOnlyImpacted(e.target.checked)}
-                style={{ cursor: 'pointer', accentColor: '#2563eb' }}
-              />
-              <span>Mostra solo fasi impattate ({isViewingRelated ? relatedImpactCount : directCount + cascadeCount})</span>
-            </label>
 
             {!isViewingRelated && canManage && (
               activeSuggestion ? (
@@ -1185,11 +1327,14 @@ export default function ReplanningGanttPreview({
                 const isDirect = task.status === 'direct';
                 const isCascade = task.status === 'cascade';
                 const isModified = isDirect || isCascade;
-                const rowHeight = isModified ? 68 : 46;
+                const rowHeight = getRowHeight(task);
+                const isHovered = hoveredTaskId === String(task.id);
 
                 return (
                   <div
                     key={task.id}
+                    onMouseEnter={() => setHoveredTaskId(String(task.id))}
+                    onMouseLeave={() => setHoveredTaskId(null)}
                     style={{
                       height: `${rowHeight}px`,
                       borderBottom: '1px solid #e2e8f0',
@@ -1197,13 +1342,16 @@ export default function ReplanningGanttPreview({
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'center',
-                      backgroundColor: isDirect
-                        ? 'rgba(99, 102, 241, 0.04)'
-                        : isCascade
-                          ? 'rgba(245, 158, 11, 0.04)'
-                          : task.isRelatedImpact
-                            ? 'rgba(245, 158, 11, 0.06)'
-                            : '#ffffff'
+                      transition: 'background-color 0.15s ease',
+                      backgroundColor: isHovered
+                        ? '#eff6ff'
+                        : isDirect
+                          ? 'rgba(99, 102, 241, 0.04)'
+                          : isCascade
+                            ? 'rgba(245, 158, 11, 0.04)'
+                            : task.isRelatedImpact
+                              ? 'rgba(245, 158, 11, 0.06)'
+                              : '#ffffff'
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
@@ -1515,11 +1663,91 @@ export default function ReplanningGanttPreview({
 
               {/* RIGHE DI BARRE GANTT */}
               <div style={{ position: 'relative', zIndex: 5 }}>
+                {/* OVERLAY SVG DIPENDENZE */}
+                <svg
+                  style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: `${totalTimelineWidth}px`,
+                      height: `${taskLayoutMap.totalHeight}px`,
+                      pointerEvents: 'none',
+                      zIndex: 9
+                    }}
+                  >
+                    <defs>
+                      <marker
+                        id="arrow-default"
+                        viewBox="0 0 10 10"
+                        refX="8"
+                        refY="5"
+                        markerWidth="7"
+                        markerHeight="7"
+                        orient="auto"
+                      >
+                        <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#64748b" />
+                      </marker>
+
+                      <marker
+                        id="arrow-hover"
+                        viewBox="0 0 10 10"
+                        refX="8"
+                        refY="5"
+                        markerWidth="8"
+                        markerHeight="8"
+                        orient="auto"
+                      >
+                        <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#2563eb" />
+                      </marker>
+                    </defs>
+
+                    {renderedLinks.map((rl) => {
+                      const isHovered = rl.isHovered;
+                      const strokeColor = isHovered ? '#2563eb' : '#64748b';
+                      const markerEnd = isHovered ? 'url(#arrow-hover)' : 'url(#arrow-default)';
+                      const strokeWidth = isHovered ? 2.5 : 1.8;
+
+                      return (
+                        <g key={rl.id}>
+                          {/* Hit area invisibile per facilitare hover e tooltip */}
+                          <path
+                            d={rl.d}
+                            fill="none"
+                            stroke="transparent"
+                            strokeWidth="14"
+                            style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+                            onMouseEnter={() => setHoveredLinkId(rl.id)}
+                            onMouseLeave={() => setHoveredLinkId(null)}
+                          >
+                            <title>
+                              {`Dipendenza: ${rl.sourcePos.task.text} → ${rl.targetPos.task.text}${rl.lag ? ` (Lag: +${rl.lag} gg)` : ''}`}
+                            </title>
+                          </path>
+                          {/* Tracciato visibile */}
+                          <path
+                            d={rl.d}
+                            fill="none"
+                            stroke={strokeColor}
+                            strokeWidth={strokeWidth}
+                            strokeLinejoin="round"
+                            strokeLinecap="round"
+                            markerEnd={markerEnd}
+                            style={{
+                              transition: 'stroke 0.15s ease, stroke-width 0.15s ease',
+                              pointerEvents: 'none'
+                            }}
+                          />
+                        </g>
+                      );
+                    })}
+                  </svg>
+
                 {displayedTasks.map((task) => {
                   const isDirect = task.status === 'direct';
                   const isCascade = task.status === 'cascade';
                   const isModified = isDirect || isCascade;
-                  const rowHeight = isModified ? 68 : 46;
+                  const rowHeight = getRowHeight(task);
+                  const isHovered = hoveredTaskId === String(task.id);
 
                   // Coordinate barra originale
                   const origLeft = getLeftPx(task.origStart);
@@ -1532,12 +1760,16 @@ export default function ReplanningGanttPreview({
                   return (
                     <div
                       key={task.id}
+                      onMouseEnter={() => setHoveredTaskId(String(task.id))}
+                      onMouseLeave={() => setHoveredTaskId(null)}
                       style={{
                         height: `${rowHeight}px`,
                         borderBottom: '1px solid #e2e8f0',
                         position: 'relative',
                         display: 'flex',
-                        alignItems: 'center'
+                        alignItems: 'center',
+                        backgroundColor: isHovered ? 'rgba(59, 130, 246, 0.03)' : 'transparent',
+                        transition: 'background-color 0.15s ease'
                       }}
                     >
                       {/* SE LA FASE È MODIFICATA: DUE CORSIE CHIARE (LANE 1: ORIGINALE, LANE 2: PROPOSTO) */}
@@ -1772,6 +2004,14 @@ export default function ReplanningGanttPreview({
                 </div>
               </>
             )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <svg width="22" height="10" viewBox="0 0 22 10" style={{ overflow: 'visible' }}>
+                <line x1="0" y1="5" x2="15" y2="5" stroke="#64748b" strokeWidth="1.8" />
+                <polygon points="15,2 21,5 15,8" fill="#64748b" />
+              </svg>
+              <span style={{ color: '#475569', fontWeight: 600 }}>Dipendenza tra Fasi</span>
+            </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 12, height: 0, borderBottom: '2px dashed #16a34a', display: 'inline-block' }} />
