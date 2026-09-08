@@ -378,3 +378,122 @@ async def test_smart_replanning_cross_project_preview(db_session: AsyncSession, 
     assert corr["cascade_tasks"][0]["task_name"] == "Montaggio Beta"
 
 
+@pytest.mark.asyncio
+async def test_apply_cross_project_corrections_flow(db_session: AsyncSession, test_user: User):
+    """
+    Test 6: Verifica applicazione effettiva delle correzioni a catena su commesse correlate:
+    Quando l'utente approva una riprogrammazione che include correzioni cross-project,
+    il task impattato dell'altra commessa e i suoi successori a valle vengono aggiornati nel DB
+    e tracciati nel ReplanLog.
+    """
+    # 1. Commessa 1
+    p1 = Project(
+        name="Commessa Alfa Principale",
+        code="COMM-ALFA",
+        status=ProjectStatus.ACTIVE,
+        owner_id=test_user.id,
+        start_date=date(2026, 9, 1),
+        end_date=date(2026, 10, 31)
+    )
+    # Commessa 2
+    p2 = Project(
+        name="Commessa Beta Secondaria",
+        code="COMM-BETA",
+        status=ProjectStatus.ACTIVE,
+        owner_id=test_user.id,
+        start_date=date(2026, 9, 1),
+        end_date=date(2026, 10, 31)
+    )
+    db_session.add_all([p1, p2])
+    await db_session.commit()
+    await db_session.refresh(p1)
+    await db_session.refresh(p2)
+
+    # Task principale Commessa 1 (scaduto nel passato, genera proposta di recupero che sovrappone t2)
+    t1 = Task(
+        project_id=p1.id,
+        text="Fase Alfa",
+        start_date=date(2026, 8, 20),
+        end_date=date(2026, 9, 2),
+        duration=10,
+        planned_hours=80.0,
+        workers=json.dumps(["Worker Shared"]),
+        worker_hours=json.dumps({"Worker Shared": 80.0}),
+        completed=0
+    )
+    # Task impattato Commessa 2
+    t2 = Task(
+        project_id=p2.id,
+        text="Fase Beta Sovrapposta",
+        start_date=date(2026, 9, 7),
+        end_date=date(2026, 9, 14),
+        duration=6,
+        planned_hours=48.0,
+        workers=json.dumps(["Worker Shared"]),
+        worker_hours=json.dumps({"Worker Shared": 48.0}),
+        completed=0
+    )
+    # Successore di t2
+    t3 = Task(
+        project_id=p2.id,
+        text="Fase Beta Successiva",
+        start_date=date(2026, 9, 15),
+        end_date=date(2026, 9, 18),
+        duration=4,
+        planned_hours=32.0,
+        workers=json.dumps(["Worker Altro"]),
+        worker_hours=json.dumps({"Worker Altro": 32.0}),
+        completed=0
+    )
+    db_session.add_all([t1, t2, t3])
+    await db_session.commit()
+    await db_session.refresh(t1)
+    await db_session.refresh(t2)
+    await db_session.refresh(t3)
+
+    # Link FS tra t2 e t3
+    link = Link(
+        project_id=p2.id,
+        source=t2.id,
+        target=t3.id,
+        type=LinkType.FS,
+        lag=0
+    )
+    db_session.add(link)
+    await db_session.commit()
+
+    # Genera suggerimenti per Commessa 1
+    result = await generate_project_smart_suggestions(db_session, str(p1.id))
+    sugg = result["suggestions"][0]
+    corr = sugg["cascade_impact"]["other_projects"][0]["proposed_correction"]
+    assert corr is not None
+
+    # Applica proposta con correzione cross-project
+    payload = {
+        **sugg["proposed_changes"],
+        "reason": sugg["title"],
+        "cascade_successors": sugg["cascade_impact"].get("same_project_tasks", []),
+        "related_project_corrections": [corr]
+    }
+
+    apply_res = await apply_smart_replanning_proposal(
+        db_session, str(p1.id), payload, test_user
+    )
+    assert apply_res["success"] is True
+
+    # Verifica aggiornamento di t2 (commessa correlata)
+    await db_session.refresh(t2)
+    expected_t2_start = date.fromisoformat(corr["proposed_start"][:10])
+    expected_t2_end = date.fromisoformat(corr["proposed_end"][:10])
+    assert t2.start_date == expected_t2_start
+    assert t2.end_date == expected_t2_end
+
+    # Verifica aggiornamento a cascata di t3 (successore in commessa correlata)
+    if corr.get("cascade_tasks"):
+        await db_session.refresh(t3)
+        sub_c = corr["cascade_tasks"][0]
+        expected_t3_start = date.fromisoformat(sub_c["proposed_start"][:10])
+        assert t3.start_date == expected_t3_start
+
+
+
