@@ -155,10 +155,19 @@
   box-shadow: var(--timeline-bar-shadow-hover) !important;
 }
 
-.gantt_task_line .gantt_task_progress {
-  border-radius: 8px 0 0 8px !important;
-  background: rgba(255, 255, 255, 0.5) !important;
-  border-right: 2px solid rgba(255, 255, 255, 0.7) !important;
+.gantt_task_line .gantt_task_progress,
+.gantt_bars_area .gantt_task_line .gantt_task_progress {
+  border-radius: 6px 0 0 6px !important;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.12) 0%, rgba(0, 0, 0, 0.22) 100%) !important;
+  border-right: 2px solid rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 1px 0 3px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+  opacity: 1 !important;
+}
+
+.gantt_task_progress_drag {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 .gantt_task_line .gantt_task_content {
@@ -506,7 +515,10 @@
 
 .gantt_task_line.gantt-task-completed .gantt_task_progress,
 .gantt_bars_area .gantt_task_line.gantt-task-completed .gantt_task_progress {
-  background-color: rgba(0, 0, 0, 0.18) !important;
+  background-color: rgba(0, 0, 0, 0.15) !important;
+  border-right: none !important;
+  border-radius: 7px !important;
+  box-shadow: none !important;
 }
 
 /* Sfondo verde smeraldo leggero per l'intera riga della fase nella griglia a sinistra e nella timeline temporale a destra */
