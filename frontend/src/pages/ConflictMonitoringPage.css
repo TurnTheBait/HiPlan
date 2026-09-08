@@ -3,3 +3,10 @@
   flex-direction: column;
   gap: 24px;
 }
+
+.conflict-counter-badge,
+.workload-heatmap-container span.conflict-counter-badge,
+.workload-heatmap-container span.btn-primary {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}

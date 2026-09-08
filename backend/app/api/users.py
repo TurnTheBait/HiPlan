@@ -223,23 +223,42 @@ async def get_worker_conflicts(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Fetch all tasks that have start_date and end_date and might have workers
-    # We join with project to get project name
-    # pyrefly: ignore [missing-import]
     from sqlalchemy.orm import selectinload
-    from app.services.replanning_service import is_weekend_or_holiday, get_working_days_count
+    from app.services.replanning_service import is_weekend_or_holiday, get_working_days_count, add_working_days
+    from app.models.vacation import Vacation
+
+    # 1. Recupera utenti e mappa per nome
+    users_res = await db.execute(select(User))
+    users = users_res.scalars().all()
+    user_by_name = {}
+    for u in users:
+        if u.full_name:
+            user_by_name[u.full_name.strip().lower()] = u
+        if u.username:
+            user_by_name[u.username.strip().lower()] = u
+
+    # 2. Recupera ferie e raggruppa per user_id
+    vac_res = await db.execute(select(Vacation))
+    all_vacations = vac_res.scalars().all()
+    vacations_by_uid = defaultdict(list)
+    for v in all_vacations:
+        vacations_by_uid[str(v.user_id)].append(v)
+
+    # 3. Recupera tutti i task attivi non completati
     result = await db.execute(
         select(Task).options(selectinload(Task.project))
         .where(Task.type != TaskType.PROJECT)
         .where(Task.type != TaskType.MILESTONE)
         .where(Task.start_date.isnot(None))
         .where(Task.end_date.isnot(None))
+        .where(Task.completed != 1)
     )
     tasks = result.scalars().all()
-    
-    # Map: worker_name -> date (string) -> list of tasks
+
+    # Mappa: worker_name -> date -> lista di task
     worker_timeline = defaultdict(lambda: defaultdict(list))
-    
+    task_by_worker = defaultdict(list)
+
     for task in tasks:
         if task.project:
             p_status = task.project.status.value if hasattr(task.project.status, 'value') else str(task.project.status)
@@ -250,29 +269,25 @@ async def get_worker_conflicts(
             workers_list = json.loads(task.workers) if task.workers else []
         except:
             workers_list = []
-        
+
         if not workers_list:
             continue
-            
+
         try:
             excluded_dates = json.loads(task.excluded_dates) if getattr(task, 'excluded_dates', None) else []
         except:
             excluded_dates = []
 
-        current_date = task.start_date
-        inclusive_end = task.end_date
-        
         try:
             worker_hours_map = json.loads(getattr(task, 'worker_hours', '{}')) or {}
         except:
             worker_hours_map = {}
-            
-        duration_days = get_working_days_count(task.start_date, inclusive_end, excluded_dates)
-            
-        while current_date <= inclusive_end:
+
+        duration_days = get_working_days_count(task.start_date, task.end_date, excluded_dates)
+
+        current_date = task.start_date
+        while current_date <= task.end_date:
             if not is_weekend_or_holiday(current_date) and current_date.strftime("%Y-%m-%d") not in excluded_dates:
-                date_str = current_date.isoformat()
-                
                 for worker_name in workers_list:
                     base_hours = worker_hours_map.get(worker_name)
                     if base_hours is not None:
@@ -282,33 +297,104 @@ async def get_worker_conflicts(
                             base_hours = float(task.planned_hours or 0.0) / len(workers_list)
                     else:
                         base_hours = float(task.planned_hours or 0.0) / len(workers_list)
-                        
-                    daily_hours = base_hours / duration_days
-                    
-                    worker_timeline[worker_name][date_str].append({
-                        "task_id": task.id,
+
+                    daily_hours = base_hours / max(1, duration_days)
+
+                    worker_timeline[worker_name][current_date].append({
+                        "task_id": str(task.id),
                         "task_name": task.text,
-                        "project_id": task.project_id,
+                        "project_id": str(task.project_id),
                         "project_name": task.project.name if task.project else "Sconosciuto",
-                        "project_code": task.project.code if task.project else "—",
+                        "project_code": task.project.code if task.project and task.project.code else "—",
                         "daily_hours": round(daily_hours, 1)
                     })
             current_date += timedelta(days=1)
-            
-    # Now find conflicts
+
+        for worker_name in workers_list:
+            task_by_worker[worker_name].append(task)
+
     conflicts = []
-    today_str = date.today().isoformat()
-    
+    today = date.today()
+
+    def _create_overload_conflict(w_name, period, d_map):
+        t_map = {}
+        max_h = 0.0
+        for d in period:
+            d_tasks = d_map.get(d, [])
+            d_tot = sum(t["daily_hours"] for t in d_tasks)
+            if d_tot > max_h:
+                max_h = d_tot
+            for t in d_tasks:
+                t_map[t["task_id"]] = t
+        return {
+            "type": "overload",
+            "worker": w_name,
+            "start_date": period[0].isoformat(),
+            "end_date": period[-1].isoformat(),
+            "date": period[0].isoformat(),
+            "workdays_count": len(period),
+            "total_hours": round(max_h, 1),
+            "tasks": list(t_map.values()),
+            "dates": [d.isoformat() for d in period]
+        }
+
+    # 4. Raggruppa i sovraccarichi (> 8.0h/gg) in periodi continui
     for worker_name, dates_map in worker_timeline.items():
-        for date_str, assigned_tasks in dates_map.items():
-            total_hours = sum(t.get("daily_hours", 0) for t in assigned_tasks)
-            if date_str >= today_str and total_hours > 8.0:
-                conflicts.append({
-                    "date": date_str,
-                    "worker": worker_name,
-                    "total_hours": round(total_hours, 1),
-                    "tasks": assigned_tasks
-                })
-                
-    conflicts.sort(key=lambda x: (x["date"], x["worker"]))
+        overload_dates = sorted([d for d, t_list in dates_map.items() if d >= today and sum(t["daily_hours"] for t in t_list) > 8.0])
+        if not overload_dates:
+            continue
+
+        current_period = []
+        for d in overload_dates:
+            if not current_period:
+                current_period.append(d)
+            else:
+                prev_d = current_period[-1]
+                expected_next = add_working_days(prev_d, 1)
+                if d == expected_next:
+                    current_period.append(d)
+                else:
+                    conflicts.append(_create_overload_conflict(worker_name, current_period, dates_map))
+                    current_period = [d]
+        if current_period:
+            conflicts.append(_create_overload_conflict(worker_name, current_period, dates_map))
+
+    # 5. Rileva conflitti tra ferie e fasi assegnate all'addetto
+    for worker_name, w_tasks in task_by_worker.items():
+        w_user = user_by_name.get(worker_name.strip().lower())
+        if not w_user:
+            continue
+        u_vacs = vacations_by_uid.get(str(w_user.id), [])
+        for task in w_tasks:
+            for v in u_vacs:
+                ov_st = max(task.start_date, v.start_date)
+                ov_en = min(task.end_date, v.end_date)
+                if ov_st <= ov_en:
+                    workdays = []
+                    c = ov_st
+                    while c <= ov_en:
+                        if c >= today and not is_weekend_or_holiday(c):
+                            workdays.append(c)
+                        c += timedelta(days=1)
+                    if workdays:
+                        conflicts.append({
+                            "type": "vacation",
+                            "worker": worker_name,
+                            "start_date": workdays[0].isoformat(),
+                            "end_date": workdays[-1].isoformat(),
+                            "date": workdays[0].isoformat(),
+                            "workdays_count": len(workdays),
+                            "total_hours": 0.0,
+                            "vacation_reason": v.reason or "Ferie",
+                            "tasks": [{
+                                "task_id": str(task.id),
+                                "task_name": task.text,
+                                "project_id": str(task.project_id),
+                                "project_name": task.project.name if task.project else "Sconosciuto",
+                                "project_code": task.project.code if task.project and task.project.code else "—",
+                                "daily_hours": round(float(task.planned_hours or 0.0) / max(1, get_working_days_count(task.start_date, task.end_date)), 1)
+                            }]
+                        })
+
+    conflicts.sort(key=lambda x: (x["start_date"], x["worker"]))
     return conflicts

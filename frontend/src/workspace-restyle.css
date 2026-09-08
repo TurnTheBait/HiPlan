@@ -1804,9 +1804,15 @@
   letter-spacing: -0.015em;
 }
 
-.workload-heatmap-container>div:first-child span {
+.workload-heatmap-container>div:first-child span:not(.badge):not(.btn):not(.btn-primary):not(.conflict-counter-badge) {
   color: var(--text-tertiary) !important;
   font-size: 0.67rem !important;
+}
+
+.workload-heatmap-container>div:first-child span.btn-primary,
+.workload-heatmap-container>div:first-child span.badge,
+.workload-heatmap-container>div:first-child .conflict-counter-badge {
+  color: #ffffff !important;
 }
 
 .workload-heatmap-container>div:first-child .input {

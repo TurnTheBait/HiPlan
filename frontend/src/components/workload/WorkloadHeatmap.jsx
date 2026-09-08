@@ -14,7 +14,7 @@ export default function WorkloadHeatmap() {
   const { user } = useAuth();
   const [heatmapData, setHeatmapData] = useState({});
   const [loading, setLoading] = useState(true);
-  const [isWorkloadOpen, setIsWorkloadOpen] = useState(true);
+  const [isWorkloadOpen, setIsWorkloadOpen] = useState(false);
   const [leftColWidth, setLeftColWidth] = useState(200);
   const [expandedUsers, setExpandedUsers] = useState({});
   const [viewMode, setViewMode] = useState('day');

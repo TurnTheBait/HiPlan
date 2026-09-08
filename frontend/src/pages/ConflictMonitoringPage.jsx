@@ -14,6 +14,15 @@ export default function ConflictMonitoringPage() {
   const [conflicts, setConflicts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isConflictsOpen, setIsConflictsOpen] = useState(false);
+  const [conflictFilter, setConflictFilter] = useState('all');
+
+  const filteredConflicts = useMemo(() => {
+    if (conflictFilter === 'all') return conflicts;
+    return conflicts.filter(c => c.type === conflictFilter);
+  }, [conflicts, conflictFilter]);
+
+  const overloadCount = useMemo(() => conflicts.filter(c => c.type === 'overload').length, [conflicts]);
+  const vacationCount = useMemo(() => conflicts.filter(c => c.type === 'vacation').length, [conflicts]);
 
   const [vacations, setVacations] = useState([]);
   const [isVacationsOpen, setIsVacationsOpen] = useState(false);
@@ -320,6 +329,13 @@ export default function ConflictMonitoringPage() {
     const d = new Date(isoString);
     return d.toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: 'long', year: 'numeric' });
   }
+
+  function formatDateShort(isoString) {
+    if (!isoString) return '';
+    const d = new Date(isoString);
+    return d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+
   if (loading) return <div className="loading-screen"><div className="spinner" /></div>;
 
   return (
@@ -403,19 +419,22 @@ export default function ConflictMonitoringPage() {
                   onChange={e => setSearchParams({ ...searchParams, type: e.target.value })}
                   className="input"
                 >
-                  <option value="days">Giorni Interi</option>
-                  <option value="hours">Ore (anche spalmate)</option>
+                  <option value="days">Giorni Consecutivi</option>
+                  <option value="hours">Ore Cumulate</option>
                 </select>
               </div>
 
               <div style={{ flex: '1 1 100px' }}>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: 600 }}>Quantità</label>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: 600 }}>
+                  Quantità ({searchParams.type === 'days' ? 'gg' : 'h'})
+                </label>
                 <input
                   type="number"
                   min="1"
-                  className="input"
+                  max="100"
                   value={searchParams.quantity}
                   onChange={e => setSearchParams({ ...searchParams, quantity: e.target.value })}
+                  className="input"
                   required
                 />
               </div>
@@ -509,7 +528,16 @@ export default function ConflictMonitoringPage() {
           </div>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
             {conflicts.length > 0 && (
-              <span className="btn btn-primary btn-sm" style={{ padding: '4px 8px', fontSize: '0.85rem', borderRadius: '12px', color: '#fff' }}>
+              <span
+                className="btn btn-primary btn-sm conflict-counter-badge"
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '0.85rem',
+                  borderRadius: '12px',
+                  color: '#ffffff',
+                  fontWeight: 700
+                }}
+              >
                 {conflicts.length}
               </span>
             )}
@@ -524,51 +552,122 @@ export default function ConflictMonitoringPage() {
 
         {isConflictsOpen && (
           <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 16 }}>
-            {conflicts.length === 0 ? (
+            {conflicts.length > 0 && (
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${conflictFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setConflictFilter('all')}
+                  style={{ borderRadius: '16px', padding: '4px 12px' }}
+                >
+                  Tutti ({conflicts.length})
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${conflictFilter === 'overload' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setConflictFilter('overload')}
+                  style={{ borderRadius: '16px', padding: '4px 12px' }}
+                >
+                  Sovraccarichi ({overloadCount})
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${conflictFilter === 'vacation' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setConflictFilter('vacation')}
+                  style={{ borderRadius: '16px', padding: '4px 12px' }}
+                >
+                  Conflitti Ferie ({vacationCount})
+                </button>
+              </div>
+            )}
+
+            {filteredConflicts.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-state-icon"><AppIcon name="check" size={24} /></div>
-                <h3>Nessuna Sovrapposizione Trovata</h3>
+                <h3>Nessun Conflitto Trovato</h3>
                 <p>Tutti gli addetti hanno una schedulazione pulita a partire da oggi.</p>
               </div>
             ) : (
               <div className="conflicts-grid" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {conflicts.map((c, idx) => (
-                  <div key={idx} className="conflict-card card">
-                    <div className="conflict-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                      <h3 style={{ margin: 0, color: 'var(--accent-400)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px' }}>
-                        <AppIcon name="user" />
-                        {c.worker}
-                      </h3>
-                      <span className="badge badge-high" style={{ fontSize: '0.85rem' }}><AppIcon name="calendar" size={14} />{formatDate(c.date)}</span>
-                    </div>
-                    <p className="conflict-desc" style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
-                      Ore totali stimate: <strong>{c.total_hours}h</strong> (limite 8h superato) distribuite su <strong>{c.tasks.length}</strong> fasi:
-                    </p>
+                {filteredConflicts.map((c, idx) => {
+                  const isVacation = c.type === 'vacation';
+                  const dateLabel = c.start_date === c.end_date
+                    ? formatDate(c.start_date || c.date)
+                    : `${formatDateShort(c.start_date)} → ${formatDateShort(c.end_date)} (${c.workdays_count || 1} gg)`;
 
-                    <div className="conflict-tasks-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {c.tasks.map(t => (
-                        <div key={t.task_id} className="conflict-task-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #f59e0b' }}>
-                          <div className="task-info" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span className="task-name" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 500 }}>
-                              <span style={{ color: 'var(--secondary)', display: 'flex', alignItems: 'center' }}><AppIcon name="list" size={15} /></span>
-                              {t.task_name} <span style={{ color: 'var(--accent-400)', fontSize: '0.85rem', marginLeft: '0px' }}>({t.daily_hours}h)</span>
+                  return (
+                    <div key={idx} className="conflict-card card">
+                      <div className="conflict-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <h3 style={{ margin: 0, color: 'var(--accent-400)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px' }}>
+                            <AppIcon name="user" />
+                            {c.worker}
+                          </h3>
+                          {isVacation ? (
+                            <span className="badge" style={{ background: '#ede9fe', color: '#6d28d9', fontSize: '0.78rem', padding: '3px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                              <AppIcon name="vacations" size={13} style={{ marginRight: 4 }} />
+                              Conflitto Ferie
                             </span>
-                            <span className="task-project" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#9ca3af' }}>
-                              <AppIcon name="projects" size={14} />
-                              Progetto: {t.project_code && t.project_code !== "—" ? `${t.project_code}${t.project_name && t.project_name !== t.project_code && t.project_name !== "—" ? ` - ${t.project_name}` : ''}` : t.project_name}
+                          ) : (
+                            <span className="badge" style={{ background: '#fef3c7', color: '#b45309', fontSize: '0.78rem', padding: '3px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                              <AppIcon name="alert" size={13} style={{ marginRight: 4 }} />
+                              Sovraccarico ({c.total_hours}h/gg)
                             </span>
-                          </div>
-                          <button
-                            className="btn btn-primary btn-sm"
-                            onClick={() => navigate(`/projects/${t.project_id}`)}
-                          >
-                            Vai alla Commessa
-                          </button>
+                          )}
                         </div>
-                      ))}
+                        <span className="badge badge-high" style={{ fontSize: '0.85rem' }}>
+                          <AppIcon name="calendar" size={14} />
+                          {dateLabel}
+                        </span>
+                      </div>
+
+                      {isVacation ? (
+                        <p className="conflict-desc" style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
+                          L'addetto è in ferie ({c.vacation_reason || 'Ferie'}) per <strong>{c.workdays_count || 1}</strong> {(c.workdays_count || 1) === 1 ? 'giorno lavorativo' : 'giorni lavorativi'} durante lo svolgimento della fase:
+                        </p>
+                      ) : (
+                        <p className="conflict-desc" style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
+                          Ore giornaliere stimate: fino a <strong>{c.total_hours}h</strong> (limite 8h superato) per <strong>{c.workdays_count || 1}</strong> {(c.workdays_count || 1) === 1 ? 'giorno lavorativo' : 'giorni lavorativi'}, distribuite su <strong>{c.tasks?.length || 0}</strong> fasi:
+                        </p>
+                      )}
+
+                      <div className="conflict-tasks-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {(c.tasks || []).map(t => (
+                          <div
+                            key={t.task_id}
+                            className="conflict-task-item"
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              background: 'var(--bg-tertiary)',
+                              padding: '12px',
+                              borderRadius: '8px',
+                              borderLeft: isVacation ? '4px solid #8b5cf6' : '4px solid #f59e0b'
+                            }}
+                          >
+                            <div className="task-info" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <span className="task-name" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 500 }}>
+                                <span style={{ color: 'var(--secondary)', display: 'flex', alignItems: 'center' }}><AppIcon name="list" size={15} /></span>
+                                {t.task_name} <span style={{ color: 'var(--accent-400)', fontSize: '0.85rem', marginLeft: '0px' }}>({t.daily_hours}h/gg)</span>
+                              </span>
+                              <span className="task-project" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#9ca3af' }}>
+                                <AppIcon name="projects" size={14} />
+                                Progetto: {t.project_code && t.project_code !== "—" ? `${t.project_code}${t.project_name && t.project_name !== t.project_code && t.project_name !== "—" ? ` - ${t.project_name}` : ''}` : t.project_name}
+                              </span>
+                            </div>
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={() => navigate(`/projects/${t.project_id}`)}
+                            >
+                              Vai alla Commessa
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
