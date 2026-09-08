@@ -48,3 +48,5 @@ class TodoOut(BaseModel):
     is_completed: bool = False
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
+

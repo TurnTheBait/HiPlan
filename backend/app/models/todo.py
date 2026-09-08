@@ -28,5 +28,7 @@ class Todo(Base, TimestampMixin):
     notify_sent = Column(Boolean, default=False, nullable=False)
     due_reminder_sent = Column(Boolean, default=False, nullable=False)
     is_completed = Column(Boolean, default=False, nullable=False)
+    deleted_at = Column(DateTime, nullable=True, default=None)
 
     creator = relationship("User", foreign_keys=[creator_id])
+

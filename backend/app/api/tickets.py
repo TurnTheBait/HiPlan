@@ -2,6 +2,7 @@ import json
 import os
 import uuid
 from typing import List, Optional
+from datetime import datetime, timedelta
 # pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 # pyrefly: ignore [missing-import]
@@ -70,6 +71,7 @@ def _serialize_ticket(ticket: Ticket, include_replies: bool = True) -> dict:
         "priority": ticket.priority.value if hasattr(ticket.priority, "value") else ticket.priority,
         "replies": replies_out,
         "reply_count": len(replies_out),
+        "deleted_at": ticket.deleted_at.isoformat() if getattr(ticket, "deleted_at", None) else None,
         "created_at": ticket.created_at,
         "updated_at": ticket.updated_at,
     }
@@ -98,7 +100,7 @@ async def _notify_for_ticket(db: AsyncSession, ticket: Ticket, message: str, cur
     assigned = json.loads(ticket.assigned_to) if ticket.assigned_to else []
 
     if assigned:
-        res = await db.execute(select(User).where(User.username.in_(assigned), User.is_active == True))
+        res = await db.execute(select(User).where(User.username.in_(assigned)))
         target_users = res.scalars().all()
     else:
         res = await db.execute(select(User).where(User.is_active == True))
@@ -117,6 +119,164 @@ async def _notify_for_ticket(db: AsyncSession, ticket: Ticket, message: str, cur
         db.add(notif)
 
 
+async def purge_expired_ticket_trash(db: AsyncSession):
+    """Elimina definitivamente i ticket nel cestino da più di 90 giorni."""
+    cutoff = datetime.utcnow() - timedelta(days=90)
+    res = await db.execute(select(Ticket).where(Ticket.deleted_at.isnot(None), Ticket.deleted_at <= cutoff))
+    expired = res.scalars().all()
+    for t in expired:
+        try:
+            attachments = json.loads(t.attachments) if t.attachments else []
+            for att in attachments:
+                fpath = att.get("path", "")
+                if fpath and os.path.exists(fpath):
+                    os.remove(fpath)
+        except Exception:
+            pass
+        await db.delete(t)
+    if expired:
+        await db.commit()
+
+
+@router.get("/trash", response_model=List[dict])
+async def list_trash_tickets(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Restituisce i ticket nel cestino con giorni rimanenti (90 giorni). Riservato ad admin ed editor."""
+    if current_user.role not in (UserRole.ADMIN, UserRole.EDITOR):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accesso al cestino riservato ad amministratori ed editor"
+        )
+    await purge_expired_ticket_trash(db)
+
+    result = await db.execute(
+        select(Ticket)
+        .options(
+            selectinload(Ticket.author),
+            selectinload(Ticket.responsible),
+            selectinload(Ticket.project),
+            selectinload(Ticket.replies).selectinload(TicketReply.author),
+        )
+        .where(Ticket.deleted_at.isnot(None))
+        .order_by(Ticket.deleted_at.desc())
+    )
+    all_trashed = result.scalars().all()
+    now = datetime.utcnow()
+
+    visible = []
+    for t in all_trashed:
+        deleted_dt = t.deleted_at or now
+        elapsed_days = (now - deleted_dt).days
+        s = _serialize_ticket(t)
+        s["days_left"] = max(0, 90 - elapsed_days)
+        visible.append(s)
+
+    return visible
+
+
+@router.delete("/trash/empty", status_code=status.HTTP_204_NO_CONTENT)
+async def empty_trash_tickets(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Svuota il cestino dei ticket. Riservato ad admin ed editor."""
+    if current_user.role not in (UserRole.ADMIN, UserRole.EDITOR):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo admin ed editor possono svuotare il cestino dei ticket"
+        )
+    result = await db.execute(select(Ticket).where(Ticket.deleted_at.isnot(None)))
+    trashed = result.scalars().all()
+    deleted_count = 0
+    for t in trashed:
+        try:
+            attachments = json.loads(t.attachments) if t.attachments else []
+            for att in attachments:
+                fpath = att.get("path", "")
+                if fpath and os.path.exists(fpath):
+                    os.remove(fpath)
+        except Exception:
+            pass
+        await db.delete(t)
+        deleted_count += 1
+    if deleted_count > 0:
+        await db.commit()
+
+
+@router.post("/trash/{ticket_id}/restore")
+async def restore_ticket(
+    ticket_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Ripristina un ticket dal cestino. Riservato ad admin ed editor."""
+    if current_user.role not in (UserRole.ADMIN, UserRole.EDITOR):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo admin ed editor possono ripristinare i ticket dal cestino"
+        )
+    result = await db.execute(
+        select(Ticket)
+        .options(
+            selectinload(Ticket.author),
+            selectinload(Ticket.responsible),
+            selectinload(Ticket.project),
+            selectinload(Ticket.replies).selectinload(TicketReply.author),
+        )
+        .where(Ticket.id == ticket_id)
+    )
+    ticket = result.scalar_one_or_none()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket non trovato")
+
+    ticket.deleted_at = None
+    await db.commit()
+    result = await db.execute(
+        select(Ticket)
+        .options(
+            selectinload(Ticket.author),
+            selectinload(Ticket.responsible),
+            selectinload(Ticket.project),
+            selectinload(Ticket.replies).selectinload(TicketReply.author),
+        )
+        .where(Ticket.id == ticket_id)
+    )
+    ticket = result.scalar_one()
+    return _serialize_ticket(ticket)
+
+
+@router.delete("/trash/{ticket_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def hard_delete_ticket(
+    ticket_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Elimina definitivamente un ticket dal database e rimuove gli allegati fisici. Riservato ad admin ed editor."""
+    if current_user.role not in (UserRole.ADMIN, UserRole.EDITOR):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo admin ed editor possono eliminare definitivamente i ticket"
+        )
+    result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
+    ticket = result.scalar_one_or_none()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket non trovato")
+
+    try:
+        attachments = json.loads(ticket.attachments) if ticket.attachments else []
+        for att in attachments:
+            fpath = att.get("path", "")
+            if fpath and os.path.exists(fpath):
+                os.remove(fpath)
+    except Exception:
+        pass
+
+    await db.delete(ticket)
+    await db.commit()
+
+
 @router.get("", response_model=List[TicketOut])
 async def list_tickets(
     status_filter: Optional[str] = Query(None, alias="status"),
@@ -133,6 +293,7 @@ async def list_tickets(
             selectinload(Ticket.project),
             selectinload(Ticket.replies).selectinload(TicketReply.author),
         )
+        .where(Ticket.deleted_at.is_(None))
         .order_by(Ticket.created_at.desc())
     )
     if status_filter:
@@ -227,7 +388,7 @@ async def get_ticket(
             selectinload(Ticket.project),
             selectinload(Ticket.replies).selectinload(TicketReply.author),
         )
-        .where(Ticket.id == ticket_id)
+        .where(Ticket.id == ticket_id, Ticket.deleted_at.is_(None))
     )
     ticket = result.scalar_one_or_none()
     if not ticket:
@@ -332,9 +493,13 @@ async def delete_ticket(
         raise HTTPException(status_code=404, detail="Ticket non trovato")
     if ticket.author_id != current_user.id and ticket.responsible_id != current_user.id and current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Solo l'autore, il responsabile o un amministratore può eliminare il ticket")
-    await db.delete(ticket)
+    # Soft delete: sposta nel cestino per 90 giorni
+    ticket.deleted_at = datetime.utcnow()
     await db.commit()
     return None
+
+
+
 
 
 @router.post("/{ticket_id}/replies", response_model=TicketOut)

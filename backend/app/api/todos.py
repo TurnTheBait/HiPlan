@@ -3,7 +3,7 @@ import os
 import uuid
 import logging
 from typing import List, Optional
-from datetime import date
+from datetime import date, datetime, timedelta
 
 # pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
@@ -65,6 +65,7 @@ def _serialize_todo(todo: Todo, all_users: dict) -> dict:
         "attachments": attachments,
         "notify_email": todo.notify_email,
         "is_completed": todo.is_completed,
+        "deleted_at": todo.deleted_at.isoformat() if getattr(todo, "deleted_at", None) else None,
         "created_at": todo.created_at.isoformat() if todo.created_at else None,
         "updated_at": todo.updated_at.isoformat() if todo.updated_at else None,
     }
@@ -77,19 +78,161 @@ async def _get_users_dict(db: AsyncSession) -> dict:
     return {u.id: u for u in users}
 
 
+async def purge_expired_todo_trash(db: AsyncSession):
+    """Elimina definitivamente i TODO nel cestino da più di 90 giorni."""
+    cutoff = datetime.utcnow() - timedelta(days=90)
+    res = await db.execute(select(Todo).where(Todo.deleted_at.isnot(None), Todo.deleted_at <= cutoff))
+    expired = res.scalars().all()
+    for t in expired:
+        try:
+            attachments = json.loads(t.attachments) if t.attachments else []
+            for att in attachments:
+                fpath = att.get("path", "")
+                if fpath and os.path.exists(fpath):
+                    os.remove(fpath)
+        except Exception:
+            pass
+        await db.delete(t)
+    if expired:
+        await db.commit()
+
+
+@router.get("/trash", response_model=List[dict])
+async def list_trash_todos(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Restituisce i TODO nel cestino con giorni rimanenti (90 giorni). Riservato ad admin ed editor."""
+    if current_user.role not in (UserRole.ADMIN, UserRole.EDITOR):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accesso al cestino riservato ad amministratori ed editor"
+        )
+    await purge_expired_todo_trash(db)
+
+    result = await db.execute(
+        select(Todo)
+        .options(selectinload(Todo.creator))
+        .where(Todo.deleted_at.isnot(None))
+        .order_by(Todo.deleted_at.desc())
+    )
+    all_trashed = result.scalars().all()
+    all_users = await _get_users_dict(db)
+    now = datetime.utcnow()
+
+    items = []
+    for t in all_trashed:
+        deleted_dt = t.deleted_at or now
+        elapsed_days = (now - deleted_dt).days
+        days_left = max(0, 90 - elapsed_days)
+
+        s = _serialize_todo(t, all_users)
+        s["days_left"] = days_left
+        items.append(s)
+
+    return items
+
+
+@router.delete("/trash/empty", status_code=status.HTTP_204_NO_CONTENT)
+async def empty_trash_todos(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Svuota il cestino dei TODO. Riservato ad admin ed editor."""
+    if current_user.role not in (UserRole.ADMIN, UserRole.EDITOR):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo admin ed editor possono svuotare il cestino dei TODO"
+        )
+    result = await db.execute(select(Todo).where(Todo.deleted_at.isnot(None)))
+    trashed = result.scalars().all()
+    deleted_count = 0
+    for t in trashed:
+        try:
+            attachments = json.loads(t.attachments) if t.attachments else []
+            for att in attachments:
+                fpath = att.get("path", "")
+                if fpath and os.path.exists(fpath):
+                    os.remove(fpath)
+        except Exception:
+            pass
+        await db.delete(t)
+        deleted_count += 1
+    if deleted_count > 0:
+        await db.commit()
+
+
+@router.post("/trash/{todo_id}/restore")
+async def restore_todo(
+    todo_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Ripristina un TODO dal cestino. Riservato ad admin ed editor."""
+    if current_user.role not in (UserRole.ADMIN, UserRole.EDITOR):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo admin ed editor possono ripristinare i TODO dal cestino"
+        )
+    result = await db.execute(select(Todo).where(Todo.id == todo_id))
+    todo = result.scalar_one_or_none()
+    if not todo:
+        raise HTTPException(status_code=404, detail="TODO non trovato")
+
+    todo.deleted_at = None
+    await db.commit()
+    result = await db.execute(
+        select(Todo).options(selectinload(Todo.creator)).where(Todo.id == todo_id)
+    )
+    todo = result.scalar_one()
+    all_users = await _get_users_dict(db)
+    return _serialize_todo(todo, all_users)
+
+
+@router.delete("/trash/{todo_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def hard_delete_todo(
+    todo_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Elimina definitivamente un TODO dal database e rimuove gli allegati fisici. Riservato ad admin ed editor."""
+    if current_user.role not in (UserRole.ADMIN, UserRole.EDITOR):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo admin ed editor possono eliminare definitivamente i TODO"
+        )
+    result = await db.execute(select(Todo).where(Todo.id == todo_id))
+    todo = result.scalar_one_or_none()
+    if not todo:
+        raise HTTPException(status_code=404, detail="TODO non trovato")
+
+    try:
+        attachments = json.loads(todo.attachments) if todo.attachments else []
+        for att in attachments:
+            fpath = att.get("path", "")
+            if fpath and os.path.exists(fpath):
+                os.remove(fpath)
+    except Exception:
+        pass
+
+    await db.delete(todo)
+    await db.commit()
+
+
 @router.get("", response_model=List[dict])
 async def list_todos(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Restituisce solo i TODO visibili all'utente corrente:
+    Restituisce solo i TODO visibili all'utente corrente e non cestinati:
     - quelli creati da lui
     - quelli in cui è assegnato
     """
     result = await db.execute(
         select(Todo)
         .options(selectinload(Todo.creator))
+        .where(Todo.deleted_at.is_(None))
         .order_by(Todo.created_at.desc())
     )
     all_todos = result.scalars().all()
@@ -106,6 +249,7 @@ async def list_todos(
             visible.append(_serialize_todo(t, all_users))
 
     return visible
+
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -266,18 +410,10 @@ async def delete_todo(
     if todo.creator_id != current_user.id and current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Solo il creatore o un amministratore possono eliminare questo TODO")
 
-    # Rimuovi allegati fisici
-    try:
-        attachments = json.loads(todo.attachments) if todo.attachments else []
-        for att in attachments:
-            fpath = att.get("path", "")
-            if fpath and os.path.exists(fpath):
-                os.remove(fpath)
-    except Exception:
-        pass
-
-    await db.delete(todo)
+    # Soft delete: sposta nel cestino per 90 giorni
+    todo.deleted_at = datetime.utcnow()
     await db.commit()
+
 
 
 @router.post("/{todo_id}/attachments")

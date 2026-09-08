@@ -130,7 +130,8 @@ async def lifespan(app: FastAPI):
                 select(Todo).where(
                     Todo.notify_date <= now,
                     Todo.is_completed == False,
-                    Todo.notify_sent == False
+                    Todo.notify_sent == False,
+                    Todo.deleted_at.is_(None),
                 )
             )
             for todo in todos_notify.scalars().all():
@@ -173,14 +174,13 @@ async def lifespan(app: FastAPI):
 
             await session.commit()
 
-            await session.commit()
-
             # 2) Invia reminder scadenza se manca <= 24 ore e non ancora inviato
             todos_due = await session.execute(
                 select(Todo).where(
                     Todo.due_date <= tomorrow_now,
                     Todo.is_completed == False,
-                    Todo.due_reminder_sent == False
+                    Todo.due_reminder_sent == False,
+                    Todo.deleted_at.is_(None),
                 )
             )
             for todo in todos_due.scalars().all():
@@ -292,11 +292,29 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"[SCHEDULER] Errore generazione report AI ore 07:00: {e}")
 
+    # Scheduler: Pulizia automatica definitiva del cestino (> 90 giorni) alle ore 03:00
+    async def run_daily_trash_purge():
+        try:
+            from app.models.base import AsyncSessionLocal
+            from app.services.project_service import purge_expired_trash as purge_projects
+            from app.api.todos import purge_expired_todo_trash
+            from app.api.tickets import purge_expired_ticket_trash
+            from app.api.notes import purge_expired_note_trash
+            async with AsyncSessionLocal() as session:
+                await purge_projects(session)
+                await purge_expired_todo_trash(session)
+                await purge_expired_ticket_trash(session)
+                await purge_expired_note_trash(session)
+                print("[SCHEDULER] Pulizia automatica cestino (> 90 giorni) completata con successo.")
+        except Exception as e:
+            print(f"[SCHEDULER] Errore pulizia automatica cestino: {e}")
+
+    scheduler.add_job(run_daily_trash_purge, 'cron', hour=3, minute=0)
     scheduler.add_job(run_daily_ai_report, 'cron', hour=7, minute=0)
     scheduler.add_job(run_todo_notifications, 'interval', minutes=5)
     scheduler.add_job(run_calendar_notifications, 'interval', minutes=5)
     scheduler.start()
-    print("[INIT] Scheduler avviato (Report AI ore 07:00, controllo TODO ed Eventi ogni 5 minuti)")
+    print("[INIT] Scheduler avviato (Report AI ore 07:00, pulizia Cestino 90gg ore 03:00, controllo TODO ed Eventi ogni 5 minuti)")
 
     yield
     await engine.dispose()

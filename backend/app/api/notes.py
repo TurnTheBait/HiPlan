@@ -1,4 +1,5 @@
 from typing import List
+from datetime import datetime, timedelta
 # pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 import os
@@ -61,9 +62,161 @@ def _serialize_note(note: Note) -> dict:
         "owner_id": note.owner_id,
         "owner": owner_data,
         "attachments": attachments_list,
+        "deleted_at": note.deleted_at.isoformat() if getattr(note, "deleted_at", None) else None,
         "created_at": note.created_at,
         "updated_at": note.updated_at
     }
+
+
+async def purge_expired_note_trash(db: AsyncSession):
+    """Elimina definitivamente le note nel cestino da più di 90 giorni."""
+    cutoff = datetime.utcnow() - timedelta(days=90)
+    res = await db.execute(select(Note).where(Note.deleted_at.isnot(None), Note.deleted_at <= cutoff))
+    expired = res.scalars().all()
+    for n in expired:
+        try:
+            attachments = json.loads(n.attachments) if n.attachments else []
+            for att in attachments:
+                fpath = att.get("path", "")
+                if fpath and os.path.exists(fpath):
+                    os.remove(fpath)
+        except Exception:
+            pass
+        await db.delete(n)
+    if expired:
+        await db.commit()
+
+
+@router.get("/trash", response_model=List[dict])
+async def list_trash_notes(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Restituisce le note nel cestino: per ogni utente le proprie note; per gli admin anche quelle condivise con il team."""
+    await purge_expired_note_trash(db)
+
+    if current_user.role == UserRole.ADMIN:
+        trash_filter = (
+            (Note.owner_id == current_user.id)
+            | (Note.visibility == "team")
+            | (Note.is_shared == True)
+        )
+    else:
+        trash_filter = (Note.owner_id == current_user.id)
+
+    result = await db.execute(
+        select(Note)
+        .options(selectinload(Note.owner))
+        .where(Note.deleted_at.isnot(None), trash_filter)
+        .order_by(Note.deleted_at.desc())
+    )
+    trashed = result.scalars().all()
+    now = datetime.utcnow()
+
+    items = []
+    for n in trashed:
+        deleted_dt = n.deleted_at or now
+        elapsed_days = (now - deleted_dt).days
+        s = _serialize_note(n)
+        s["days_left"] = max(0, 90 - elapsed_days)
+        items.append(s)
+
+    return items
+
+
+@router.delete("/trash/empty", status_code=status.HTTP_204_NO_CONTENT)
+async def empty_trash_notes(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Svuota il cestino delle note visibili all'utente (le proprie, più quelle team per gli admin)."""
+    if current_user.role == UserRole.ADMIN:
+        trash_filter = (
+            (Note.owner_id == current_user.id)
+            | (Note.visibility == "team")
+            | (Note.is_shared == True)
+        )
+    else:
+        trash_filter = (Note.owner_id == current_user.id)
+
+    result = await db.execute(
+        select(Note).where(Note.deleted_at.isnot(None), trash_filter)
+    )
+    trashed = result.scalars().all()
+    deleted_count = 0
+    for n in trashed:
+        try:
+            attachments = json.loads(n.attachments) if n.attachments else []
+            for att in attachments:
+                fpath = att.get("path", "")
+                if fpath and os.path.exists(fpath):
+                    os.remove(fpath)
+        except Exception:
+            pass
+        await db.delete(n)
+        deleted_count += 1
+    if deleted_count > 0:
+        await db.commit()
+
+
+@router.post("/trash/{note_id}/restore")
+async def restore_note(
+    note_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Ripristina una nota dal cestino (il proprietario, oppure un admin se la nota era condivisa col team)."""
+    result = await db.execute(
+        select(Note).options(selectinload(Note.owner)).where(Note.id == note_id)
+    )
+    note = result.scalar_one_or_none()
+    if not note:
+        raise HTTPException(status_code=404, detail="Nota non trovata")
+
+    can_manage = (note.owner_id == current_user.id) or (
+        current_user.role == UserRole.ADMIN and (note.is_shared or note.visibility == "team")
+    )
+    if not can_manage:
+        raise HTTPException(status_code=403, detail="Non hai i permessi per ripristinare questa nota")
+
+    note.deleted_at = None
+    await db.commit()
+    result = await db.execute(
+        select(Note).options(selectinload(Note.owner)).where(Note.id == note_id)
+    )
+    note = result.scalar_one()
+    return _serialize_note(note)
+
+
+@router.delete("/trash/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def hard_delete_note(
+    note_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Elimina definitivamente una nota dal database e rimuove gli allegati fisici (il proprietario, oppure un admin se condivisa col team)."""
+    result = await db.execute(select(Note).where(Note.id == note_id))
+    note = result.scalar_one_or_none()
+    if not note:
+        raise HTTPException(status_code=404, detail="Nota non trovata")
+
+    can_manage = (note.owner_id == current_user.id) or (
+        current_user.role == UserRole.ADMIN and (note.is_shared or note.visibility == "team")
+    )
+    if not can_manage:
+        raise HTTPException(status_code=403, detail="Solo il creatore della nota o un amministratore (per note di team) può eliminarla definitivamente")
+
+    try:
+        attachments = json.loads(note.attachments) if note.attachments else []
+        for att in attachments:
+            fpath = att.get("path", "")
+            if fpath and os.path.exists(fpath):
+                os.remove(fpath)
+    except Exception:
+        pass
+
+    await db.delete(note)
+    await db.commit()
 
 
 @router.get("", response_model=List[NoteOut])
@@ -75,6 +228,7 @@ async def list_notes(
         select(Note)
         .options(selectinload(Note.owner))
         .where(
+            Note.deleted_at.is_(None),
             (Note.owner_id == current_user.id) | 
             (Note.is_shared == True) | 
             (Note.visibility == 'team') | 
@@ -85,6 +239,7 @@ async def list_notes(
     result = await db.execute(query)
     notes = result.scalars().all()
     return [_serialize_note(n) for n in notes]
+
 
 
 @router.post("", response_model=NoteOut, status_code=status.HTTP_201_CREATED)
@@ -120,7 +275,7 @@ async def get_note(
     current_user: User = Depends(get_current_user),
 ):
     result = await db.execute(
-        select(Note).options(selectinload(Note.owner)).where(Note.id == note_id)
+        select(Note).options(selectinload(Note.owner)).where(Note.id == note_id, Note.deleted_at.is_(None))
     )
     note = result.scalar_one_or_none()
     if not note:
@@ -190,7 +345,7 @@ async def delete_note(
         if current_user.role != UserRole.ADMIN:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo l'autore o un amministratore può eliminare questa nota")
 
-    await db.delete(note)
+    note.deleted_at = datetime.utcnow()
     await db.commit()
     return None
 

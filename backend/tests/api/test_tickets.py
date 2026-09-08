@@ -48,3 +48,31 @@ async def test_delete_ticket(client: AsyncClient, auth_headers: dict):
 
     res_del = await client.delete(f"/api/tickets/{t_id}", headers=auth_headers)
     assert res_del.status_code == 200 or res_del.status_code == 204
+
+    # Dopo l'eliminazione, il ticket non compare nella lista standard
+    get_res = await client.get("/api/tickets", headers=auth_headers)
+    assert not any(t["id"] == t_id for t in get_res.json())
+
+    # Ma compare nel cestino con giorni rimanenti
+    trash_res = await client.get("/api/tickets/trash", headers=auth_headers)
+    assert trash_res.status_code == 200
+    trashed = next((t for t in trash_res.json() if t["id"] == t_id), None)
+    assert trashed is not None
+    assert trashed["days_left"] == 90
+
+    # Ripristino
+    rest_res = await client.post(f"/api/tickets/trash/{t_id}/restore", headers=auth_headers)
+    assert rest_res.status_code == 200
+
+    # Ricompare nella lista standard
+    get_res_after = await client.get("/api/tickets", headers=auth_headers)
+    assert any(t["id"] == t_id for t in get_res_after.json())
+
+    # Ri-elimina e poi hard delete
+    await client.delete(f"/api/tickets/{t_id}", headers=auth_headers)
+    hard_del = await client.delete(f"/api/tickets/trash/{t_id}", headers=auth_headers)
+    assert hard_del.status_code == 204
+
+    trash_res_final = await client.get("/api/tickets/trash", headers=auth_headers)
+    assert not any(t["id"] == t_id for t in trash_res_final.json())
+

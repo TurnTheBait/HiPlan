@@ -36,11 +36,15 @@ export default function TodoPage() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
 
-  // Modal
   const [showModal, setShowModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+
+  // Cestino
+  const [showTrashModal, setShowTrashModal] = useState(false);
+  const [trashTodos, setTrashTodos] = useState([]);
+  const [trashLoading, setTrashLoading] = useState(false);
 
   const fileInputRef = useRef(null);
   const modalFileRef = useRef(null);
@@ -62,10 +66,63 @@ export default function TodoPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const canAccessTrash = user?.role === 'admin' || user?.role === 'editor';
+
   useEffect(() => {
     loadTodos();
     loadUsers();
-  }, []);
+    if (canAccessTrash) {
+      loadTrash();
+    }
+  }, [canAccessTrash]);
+
+  async function loadTrash() {
+    if (!canAccessTrash) return;
+    setTrashLoading(true);
+    try {
+      const { data } = await api.get('/todos/trash');
+      setTrashTodos(Array.isArray(data) ? data : []);
+    } catch {
+      /* ignore */
+    } finally {
+      setTrashLoading(false);
+    }
+  }
+
+  async function handleRestoreTodo(todo) {
+    try {
+      await api.post(`/todos/trash/${todo.id}/restore`);
+      toast.success('TODO ripristinato con successo');
+      await loadTodos();
+      await loadTrash();
+    } catch {
+      toast.error('Errore durante il ripristino del TODO');
+    }
+  }
+
+  async function handleHardDeleteTodo(todo) {
+    if (!window.confirm(`Eliminare definitivamente "${todo.title}"?\nL'operazione è irreversibile.`)) return;
+    try {
+      await api.delete(`/todos/trash/${todo.id}`);
+      toast.success('TODO eliminato definitivamente');
+      await loadTrash();
+    } catch {
+      toast.error('Errore durante l\'eliminazione definitiva');
+    }
+  }
+
+  async function handleEmptyTrash() {
+    if (trashTodos.length === 0) return;
+    if (!window.confirm(`Svuotare il cestino dei TODO?\nTutti i ${trashTodos.length} TODO presenti verranno eliminati in modo irreversibile.`)) return;
+    try {
+      await api.delete('/todos/trash/empty');
+      toast.success('Cestino svuotato');
+      await loadTrash();
+    } catch {
+      toast.error('Errore durante lo svuotamento del cestino');
+    }
+  }
+
 
   useEffect(() => {
     if (todos.length > 0) {
@@ -236,16 +293,20 @@ export default function TodoPage() {
 
   async function deleteTodo(todo, e) {
     e?.stopPropagation();
-    if (!confirm(`Eliminare "${todo.title}"?`)) return;
+    if (!confirm(`Spostare "${todo.title}" nel cestino?\nVerrà conservato per 90 giorni prima dell'eliminazione definitiva.`)) return;
     try {
       await api.delete(`/todos/${todo.id}`);
-      toast.success('TODO eliminato');
+      toast.success('TODO spostato nel cestino');
       if (selected?.id === todo.id) setSelected(null);
       setTodos(prev => prev.filter(t => t.id !== todo.id));
+      if (canAccessTrash) {
+        loadTrash();
+      }
     } catch (e) {
       toast.error(e?.response?.data?.detail || 'Errore eliminazione');
     }
   }
+
 
   async function uploadAttachment(file, todoId) {
     const fd = new FormData();
@@ -352,7 +413,43 @@ export default function TodoPage() {
               <span className="filter-label"><AppIcon name={f.icon} size={16} />{f.label}</span>
             </button>
           ))}
+
+          {canAccessTrash && (
+            <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
+              <button
+                className="todo-filter-btn"
+                onClick={() => { setShowTrashModal(true); loadTrash(); }}
+                title="Cestino TODO (conservati per 90 giorni)"
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  color: 'var(--text-secondary)'
+                }}
+              >
+                <span className="filter-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <AppIcon name="trash" size={16} /> Cestino
+                </span>
+                {trashTodos.length > 0 && (
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      padding: '2px 7px',
+                      borderRadius: 999,
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      color: 'var(--danger, #ef4444)'
+                    }}
+                  >
+                    {trashTodos.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          )}
         </aside>
+
 
         {/* Main */}
         <div className="todo-main">
@@ -766,6 +863,167 @@ export default function TodoPage() {
           </div>
         </div>
       )}
+
+      {/* MODALE CESTINO TODO */}
+      {showTrashModal && canAccessTrash && (
+        <div className="modal-overlay" onClick={() => setShowTrashModal(false)}>
+          <div
+            className="modal trash-modal animate-scaleIn"
+            style={{
+              maxWidth: 780,
+              width: '94%',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'var(--bg-card, #ffffff)',
+              backgroundColor: 'var(--bg-card, #ffffff)',
+              borderRadius: 16,
+              padding: '24px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              border: '1px solid var(--border-default)',
+              zIndex: 1001,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header del Cestino */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: 16, borderBottom: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 12,
+                  background: 'rgba(239, 68, 68, 0.12)', color: 'var(--danger, #ef4444)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                }}>
+                  <AppIcon name="trash" size={24} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Cestino TODO</h2>
+                    <span style={{
+                      fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+                      background: 'rgba(148, 163, 184, 0.16)', color: 'var(--text-secondary)'
+                    }}>
+                      {trashTodos.length} {trashTodos.length === 1 ? 'elemento' : 'elementi'}
+                    </span>
+                  </div>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--text-tertiary)' }}>
+                    Gli elementi vengono conservati per 90 giorni prima dell'eliminazione definitiva automatica.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {trashTodos.length > 0 && (
+                  <button
+                    className="btn btn-danger btn-sm"
+                    onClick={handleEmptyTrash}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', padding: '6px 12px' }}
+                  >
+                    <AppIcon name="trash" size={14} />
+                    Svuota Cestino
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn-ghost btn-icon"
+                  onClick={() => setShowTrashModal(false)}
+                  aria-label="Chiudi"
+                  style={{ width: 34, height: 34, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <AppIcon name="close" size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Lista dei TODO nel Cestino */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 0', minHeight: 220 }}>
+              {trashLoading ? (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '60px 0' }}>
+                  <div className="spinner" />
+                </div>
+              ) : trashTodos.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-tertiary)' }}>
+                  <div style={{
+                    width: 54, height: 54, borderRadius: '50%',
+                    background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', margin: '0 auto 16px', color: 'var(--text-muted)'
+                  }}>
+                    <AppIcon name="trash" size={26} />
+                  </div>
+                  <h3 style={{ fontSize: '0.98rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>
+                    Il cestino è vuoto
+                  </h3>
+                  <p style={{ fontSize: '0.84rem', margin: 0 }}>
+                    Nessun TODO presente nel cestino.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {trashTodos.map((t) => (
+                    <div
+                      key={t.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '12px 16px', borderRadius: 10,
+                        border: '1px solid var(--border-default)', background: 'var(--bg-card)',
+                        gap: 16
+                      }}
+                    >
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.92rem', marginBottom: 4 }}>
+                          {t.title}
+                        </div>
+                        {t.content && (
+                          <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {t.content}
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                          <span>Creato da: {t.creator_full_name || t.creator_username || 'Utente'}</span>
+                          <span>•</span>
+                          <span>Eliminato il {t.deleted_at ? new Date(t.deleted_at).toLocaleDateString('it-IT') : 'N/D'}</span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                        <span
+                          style={{
+                            fontSize: '0.75rem', fontWeight: 650, padding: '4px 10px', borderRadius: 999,
+                            background: t.days_left <= 7 ? 'rgba(239, 68, 68, 0.12)' : (t.days_left <= 30 ? 'rgba(245, 158, 11, 0.12)' : 'var(--bg-tertiary)'),
+                            color: t.days_left <= 7 ? 'var(--danger, #ef4444)' : (t.days_left <= 30 ? '#d97706' : 'var(--text-secondary)'),
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {t.days_left <= 0 ? 'Eliminazione oggi' : `Tra ${t.days_left} giorni`}
+                        </span>
+
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleRestoreTodo(t)}
+                          title="Ripristina TODO"
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', padding: '6px 12px' }}
+                        >
+                          <AppIcon name="undo" size={14} />
+                          Ripristina
+                        </button>
+
+                        <button
+                          className="btn btn-icon btn-sm"
+                          onClick={() => handleHardDeleteTodo(t)}
+                          title="Elimina definitivamente"
+                          style={{ color: 'var(--danger, #ef4444)', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                        >
+                          <AppIcon name="trash" size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

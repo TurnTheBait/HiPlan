@@ -1,6 +1,6 @@
 import enum
 # pyrefly: ignore [missing-import]
-from sqlalchemy import Column, String, Text, Enum, ForeignKey
+from sqlalchemy import Column, String, Text, Enum, ForeignKey, DateTime
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import relationship
 from app.models.base import Base, TimestampMixin, uuid_pk, uuid_fk
@@ -32,6 +32,7 @@ class Ticket(Base, TimestampMixin):
     attachments = Column(Text, default="[]", nullable=False)  # JSON list of file paths
     status = Column(Enum(TicketStatus), default=TicketStatus.DA_GESTIRE, nullable=False)
     priority = Column(Enum(TicketPriority), default=TicketPriority.MEDIUM, nullable=False)
+    deleted_at = Column(DateTime, nullable=True, default=None)
 
     author = relationship("User", foreign_keys=[author_id])
     responsible = relationship("User", foreign_keys=[responsible_id])

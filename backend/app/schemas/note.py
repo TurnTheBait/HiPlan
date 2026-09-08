@@ -33,5 +33,7 @@ class NoteOut(BaseModel):
     attachments: List[dict] = []
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+

@@ -52,6 +52,11 @@ export default function NotesPage() {
 
   const [users, setUsers] = useState([]);
 
+  // Cestino
+  const [showTrashModal, setShowTrashModal] = useState(false);
+  const [trashNotes, setTrashNotes] = useState([]);
+  const [trashLoading, setTrashLoading] = useState(false);
+
   // Ordinamento e riordino personalizzato (drag & drop) delle note
   const [sortMode, setSortMode] = useState(() => (loadSavedOrder().length ? 'custom' : 'created'));
   const [customOrder, setCustomOrder] = useState(loadSavedOrder);
@@ -61,6 +66,18 @@ export default function NotesPage() {
   // Ref per l'editor visuale contentEditable e timeout autocalcolato
   const editorRef = useRef(null);
   const saveTimeoutRef = useRef(null);
+
+  const loadTrash = useCallback(async () => {
+    setTrashLoading(true);
+    try {
+      const { data } = await api.get('/notes/trash');
+      setTrashNotes(Array.isArray(data) ? data : []);
+    } catch {
+      /* ignore */
+    } finally {
+      setTrashLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     async function loadUsers() {
@@ -85,7 +102,8 @@ export default function NotesPage() {
 
   useEffect(() => {
     loadNotes();
-  }, []);
+    loadTrash();
+  }, [loadTrash]);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -105,6 +123,40 @@ export default function NotesPage() {
       toast.error('Errore durante il caricamento dei blocchi note');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleRestoreNote(note) {
+    try {
+      await api.post(`/notes/trash/${note.id}/restore`);
+      toast.success('Nota ripristinata con successo');
+      await loadNotes();
+      await loadTrash();
+    } catch {
+      toast.error('Errore durante il ripristino della nota');
+    }
+  }
+
+  async function handleHardDeleteNote(note) {
+    if (!window.confirm(`Eliminare definitivamente la nota "${note.title}"?\nL'operazione è irreversibile.`)) return;
+    try {
+      await api.delete(`/notes/trash/${note.id}`);
+      toast.success('Nota eliminata definitivamente');
+      await loadTrash();
+    } catch {
+      toast.error('Errore durante l\'eliminazione definitiva');
+    }
+  }
+
+  async function handleEmptyTrash() {
+    if (trashNotes.length === 0) return;
+    if (!window.confirm(`Svuotare il cestino delle note?\nTutte le ${trashNotes.length} note presenti verranno eliminate in modo irreversibile.`)) return;
+    try {
+      await api.delete('/notes/trash/empty');
+      toast.success('Cestino svuotato');
+      await loadTrash();
+    } catch {
+      toast.error('Errore durante lo svuotamento del cestino');
     }
   }
 
@@ -337,10 +389,10 @@ export default function NotesPage() {
   // Eliminazione Nota
   async function handleDeleteNote() {
     if (!activeNoteId) return;
-    if (!window.confirm(`Eliminare definitivamente la nota "${title}"?`)) return;
+    if (!window.confirm(`Spostare la nota "${title}" nel cestino?\nVerrà conservata per 90 giorni prima dell'eliminazione definitiva.`)) return;
     try {
       await api.delete(`/notes/${activeNoteId}`);
-      toast.success('Nota eliminata');
+      toast.success('Nota spostata nel cestino');
       const updated = notes.filter(n => n.id !== activeNoteId);
       setNotes(updated);
       if (updated.length > 0) {
@@ -348,8 +400,9 @@ export default function NotesPage() {
       } else {
         selectNote(null);
       }
+      loadTrash();
     } catch {
-      toast.error('Errore durante l\'eliminazione');
+      toast.error('Errore durante lo spostamento nel cestino');
     }
   }
 
@@ -760,6 +813,47 @@ export default function NotesPage() {
               );
             })
           )}
+        </div>
+
+        <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+          <button
+            className="notes-trash-btn"
+            onClick={() => { setShowTrashModal(true); loadTrash(); }}
+            title="Cestino Note (conservate per 90 giorni)"
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '8px 12px',
+              borderRadius: 10,
+              border: '1px solid var(--border-subtle)',
+              background: 'var(--bg-tertiary)',
+              cursor: 'pointer',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AppIcon name="trash" size={15} /> Cestino
+            </span>
+            {trashNotes.length > 0 && (
+              <span
+                style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  padding: '1px 6px',
+                  borderRadius: 999,
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  color: 'var(--danger, #ef4444)'
+                }}
+              >
+                {trashNotes.length}
+              </span>
+            )}
+          </button>
         </div>
       </aside>
 
@@ -1173,6 +1267,172 @@ export default function NotesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODALE CESTINO NOTE */}
+      {showTrashModal && (
+        <div className="modal-overlay" onClick={() => setShowTrashModal(false)}>
+          <div
+            className="modal trash-modal animate-scaleIn"
+            style={{
+              maxWidth: 780,
+              width: '94%',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'var(--bg-card, #ffffff)',
+              backgroundColor: 'var(--bg-card, #ffffff)',
+              borderRadius: 16,
+              padding: '24px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              border: '1px solid var(--border-default)',
+              zIndex: 1001,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header del Cestino */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: 16, borderBottom: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 12,
+                  background: 'rgba(239, 68, 68, 0.12)', color: 'var(--danger, #ef4444)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                }}>
+                  <AppIcon name="trash" size={24} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Cestino Note</h2>
+                    <span style={{
+                      fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+                      background: 'rgba(148, 163, 184, 0.16)', color: 'var(--text-secondary)'
+                    }}>
+                      {trashNotes.length} {trashNotes.length === 1 ? 'elemento' : 'elementi'}
+                    </span>
+                  </div>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--text-tertiary)' }}>
+                    {user?.role === 'admin'
+                      ? "Mostra le note create da te e quelle condivise con il team. Gli elementi vengono conservati per 90 giorni prima dell'eliminazione definitiva automatica."
+                      : "Mostra solo le note create da te. Gli elementi vengono conservati per 90 giorni prima dell'eliminazione definitiva automatica."}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {trashNotes.length > 0 && (
+                  <button
+                    className="btn btn-danger btn-sm"
+                    onClick={handleEmptyTrash}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', padding: '6px 12px' }}
+                  >
+                    <AppIcon name="trash" size={14} />
+                    Svuota Cestino
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn-ghost btn-icon"
+                  onClick={() => setShowTrashModal(false)}
+                  aria-label="Chiudi"
+                  style={{ width: 34, height: 34, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <AppIcon name="close" size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Lista delle Note nel Cestino */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 0', minHeight: 220 }}>
+              {trashLoading ? (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '60px 0' }}>
+                  <div className="spinner" />
+                </div>
+              ) : trashNotes.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-tertiary)' }}>
+                  <div style={{
+                    width: 54, height: 54, borderRadius: '50%',
+                    background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', margin: '0 auto 16px', color: 'var(--text-muted)'
+                  }}>
+                    <AppIcon name="trash" size={26} />
+                  </div>
+                  <h3 style={{ fontSize: '0.98rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>
+                    Il cestino è vuoto
+                  </h3>
+                  <p style={{ fontSize: '0.84rem', margin: 0 }}>
+                    Nessuna nota presente nel cestino.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {trashNotes.map((n) => (
+                    <div
+                      key={n.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '12px 16px', borderRadius: 10,
+                        border: '1px solid var(--border-default)', background: 'var(--bg-card)',
+                        gap: 16
+                      }}
+                    >
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.92rem', marginBottom: 4 }}>
+                          {n.title || 'Senza Titolo'}
+                        </div>
+                        {n.content && (
+                          <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {n.content.replace(/<[^>]*>/g, '').slice(0, 100)}
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                          <span>
+                            {n.owner_id === user?.id
+                              ? 'Creata da te'
+                              : `Creata da: ${n.owner?.full_name || n.owner?.username || 'Utente'} (Team)`}
+                          </span>
+                          <span>•</span>
+                          <span>Eliminata il {n.deleted_at ? new Date(n.deleted_at).toLocaleDateString('it-IT') : 'N/D'}</span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                        <span
+                          style={{
+                            fontSize: '0.75rem', fontWeight: 650, padding: '4px 10px', borderRadius: 999,
+                            background: n.days_left <= 7 ? 'rgba(239, 68, 68, 0.12)' : (n.days_left <= 30 ? 'rgba(245, 158, 11, 0.12)' : 'var(--bg-tertiary)'),
+                            color: n.days_left <= 7 ? 'var(--danger, #ef4444)' : (n.days_left <= 30 ? '#d97706' : 'var(--text-secondary)'),
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {n.days_left <= 0 ? 'Eliminazione oggi' : `Tra ${n.days_left} giorni`}
+                        </span>
+
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleRestoreNote(n)}
+                          title="Ripristina Nota"
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', padding: '6px 12px' }}
+                        >
+                          <AppIcon name="undo" size={14} />
+                          Ripristina
+                        </button>
+
+                        <button
+                          className="btn btn-icon btn-sm"
+                          onClick={() => handleHardDeleteNote(n)}
+                          title="Elimina definitivamente"
+                          style={{ color: 'var(--danger, #ef4444)', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                        >
+                          <AppIcon name="trash" size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
