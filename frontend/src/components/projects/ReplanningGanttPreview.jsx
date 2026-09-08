@@ -1077,27 +1077,57 @@ export default function ReplanningGanttPreview({
               <span>Mostra solo fasi impattate ({isViewingRelated ? relatedImpactCount : directCount + cascadeCount})</span>
             </label>
 
-            {!isViewingRelated && activeSuggestion && canManage && (
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  if (onApplySuggestion) {
-                    onApplySuggestion(activeSuggestion);
-                  }
-                }}
-                style={{
-                  padding: '6px 14px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  background: '#2563eb'
-                }}
-              >
-                <CheckCircle size={14} />
-                Applica Questa Modifica
-              </button>
+            {!isViewingRelated && canManage && (
+              activeSuggestion ? (
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    if (onApplySuggestion) {
+                      onApplySuggestion(activeSuggestion);
+                    }
+                  }}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    background: '#2563eb'
+                  }}
+                  title="Applica questa singola proposta di ottimizzazione"
+                >
+                  <CheckCircle size={14} />
+                  Applica Questa Modifica
+                </button>
+              ) : selectedSuggestionId === 'all' && primaryCombinedSuggestions.length > 0 ? (
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    if (onApplySuggestion) {
+                      onApplySuggestion({
+                        isBatch: true,
+                        suggestions: primaryCombinedSuggestions,
+                        count: primaryCombinedSuggestions.length,
+                        action_label: `Applicazione di ${primaryCombinedSuggestions.length} modifiche consigliate`
+                      });
+                    }
+                  }}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    background: '#2563eb'
+                  }}
+                  title="Applica contemporaneamente tutte le azioni consigliate simulate (escluse le opzioni alternative)"
+                >
+                  <CheckCircle size={14} />
+                  Applica Modifiche Consigliate ({primaryCombinedSuggestions.length})
+                </button>
+              ) : null
             )}
           </div>
         </div>

@@ -21,6 +21,7 @@ class ReplanLog(Base, TimestampMixin):
     __tablename__ = "replan_logs"
 
     id = uuid_pk()
+    parent_log_id = Column(uuid_fk(), ForeignKey("replan_logs.id", ondelete="CASCADE"), nullable=True)
     action_type = Column(Enum(ReplanActionType), nullable=False)
     task_id = Column(uuid_fk(), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
     project_id = Column(uuid_fk(), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
@@ -30,6 +31,8 @@ class ReplanLog(Base, TimestampMixin):
     old_end_date = Column(Date, nullable=True)
     new_start_date = Column(Date, nullable=True)
     new_end_date = Column(Date, nullable=True)
+    old_workers = Column(Text, nullable=True)
+    old_worker_hours = Column(Text, nullable=True)
     shift_days = Column(Integer, default=0, nullable=False)
     reverted = Column(Boolean, default=False, nullable=False)
     reverted_at = Column(DateTime(timezone=True), nullable=True)
@@ -39,3 +42,4 @@ class ReplanLog(Base, TimestampMixin):
     task = relationship("Task", foreign_keys=[task_id])
     project = relationship("Project", foreign_keys=[project_id])
     reverted_by_user = relationship("User", foreign_keys=[reverted_by])
+    parent_log = relationship("ReplanLog", remote_side=[id], backref="cascade_logs")

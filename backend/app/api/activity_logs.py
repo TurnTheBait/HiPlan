@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 # pyrefly: ignore [missing-import]
 from sqlalchemy import desc
 from typing import List, Any
+from datetime import timezone
 import uuid
 
 from app.models.base import AsyncSessionLocal
@@ -54,7 +55,7 @@ async def get_activity_logs(
             "user_id": log.user_id,
             "category": log.category.value,
             "action_text": log.action_text,
-            "created_at": log.created_at.isoformat() if log.created_at else None,
+            "created_at": (log.created_at.replace(tzinfo=timezone.utc).isoformat() if log.created_at.tzinfo is None else log.created_at.isoformat()) if log.created_at else None,
             "user_name": log.user.full_name if log.user else "Sistema"
         })
 

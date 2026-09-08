@@ -25,6 +25,14 @@ logger = logging.getLogger(__name__)
 MAX_DAILY_HOURS = 8.0
 
 
+def to_utc_iso(dt: Optional[datetime]) -> Optional[str]:
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
 def is_weekend_or_holiday(d: date) -> bool:
     return not is_working_day(d)
 
@@ -1114,18 +1122,37 @@ async def generate_project_smart_suggestions(
     # Estrai cronologia delle modifiche applicate su questa commessa
     log_res = await db.execute(
         select(ReplanLog)
-        .options(selectinload(ReplanLog.task), selectinload(ReplanLog.reverted_by_user))
-        .where(ReplanLog.project_id == project_id)
+        .options(
+            selectinload(ReplanLog.task),
+            selectinload(ReplanLog.reverted_by_user),
+            selectinload(ReplanLog.cascade_logs).selectinload(ReplanLog.task)
+        )
+        .where(
+            ReplanLog.project_id == project_id,
+            ReplanLog.parent_log_id.is_(None)
+        )
         .order_by(desc(ReplanLog.created_at))
-        .limit(20)
+        .limit(30)
     )
     history_logs = []
     for log in log_res.scalars().all():
+        cascade_items = []
+        if getattr(log, "cascade_logs", None):
+            for cl in log.cascade_logs:
+                cascade_items.append({
+                    "id": str(cl.id),
+                    "task_id": str(cl.task_id) if cl.task_id else None,
+                    "task_name": cl.task.text if cl.task else "Fase a valle",
+                    "shift_days": cl.shift_days,
+                    "reverted": cl.reverted
+                })
+
         history_logs.append({
             "id": str(log.id),
+            "parent_log_id": str(log.parent_log_id) if getattr(log, "parent_log_id", None) else None,
             "action_type": log.action_type.value,
             "task_id": str(log.task_id) if log.task_id else None,
-            "task_name": log.task.text if log.task else "Fase",
+            "task_name": log.task.text if log.task else "Piano Consigliato",
             "worker_name": log.worker_name,
             "reason": log.reason,
             "old_start_date": log.old_start_date.isoformat() if log.old_start_date else None,
@@ -1134,9 +1161,11 @@ async def generate_project_smart_suggestions(
             "new_end_date": log.new_end_date.isoformat() if log.new_end_date else None,
             "shift_days": log.shift_days,
             "reverted": log.reverted,
-            "created_at": log.created_at.isoformat() if log.created_at else None,
-            "reverted_at": log.reverted_at.isoformat() if log.reverted_at else None,
-            "reverted_by_name": log.reverted_by_user.full_name if log.reverted_by_user else None
+            "created_at": to_utc_iso(log.created_at),
+            "reverted_at": to_utc_iso(log.reverted_at),
+            "reverted_by_name": log.reverted_by_user.full_name if log.reverted_by_user else None,
+            "cascade_logs": cascade_items,
+            "cascade_count": len(cascade_items)
         })
 
     # Estrai commesse correlate impattate dalle proposte
@@ -1220,7 +1249,10 @@ async def apply_smart_replanning_proposal(
     db: AsyncSession,
     project_id: str,
     proposal_payload: Dict[str, Any],
-    current_user: User
+    current_user: User,
+    parent_batch_log_id: Optional[str] = None,
+    task_snapshots: Optional[Dict[str, Dict[str, Any]]] = None,
+    commit_on_finish: bool = True
 ) -> Dict[str, Any]:
     """
     Applica transazionalmente le modifiche proposte da un suggerimento approvato:
@@ -1237,9 +1269,28 @@ async def apply_smart_replanning_proposal(
     if not task:
         raise ValueError("Task non trovato.")
 
-    old_start = task.start_date
-    old_end = task.end_date
-    old_workers = task.workers
+    effective_parent_id = parent_batch_log_id or None
+
+    # Snapshot dello stato ante-modifica per prevenire corruzioni da modifiche cumulative successive
+    if task_snapshots is not None:
+        t_key = str(task.id)
+        if t_key not in task_snapshots:
+            task_snapshots[t_key] = {
+                "start_date": task.start_date,
+                "end_date": task.end_date,
+                "workers": task.workers,
+                "worker_hours": getattr(task, "worker_hours", None)
+            }
+        snap = task_snapshots[t_key]
+        old_start = snap["start_date"]
+        old_end = snap["end_date"]
+        old_workers = snap["workers"]
+        old_worker_hours = snap["worker_hours"]
+    else:
+        old_start = task.start_date
+        old_end = task.end_date
+        old_workers = task.workers
+        old_worker_hours = getattr(task, "worker_hours", None)
 
     # 1. Aggiorna date se fornite
     new_start_str = proposal_payload.get("start_date")
@@ -1273,6 +1324,7 @@ async def apply_smart_replanning_proposal(
     # 3. Salva in ReplanLog
     log_entry = ReplanLog(
         id=str(uuid4()),
+        parent_log_id=effective_parent_id,
         action_type=action_type,
         task_id=task.id,
         project_id=project_id,
@@ -1282,6 +1334,8 @@ async def apply_smart_replanning_proposal(
         old_end_date=old_end,
         new_start_date=task.start_date,
         new_end_date=task.end_date,
+        old_workers=old_workers,
+        old_worker_hours=old_worker_hours,
         shift_days=shift_days,
         reverted=False
     )
@@ -1307,15 +1361,34 @@ async def apply_smart_replanning_proposal(
             s_res = await db.execute(select(Task).where(Task.id == s_id))
             s_task = s_res.scalar_one_or_none()
             if s_task:
-                s_old_start = s_task.start_date
-                s_old_end = s_task.end_date
+                if task_snapshots is not None:
+                    st_key = str(s_task.id)
+                    if st_key not in task_snapshots:
+                        task_snapshots[st_key] = {
+                            "start_date": s_task.start_date,
+                            "end_date": s_task.end_date,
+                            "workers": s_task.workers,
+                            "worker_hours": getattr(s_task, "worker_hours", None)
+                        }
+                    s_snap = task_snapshots[st_key]
+                    s_old_start = s_snap["start_date"]
+                    s_old_end = s_snap["end_date"]
+                    s_old_workers = s_snap["workers"]
+                    s_old_worker_hours = s_snap["worker_hours"]
+                else:
+                    s_old_start = s_task.start_date
+                    s_old_end = s_task.end_date
+                    s_old_workers = s_task.workers
+                    s_old_worker_hours = getattr(s_task, "worker_hours", None)
+
                 s_task.start_date = datetime.strptime(s_start_str[:10], "%Y-%m-%d").date()
                 s_task.end_date = datetime.strptime(s_end_str[:10], "%Y-%m-%d").date()
                 s_task.duration = get_working_days_count(s_task.start_date, s_task.end_date)
                 
-                # Log successore
+                # Log successore collegato al log principale genitore o al batch
                 s_log = ReplanLog(
                     id=str(uuid4()),
+                    parent_log_id=effective_parent_id or log_entry.id,
                     action_type=ReplanActionType.SHIFT_CASCADE,
                     task_id=s_task.id,
                     project_id=project_id,
@@ -1325,6 +1398,8 @@ async def apply_smart_replanning_proposal(
                     old_end_date=s_old_end,
                     new_start_date=s_task.start_date,
                     new_end_date=s_task.end_date,
+                    old_workers=s_old_workers,
+                    old_worker_hours=s_old_worker_hours,
                     shift_days=int(succ_data.get("shift_working_days", 0)),
                     reverted=False
                 )
@@ -1340,14 +1415,33 @@ async def apply_smart_replanning_proposal(
             r_res = await db.execute(select(Task).where(Task.id == r_id))
             r_task = r_res.scalar_one_or_none()
             if r_task:
-                r_old_start = r_task.start_date
-                r_old_end = r_task.end_date
+                if task_snapshots is not None:
+                    rt_key = str(r_task.id)
+                    if rt_key not in task_snapshots:
+                        task_snapshots[rt_key] = {
+                            "start_date": r_task.start_date,
+                            "end_date": r_task.end_date,
+                            "workers": r_task.workers,
+                            "worker_hours": getattr(r_task, "worker_hours", None)
+                        }
+                    r_snap = task_snapshots[rt_key]
+                    r_old_start = r_snap["start_date"]
+                    r_old_end = r_snap["end_date"]
+                    r_old_workers = r_snap["workers"]
+                    r_old_worker_hours = r_snap["worker_hours"]
+                else:
+                    r_old_start = r_task.start_date
+                    r_old_end = r_task.end_date
+                    r_old_workers = r_task.workers
+                    r_old_worker_hours = getattr(r_task, "worker_hours", None)
+
                 r_task.start_date = datetime.strptime(r_start_str[:10], "%Y-%m-%d").date()
                 r_task.end_date = datetime.strptime(r_end_str[:10], "%Y-%m-%d").date()
                 r_task.duration = get_working_days_count(r_task.start_date, r_task.end_date)
 
                 r_log = ReplanLog(
                     id=str(uuid4()),
+                    parent_log_id=effective_parent_id or log_entry.id,
                     action_type=ReplanActionType.SHIFT_CASCADE,
                     task_id=r_task.id,
                     project_id=r_task.project_id,
@@ -1357,6 +1451,8 @@ async def apply_smart_replanning_proposal(
                     old_end_date=r_old_end,
                     new_start_date=r_task.start_date,
                     new_end_date=r_task.end_date,
+                    old_workers=r_old_workers,
+                    old_worker_hours=r_old_worker_hours,
                     shift_days=int(rel_corr.get("shift_working_days", 0)),
                     reverted=False
                 )
@@ -1371,14 +1467,33 @@ async def apply_smart_replanning_proposal(
                         sub_res = await db.execute(select(Task).where(Task.id == sub_id))
                         sub_t = sub_res.scalar_one_or_none()
                         if sub_t:
-                            s_old_st = sub_t.start_date
-                            s_old_en = sub_t.end_date
+                            if task_snapshots is not None:
+                                sub_key = str(sub_t.id)
+                                if sub_key not in task_snapshots:
+                                    task_snapshots[sub_key] = {
+                                        "start_date": sub_t.start_date,
+                                        "end_date": sub_t.end_date,
+                                        "workers": sub_t.workers,
+                                        "worker_hours": getattr(sub_t, "worker_hours", None)
+                                    }
+                                sub_snap = task_snapshots[sub_key]
+                                s_old_st = sub_snap["start_date"]
+                                s_old_en = sub_snap["end_date"]
+                                s_old_wk = sub_snap["workers"]
+                                s_old_wh = sub_snap["worker_hours"]
+                            else:
+                                s_old_st = sub_t.start_date
+                                s_old_en = sub_t.end_date
+                                s_old_wk = sub_t.workers
+                                s_old_wh = getattr(sub_t, "worker_hours", None)
+
                             sub_t.start_date = datetime.strptime(sub_start_s[:10], "%Y-%m-%d").date()
                             sub_t.end_date = datetime.strptime(sub_end_s[:10], "%Y-%m-%d").date()
                             sub_t.duration = get_working_days_count(sub_t.start_date, sub_t.end_date)
 
                             sub_l = ReplanLog(
                                 id=str(uuid4()),
+                                parent_log_id=effective_parent_id or log_entry.id,
                                 action_type=ReplanActionType.SHIFT_CASCADE,
                                 task_id=sub_t.id,
                                 project_id=sub_t.project_id,
@@ -1388,13 +1503,16 @@ async def apply_smart_replanning_proposal(
                                 old_end_date=s_old_en,
                                 new_start_date=sub_t.start_date,
                                 new_end_date=sub_t.end_date,
+                                old_workers=s_old_wk,
+                                old_worker_hours=s_old_wh,
                                 shift_days=int(sub_s.get("shift_working_days", 0)),
                                 reverted=False
                             )
                             db.add(sub_l)
 
-    await db.commit()
-    await db.refresh(task)
+    if commit_on_finish:
+        await db.commit()
+        await db.refresh(task)
 
     return {
         "success": True,
@@ -1410,6 +1528,65 @@ async def apply_smart_replanning_proposal(
     }
 
 
+async def apply_smart_replanning_batch(
+    db: AsyncSession,
+    project_id: str,
+    proposals: List[Dict[str, Any]],
+    current_user: User
+) -> Dict[str, Any]:
+    """
+    Applica atomicamente un intero piano consigliato multi-proposta:
+    1. Effettua uno snapshot immutabile di tutti i task ante-modifica, così che nessun task
+       possa registrare date intermedie sballate da modifiche cumulative successive.
+    2. Crea un master log del batch (parent_log_id=None) a cui aggancia tutti i sotto-log.
+    3. Rende l'intero piano reversibile al 100% con un singolo click in modo consistente.
+    """
+    if not proposals:
+        return {"success": True, "message": "Nessuna proposta da applicare.", "results": []}
+
+    batch_log_id = str(uuid4())
+    batch_log = ReplanLog(
+        id=batch_log_id,
+        parent_log_id=None,
+        action_type=ReplanActionType.SHIFT_DELAY,
+        task_id=None,
+        project_id=project_id,
+        worker_name=None,
+        reason=f"Piano Consigliato Combinato ({len(proposals)} azioni)",
+        old_start_date=None,
+        old_end_date=None,
+        new_start_date=None,
+        new_end_date=None,
+        shift_days=0,
+        reverted=False
+    )
+    db.add(batch_log)
+
+    task_snapshots: Dict[str, Dict[str, Any]] = {}
+    results = []
+
+    for payload in proposals:
+        res = await apply_smart_replanning_proposal(
+            db=db,
+            project_id=project_id,
+            proposal_payload=payload,
+            current_user=current_user,
+            parent_batch_log_id=batch_log_id,
+            task_snapshots=task_snapshots,
+            commit_on_finish=False
+        )
+        results.append(res)
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "batch_log_id": batch_log_id,
+        "message": f"{len(proposals)} ottimizzazioni applicate con successo!",
+        "results": results
+    }
+
+
 async def revert_smart_replanning_log(
     db: AsyncSession,
     log_id: str,
@@ -1417,34 +1594,103 @@ async def revert_smart_replanning_log(
 ) -> Dict[str, Any]:
     """
     Annulla una modifica precedentemente applicata ripristinando date e addetti
-    registrati in ReplanLog.
+    registrati in ReplanLog, insieme a tutte le modifiche a cascata causate da tale operazione.
     """
-    res = await db.execute(select(ReplanLog).where(ReplanLog.id == log_id))
+    res = await db.execute(
+        select(ReplanLog)
+        .options(selectinload(ReplanLog.task))
+        .where(ReplanLog.id == log_id)
+    )
     log_entry = res.scalar_one_or_none()
     if not log_entry:
         raise ValueError("Voce di cronologia non trovata.")
     if log_entry.reverted:
         raise ValueError("Questa operazione è già stata annullata in precedenza.")
 
-    if log_entry.task_id:
-        task_res = await db.execute(select(Task).where(Task.id == log_entry.task_id))
-        task = task_res.scalar_one_or_none()
-        if task:
-            if log_entry.old_start_date:
-                task.start_date = log_entry.old_start_date
-            if log_entry.old_end_date:
-                task.end_date = log_entry.old_end_date
-            if task.start_date and task.end_date:
-                task.duration = get_working_days_count(task.start_date, task.end_date)
+    # Se è stato selezionato un log a cascata figlio, risali al log genitore principale
+    root_log = log_entry
+    if log_entry.parent_log_id:
+        p_res = await db.execute(
+            select(ReplanLog)
+            .options(selectinload(ReplanLog.task))
+            .where(ReplanLog.id == log_entry.parent_log_id)
+        )
+        parent_log = p_res.scalar_one_or_none()
+        if parent_log and not parent_log.reverted:
+            root_log = parent_log
 
-    log_entry.reverted = True
-    log_entry.reverted_at = datetime.now(timezone.utc)
-    log_entry.reverted_by = current_user.id
+    now = datetime.now(timezone.utc)
+    reverted_task_names = []
+
+    # Helper per ripristinare un singolo log
+    async def _revert_single_log(item: ReplanLog):
+        if item.task_id and not item.reverted:
+            t_res = await db.execute(select(Task).where(Task.id == item.task_id))
+            task = t_res.scalar_one_or_none()
+            if task:
+                if item.old_start_date:
+                    task.start_date = item.old_start_date
+                if item.old_end_date:
+                    task.end_date = item.old_end_date
+                if task.start_date and task.end_date:
+                    task.duration = get_working_days_count(task.start_date, task.end_date)
+                if item.old_workers is not None:
+                    task.workers = item.old_workers
+                if hasattr(item, "old_worker_hours") and item.old_worker_hours is not None:
+                    task.worker_hours = item.old_worker_hours
+                reverted_task_names.append(task.text)
+
+        item.reverted = True
+        item.reverted_at = now
+        item.reverted_by = current_user.id
+
+    # 1. Annulla il log principale
+    await _revert_single_log(root_log)
+
+    # 2. Trova e annulla TUTTI i log a cascata generati da root_log
+    cascade_res = await db.execute(
+        select(ReplanLog)
+        .options(selectinload(ReplanLog.task))
+        .where(
+            ReplanLog.parent_log_id == root_log.id,
+            ReplanLog.reverted == False
+        )
+    )
+    cascade_logs = list(cascade_res.scalars().all())
+
+    # Fallback compatibilità con log legacy (privi di parent_log_id)
+    if not cascade_logs and root_log.created_at and root_log.task:
+        time_start = root_log.created_at - timedelta(seconds=15)
+        time_end = root_log.created_at + timedelta(seconds=15)
+        legacy_res = await db.execute(
+            select(ReplanLog)
+            .options(selectinload(ReplanLog.task))
+            .where(
+                ReplanLog.action_type == ReplanActionType.SHIFT_CASCADE,
+                ReplanLog.reverted == False,
+                ReplanLog.created_at >= time_start,
+                ReplanLog.created_at <= time_end
+            )
+        )
+        for l in legacy_res.scalars().all():
+            if root_log.task.text in (l.reason or ""):
+                cascade_logs.append(l)
+
+    cascade_count = 0
+    for c_log in cascade_logs:
+        await _revert_single_log(c_log)
+        cascade_count += 1
 
     await db.commit()
 
+    msg = "Operazione annullata con successo."
+    if cascade_count > 0:
+        msg = f"Operazione principale e {cascade_count} slittamenti a cascata annullati con successo."
+
     return {
         "success": True,
-        "message": "Operazione annullata e stato precedente ripristinato con successo.",
-        "log_id": str(log_entry.id)
+        "message": msg,
+        "log_id": str(root_log.id),
+        "cascade_reverted_count": cascade_count,
+        "reverted_tasks": reverted_task_names
     }

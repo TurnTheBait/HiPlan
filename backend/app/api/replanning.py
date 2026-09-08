@@ -12,7 +12,9 @@ from app.services.replanning_service import get_replanning_suggestions
 from app.services.smart_replanning_service import (
     generate_project_smart_suggestions,
     apply_smart_replanning_proposal,
-    revert_smart_replanning_log
+    apply_smart_replanning_batch,
+    revert_smart_replanning_log,
+    to_utc_iso
 )
 
 router = APIRouter(prefix="/api/replanning", tags=["replanning"])
@@ -85,6 +87,38 @@ async def apply_project_suggestion(
         )
 
 
+class ApplyReplanningBatchRequest(BaseModel):
+    proposals: List[Dict[str, Any]]
+
+
+@router.post("/project/{project_id}/apply-batch")
+async def apply_project_batch_suggestions(
+    project_id: str,
+    request: ApplyReplanningBatchRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Applica un gruppo di proposte di ripianificazione/rebalance approvate da un editor o admin.
+    """
+    if current_user.role not in [UserRole.ADMIN, UserRole.EDITOR]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accesso negato. Solo editor e admin possono applicare modifiche di ripianificazione."
+        )
+    try:
+        return await apply_smart_replanning_batch(
+            db, project_id, request.proposals, current_user
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Errore durante l'applicazione delle modifiche: {str(e)}"
+        )
+
+
 @router.post("/project/{project_id}/revert/{log_id}")
 async def revert_project_suggestion(
     project_id: str,
@@ -145,8 +179,8 @@ async def get_replanning_logs(
             "new_end_date": log.new_end_date.isoformat() if log.new_end_date else None,
             "shift_days": log.shift_days,
             "reverted": log.reverted,
-            "created_at": log.created_at.isoformat() if log.created_at else None,
-            "reverted_at": log.reverted_at.isoformat() if log.reverted_at else None,
+            "created_at": to_utc_iso(log.created_at),
+            "reverted_at": to_utc_iso(log.reverted_at),
             "reverted_by_name": log.reverted_by_user.full_name if log.reverted_by_user else None
         })
     return results

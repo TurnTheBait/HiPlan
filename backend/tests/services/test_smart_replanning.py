@@ -635,5 +635,101 @@ async def test_smart_replanning_fs_dependency_and_independence(db_session: Async
     assert casc_fase4_sub is None
 
 
+@pytest.mark.asyncio
+async def test_revert_with_cascade_modifications(db_session: AsyncSession, test_user: User):
+    """
+    Test: Verifica che annullando una modifica applicata con il replanning AI,
+    vengano automaticamente annullate anche tutte le modifiche a cascata causate.
+    """
+    project = Project(
+        name="Commessa Revert Cascata",
+        status=ProjectStatus.ACTIVE,
+        owner_id=test_user.id,
+        start_date=date(2026, 9, 1),
+        end_date=date(2026, 9, 30)
+    )
+    db_session.add(project)
+    await db_session.commit()
+    await db_session.refresh(project)
+
+    # Fase 1 (principale da spostare)
+    orig_fase1_start = date(2026, 9, 1)
+    orig_fase1_end = date(2026, 9, 4)
+    t1 = Task(
+        project_id=project.id,
+        text="Fase Principale 1",
+        start_date=orig_fase1_start,
+        end_date=orig_fase1_end,
+        duration=4,
+        planned_hours=32.0,
+        workers=json.dumps(["Operatore 1"])
+    )
+    # Fase 2 (dipendente a cascata)
+    orig_fase2_start = date(2026, 9, 7)
+    orig_fase2_end = date(2026, 9, 11)
+    t2 = Task(
+        project_id=project.id,
+        text="Fase Cascata 2",
+        start_date=orig_fase2_start,
+        end_date=orig_fase2_end,
+        duration=5,
+        planned_hours=40.0,
+        workers=json.dumps(["Operatore 2"])
+    )
+    db_session.add_all([t1, t2])
+    await db_session.commit()
+    await db_session.refresh(t1)
+    await db_session.refresh(t2)
+
+    # Payload proposta che sposta t1 e applica cascata su t2
+    new_fase1_start = date(2026, 9, 8)
+    new_fase1_end = date(2026, 9, 11)
+    new_fase2_start = date(2026, 9, 14)
+    new_fase2_end = date(2026, 9, 18)
+
+    proposal = {
+        "task_id": str(t1.id),
+        "start_date": new_fase1_start.isoformat(),
+        "end_date": new_fase1_end.isoformat(),
+        "workers": ["Operatore 1"],
+        "shift_working_days": 5,
+        "reason": "Riprogrammazione Fase 1 con cascata",
+        "cascade_successors": [
+            {
+                "task_id": str(t2.id),
+                "proposed_start": new_fase2_start.isoformat(),
+                "proposed_end": new_fase2_end.isoformat(),
+                "shift_working_days": 5
+            }
+        ]
+    }
+
+    # 1. Applica proposta
+    apply_res = await apply_smart_replanning_proposal(db_session, str(project.id), proposal, test_user)
+    assert apply_res["success"] is True
+    log_id = apply_res["log_id"]
+
+    await db_session.refresh(t1)
+    await db_session.refresh(t2)
+    assert t1.start_date == new_fase1_start
+    assert t1.end_date == new_fase1_end
+    assert t2.start_date == new_fase2_start
+    assert t2.end_date == new_fase2_end
+
+    # 2. Annulla modifica (Revert)
+    revert_res = await revert_smart_replanning_log(db_session, log_id, test_user)
+    assert revert_res["success"] is True
+    assert revert_res["cascade_reverted_count"] == 1
+
+    await db_session.refresh(t1)
+    await db_session.refresh(t2)
+    # ENTRAMBE le fasi devono essere ritornate alle date originali!
+    assert t1.start_date == orig_fase1_start
+    assert t1.end_date == orig_fase1_end
+    assert t2.start_date == orig_fase2_start
+    assert t2.end_date == orig_fase2_end
+
+
+
 
 

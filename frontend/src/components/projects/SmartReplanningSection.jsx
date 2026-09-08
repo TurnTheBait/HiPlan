@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import {
@@ -21,6 +21,17 @@ import {
 } from 'lucide-react';
 import ReplanningGanttPreview from './ReplanningGanttPreview';
 
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return '-';
+  try {
+    const hasTimezone = /Z|[+-]\d{2}(?::?\d{2})?$/.test(dateStr);
+    const normalizedStr = hasTimezone ? dateStr : `${dateStr}Z`;
+    return new Date(normalizedStr).toLocaleString('it-IT');
+  } catch {
+    return dateStr;
+  }
+};
+
 export default function SmartReplanningSection({
   projectId,
   user,
@@ -40,12 +51,58 @@ export default function SmartReplanningSection({
   const [previewSuggestionId, setPreviewSuggestionId] = useState(null);
 
   const canManage = user?.role === 'admin' || user?.role === 'editor';
+  const prevFingerprintRef = useRef(null);
+  const isInternalActionRef = useRef(false);
+  const debounceTimerRef = useRef(null);
+
+  // Calcolo di una firma univoca (fingerprint) per rilevare aggiunte, eliminazioni o modifiche di date/ore/addetti/stato sulle fasi e dipendenze del Gantt
+  const ganttFingerprint = useMemo(() => {
+    if (!Array.isArray(tasks) || tasks.length === 0) {
+      return '__EMPTY__';
+    }
+
+    const tasksStr = tasks
+      .map((t) => {
+        let workersStr = '';
+        if (Array.isArray(t.workers)) {
+          workersStr = t.workers
+            .map((w) => (typeof w === 'object' && w !== null ? (w.id || w.name || w.username || '') : String(w)))
+            .sort()
+            .join(',');
+        } else if (t.workers) {
+          workersStr = String(t.workers);
+        }
+
+        return [
+          t.id,
+          t.text || '',
+          t.start_date || '',
+          t.end_date || '',
+          t.duration || 0,
+          t.progress || 0,
+          t.completed || 0,
+          t.planned_hours || 0,
+          workersStr
+        ].join(':');
+      })
+      .sort()
+      .join('|');
+
+    const linksStr = Array.isArray(links)
+      ? links
+          .map((l) => `${l.id}:${l.source}:${l.target}:${l.type || 0}`)
+          .sort()
+          .join('|')
+      : '';
+
+    return `${tasksStr}#${linksStr}`;
+  }, [tasks, links]);
 
   const fetchSuggestions = useCallback(async () => {
     if (!projectId || !canManage) return;
     setLoading(true);
     try {
-      const res = await api.get(`/replanning/project/${projectId}/suggestions`);
+      const res = await api.get(`/replanning/project/${projectId}/suggestions?_t=${Date.now()}`);
       setReplanData(res.data);
     } catch (err) {
       console.error('Errore caricamento suggerimenti di replanning:', err);
@@ -55,36 +112,94 @@ export default function SmartReplanningSection({
     }
   }, [projectId, canManage]);
 
+  // Caricamento iniziale al montaggio
   useEffect(() => {
     if (canManage) {
       fetchSuggestions();
     }
   }, [fetchSuggestions, canManage]);
 
-  const handleApply = async (suggestion) => {
+  // Aggiornamento automatico in tempo reale quando una fase qualsiasi della commessa corrente viene aggiunta o modificata nel Gantt
+  useEffect(() => {
+    if (!canManage || !projectId) return;
+
+    // Al primo render, memorizza la firma iniziale senza effettuare fetch duplicato
+    if (prevFingerprintRef.current === null) {
+      prevFingerprintRef.current = ganttFingerprint;
+      return;
+    }
+
+    // Se la firma non è cambiata, nessuna modifica
+    if (prevFingerprintRef.current === ganttFingerprint) {
+      return;
+    }
+
+    // Se l'aggiornamento è scaturito dall'applicazione/annullamento interno di un suggerimento, non duplicare la richiesta
+    if (isInternalActionRef.current) {
+      isInternalActionRef.current = false;
+      prevFingerprintRef.current = ganttFingerprint;
+      return;
+    }
+
+    // Registra la nuova firma e ricalcola automaticamente i suggerimenti di replanning (con debounce 450ms)
+    prevFingerprintRef.current = ganttFingerprint;
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      fetchSuggestions();
+    }, 450);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [ganttFingerprint, canManage, projectId, fetchSuggestions]);
+
+  const handleApply = async (suggestionOrBatch) => {
     if (!canManage) {
       toast.error('Solo gli utenti Editor o Admin possono applicare modifiche.');
       return;
     }
-    if (!suggestion?.proposed_changes) return;
+    if (!suggestionOrBatch) return;
 
-    setApplyingId(suggestion.id);
+    const isBatch = Boolean(suggestionOrBatch.isBatch && Array.isArray(suggestionOrBatch.suggestions));
+    const listToApply = isBatch ? suggestionOrBatch.suggestions : [suggestionOrBatch];
+    const validList = listToApply.filter((s) => s?.proposed_changes);
+
+    if (validList.length === 0) return;
+
+    setApplyingId(isBatch ? 'batch' : suggestionOrBatch.id);
     try {
-      const relatedCorrections = (suggestion.cascade_impact?.other_projects || [])
-        .filter((op) => op.proposed_correction)
-        .map((op) => op.proposed_correction);
+      const proposals = validList.map((sugg) => {
+        const relatedCorrections = (sugg.cascade_impact?.other_projects || [])
+          .filter((op) => op.proposed_correction)
+          .map((op) => op.proposed_correction);
 
-      const payload = {
-        proposal_payload: {
-          ...suggestion.proposed_changes,
-          reason: suggestion.action_label || suggestion.title,
-          cascade_successors: suggestion.cascade_impact?.same_project_tasks || [],
+        return {
+          ...sugg.proposed_changes,
+          reason: sugg.action_label || sugg.title,
+          cascade_successors: sugg.cascade_impact?.same_project_tasks || [],
           related_project_corrections: relatedCorrections
-        }
-      };
+        };
+      });
 
-      const res = await api.post(`/replanning/project/${projectId}/apply`, payload);
-      toast.success(res.data.message || 'Ottimizzazione applicata con successo!');
+      isInternalActionRef.current = true;
+
+      let successMsg = '';
+      if (isBatch && proposals.length > 1) {
+        const res = await api.post(`/replanning/project/${projectId}/apply-batch`, { proposals });
+        successMsg = res.data.message || `${proposals.length} ottimizzazioni applicate con successo!`;
+      } else {
+        const payload = { proposal_payload: proposals[0] };
+        const res = await api.post(`/replanning/project/${projectId}/apply`, payload);
+        successMsg = res.data.message || 'Ottimizzazione applicata con successo!';
+      }
+
+      toast.success(successMsg);
       setConfirmModalSuggestion(null);
 
       // Ricarica sia i suggerimenti che il Gantt della pagina padre
@@ -93,11 +208,16 @@ export default function SmartReplanningSection({
         onReloadTasks();
       }
     } catch (err) {
+      isInternalActionRef.current = false;
       console.error('Errore durante applicazione suggerimento:', err);
       const detail = err.response?.data?.detail || err.message || 'Errore durante l\'applicazione.';
       toast.error(detail);
     } finally {
       setApplyingId(null);
+      // Timeout di sicurezza per resettare il flag interno
+      setTimeout(() => {
+        isInternalActionRef.current = false;
+      }, 2500);
     }
   };
 
@@ -108,6 +228,7 @@ export default function SmartReplanningSection({
     }
     setRevertingId(logId);
     try {
+      isInternalActionRef.current = true;
       const res = await api.post(`/replanning/project/${projectId}/revert/${logId}`);
       toast.success(res.data.message || 'Modifica annullata con successo!');
       await fetchSuggestions();
@@ -115,11 +236,16 @@ export default function SmartReplanningSection({
         onReloadTasks();
       }
     } catch (err) {
+      isInternalActionRef.current = false;
       console.error('Errore annullamento replanning:', err);
       const detail = err.response?.data?.detail || err.message || 'Errore durante l\'annullamento.';
       toast.error(detail);
     } finally {
       setRevertingId(null);
+      // Timeout di sicurezza per resettare il flag interno
+      setTimeout(() => {
+        isInternalActionRef.current = false;
+      }, 2500);
     }
   };
 
@@ -129,6 +255,12 @@ export default function SmartReplanningSection({
 
   const suggestions = replanData?.suggestions || [];
   const history = replanData?.history || [];
+
+  const primaryHistory = useMemo(() => {
+    if (!Array.isArray(history)) return [];
+    const filtered = history.filter((log) => !log.parent_log_id);
+    return filtered.length > 0 ? filtered : history;
+  }, [history]);
 
   return (
     <div style={{ marginTop: 24 }}>
@@ -255,8 +387,8 @@ export default function SmartReplanningSection({
         </div>
 
         {/* Corpo Sezione */}
-        <div style={{ padding: '24px' }}>
-          {loading ? (
+        <div style={{ padding: '24px', opacity: (loading && replanData) ? 0.65 : 1, transition: 'opacity 0.2s ease', position: 'relative' }}>
+          {loading && !replanData ? (
             <div style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-secondary, #64748b)' }}>
               <RefreshCw size={28} className="animate-spin" style={{ margin: '0 auto 12px', color: '#2563eb' }} />
               <div style={{ fontSize: 15, fontWeight: 500 }}>Analisi carichi e conflitti in corso...</div>
@@ -548,12 +680,14 @@ export default function SmartReplanningSection({
                 }}
               >
                 <History size={15} />
-                {showHistory ? 'Nascondi Cronologia Ottimizzazioni' : `Mostra Cronologia Ottimizzazioni Applicate (${history.length})`}
+                {showHistory
+                  ? 'Nascondi Cronologia Ottimizzazioni'
+                  : `Mostra Cronologia Ottimizzazioni Applicate (${primaryHistory.length})`}
               </button>
 
               {showHistory && (
                 <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {history.map((log) => (
+                  {primaryHistory.map((log) => (
                     <div
                       key={log.id}
                       style={{
@@ -571,9 +705,15 @@ export default function SmartReplanningSection({
                         <div style={{ fontWeight: 600, color: log.reverted ? '#94a3b8' : '#0f172a' }}>
                           {log.reason} {log.reverted && <span style={{ color: '#dc2626' }}>(ANNULLATO)</span>}
                         </div>
-                        <div style={{ color: '#64748b', fontSize: 11, marginTop: 2 }}>
-                          Applicato il {log.created_at ? new Date(log.created_at).toLocaleString('it-IT') : '-'}
-                          {log.reverted_by_name && ` • Annullato da ${log.reverted_by_name}`}
+                        {log.cascade_logs && log.cascade_logs.length > 0 && (
+                          <div style={{ color: '#b45309', fontSize: 11, marginTop: 3 }}>
+                            ↳ Include {log.cascade_logs.length} {log.cascade_logs.length === 1 ? 'slittamento a cascata collegato' : 'slittamenti a cascata collegati'}:{' '}
+                            <strong>{[...new Set(log.cascade_logs.map((c) => c.task_name))].join(', ')}</strong>
+                          </div>
+                        )}
+                        <div style={{ color: '#64748b', fontSize: 11, marginTop: 3 }}>
+                          Applicato il {formatDateTime(log.created_at)}
+                          {log.reverted_by_name && ` • Annullato da ${log.reverted_by_name}${log.reverted_at ? ` il ${formatDateTime(log.reverted_at)}` : ''}`}
                         </div>
                       </div>
 
@@ -590,9 +730,14 @@ export default function SmartReplanningSection({
                             gap: 4,
                             color: '#b91c1c'
                           }}
+                          title={log.cascade_count > 0 ? "Annulla questa operazione e ripristina automaticamente anche tutte le modifiche a cascata collegate" : "Annulla questa operazione"}
                         >
                           <Undo2 size={13} />
-                          {revertingId === log.id ? 'Annullamento...' : 'Annulla (Revert)'}
+                          {revertingId === log.id
+                            ? 'Annullamento...'
+                            : log.cascade_count > 0
+                              ? `Annulla con Cascate (${log.cascade_count + 1})`
+                              : 'Annulla (Revert)'}
                         </button>
                       )}
                     </div>
@@ -624,7 +769,7 @@ export default function SmartReplanningSection({
             style={{
               background: 'var(--bg-primary, #ffffff)',
               borderRadius: '16px',
-              maxWidth: 520,
+              maxWidth: confirmModalSuggestion?.isBatch ? 620 : 520,
               width: '100%',
               boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
               border: '1px solid var(--border-subtle, #e2e8f0)',
@@ -634,52 +779,101 @@ export default function SmartReplanningSection({
           >
             <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-subtle, #e2e8f0)' }}>
               <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e293b' }}>
-                Conferma Applicazione Modifiche
+                {confirmModalSuggestion.isBatch ? 'Conferma Applicazione Modifiche Consigliate' : 'Conferma Applicazione Modifiche'}
               </h3>
               <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748b' }}>
-                Questa azione aggiornerà le date o gli addetti delle lavorazioni indicate.
+                {confirmModalSuggestion.isBatch
+                  ? `Questa azione applicherà contemporaneamente le ${confirmModalSuggestion.suggestions.length} azioni consigliate per riequilibrare la commessa.`
+                  : 'Questa azione aggiornerà le date o gli addetti delle lavorazioni indicate.'}
               </p>
             </div>
 
-            <div style={{ padding: '20px 24px', fontSize: 13, color: '#334155' }}>
-              <div style={{ fontWeight: 600, marginBottom: 8 }}>{confirmModalSuggestion.action_label}</div>
-              <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <div>• Fase: <strong>{confirmModalSuggestion.task_name}</strong></div>
-                {confirmModalSuggestion.proposed_changes.workers && (
-                  <div>• Addetti: <strong>{confirmModalSuggestion.proposed_changes.workers.join(', ')}</strong></div>
-                )}
-                <div>
-                  • Nuove Date: <strong>{confirmModalSuggestion.proposed_changes.start_date ? new Date(confirmModalSuggestion.proposed_changes.start_date).toLocaleDateString('it-IT') : '-'} → {confirmModalSuggestion.proposed_changes.end_date ? new Date(confirmModalSuggestion.proposed_changes.end_date).toLocaleDateString('it-IT') : '-'}</strong>
-                </div>
-                {confirmModalSuggestion.cascade_impact?.same_project_tasks?.length > 0 && (
-                  <div style={{ marginTop: 8, color: '#b45309' }}>
-                    • Fasi a valle che slitteranno ({confirmModalSuggestion.cascade_impact.same_project_tasks.length}):
-                    <div style={{ marginTop: 4, marginLeft: 10, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      {confirmModalSuggestion.cascade_impact.same_project_tasks.map((st, i) => (
-                        <div key={i} style={{ fontSize: 11, color: '#475569' }}>
-                          ↳ <strong>{st.task_name}</strong>: {st.proposed_start ? new Date(st.proposed_start).toLocaleDateString('it-IT') : '-'} → {st.proposed_end ? new Date(st.proposed_end).toLocaleDateString('it-IT') : '-'}
+            <div style={{ padding: '20px 24px', fontSize: 13, color: '#334155', maxHeight: '60vh', overflowY: 'auto' }}>
+              {confirmModalSuggestion.isBatch ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {confirmModalSuggestion.suggestions.map((sugg, idx) => (
+                    <div key={sugg.id || idx} style={{ background: '#f8fafc', padding: '14px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontWeight: 600, color: '#2563eb', marginBottom: 6 }}>
+                        {idx + 1}. {sugg.action_label || sugg.title}
+                      </div>
+                      <div>• Fase: <strong>{sugg.task_name}</strong></div>
+                      {sugg.proposed_changes?.workers && (
+                        <div>• Addetti: <strong>{sugg.proposed_changes.workers.join(', ')}</strong></div>
+                      )}
+                      <div>
+                        • Nuove Date: <strong>{sugg.proposed_changes?.start_date ? new Date(sugg.proposed_changes.start_date).toLocaleDateString('it-IT') : '-'} → {sugg.proposed_changes?.end_date ? new Date(sugg.proposed_changes.end_date).toLocaleDateString('it-IT') : '-'}</strong>
+                      </div>
+                      {sugg.cascade_impact?.same_project_tasks?.length > 0 && (
+                        <div style={{ marginTop: 6, color: '#b45309', fontSize: 12 }}>
+                          • Fasi a valle che slitteranno ({sugg.cascade_impact.same_project_tasks.length}):
+                          <div style={{ marginTop: 2, marginLeft: 10, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {sugg.cascade_impact.same_project_tasks.map((st, i) => (
+                              <div key={i} style={{ fontSize: 11, color: '#475569' }}>
+                                ↳ <strong>{st.task_name}</strong>: {st.proposed_start ? new Date(st.proposed_start).toLocaleDateString('it-IT') : '-'} → {st.proposed_end ? new Date(st.proposed_end).toLocaleDateString('it-IT') : '-'}
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      ))}
+                      )}
+                      {sugg.cascade_impact?.other_projects?.some((op) => op.proposed_correction) && (
+                        <div style={{ marginTop: 6, color: '#6d28d9', fontSize: 12 }}>
+                          • Correzioni su altre commesse:
+                          <div style={{ marginTop: 2, marginLeft: 10, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {sugg.cascade_impact.other_projects
+                              .filter((op) => op.proposed_correction)
+                              .map((op, i) => (
+                                <div key={i} style={{ fontSize: 11, color: '#4c1d95' }}>
+                                  ↳ <strong>{op.proposed_correction.task_name}</strong> ({op.project_code || op.proposed_correction?.project_code ? `[${op.project_code || op.proposed_correction?.project_code}] ` : ''}{op.project_name}):{' '}
+                                  {op.proposed_correction.proposed_start ? new Date(op.proposed_correction.proposed_start).toLocaleDateString('it-IT') : '-'} → {op.proposed_correction.proposed_end ? new Date(op.proposed_correction.proposed_end).toLocaleDateString('it-IT') : '-'}{' '}
+                                  (+{op.proposed_correction.shift_working_days} gg)
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontWeight: 600, marginBottom: 8 }}>{confirmModalSuggestion.action_label}</div>
+                  <div>• Fase: <strong>{confirmModalSuggestion.task_name}</strong></div>
+                  {confirmModalSuggestion.proposed_changes?.workers && (
+                    <div>• Addetti: <strong>{confirmModalSuggestion.proposed_changes.workers.join(', ')}</strong></div>
+                  )}
+                  <div>
+                    • Nuove Date: <strong>{confirmModalSuggestion.proposed_changes?.start_date ? new Date(confirmModalSuggestion.proposed_changes.start_date).toLocaleDateString('it-IT') : '-'} → {confirmModalSuggestion.proposed_changes?.end_date ? new Date(confirmModalSuggestion.proposed_changes.end_date).toLocaleDateString('it-IT') : '-'}</strong>
                   </div>
-                )}
-                {confirmModalSuggestion.cascade_impact?.other_projects?.some((op) => op.proposed_correction) && (
-                  <div style={{ marginTop: 8, color: '#6d28d9' }}>
-                    • Correzioni a catena su altre commesse:
-                    <div style={{ marginTop: 4, marginLeft: 10, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                      {confirmModalSuggestion.cascade_impact.other_projects
-                        .filter((op) => op.proposed_correction)
-                        .map((op, i) => (
-                          <div key={i} style={{ fontSize: 11, color: '#4c1d95' }}>
-                            ↳ <strong>{op.proposed_correction.task_name}</strong> ({op.project_code || op.proposed_correction?.project_code ? `[${op.project_code || op.proposed_correction?.project_code}] ` : ''}{op.project_name}):{' '}
-                            {op.proposed_correction.proposed_start ? new Date(op.proposed_correction.proposed_start).toLocaleDateString('it-IT') : '-'} → {op.proposed_correction.proposed_end ? new Date(op.proposed_correction.proposed_end).toLocaleDateString('it-IT') : '-'}{' '}
-                            (+{op.proposed_correction.shift_working_days} gg)
+                  {confirmModalSuggestion.cascade_impact?.same_project_tasks?.length > 0 && (
+                    <div style={{ marginTop: 8, color: '#b45309' }}>
+                      • Fasi a valle che slitteranno ({confirmModalSuggestion.cascade_impact.same_project_tasks.length}):
+                      <div style={{ marginTop: 4, marginLeft: 10, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {confirmModalSuggestion.cascade_impact.same_project_tasks.map((st, i) => (
+                          <div key={i} style={{ fontSize: 11, color: '#475569' }}>
+                            ↳ <strong>{st.task_name}</strong>: {st.proposed_start ? new Date(st.proposed_start).toLocaleDateString('it-IT') : '-'} → {st.proposed_end ? new Date(st.proposed_end).toLocaleDateString('it-IT') : '-'}
                           </div>
                         ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                  {confirmModalSuggestion.cascade_impact?.other_projects?.some((op) => op.proposed_correction) && (
+                    <div style={{ marginTop: 8, color: '#6d28d9' }}>
+                      • Correzioni a catena su altre commesse:
+                      <div style={{ marginTop: 4, marginLeft: 10, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {confirmModalSuggestion.cascade_impact.other_projects
+                          .filter((op) => op.proposed_correction)
+                          .map((op, i) => (
+                            <div key={i} style={{ fontSize: 11, color: '#4c1d95' }}>
+                              ↳ <strong>{op.proposed_correction.task_name}</strong> ({op.project_code || op.proposed_correction?.project_code ? `[${op.project_code || op.proposed_correction?.project_code}] ` : ''}{op.project_name}):{' '}
+                              {op.proposed_correction.proposed_start ? new Date(op.proposed_correction.proposed_start).toLocaleDateString('it-IT') : '-'} → {op.proposed_correction.proposed_end ? new Date(op.proposed_correction.proposed_end).toLocaleDateString('it-IT') : '-'}{' '}
+                              (+{op.proposed_correction.shift_working_days} gg)
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <p style={{ fontSize: 12, color: '#64748b', marginTop: 12, marginBottom: 0 }}>
                 Nota: L'operazione verrà registrata nella cronologia e potrà essere annullata in qualsiasi momento.
               </p>
@@ -708,7 +902,11 @@ export default function SmartReplanningSection({
                 disabled={applyingId !== null}
                 style={{ background: '#2563eb' }}
               >
-                {applyingId ? 'Applicazione in corso...' : 'Conferma e Applica'}
+                {applyingId
+                  ? 'Applicazione in corso...'
+                  : confirmModalSuggestion.isBatch
+                    ? `Conferma e Applica (${confirmModalSuggestion.suggestions.length})`
+                    : 'Conferma e Applica'}
               </button>
             </div>
           </div>

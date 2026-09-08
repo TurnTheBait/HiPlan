@@ -3,6 +3,17 @@ import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import AppIcon from '../ui/AppIcon';
 
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return '';
+  try {
+    const hasTimezone = /Z|[+-]\d{2}(?::?\d{2})?$/.test(dateStr);
+    const normalizedStr = hasTimezone ? dateStr : `${dateStr}Z`;
+    return new Date(normalizedStr).toLocaleString('it-IT');
+  } catch {
+    return dateStr;
+  }
+};
+
 export default function ActivityLogPanel({ projectId }) {
   const toast = useToast();
   const [logs, setLogs] = useState([]);
@@ -49,7 +60,7 @@ export default function ActivityLogPanel({ projectId }) {
               <strong>{log.user_name}</strong>
               <span>{log.action_text}</span>
             </div>
-            <time>{log.created_at ? new Date(log.created_at).toLocaleString('it-IT') : ''}</time>
+            <time>{formatDateTime(log.created_at)}</time>
           </div>
         ))}
       </div>
