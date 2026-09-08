@@ -14,7 +14,7 @@ export default function WorkloadHeatmap() {
   const { user } = useAuth();
   const [heatmapData, setHeatmapData] = useState({});
   const [loading, setLoading] = useState(true);
-  const [isWorkloadOpen, setIsWorkloadOpen] = useState(false);
+  const [isWorkloadOpen, setIsWorkloadOpen] = useState(true);
   const [leftColWidth, setLeftColWidth] = useState(200);
   const [expandedUsers, setExpandedUsers] = useState({});
   const [viewMode, setViewMode] = useState('day');
@@ -90,28 +90,26 @@ export default function WorkloadHeatmap() {
     });
   });
 
-  let minDateStr = null;
-  let maxDateStr = null;
+  const today = new Date();
+  const todayIso = today.toISOString().substring(0, 10);
+
+  let minDateStr = todayIso;
+  let maxDateStr = todayIso;
+
   if (allWorkDates.size > 0) {
     const sorted = Array.from(allWorkDates).sort();
-    minDateStr = sorted[0];
-    maxDateStr = sorted[sorted.length - 1];
+    minDateStr = sorted[0] < todayIso ? sorted[0] : todayIso;
+    maxDateStr = sorted[sorted.length - 1] > todayIso ? sorted[sorted.length - 1] : todayIso;
   }
 
-  const today = new Date();
-  if (!minDateStr || !maxDateStr) {
-    minDateStr = today.toISOString().substring(0, 10);
-    maxDateStr = today.toISOString().substring(0, 10);
-  }
+  // Estendiamo il range attorno alle date di lavoro effettive e ad oggi (+/- 14 giorni prima e 30 giorni dopo)
+  const minDate = new Date(minDateStr + 'T12:00:00Z');
+  const maxDate = new Date(maxDateStr + 'T12:00:00Z');
+  const padPast = new Date(minDate.getTime() - 14 * 86400000);
+  const padFuture = new Date(maxDate.getTime() + 30 * 86400000);
 
-  // Estendiamo il range per simulare lo scorrimento "infinito"
-  const minDate = new Date(minDateStr);
-  const maxDate = new Date(maxDateStr);
-  const padPast = new Date(today.getTime() - 730 * 86400000); // 2 anni prima
-  const padFuture = new Date(today.getTime() + 1825 * 86400000); // 5 anni dopo
-
-  if (padPast < minDate) minDateStr = padPast.toISOString().substring(0, 10);
-  if (padFuture > maxDate) maxDateStr = padFuture.toISOString().substring(0, 10);
+  minDateStr = padPast.toISOString().substring(0, 10);
+  maxDateStr = padFuture.toISOString().substring(0, 10);
 
   // Riempiamo tutti i giorni nel range in modo che la tabella mostri anche i periodi vuoti
   const fullDatesSet = new Set(allWorkDates);
@@ -170,8 +168,8 @@ export default function WorkloadHeatmap() {
   const todayKey = getTodayKey(viewMode);
 
   const scrollToToday = () => {
-    if (!gridRef.current || columns.length === 0) return;
-    setTimeout(() => {
+    const doScroll = () => {
+      if (!gridRef.current || columns.length === 0) return;
       let targetEl = gridRef.current.querySelector('[data-colkey="' + todayKey + '"]');
       if (!targetEl) {
         const futureCol = columns.find(c => c >= todayKey);
@@ -182,17 +180,19 @@ export default function WorkloadHeatmap() {
         const containerWidth = gridRef.current.clientWidth;
         const targetOffsetLeft = targetEl.offsetLeft;
         const targetWidth = targetEl.clientWidth;
-        const scrollLeft = targetOffsetLeft - (containerWidth / 2) + (targetWidth / 2) - 100;
+        const scrollLeft = targetOffsetLeft - (containerWidth + leftColWidth) / 2 + (targetWidth / 2);
         gridRef.current.scrollTo({ left: Math.max(0, scrollLeft), behavior: 'smooth' });
       }
-    }, 60);
+    };
+    setTimeout(doScroll, 50);
+    setTimeout(doScroll, 200);
   };
 
   useEffect(() => {
-    if (!loading && columns.length > 0) {
+    if (!loading && columns.length > 0 && isWorkloadOpen) {
       scrollToToday();
     }
-  }, [loading, columns.length, viewMode]);
+  }, [loading, columns.length, viewMode, isWorkloadOpen]);
 
   const capacityMap = { day: 8, week: 40, month: 160 };
   const currentCapacity = capacityMap[viewMode];
