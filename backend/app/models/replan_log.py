@@ -42,4 +42,5 @@ class ReplanLog(Base, TimestampMixin):
     task = relationship("Task", foreign_keys=[task_id])
     project = relationship("Project", foreign_keys=[project_id])
     reverted_by_user = relationship("User", foreign_keys=[reverted_by])
-    parent_log = relationship("ReplanLog", remote_side=[id], backref="cascade_logs")
+    parent_log = relationship("ReplanLog", remote_side=[id], back_populates="cascade_logs")
+    cascade_logs = relationship("ReplanLog", back_populates="parent_log")

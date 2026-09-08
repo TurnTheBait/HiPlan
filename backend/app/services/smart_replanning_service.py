@@ -308,7 +308,7 @@ def get_earliest_start_from_predecessors(
     restituisce None, permettendo al task di essere programmato liberamente.
     """
     links_by_target = context.get("links_by_target", {})
-    incoming_links = links_by_target.get(str(task_id), [])
+    incoming_links = links_by_target.get(task_id, [])
     if not incoming_links:
         return None
 
@@ -347,6 +347,23 @@ def get_earliest_start_from_predecessors(
                 min_allowed = allowed
 
     return min_allowed
+
+
+def get_all_downstream_task_ids(task_id: str, context: Dict[str, Any]) -> Set[str]:
+    """
+    Raccoglie ricorsivamente tutti gli ID dei task successori a valle collegati da link.
+    """
+    succ_ids = set()
+    stack = [task_id]
+    links_by_source = context.get("links_by_source", {})
+    while stack:
+        curr = stack.pop()
+        for link in links_by_source.get(curr, []):
+            tgt = str(link.target)
+            if tgt not in succ_ids:
+                succ_ids.add(tgt)
+                stack.append(tgt)
+    return succ_ids
 
 
 def calculate_cascade_impact(
@@ -434,6 +451,164 @@ def calculate_cascade_impact(
         "max_reach_date": str(max_reach_date),
         "exceeds_project_deadline": exceeds_deadline
     }
+
+
+def find_available_window_for_worker(
+    task: Task,
+    worker_name: str,
+    worker_user_id: Optional[str],
+    duration_days: int,
+    daily_h_needed: float,
+    earliest_start: date,
+    proj_end_date: Optional[date],
+    context: Dict[str, Any],
+    max_search_days: int = 180,
+    downstream_task_ids: Optional[Set[str]] = None
+) -> Optional[Tuple[date, date, Dict[str, Any]]]:
+    """
+    Cerca la prima finestra temporale continua di duration_days lavorativi in cui
+    lo STESSO addetto (worker_name) può svolgere il task in modo OLISTICO:
+    1. Rispettando la data minima earliest_start (vincoli predecessori / oggi).
+    2. Senza essere in ferie in nessuna data della finestra.
+    3. Senza superare MAI le 8.0 ore/giorno sommando i suoi altri task concorrenti.
+    4. Senza sforare la scadenza finale della commessa calcolata tramite propagazione a cascata.
+    5. Verificando che NESSUN successore a valle mosso a cascata causi un nuovo sovraccarico (> 8h/gg)
+       o finisca su giorni di ferie per i rispettivi addetti assegnati.
+    Restituisce (target_start, target_end, cascade_impact).
+    """
+    w_hours = context.get("worker_daily_hours", {}).get(worker_name, {})
+    w_vacations = context.get("vacation_days_by_uid", {}).get(worker_user_id, set()) if worker_user_id else set()
+    downstream_ids = downstream_task_ids or set()
+    all_tasks_by_id = context.get("all_tasks_by_id", {})
+    worker_daily_hours = context.get("worker_daily_hours", {})
+    vacation_days_by_uid = context.get("vacation_days_by_uid", {})
+    user_by_name = context.get("user_by_name", {})
+
+    cur_start = earliest_start
+    while is_weekend_or_holiday(cur_start):
+        cur_start += timedelta(days=1)
+
+    def flatten_succs(succ_list):
+        res = []
+        for s in succ_list:
+            res.append(s)
+            if s.get("sub_successors"):
+                res.extend(flatten_succs(s["sub_successors"]))
+        return res
+
+    for _ in range(max_search_days):
+        cur_end = add_working_days(cur_start, duration_days - 1)
+        valid = True
+
+        # 1. Verifica capienza addetto principale
+        c = cur_start
+        while c <= cur_end:
+            if not is_weekend_or_holiday(c):
+                if c in w_vacations:
+                    valid = False
+                    cur_start = add_working_days(c, 1)
+                    break
+                other_h = sum(
+                    e["daily_hours"]
+                    for e in w_hours.get(c, [])
+                    if e.get("task_id") != str(task.id) and e.get("task_id") not in downstream_ids
+                )
+                if other_h + daily_h_needed > MAX_DAILY_HOURS:
+                    valid = False
+                    cur_start = add_working_days(cur_start, 1)
+                    break
+            c += timedelta(days=1)
+
+        if not valid:
+            continue
+
+        # 1b. Verifica capienza eventuali co-lavoratori assegnati allo stesso task
+        task_workers = parse_workers_list(task.workers)
+        t_w_hours_map = parse_worker_hours_map(task.worker_hours)
+        t_plan_h = float(task.planned_hours or 8.0)
+        for tw in task_workers:
+            if tw.strip() == worker_name.strip():
+                continue
+            tw_u = user_by_name.get(tw.strip().lower())
+            tw_uid = str(tw_u.id) if tw_u else None
+            tw_vac = vacation_days_by_uid.get(tw_uid, set()) if tw_uid else set()
+            tw_timeline = worker_daily_hours.get(tw, {})
+            tw_assigned_h = t_w_hours_map.get(tw.strip(), t_plan_h / max(1, len(task_workers)))
+            tw_daily_h = tw_assigned_h / max(1, duration_days)
+            c = cur_start
+            while c <= cur_end:
+                if not is_weekend_or_holiday(c):
+                    if c in tw_vac:
+                        valid = False
+                        break
+                    other_tw_h = sum(
+                        e["daily_hours"] for e in tw_timeline.get(c, [])
+                        if e.get("task_id") != str(task.id) and e.get("task_id") not in downstream_ids
+                    )
+                    if other_tw_h + tw_daily_h > MAX_DAILY_HOURS:
+                        valid = False
+                        break
+                c += timedelta(days=1)
+            if not valid:
+                break
+
+        if not valid:
+            cur_start = add_working_days(cur_start, 1)
+            continue
+
+        # 2. Verifica scadenza commessa a cascata
+        cascade = calculate_cascade_impact(task, cur_start, cur_end, proj_end_date, context)
+        if cascade.get("exceeds_project_deadline"):
+            cur_start = add_working_days(cur_start, 1)
+            continue
+
+        # 3. Verifica olistica: nessun nuovo sovraccarico generato sulle fasi a valle mosse a cascata
+        succ_valid = True
+        for succ_info in flatten_succs(cascade.get("affected_successors", [])):
+            succ_t = all_tasks_by_id.get(succ_info["task_id"])
+            if not succ_t:
+                continue
+            s_st = date.fromisoformat(succ_info["proposed_start"])
+            s_en = date.fromisoformat(succ_info["proposed_end"])
+            s_dur = succ_t.duration or max(1, get_working_days_count(s_st, s_en))
+            s_workers = parse_workers_list(succ_t.workers)
+            s_plan_h = float(succ_t.planned_hours or 8.0)
+            s_w_hours_map = parse_worker_hours_map(succ_t.worker_hours)
+
+            for sw in s_workers:
+                sw_u = user_by_name.get(sw.strip().lower())
+                sw_uid = str(sw_u.id) if sw_u else None
+                sw_vac = vacation_days_by_uid.get(sw_uid, set()) if sw_uid else set()
+                sw_timeline = worker_daily_hours.get(sw, {})
+                assigned_sw_h = s_w_hours_map.get(sw.strip(), s_plan_h / max(1, len(s_workers)))
+                s_daily_h = assigned_sw_h / max(1, s_dur)
+
+                sc = s_st
+                while sc <= s_en:
+                    if not is_weekend_or_holiday(sc):
+                        if sc in sw_vac:
+                            succ_valid = False
+                            break
+                        other_sw_h = sum(
+                            e["daily_hours"] for e in sw_timeline.get(sc, [])
+                            if e.get("task_id") != str(succ_t.id) and e.get("task_id") != str(task.id) and e.get("task_id") not in downstream_ids
+                        )
+                        if other_sw_h + s_daily_h > MAX_DAILY_HOURS:
+                            succ_valid = False
+                            break
+                    sc += timedelta(days=1)
+                if not succ_valid:
+                    break
+            if not succ_valid:
+                break
+
+        if not succ_valid:
+            cur_start = add_working_days(cur_start, 1)
+            continue
+
+        return cur_start, cur_end, cascade
+
+    return None
 
 
 def calculate_cross_project_correction(
@@ -708,9 +883,117 @@ async def generate_project_smart_suggestions(
     users = context["users"]
 
     suggestions: List[Dict[str, Any]] = []
+    handled_by_cascade_ids: Set[str] = set()
+
+    def register_cascade_ids(cascade_dict: Optional[Dict[str, Any]]):
+        if not cascade_dict:
+            return
+        for s in cascade_dict.get("affected_successors", []):
+            handled_by_cascade_ids.add(str(s["task_id"]))
+            if s.get("sub_successors"):
+                for sub in s["sub_successors"]:
+                    register_cascade_ids({"affected_successors": [sub]})
+
+    def sync_timeline_with_proposal(
+        main_task: Task,
+        t_start: date,
+        t_end: date,
+        cascade_dict: Optional[Dict[str, Any]],
+        cross_proj_list: Optional[List[Dict[str, Any]]] = None
+    ):
+        register_cascade_ids(cascade_dict)
+        all_tasks_map = context.get("all_tasks_by_id", {})
+        active_projs = context.get("active_projects", {})
+
+        def relocate_task_hours(t_obj: Task, old_st: Optional[date], old_en: Optional[date], new_st: date, new_en: date):
+            t_workers = parse_workers_list(t_obj.workers)
+            t_w_hours = parse_worker_hours_map(t_obj.worker_hours)
+            t_dur = max(1, get_working_days_count(new_st, new_en))
+            t_plan_h = float(t_obj.planned_hours or 8.0)
+            p_id = str(t_obj.project_id)
+            proj_obj = active_projs.get(p_id)
+            p_name = proj_obj.name if proj_obj else ""
+            p_code = proj_obj.code if proj_obj and proj_obj.code else ""
+
+            for tw in t_workers:
+                tw_clean = tw.strip()
+                tw_timeline = worker_daily_hours.setdefault(tw_clean, {})
+                # Rimuove vecchie entrate
+                if old_st and old_en:
+                    c = old_st
+                    while c <= old_en:
+                        if c in tw_timeline:
+                            tw_timeline[c] = [e for e in tw_timeline[c] if e.get("task_id") != str(t_obj.id)]
+                        c += timedelta(days=1)
+                # Aggiunge nuove entrate
+                assigned_h = t_w_hours.get(tw_clean, t_plan_h / max(1, len(t_workers)))
+                daily_h = assigned_h / t_dur
+                c = new_st
+                while c <= new_en:
+                    if not is_weekend_or_holiday(c):
+                        tw_timeline.setdefault(c, []).append({
+                            "task_id": str(t_obj.id),
+                            "task_text": t_obj.text,
+                            "daily_hours": daily_h,
+                            "project_id": p_id,
+                            "project_name": p_name,
+                            "project_code": p_code
+                        })
+                    c += timedelta(days=1)
+
+        # 1. Ricollocheremo il task principale
+        relocate_task_hours(main_task, main_task.start_date, main_task.end_date, t_start, t_end)
+
+        # 2. Ricollocheremo i successori a cascata
+        if cascade_dict:
+            def flatten_succs(succ_list):
+                res = []
+                for s in succ_list:
+                    res.append(s)
+                    if s.get("sub_successors"):
+                        res.extend(flatten_succs(s["sub_successors"]))
+                return res
+
+            for s_info in flatten_succs(cascade_dict.get("affected_successors", [])):
+                st_id = s_info["task_id"]
+                s_task = all_tasks_map.get(st_id)
+                if s_task:
+                    s_old_st = s_task.start_date
+                    s_old_en = s_task.end_date
+                    s_new_st = date.fromisoformat(s_info["proposed_start"])
+                    s_new_en = date.fromisoformat(s_info["proposed_end"])
+                    relocate_task_hours(s_task, s_old_st, s_old_en, s_new_st, s_new_en)
+
+        # 3. Ricollocheremo le correzioni a catena su commesse collegate
+        if cross_proj_list:
+            for op in cross_proj_list:
+                corr = op.get("proposed_correction")
+                if corr:
+                    c_id = corr["task_id"]
+                    c_task = all_tasks_map.get(c_id)
+                    if c_task:
+                        c_old_st = c_task.start_date
+                        c_old_en = c_task.end_date
+                        c_new_st = date.fromisoformat(corr["proposed_start"])
+                        c_new_en = date.fromisoformat(corr["proposed_end"])
+                        relocate_task_hours(c_task, c_old_st, c_old_en, c_new_st, c_new_en)
+                        for ct in corr.get("cascade_tasks", []):
+                            ct_task = all_tasks_map.get(ct["task_id"])
+                            if ct_task:
+                                ct_old_st = ct_task.start_date
+                                ct_old_en = ct_task.end_date
+                                ct_new_st = date.fromisoformat(ct["proposed_start"])
+                                ct_new_en = date.fromisoformat(ct["proposed_end"])
+                                relocate_task_hours(ct_task, ct_old_st, ct_old_en, ct_new_st, ct_new_en)
 
     for task in proj_tasks:
         if task.completed == 1 or not task.start_date or not task.end_date:
+            continue
+
+        # Se questa fase è già stata riprogrammata a valle nella propagazione a cascata
+        # di una proposta primaria precedente (ed è già stata verificata in modo olistico esente da ferie/sovraccarichi),
+        # non generiamo proposte autonome e contraddittorie basate sulle sue vecchie date obsolete.
+        if str(task.id) in handled_by_cascade_ids:
             continue
 
         workers = parse_workers_list(task.workers)
@@ -750,21 +1033,37 @@ async def generate_project_smart_suggestions(
                 assigned_h = w_hours_map.get(w, planned_h / len(workers))
                 daily_h_needed = assigned_h / max(1, duration_days)
 
-                # PRIORITÀ 1 (PREFERITA): L'addetto stesso recupera le ore al rientro dalle ferie
+                # PRIORITÀ 1 (PREFERITA): L'addetto stesso recupera le ore al rientro dalle ferie in modo olistico
                 max_vac = max(conflicting_vac_dates)
                 start_after_vac = add_working_days(max_vac, 1)
                 min_from_pred = get_earliest_start_from_predecessors(str(task.id), context, today)
-                target_start = max(start_after_vac, min_from_pred) if min_from_pred else start_after_vac
-                target_end = add_working_days(target_start, duration_days - 1)
+                earliest_search = max(start_after_vac, min_from_pred) if min_from_pred else start_after_vac
+                downstream_ids = get_all_downstream_task_ids(str(task.id), context)
 
-                cascade = calculate_cascade_impact(task, target_start, target_end, proj_end_date, context)
+                same_worker_res = find_available_window_for_worker(
+                    task=task,
+                    worker_name=w,
+                    worker_user_id=w_uid,
+                    duration_days=duration_days,
+                    daily_h_needed=daily_h_needed,
+                    earliest_start=earliest_search,
+                    proj_end_date=proj_end_date,
+                    context=context,
+                    downstream_task_ids=downstream_ids
+                )
+
+                target_start = None
+                target_end = None
+                cascade = None
+                if same_worker_res:
+                    target_start, target_end, cascade = same_worker_res
 
                 alt_worker = find_alternative_worker(
                     users, w, task.start_date, task.end_date, daily_h_needed, context,
                     department_filter=task.department or w_user.department
                 )
 
-                if not cascade["exceeds_project_deadline"]:
+                if same_worker_res and cascade and target_start and target_end and not cascade["exceeds_project_deadline"]:
                     # L'addetto stesso recupera il lavoro al rientro senza violare la scadenza commessa
                     shift_days = get_working_days_count(task.start_date, target_start) - 1
                     sugg_id = f"vac_shift_{task.id}_{w_uid}_{target_start.strftime('%Y%m%d')}"
@@ -808,6 +1107,7 @@ async def generate_project_smart_suggestions(
                             "deadline_message": f"Tutte le fasi a valle rimangono entro la scadenza finale ({proj_end_date.strftime('%d/%m/%Y')})."
                         }
                     })
+                    sync_timeline_with_proposal(task, target_start, target_end, cascade, cross_proj_impact)
 
                     # Se esiste anche un collega alternativo, offriamo l'opzione secondaria per mantenere le date fisse
                     if alt_worker:
@@ -929,7 +1229,7 @@ async def generate_project_smart_suggestions(
                         },
                         "proposed_changes": None,
                         "cascade_impact": {
-                            "same_project_tasks": cascade["affected_successors"],
+                            "same_project_tasks": cascade["affected_successors"] if cascade else [],
                             "other_projects": [],
                             "project_deadline_status": "breached",
                             "deadline_message": f"Attenzione: Lo slittamento supererebbe la consegna finale del {proj_end_date.strftime('%d/%m/%Y')}. È richiesta una modifica manuale della commessa."
@@ -941,6 +1241,8 @@ async def generate_project_smart_suggestions(
         # -------------------------------------------------------------
         for w in workers:
             w_hours_in_timeline = worker_daily_hours.get(w, {})
+            w_user = user_by_name.get(w.strip().lower())
+            w_uid = str(w_user.id) if w_user else None
             overload_dates = []
             max_overload_val = 0.0
 
@@ -956,39 +1258,180 @@ async def generate_project_smart_suggestions(
                 c += timedelta(days=1)
 
             if overload_dates:
-                # Trovato sovraccarico incrociato: cerchiamo sostituto
+                # Identifica se il sovraccarico è causato da altri task o se è dovuto solo a successori a valle
+                downstream_ids = get_all_downstream_task_ids(str(task.id), context)
+                genuine_overload_dates = []
+                for c_date, tot_day_h in overload_dates:
+                    other_entries = [
+                        e for e in w_hours_in_timeline.get(c_date, [])
+                        if e.get("task_id") != str(task.id) and e.get("task_id") not in downstream_ids
+                    ]
+                    if other_entries:
+                        other_tot = sum(e["daily_hours"] for e in other_entries)
+                        task_entry_h = sum(e["daily_hours"] for e in w_hours_in_timeline.get(c_date, []) if e.get("task_id") == str(task.id))
+                        if other_tot + task_entry_h > MAX_DAILY_HOURS:
+                            genuine_overload_dates.append((c_date, other_tot + task_entry_h))
+
+                if not genuine_overload_dates:
+                    # Il sovraccarico su questo task è dovuto unicamente a fasi successive che lo precedono indebitamente;
+                    # la correzione spetta alle fasi successive
+                    continue
+
                 assigned_h = w_hours_map.get(w, planned_h / len(workers))
                 daily_h_needed = assigned_h / max(1, duration_days)
 
-                alt_worker = find_alternative_worker(
-                    users, w, task.start_date, task.end_date, daily_h_needed, context,
-                    department_filter=task.department
+                min_from_pred = get_earliest_start_from_predecessors(str(task.id), context, today)
+                earliest_possible_start = max(today, min_from_pred) if min_from_pred else max(today, task.start_date)
+
+                # PRIORITÀ 1 (PREFERITA): Risolvere il sovraccarico mantenendo lo STESSO ADDETTO (senza riassegnare ore) in modo OLISTICO
+                same_worker_res = find_available_window_for_worker(
+                    task=task,
+                    worker_name=w,
+                    worker_user_id=w_uid,
+                    duration_days=duration_days,
+                    daily_h_needed=daily_h_needed,
+                    earliest_start=earliest_possible_start,
+                    proj_end_date=proj_end_date,
+                    context=context,
+                    downstream_task_ids=downstream_ids
                 )
 
-                if alt_worker:
+                target_start = None
+                target_end = None
+                cascade = None
+                if same_worker_res:
+                    target_start, target_end, cascade = same_worker_res
+
+                alt_worker = find_alternative_worker(
+                    users, w, task.start_date, task.end_date, daily_h_needed, context,
+                    department_filter=task.department or (w_user.department if w_user else None)
+                )
+
+                if same_worker_res and cascade and target_start and target_end and not cascade["exceeds_project_deadline"]:
+                    shift_days = get_working_days_count(task.start_date, target_start) - 1
+                    sugg_id = f"overload_shift_{task.id}_{w}_{target_start.strftime('%Y%m%d')}"
+
+                    cross_proj_impact = detect_cross_project_impact(
+                        workers, target_start, target_end, project_id, context,
+                        needed_daily_h=daily_h_needed,
+                        downstream_tasks=cascade["affected_successors"]
+                    )
+
+                    suggestions.append({
+                        "id": sugg_id,
+                        "type": "overload_conflict",
+                        "severity": "medium",
+                        "title": f"Riprogrammazione Sovraccarico: {w}",
+                        "description": f"L'addetto {w} ha un picco di {round(max_overload_val, 1)}h/gg. Come preferito, il sovraccarico viene risolto mantenendo {w} senza riassegnare ore ad altri colleghi, riprogrammando la fase nella prima finestra libera ({target_start.strftime('%d/%m')} → {target_end.strftime('%d/%m')}). Consegna commessa rispettata.",
+                        "task_id": str(task.id),
+                        "task_name": task.text,
+                        "strategy": "internal_shift",
+                        "strategy_label": "Riprogrammazione su Stesso Addetto",
+                        "badge": "Rebalance Carichi",
+                        "is_alternative": False,
+                        "action_label": f"Riprogramma fase su {w} ({target_start.strftime('%d/%m')} → {target_end.strftime('%d/%m')})",
+                        "current_state": {
+                            "workers": workers,
+                            "start_date": str(task.start_date),
+                            "end_date": str(task.end_date),
+                            "peak_hours": round(max_overload_val, 1),
+                            "overload_days_count": len(genuine_overload_dates)
+                        },
+                        "proposed_changes": {
+                            "task_id": str(task.id),
+                            "workers": workers,
+                            "worker_hours": w_hours_map,
+                            "start_date": str(target_start),
+                            "end_date": str(target_end),
+                            "shift_working_days": max(0, shift_days)
+                        },
+                        "cascade_impact": {
+                            "same_project_tasks": cascade["affected_successors"],
+                            "other_projects": cross_proj_impact,
+                            "project_deadline_status": "safe",
+                            "deadline_message": f"Scadenza commessa ({proj_end_date.strftime('%d/%m/%Y') if proj_end_date else 'N.D.'}) pienamente rispettata."
+                        }
+                    })
+                    sync_timeline_with_proposal(task, target_start, target_end, cascade, cross_proj_impact)
+
+                    # Opzione alternativa secondaria: riassegnare a collega alternativo per mantenere le date attuali fisse
+                    if alt_worker:
+                        new_workers = [alt_worker["worker_name"] if cur == w else cur for cur in workers]
+                        new_w_hours = dict(w_hours_map)
+                        if w in new_w_hours:
+                            new_w_hours[alt_worker["worker_name"]] = new_w_hours.pop(w)
+
+                        alt_sugg_id = f"overload_reassign_alt_{task.id}_{w}_{genuine_overload_dates[0][0].strftime('%Y%m%d')}"
+                        suggestions.append({
+                            "id": alt_sugg_id,
+                            "type": "overload_conflict",
+                            "severity": "low",
+                            "title": f"Opzione Alternativa: Riassegna a {alt_worker['worker_name']}",
+                            "description": f"Se si preferisce mantenere le date attuali senza far slittare la fase, è possibile affidarla al collega {alt_worker['worker_name']} che ha disponibilità nel periodo.",
+                            "task_id": str(task.id),
+                            "task_name": task.text,
+                            "strategy": "reassign_worker",
+                            "strategy_label": "Riassegnazione a Risorsa Alternativa",
+                            "badge": "Opzione Alternativa",
+                            "is_alternative": True,
+                            "action_label": f"Riassegna a {alt_worker['worker_name']} (date invariate)",
+                            "current_state": {
+                                "workers": workers,
+                                "start_date": str(task.start_date),
+                                "end_date": str(task.end_date),
+                                "peak_hours": round(max_overload_val, 1),
+                                "overload_days_count": len(genuine_overload_dates)
+                            },
+                            "proposed_changes": {
+                                "task_id": str(task.id),
+                                "workers": new_workers,
+                                "worker_hours": new_w_hours,
+                                "start_date": str(task.start_date),
+                                "end_date": str(task.end_date),
+                                "shift_working_days": 0
+                            },
+                            "cascade_impact": {
+                                "same_project_tasks": [],
+                                "other_projects": [
+                                    {
+                                        "worker": alt_worker["worker_name"],
+                                        "status": "safe",
+                                        "message": f"{alt_worker['worker_name']} accoglie il task rimanendo entro il limite di 8h giornaliere."
+                                    }
+                                ],
+                                "project_deadline_status": "safe",
+                                "deadline_message": "Date della commessa invariate al 100%."
+                            }
+                        })
+
+                elif alt_worker:
+                    # PRIORITÀ 2 (FALLBACK): Riprogrammare lo stesso addetto violerebbe la scadenza commessa.
+                    # Riassegniamo ad un collega per salvare la data di consegna.
                     new_workers = [alt_worker["worker_name"] if cur == w else cur for cur in workers]
                     new_w_hours = dict(w_hours_map)
                     if w in new_w_hours:
                         new_w_hours[alt_worker["worker_name"]] = new_w_hours.pop(w)
 
-                    sugg_id = f"overload_reassign_{task.id}_{w}_{overload_dates[0][0].strftime('%Y%m%d')}"
+                    sugg_id = f"overload_reassign_{task.id}_{w}_{genuine_overload_dates[0][0].strftime('%Y%m%d')}"
                     suggestions.append({
                         "id": sugg_id,
                         "type": "overload_conflict",
                         "severity": "high",
-                        "title": f"Sovraccarico Multi-Commessa: {w}",
-                        "description": f"L'addetto {w} ha un picco di {round(max_overload_val, 1)}h/gg su più commesse concomitanti tra il {task.start_date.strftime('%d/%m')} e il {task.end_date.strftime('%d/%m')}.",
+                        "title": f"Salva Scadenza per Sovraccarico: {w} → {alt_worker['worker_name']}",
+                        "description": f"Riprogrammare {w} oltre la data prevista supererebbe la consegna finale del {proj_end_date.strftime('%d/%m/%Y') if proj_end_date else 'N.D.'}. Per proteggere la scadenza, la fase viene affidata al collega {alt_worker['worker_name']}.",
                         "task_id": str(task.id),
                         "task_name": task.text,
                         "strategy": "reassign_worker",
-                        "strategy_label": "Ribilanciamento Carico Orario",
-                        "badge": "Rebalance Carichi",
+                        "strategy_label": "Riassegnazione per Salvaguardia Consegna",
+                        "badge": "Salva Scadenza",
                         "is_alternative": False,
-                        "action_label": f"Riassegna fase a {alt_worker['worker_name']} per assorbire il sovraccarico",
+                        "action_label": f"Riassegna a {alt_worker['worker_name']} per rispettare la consegna finale",
                         "current_state": {
                             "workers": workers,
+                            "start_date": str(task.start_date),
+                            "end_date": str(task.end_date),
                             "peak_hours": round(max_overload_val, 1),
-                            "overload_days_count": len(overload_dates)
+                            "overload_days_count": len(genuine_overload_dates)
                         },
                         "proposed_changes": {
                             "task_id": str(task.id),
@@ -1013,7 +1456,39 @@ async def generate_project_smart_suggestions(
                                 }
                             ],
                             "project_deadline_status": "safe",
-                            "deadline_message": "Date della commessa invariate al 100%."
+                            "deadline_message": f"Scadenza commessa ({proj_end_date.strftime('%d/%m/%Y') if proj_end_date else 'N.D.'}) pienamente rispettata."
+                        }
+                    })
+
+                else:
+                    # PRIORITÀ 3: Impossibile risolvere mantenendo l'addetto senza violare la consegna, e nessun collega disponibile
+                    sugg_id = f"overload_crit_{task.id}_{w}"
+                    suggestions.append({
+                        "id": sugg_id,
+                        "type": "deadline_breach_risk",
+                        "severity": "critical",
+                        "title": f"Rischio Consegna per Sovraccarico: {w}",
+                        "description": f"L'addetto {w} è sovraccarico ({round(max_overload_val, 1)}h/gg) e spostare la lavorazione sfora la consegna del {proj_end_date.strftime('%d/%m/%Y') if proj_end_date else 'N.D.'}. Nessun collega disponibile.",
+                        "task_id": str(task.id),
+                        "task_name": task.text,
+                        "strategy": "manual_action_required",
+                        "strategy_label": "Intervento Manuale Necessario",
+                        "badge": "Rischio Scadenza",
+                        "is_alternative": False,
+                        "action_label": "Richiede estensione manuale data consegna o risorsa esterna",
+                        "current_state": {
+                            "workers": workers,
+                            "start_date": str(task.start_date),
+                            "end_date": str(task.end_date),
+                            "peak_hours": round(max_overload_val, 1),
+                            "overload_days_count": len(genuine_overload_dates)
+                        },
+                        "proposed_changes": None,
+                        "cascade_impact": {
+                            "same_project_tasks": cascade["affected_successors"] if cascade else [],
+                            "other_projects": [],
+                            "project_deadline_status": "breached",
+                            "deadline_message": f"Attenzione: Lo slittamento supererebbe la consegna finale del {proj_end_date.strftime('%d/%m/%Y') if proj_end_date else 'N.D.'}."
                         }
                     })
 
@@ -1091,6 +1566,7 @@ async def generate_project_smart_suggestions(
                         "deadline_message": f"Tutte le fasi a valle rientrano entro la consegna finale ({proj_end_date.strftime('%d/%m/%Y') if proj_end_date else 'N.D.'})."
                     }
                 })
+                sync_timeline_with_proposal(task, target_start, target_end, cascade, cross_proj_impact)
             else:
                 suggestions.append({
                     "id": sugg_id,
