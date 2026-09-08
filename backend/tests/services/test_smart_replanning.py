@@ -496,4 +496,144 @@ async def test_apply_cross_project_corrections_flow(db_session: AsyncSession, te
         assert t3.start_date == expected_t3_start
 
 
+@pytest.mark.asyncio
+async def test_smart_replanning_fs_dependency_and_independence(db_session: AsyncSession, test_user: User):
+    """
+    Test 7: Rispetto rigoroso di dipendenze e indipendenze tra fasi:
+    - Fase 1 (Disegno) con link FS verso Fase 2 (Approvazione).
+    - Fase 2 con link FS verso Fase 3 (Assemblaggio Meccanico).
+    - Fase 4 (Cablaggio) NON è collegata a Fase 3 (nessuna dipendenza).
+    
+    Verifiche:
+    1. Quando Fase 1 slitta, Fase 2 deve iniziare rigorosamente DOPO il termine di Fase 1.
+    2. Fase 3 deve iniziare rigorosamente DOPO il termine di Fase 2.
+    3. Fase 4, non dipendendo da Fase 3, NON deve essere spostata né ritardata dal ritardo di Fase 3.
+    """
+    p_start = date(2026, 8, 24)
+    p_end = date(2026, 9, 30)
+
+    project = Project(
+        name="Commessa TEST-REB-2026",
+        code="TEST-REB-2026",
+        status=ProjectStatus.ACTIVE,
+        owner_id=test_user.id,
+        start_date=p_start,
+        end_date=p_end
+    )
+    db_session.add(project)
+    await db_session.commit()
+    await db_session.refresh(project)
+
+    # 4 Fasi come nello scenario dell'utente:
+    # Fase 1: 26/08 - 02/09 (scaduta/in ritardo)
+    fase1 = Task(
+        project_id=project.id,
+        text="Fase 1: Disegno Schemi Elettrici",
+        start_date=date(2026, 8, 26),
+        end_date=date(2026, 9, 2),
+        duration=6,
+        planned_hours=48.0,
+        workers=json.dumps(["Marco UT"]),
+        worker_hours=json.dumps({"Marco UT": 48.0}),
+        completed=0
+    )
+    # Fase 2: 03/09 - 07/09 (dipende da Fase 1)
+    fase2 = Task(
+        project_id=project.id,
+        text="Fase 2: Approvazione Componenti e Distinta Base",
+        start_date=date(2026, 9, 3),
+        end_date=date(2026, 9, 7),
+        duration=3,
+        planned_hours=24.0,
+        workers=json.dumps(["Anna UT"]),
+        worker_hours=json.dumps({"Anna UT": 24.0}),
+        completed=0
+    )
+    # Fase 3: 08/09 - 09/09 (dipende da Fase 2)
+    fase3 = Task(
+        project_id=project.id,
+        text="Fase 3: Assemblaggio Meccanico Principale",
+        start_date=date(2026, 9, 8),
+        end_date=date(2026, 9, 9),
+        duration=2,
+        planned_hours=16.0,
+        workers=json.dumps(["Franco Prod"]),
+        worker_hours=json.dumps({"Franco Prod": 16.0}),
+        completed=0
+    )
+    # Fase 4: 14/09 - 18/09 (INDIPENDENTE, NESSUN LINK DA FASE 3)
+    fase4 = Task(
+        project_id=project.id,
+        text="Fase 4: Cablaggio e Collaudo Finale",
+        start_date=date(2026, 9, 14),
+        end_date=date(2026, 9, 18),
+        duration=5,
+        planned_hours=40.0,
+        workers=json.dumps(["Roberto Prod"]),
+        worker_hours=json.dumps({"Roberto Prod": 40.0}),
+        completed=0
+    )
+
+    db_session.add_all([fase1, fase2, fase3, fase4])
+    await db_session.commit()
+    for f in (fase1, fase2, fase3, fase4):
+        await db_session.refresh(f)
+
+    # Link FS: Fase 1 -> Fase 2
+    link1_2 = Link(
+        project_id=project.id,
+        source=fase1.id,
+        target=fase2.id,
+        type=LinkType.FS,
+        lag=0
+    )
+    # Link FS: Fase 2 -> Fase 3
+    link2_3 = Link(
+        project_id=project.id,
+        source=fase2.id,
+        target=fase3.id,
+        type=LinkType.FS,
+        lag=0
+    )
+    # NOTA: NESSUN LINK tra Fase 3 e Fase 4!
+    db_session.add_all([link1_2, link2_3])
+    await db_session.commit()
+
+    # Genera suggerimenti di riprogrammazione AI
+    result = await generate_project_smart_suggestions(db_session, str(project.id), test_user)
+    suggestions = result.get("suggestions", [])
+    assert len(suggestions) >= 1
+
+    # Trova la proposta di recupero per Fase 1
+    sugg1 = next((s for s in suggestions if s["task_id"] == str(fase1.id)), None)
+    assert sugg1 is not None
+
+    fase1_new_end = date.fromisoformat(sugg1["proposed_changes"]["end_date"][:10])
+
+    # Verifica cascata su Fase 2
+    cascade_list = sugg1["cascade_impact"]["same_project_tasks"]
+    casc_fase2 = next((c for c in cascade_list if c["task_id"] == str(fase2.id)), None)
+    assert casc_fase2 is not None
+
+    fase2_new_start = date.fromisoformat(casc_fase2["proposed_start"][:10])
+    fase2_new_end = date.fromisoformat(casc_fase2["proposed_end"][:10])
+    
+    # 1. Fase 2 NON può iniziare prima che Fase 1 sia terminata (+1 gg lavorativo)
+    assert fase2_new_start > fase1_new_end
+
+    # 2. Fase 3 (sub_successore di Fase 2) deve iniziare DOPO il termine di Fase 2
+    sub_successors = casc_fase2.get("sub_successors", [])
+    casc_fase3 = next((c for c in sub_successors if c["task_id"] == str(fase3.id)), None)
+    assert casc_fase3 is not None
+    fase3_new_start = date.fromisoformat(casc_fase3["proposed_start"][:10])
+    assert fase3_new_start > fase2_new_end
+
+    # 3. Fase 4 NON deve essere toccata dalla catena (nessuna dipendenza da Fase 3)
+    casc_fase4_direct = next((c for c in cascade_list if c["task_id"] == str(fase4.id)), None)
+    casc_fase4_sub = next((c for c in casc_fase3.get("sub_successors", []) if c["task_id"] == str(fase4.id)), None)
+    assert casc_fase4_direct is None
+    assert casc_fase4_sub is None
+
+
+
 

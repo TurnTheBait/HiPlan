@@ -11,6 +11,7 @@ import {
   Calendar,
   Sparkles
 } from 'lucide-react';
+import { addWorkingDays as addWorkDaysUtil, countWorkingDays } from '../../utils/workingDays';
 
 const parseDateSafe = (d) => {
   if (!d) return null;
@@ -164,6 +165,21 @@ export default function ReplanningGanttPreview({
     const directModMap = new Map();
     const cascadeModMap = new Map();
 
+    const addCascadeTasks = (list, parentSugg) => {
+      if (!list || !Array.isArray(list)) return;
+      list.forEach((cs) => {
+        if (cs.task_id) {
+          cascadeModMap.set(String(cs.task_id), {
+            sugg: parentSugg,
+            cascade: cs
+          });
+        }
+        if (cs.sub_successors && Array.isArray(cs.sub_successors)) {
+          addCascadeTasks(cs.sub_successors, parentSugg);
+        }
+      });
+    };
+
     // Se è selezionato 'all', applichiamo solo le modifiche primarie (escludendo le opzioni alternative secondarie)
     const targets = activeSuggestion ? [activeSuggestion] : primaryCombinedSuggestions;
 
@@ -175,16 +191,12 @@ export default function ReplanningGanttPreview({
         });
       }
       if (sugg.cascade_impact?.same_project_tasks) {
-        sugg.cascade_impact.same_project_tasks.forEach((cs) => {
-          cascadeModMap.set(String(cs.task_id), {
-            sugg,
-            cascade: cs
-          });
-        });
+        addCascadeTasks(sugg.cascade_impact.same_project_tasks, sugg);
       }
     });
 
-    return tasks.map((t) => {
+    const taskMap = new Map();
+    tasks.forEach((t) => {
       const tId = String(t.id);
       const direct = directModMap.get(tId);
       const cascade = cascadeModMap.get(tId);
@@ -215,7 +227,7 @@ export default function ReplanningGanttPreview({
         shiftDays = cascade.cascade.shift_working_days || 0;
       }
 
-      return {
+      taskMap.set(tId, {
         ...t,
         origStart,
         origEnd,
@@ -226,9 +238,61 @@ export default function ReplanningGanttPreview({
         status,
         shiftDays,
         relatedSugg
-      };
+      });
     });
-  }, [tasks, activeSuggestion, primaryCombinedSuggestions]);
+
+    // Risoluzione rigorosa dipendenze da links FS:
+    // Se Fase B dipende da Fase A (link FS), Fase B DEVE iniziare solo dopo il termine di Fase A.
+    // Se invece due fasi NON sono dipendenti (nessun link tra loro), non viene applicato alcun vincolo
+    // e la fase indipendente mantiene le sue date autonome.
+    const incomingLinksMap = new Map();
+    (links || []).forEach((l) => {
+      const targetId = String(l.target);
+      if (!incomingLinksMap.has(targetId)) {
+        incomingLinksMap.set(targetId, []);
+      }
+      incomingLinksMap.get(targetId).push(l);
+    });
+
+    let changed = true;
+    let iterations = 0;
+    while (changed && iterations < 20) {
+      changed = false;
+      iterations++;
+
+      taskMap.forEach((simTask, tId) => {
+        const inLinks = incomingLinksMap.get(tId) || [];
+        inLinks.forEach((link) => {
+          const linkType = String(link.type !== undefined ? link.type : '0');
+          const lag = Number(link.lag) || 0;
+          const predTask = taskMap.get(String(link.source));
+
+          if (predTask && predTask.simEnd && (linkType === '0' || linkType === 'FS')) {
+            const minStartStr = addWorkDaysUtil(predTask.simEnd, 2 + lag, simTask.excluded_dates || []);
+            const minAllowedStart = parseDateSafe(minStartStr);
+            if (minAllowedStart && simTask.simStart && simTask.simStart < minAllowedStart) {
+              const durDays = simTask.duration || Math.max(1, countWorkingDays(simTask.simStart, simTask.simEnd, simTask.excluded_dates || []));
+              const newEndStr = addWorkDaysUtil(minAllowedStart, durDays, simTask.excluded_dates || []);
+              const newSimEnd = parseDateSafe(newEndStr) || minAllowedStart;
+
+              simTask.simStart = minAllowedStart;
+              simTask.simEnd = newSimEnd;
+              if (simTask.status === 'unchanged') {
+                simTask.status = 'cascade';
+              }
+              const origS = simTask.origStart;
+              if (origS && minAllowedStart > origS) {
+                simTask.shiftDays = Math.max(1, countWorkingDays(origS, minAllowedStart, simTask.excluded_dates || []) - 1);
+              }
+              changed = true;
+            }
+          }
+        });
+      });
+    }
+
+    return Array.from(taskMap.values());
+  }, [tasks, links, activeSuggestion, primaryCombinedSuggestions]);
 
   // Calcolo dei task per commessa correlata (quando attiva) con simulazione correzioni a catena
   const relatedSimulatedTasks = useMemo(() => {

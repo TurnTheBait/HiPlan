@@ -287,6 +287,60 @@ def find_alternative_worker(
     return best_candidate
 
 
+def get_earliest_start_from_predecessors(
+    task_id: str,
+    context: Dict[str, Any],
+    today: date,
+    task_projected_ends: Optional[Dict[str, date]] = None
+) -> Optional[date]:
+    """
+    Calcola la data minima in cui un task può iniziare in base a tutti i suoi predecessori
+    collegati da Link Finish-to-Start (FS) o Start-to-Start (SS).
+    Se un task non ha dipendenze in ingresso (es. Fase 4 che non dipende da Fase 3),
+    restituisce None, permettendo al task di essere programmato liberamente.
+    """
+    links_by_target = context.get("links_by_target", {})
+    incoming_links = links_by_target.get(str(task_id), [])
+    if not incoming_links:
+        return None
+
+    all_tasks_by_id = context.get("all_tasks_by_id", {})
+    min_allowed = None
+
+    for link in incoming_links:
+        link_type = link.type.value if hasattr(link.type, 'value') else str(link.type)
+        lag = int(link.lag or 0)
+        pred_task = all_tasks_by_id.get(str(link.source))
+        if not pred_task or pred_task.completed == 1:
+            continue
+
+        # Data di fine effettiva del predecessore
+        pred_end = None
+        if task_projected_ends and str(pred_task.id) in task_projected_ends:
+            pred_end = task_projected_ends[str(pred_task.id)]
+        elif pred_task.end_date:
+            if pred_task.end_date < today:
+                pred_duration = pred_task.duration or get_working_days_count(pred_task.start_date, pred_task.end_date)
+                pred_end = add_working_days(today, max(1, pred_duration) - 1)
+            else:
+                pred_end = pred_task.end_date
+
+        if not pred_end:
+            continue
+
+        if link_type == "0":  # Finish-to-Start (FS): la fase successiva può iniziare solo dopo che il predecessore è terminato
+            allowed = add_working_days(pred_end, 1 + lag)
+            if min_allowed is None or allowed > min_allowed:
+                min_allowed = allowed
+        elif link_type == "1":  # Start-to-Start (SS)
+            pred_start = pred_task.start_date or today
+            allowed = add_working_days(pred_start, lag)
+            if min_allowed is None or allowed > min_allowed:
+                min_allowed = allowed
+
+    return min_allowed
+
+
 def calculate_cascade_impact(
     task: Task,
     new_start_date: date,
@@ -690,7 +744,9 @@ async def generate_project_smart_suggestions(
 
                 # PRIORITÀ 1 (PREFERITA): L'addetto stesso recupera le ore al rientro dalle ferie
                 max_vac = max(conflicting_vac_dates)
-                target_start = add_working_days(max_vac, 1)
+                start_after_vac = add_working_days(max_vac, 1)
+                min_from_pred = get_earliest_start_from_predecessors(str(task.id), context, today)
+                target_start = max(start_after_vac, min_from_pred) if min_from_pred else start_after_vac
                 target_end = add_working_days(target_start, duration_days - 1)
 
                 cascade = calculate_cascade_impact(task, target_start, target_end, proj_end_date, context)
@@ -957,11 +1013,28 @@ async def generate_project_smart_suggestions(
         # 3. ANALISI FASE SCADUTA O RITARDO ACCUMULATO
         # -------------------------------------------------------------
         if task.end_date < today and tot_actual_h < planned_h:
-            # Fase scaduta nel passato e non completata
+            # Se la fase ha un predecessore incompleto (link FS) che è anch'esso scaduto o non completato,
+            # il ritardo di questa fase è causato a catena dal predecessore.
+            # La riprogrammazione del predecessore include già a cascata questa fase con le date corrette.
+            # Non generiamo un suggerimento autonomo e contraddittorio che pretenderebbe di far partire
+            # questa fase oggi prima che il suo predecessore sia terminato.
+            has_uncompleted_pred = False
+            incoming_links = context.get("links_by_target", {}).get(str(task.id), [])
+            for link in incoming_links:
+                link_type = link.type.value if hasattr(link.type, 'value') else str(link.type)
+                if link_type == "0":  # FS
+                    pred = context.get("all_tasks_by_id", {}).get(str(link.source))
+                    if pred and pred.completed != 1 and pred.end_date < today:
+                        has_uncompleted_pred = True
+                        break
+            if has_uncompleted_pred:
+                continue
+
             days_late = get_working_days_count(task.end_date, today) - 1
             needed_days = max(1, math.ceil((planned_h - tot_actual_h) / max(1.0, (planned_h / max(1, duration_days)))))
             
-            target_start = today
+            min_from_pred = get_earliest_start_from_predecessors(str(task.id), context, today)
+            target_start = max(today, min_from_pred) if min_from_pred else today
             target_end = add_working_days(target_start, needed_days - 1)
 
             cascade = calculate_cascade_impact(task, target_start, target_end, proj_end_date, context)
@@ -1214,8 +1287,18 @@ async def apply_smart_replanning_proposal(
     )
     db.add(log_entry)
 
-    # 4. Aggiorna a cascata i successori inclusi
-    cascade_successors = proposal_payload.get("cascade_successors", [])
+    # 4. Aggiorna a cascata i successori inclusi (inclusi ricorsivamente i sub_successors)
+    def flatten_cascade_successors(succ_list):
+        result = []
+        for s in succ_list:
+            result.append(s)
+            if s.get("sub_successors"):
+                result.extend(flatten_cascade_successors(s["sub_successors"]))
+        return result
+
+    raw_cascades = proposal_payload.get("cascade_successors", [])
+    cascade_successors = flatten_cascade_successors(raw_cascades)
+
     for succ_data in cascade_successors:
         s_id = succ_data.get("task_id")
         s_start_str = succ_data.get("proposed_start")
