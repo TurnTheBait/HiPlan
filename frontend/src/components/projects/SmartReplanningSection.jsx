@@ -146,13 +146,11 @@ export default function SmartReplanningSection({
         <div
           style={{
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            flexDirection: 'column',
+            gap: 16,
             padding: '20px 24px',
             background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(99, 102, 241, 0.04))',
-            borderBottom: '1px solid var(--border-subtle, #e2e8f0)',
-            flexWrap: 'wrap',
-            gap: 12
+            borderBottom: '1px solid var(--border-subtle, #e2e8f0)'
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -166,7 +164,8 @@ export default function SmartReplanningSection({
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: '#fff',
-                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)'
+                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
+                flexShrink: 0
               }}
             >
               <Sparkles size={22} />
@@ -181,72 +180,77 @@ export default function SmartReplanningSection({
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {suggestions.length > 0 && (
-              <span
-                style={{
-                  background: 'rgba(239, 68, 68, 0.12)',
-                  color: '#dc2626',
-                  border: '1px solid rgba(239, 68, 68, 0.25)',
-                  padding: '4px 12px',
-                  borderRadius: '20px',
-                  fontSize: 12,
-                  fontWeight: 600
-                }}
-              >
-                {suggestions.length} {suggestions.length === 1 ? 'conflitto' : 'conflitti'}
-              </span>
-            )}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            {/* Badges conflitti e raccomandazioni a sinistra */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              {suggestions.length > 0 && (
+                <span
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    color: '#dc2626',
+                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                    padding: '4px 12px',
+                    borderRadius: '20px',
+                    fontSize: 12,
+                    fontWeight: 600
+                  }}
+                >
+                  {suggestions.length} {suggestions.length === 1 ? 'conflitto' : 'conflitti'}
+                </span>
+              )}
 
-            {replanData?.actionable_suggestions_count > 0 && (
-              <span
-                style={{
-                  background: 'rgba(16, 185, 129, 0.12)',
-                  color: '#059669',
-                  border: '1px solid rgba(16, 185, 129, 0.25)',
-                  padding: '4px 12px',
-                  borderRadius: '20px',
-                  fontSize: 12,
-                  fontWeight: 600
-                }}
-              >
-                {replanData.actionable_suggestions_count} azioni raccomandate
-              </span>
-            )}
+              {replanData?.actionable_suggestions_count > 0 && (
+                <span
+                  style={{
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    color: '#059669',
+                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                    padding: '4px 12px',
+                    borderRadius: '20px',
+                    fontSize: 12,
+                    fontWeight: 600
+                  }}
+                >
+                  {replanData.actionable_suggestions_count} azioni raccomandate
+                </span>
+              )}
+            </div>
 
-            {/* Pulsante Anteprima Gantt Globale */}
-            {replanData?.actionable_suggestions_count > 0 && (
+            {/* Pulsanti Anteprima Gantt e Aggiorna posizionati sul lato destro */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
+              {replanData?.actionable_suggestions_count > 0 && (
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setPreviewSuggestionId('all')}
+                  style={{
+                    padding: '8px 14px',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    color: '#1d4ed8',
+                    borderColor: '#3b82f6',
+                    background: 'rgba(59, 130, 246, 0.08)'
+                  }}
+                  title="Visualizza anteprima simulata del Gantt con tutte le modifiche applicate"
+                >
+                  <Eye size={15} />
+                  Anteprima Gantt Riprogrammato
+                </button>
+              )}
+
               <button
                 className="btn btn-secondary"
-                onClick={() => setPreviewSuggestionId('all')}
-                style={{
-                  padding: '8px 14px',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  color: '#1d4ed8',
-                  borderColor: '#3b82f6',
-                  background: 'rgba(59, 130, 246, 0.08)'
-                }}
-                title="Visualizza anteprima simulata del Gantt con tutte le modifiche applicate"
+                onClick={fetchSuggestions}
+                disabled={loading}
+                title="Ricalcola analisi orari e carichi"
+                style={{ padding: '8px 12px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
               >
-                <Eye size={15} />
-                Anteprima Gantt Riprogrammato
+                <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                Aggiorna
               </button>
-            )}
-
-            <button
-              className="btn btn-secondary"
-              onClick={fetchSuggestions}
-              disabled={loading}
-              title="Ricalcola analisi orari e carichi"
-              style={{ padding: '8px 12px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
-            >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-              Aggiorna
-            </button>
+            </div>
           </div>
         </div>
 
