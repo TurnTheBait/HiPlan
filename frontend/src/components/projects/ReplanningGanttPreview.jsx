@@ -88,7 +88,7 @@ export default function ReplanningGanttPreview({
   const [activeProjectId, setActiveProjectId] = useState('main');
   const [hoveredLinkId, setHoveredLinkId] = useState(null);
   const [hoveredTaskId, setHoveredTaskId] = useState(null);
-  const [dayWidth, setDayWidth] = useState(22); // px per day (zoom)
+  const [dayWidth, setDayWidth] = useState(26); // px per day (zoom)
 
   const scrollContainerRef = useRef(null);
 
@@ -426,7 +426,7 @@ export default function ReplanningGanttPreview({
   const activeProjectEnd = isViewingRelated ? activeRelatedProject?.project_end_date : projectEndDate;
 
   // Calcolo intervallo temporale armonizzato a settimane piene (Lunedì - Domenica)
-  const { timelineStart, totalDays, monthsList, weeksList } = useMemo(() => {
+  const { timelineStart, totalDays, monthsList, daysList } = useMemo(() => {
     let minD = parseDateSafe(activeProjectStart);
     let maxD = parseDateSafe(activeProjectEnd);
 
@@ -473,22 +473,30 @@ export default function ReplanningGanttPreview({
     const diffMs = endSun.getTime() - startMon.getTime();
     const totDays = Math.max(14, Math.round(diffMs / (1000 * 60 * 60 * 24)));
 
-    // Costruisci lista settimane
-    const weeks = [];
-    const curWeek = new Date(startMon);
-    let dayOffset = 0;
-    while (curWeek < endSun) {
-      weeks.push({
-        date: new Date(curWeek),
-        offsetDays: dayOffset
+    // Costruisci lista giorni per la timeline
+    const days = [];
+    for (let d = 0; d < totDays; d++) {
+      const dDate = new Date(startMon);
+      dDate.setDate(dDate.getDate() + d);
+      const dow = dDate.getDay(); // 0 = Dom, 6 = Sab
+      const isWeekend = dow === 0 || dow === 6;
+      const isToday = dDate.getTime() === today.getTime();
+      const dayNum = dDate.getDate();
+      const dayNameShort = dDate.toLocaleDateString('it-IT', { weekday: 'narrow' }).toUpperCase();
+
+      days.push({
+        dayIndex: d,
+        date: dDate,
+        dayNum,
+        dayNameShort,
+        isWeekend,
+        isToday,
+        offsetDays: d
       });
-      curWeek.setDate(curWeek.getDate() + 7);
-      dayOffset += 7;
     }
 
     // Costruisci lista mesi
     const months = [];
-    let curMonthDate = new Date(startMon);
     let currentMonthName = '';
     let currentMonthObj = null;
 
@@ -515,7 +523,7 @@ export default function ReplanningGanttPreview({
       months.push(currentMonthObj);
     }
 
-    return { timelineStart: startMon, totalDays: totDays, monthsList: months, weeksList: weeks };
+    return { timelineStart: startMon, totalDays: totDays, monthsList: months, daysList: days };
   }, [activeProjectStart, activeProjectEnd, activeProjectTasks]);
 
   // Coordinate di posizionamento in pixel
@@ -954,7 +962,7 @@ export default function ReplanningGanttPreview({
             {/* Controlli Zoom Scala */}
             <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '2px' }}>
               <button
-                onClick={() => setDayWidth((prev) => Math.max(14, prev - 4))}
+                onClick={() => setDayWidth((prev) => Math.max(16, prev - 4))}
                 title="Riduci zoom (-)"
                 style={{
                   border: 'none',
@@ -971,7 +979,7 @@ export default function ReplanningGanttPreview({
               </button>
               <div style={{ width: 1, height: 14, background: '#cbd5e1' }} />
               <button
-                onClick={() => setDayWidth((prev) => Math.min(38, prev + 4))}
+                onClick={() => setDayWidth((prev) => Math.min(48, prev + 4))}
                 title="Aumenta zoom (+)"
                 style={{
                   border: 'none',
@@ -1513,34 +1521,49 @@ export default function ReplanningGanttPreview({
                   ))}
                 </div>
 
-                {/* LIVELLO 2: SETTIMANE (LUNEDÌ) */}
+                {/* LIVELLO 2: GIORNI */}
                 <div style={{ height: '28px', display: 'flex', position: 'relative' }}>
-                  {weeksList.map((w, idx) => (
+                  {daysList.map((day) => (
                     <div
-                      key={idx}
+                      key={day.dayIndex}
                       style={{
                         position: 'absolute',
-                        left: `${w.offsetDays * dayWidth}px`,
-                        width: `${7 * dayWidth}px`,
+                        left: `${day.offsetDays * dayWidth}px`,
+                        width: `${dayWidth}px`,
                         height: '28px',
                         display: 'flex',
+                        flexDirection: 'column',
                         alignItems: 'center',
-                        paddingLeft: '6px',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: '#64748b',
+                        justifyContent: 'center',
                         borderRight: '1px solid #e2e8f0',
+                        backgroundColor: day.isToday
+                          ? '#eff6ff'
+                          : day.isWeekend
+                            ? 'rgba(241, 245, 249, 0.85)'
+                            : '#ffffff',
+                        color: day.isToday
+                          ? '#2563eb'
+                          : day.isWeekend
+                            ? '#94a3b8'
+                            : '#334155',
+                        fontWeight: day.isToday ? 700 : day.isWeekend ? 500 : 600,
                         overflow: 'hidden',
-                        whiteSpace: 'nowrap'
+                        userSelect: 'none'
                       }}
+                      title={`${formatDateIt(day.date)}${day.isToday ? ' (Oggi)' : ''}${day.isWeekend ? ' (Weekend)' : ''}`}
                     >
-                      {w.date.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}
+                      <span style={{ fontSize: dayWidth < 22 ? 9 : 11, lineHeight: 1 }}>{day.dayNum}</span>
+                      {dayWidth >= 20 && (
+                        <span style={{ fontSize: 8, opacity: day.isToday ? 1 : 0.7, marginTop: 1 }}>
+                          {day.dayNameShort}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* GRIGLIA VERTICALE DI SFONDO (SETTIMANE) */}
+              {/* GRIGLIA VERTICALE DI SFONDO (GIORNI) */}
               <div
                 style={{
                   position: 'absolute',
@@ -1552,16 +1575,17 @@ export default function ReplanningGanttPreview({
                   zIndex: 1
                 }}
               >
-                {weeksList.map((w, idx) => (
+                {daysList.map((day) => (
                   <div
-                    key={idx}
+                    key={day.dayIndex}
                     style={{
                       position: 'absolute',
-                      left: `${w.offsetDays * dayWidth}px`,
+                      left: `${day.offsetDays * dayWidth}px`,
                       top: 0,
                       bottom: 0,
-                      width: '1px',
-                      backgroundColor: '#f1f5f9'
+                      width: `${dayWidth}px`,
+                      borderRight: '1px solid #f1f5f9',
+                      backgroundColor: day.isWeekend ? 'rgba(241, 245, 249, 0.45)' : 'transparent'
                     }}
                   />
                 ))}
