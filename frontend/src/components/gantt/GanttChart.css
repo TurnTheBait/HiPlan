@@ -334,7 +334,6 @@
 .custom-project-marker.custom-end-marker .custom-marker-badge {
   position: absolute !important;
   top: 6px !important;
-  left: 6px !important;
   padding: 4px 10px !important;
   border-radius: 14px !important;
   font-size: 0.75rem !important;
@@ -345,20 +344,24 @@
   letter-spacing: 0.02em !important;
 }
 
+/* Inizio Commessa: posizionato a SINISTRA della linea verde verticale */
 .gantt_marker.gantt-project-start-marker .gantt_marker_content,
 .custom-project-marker.custom-start-marker .custom-marker-badge {
   background-color: #10b981 !important;
   color: #ffffff !important;
   border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  left: auto !important;
+  right: 6px !important;
 }
 
+/* Fine Commessa: posizionato a DESTRA della linea rossa verticale */
 .gantt_marker.gantt-project-end-marker .gantt_marker_content,
 .custom-project-marker.custom-end-marker .custom-marker-badge {
   background-color: #ef4444 !important;
   color: #ffffff !important;
   border: 1px solid rgba(255, 255, 255, 0.4) !important;
-  left: auto !important;
-  right: 6px !important;
+  left: 6px !important;
+  right: auto !important;
 }
 
 /* Evidenziazione colonna/cella del giorno/settimana/mese/trimestre di oggi nella timeline */
