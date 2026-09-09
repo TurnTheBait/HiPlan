@@ -57,5 +57,6 @@ TODO.md
 # Uploads
 backend/uploads/
 
-# Backups
+# Backups & Archives
 backend/backups/
+*.zip

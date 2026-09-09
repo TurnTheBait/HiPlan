@@ -26,7 +26,49 @@ C_GRAY=$'\033[90m'
 
 unset DEBUG
 
-# Barra di caricamento moderna, compatta (38-42 caratteri max, non va mai a capo)
+# Rilevazione percorso python nel virtualenv (compatibile macOS, Linux e Windows/Git Bash)
+get_venv_python() {
+  if [[ -x "$BACKEND_DIR/venv/Scripts/python.exe" || -f "$BACKEND_DIR/venv/Scripts/python.exe" ]]; then
+    echo "$BACKEND_DIR/venv/Scripts/python.exe"
+  elif [[ -x "$BACKEND_DIR/venv/Scripts/python" || -f "$BACKEND_DIR/venv/Scripts/python" ]]; then
+    echo "$BACKEND_DIR/venv/Scripts/python"
+  elif [[ -x "$BACKEND_DIR/venv/bin/python" || -f "$BACKEND_DIR/venv/bin/python" ]]; then
+    echo "$BACKEND_DIR/venv/bin/python"
+  elif [[ -x "$BACKEND_DIR/venv/bin/python3" || -f "$BACKEND_DIR/venv/bin/python3" ]]; then
+    echo "$BACKEND_DIR/venv/bin/python3"
+  else
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" || -n "${WINDIR:-}" ]]; then
+      echo "$BACKEND_DIR/venv/Scripts/python.exe"
+    else
+      echo "$BACKEND_DIR/venv/bin/python"
+    fi
+  fi
+}
+
+venv_python_valid() {
+  local py
+  py="$(get_venv_python)"
+  if [[ -f "$py" || -x "$py" ]]; then
+    "$py" -c "import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)" >/dev/null 2>&1
+  else
+    return 1
+  fi
+}
+
+# Rilevazione interprete Python di sistema per creare venv
+get_sys_python() {
+  if command -v python3 >/dev/null 2>&1; then
+    echo "python3"
+  elif command -v python >/dev/null 2>&1; then
+    echo "python"
+  elif command -v py >/dev/null 2>&1; then
+    echo "py -3"
+  else
+    echo "python3"
+  fi
+}
+
+# Barra di caricamento moderna, compatta
 draw_bar() {
   local pct="$1"
   local text="$2"
@@ -61,6 +103,8 @@ run_with_progress() {
   local log_file="$4"
   shift 4
 
+  rm -f "$log_file" 2>/dev/null || true
+
   ("$@" > "$log_file" 2>&1) &
   local pid=$!
   local cur=$start_pct
@@ -79,7 +123,9 @@ run_with_progress() {
   if [[ $rc -ne 0 ]]; then
     fail_bar "$cur" "$text (errore)"
     echo "  ${C_YELLOW}Dettagli errore da log:${C_RESET}"
-    tail -n 8 "$log_file" | sed 's/^/    /' || true
+    if [[ -f "$log_file" ]]; then
+      tail -n 12 "$log_file" | sed 's/^/    /' || true
+    fi
     echo
     return $rc
   fi
@@ -111,24 +157,76 @@ fail_bar() {
 }
 
 local_ip() {
-  local iface=""
-  iface="$(route get default 2>/dev/null | awk '/interface:/{print $2; exit}')" || true
-  if [[ -n "$iface" ]]; then
-    ipconfig getifaddr "$iface" 2>/dev/null || true
+  local ip=""
+  if command -v ipconfig >/dev/null 2>&1; then
+    local iface
+    iface="$(route get default 2>/dev/null | awk '/interface:/{print $2; exit}')" || true
+    if [[ -n "$iface" ]]; then
+      ip="$(ipconfig getifaddr "$iface" 2>/dev/null)" || true
+    fi
   fi
+  if [[ -z "$ip" ]] && command -v powershell.exe >/dev/null 2>&1; then
+    ip="$(powershell.exe -NoProfile -Command "(Get-NetIPConfiguration | Where-Object { \$_.IPv4DefaultGateway -and \$_.NetAdapter.Status -eq 'Up' } | ForEach-Object { \$_.IPv4Address.IPAddress } | Select-Object -First 1)" 2>/dev/null | tr -d '\r')" || true
+  fi
+  if [[ -z "$ip" ]] && command -v ip >/dev/null 2>&1; then
+    ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}')" || true
+  fi
+  echo "$ip"
 }
 
 port_is_busy() {
-  lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+  elif command -v netstat >/dev/null 2>&1; then
+    netstat -ano 2>/dev/null | grep -E ":$port\s+.*LISTENING" >/dev/null 2>&1
+  else
+    return 1
+  fi
 }
 
 cleanup_processes() {
   [[ -n "$BACKEND_PID" ]] && kill "$BACKEND_PID" 2>/dev/null || true
   [[ -n "$FRONTEND_PID" ]] && kill "$FRONTEND_PID" 2>/dev/null || true
-  lsof -ti:8000 2>/dev/null | xargs kill -9 2>/dev/null || true
-  lsof -ti:5173 2>/dev/null | xargs kill -9 2>/dev/null || true
-  pkill -9 -f "uvicorn app.main:app" 2>/dev/null || true
-  pkill -9 -f "vite.*5173" 2>/dev/null || true
+
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -ti:8000 2>/dev/null | xargs kill -9 2>/dev/null || true
+    lsof -ti:5173 2>/dev/null | xargs kill -9 2>/dev/null || true
+  fi
+
+  if command -v pkill >/dev/null 2>&1; then
+    pkill -9 -f "uvicorn app.main:app" 2>/dev/null || true
+    pkill -9 -f "vite.*5173" 2>/dev/null || true
+  fi
+
+  if command -v taskkill >/dev/null 2>&1; then
+    taskkill //F //IM uvicorn.exe 2>/dev/null || true
+    local pids
+    pids=$(netstat -ano 2>/dev/null | awk '/:8000.*LISTENING|:5173.*LISTENING/{print $NF}' | tr -d '\r')
+    for pid in $pids; do
+      if [[ -n "$pid" && "$pid" =~ ^[0-9]+$ && "$pid" -gt 0 ]]; then
+        taskkill //F //PID "$pid" 2>/dev/null || true
+      fi
+    done
+  fi
+}
+
+open_browser() {
+  local url="$1"
+  if command -v open >/dev/null 2>&1; then
+    open "$url" 2>/dev/null || true
+  elif command -v cmd.exe >/dev/null 2>&1; then
+    cmd.exe /c start "$url" 2>/dev/null || true
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$url" 2>/dev/null || true
+  elif command -v start >/dev/null 2>&1; then
+    start "$url" 2>/dev/null || true
+  fi
+}
+
+pause_return() {
+  echo
+  read -rp "Premi INVIO per tornare al menu principale..." dummy || true
 }
 
 header() {
@@ -146,11 +244,14 @@ header() {
 do_start() {
   header "Avvio Sistema"
 
-  if [[ ! -x "$BACKEND_DIR/venv/bin/python" || ! -d "$FRONTEND_DIR/node_modules" ]]; then
-    echo "  ${C_YELLOW}[i] Installazione incompleta: avvio configurazione iniziale...${C_RESET}"
+  if ! venv_python_valid || [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
+    echo "  ${C_YELLOW}[i] Installazione incompleta o virtualenv da aggiornare: avvio setup...${C_RESET}"
     echo
     do_setup
   fi
+
+  local py_bin
+  py_bin="$(get_venv_python)"
 
   advance_bar 0 15 "Controllo porte di rete..."
   if port_is_busy 8000 || port_is_busy 5173; then
@@ -169,7 +270,7 @@ do_start() {
   draw_bar 40 "Avvio Backend API..."
   (
     cd "$BACKEND_DIR"
-    exec "$BACKEND_DIR/venv/bin/python" -m uvicorn app.main:app \
+    exec "$py_bin" -m uvicorn app.main:app \
       --host 0.0.0.0 --port 8000 --log-level info
   ) >"$LOG_DIR/backend_app.log" 2>&1 &
   BACKEND_PID=$!
@@ -210,18 +311,18 @@ do_start() {
 
   local ip
   ip="$(local_ip)"
-  open "http://localhost:5173" 2>/dev/null || true
+  open_browser "http://localhost:5173"
 
   echo "${C_GREEN}------------------------------------------------------------${C_RESET}"
   echo "  ${C_BOLD}${C_WHITE}PUNTI DI ACCESSO HIPLAN${C_RESET}"
   echo "${C_GREEN}------------------------------------------------------------${C_RESET}"
-  echo "  ${C_GREEN}>${C_RESET}  Questo Mac:      ${C_CYAN}${C_BOLD}http://localhost:5173${C_RESET}"
+  echo "  ${C_GREEN}>${C_RESET}  Questo PC/Mac:   ${C_CYAN}${C_BOLD}http://localhost:5173${C_RESET}"
   if [[ -n "$ip" ]]; then
     echo "  ${C_GREEN}>${C_RESET}  Rete Locale:     ${C_CYAN}${C_BOLD}http://${ip}:5173${C_RESET}"
   fi
   echo "  ${C_GREEN}>${C_RESET}  Documentazione:  ${C_GRAY}http://localhost:8000/docs${C_RESET}"
   echo "${C_GREEN}------------------------------------------------------------${C_RESET}"
-  echo "  ${C_GRAY}Per arrestare: premi CTRL+C oppure usa ./hiplan.sh stop${C_RESET}"
+  echo "  ${C_GRAY}I servizi sono attivi. Premi CTRL+C per arrestarli.${C_RESET}"
   echo
 
   wait "$BACKEND_PID" "$FRONTEND_PID"
@@ -233,12 +334,9 @@ do_start() {
 do_stop() {
   header "Arresto Servizi"
   advance_bar 0 30 "Chiusura Backend API..."
-  lsof -ti:8000 2>/dev/null | xargs kill -9 2>/dev/null || true
-  advance_bar 30 65 "Chiusura Frontend Web..."
-  lsof -ti:5173 2>/dev/null | xargs kill -9 2>/dev/null || true
-  advance_bar 65 90 "Pulizia processi residui..."
-  pkill -9 -f "uvicorn app.main:app" 2>/dev/null || true
-  pkill -9 -f "vite.*5173" 2>/dev/null || true
+  cleanup_processes
+  advance_bar 30 70 "Chiusura Frontend Web..."
+  advance_bar 70 95 "Pulizia processi residui..."
   finish_bar "Tutti i servizi HiPlan sono stati arrestati!"
 }
 
@@ -248,12 +346,15 @@ do_stop() {
 do_update() {
   header "Aggiornamento HiPlan"
 
-  if [[ ! -x "$BACKEND_DIR/venv/bin/python" || ! -d "$FRONTEND_DIR/node_modules" ]]; then
-    echo "  ${C_YELLOW}[i] Ambiente non configurato: avvio configurazione iniziale...${C_RESET}"
+  if ! venv_python_valid || [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
+    echo "  ${C_YELLOW}[i] Ambiente non configurato o non valido: avvio setup...${C_RESET}"
     echo
     do_setup
     return 0
   fi
+
+  local py_bin
+  py_bin="$(get_venv_python)"
 
   if [[ ! -f "$BACKEND_DIR/.env" && -f "$BACKEND_DIR/.env.example" ]]; then
     cp "$BACKEND_DIR/.env.example" "$BACKEND_DIR/.env"
@@ -263,15 +364,15 @@ do_update() {
   cleanup_processes
 
   advance_bar 15 25 "Backup di sicurezza database..."
-  "$BACKEND_DIR/venv/bin/python" -c "import sys; sys.path.append('backend'); from app.services.backup_service import run_backup; run_backup()" > "$LOG_DIR/backup.log" 2>&1 || {
+  "$py_bin" -c "import sys; sys.path.append('backend'); from app.services.backup_service import run_backup; run_backup()" > "$LOG_DIR/backup.log" 2>&1 || {
     echo "  ${C_YELLOW}[!] Nota: Backup preventivo non eseguito o database non ancora presente.${C_RESET}"
   }
 
   run_with_progress 25 40 "Aggiornamento pip e wheel..." "$LOG_DIR/update_pip.log" \
-    "$BACKEND_DIR/venv/bin/python" -m pip install --quiet --upgrade pip setuptools wheel
+    "$py_bin" -m pip install --quiet --upgrade pip setuptools wheel
 
   run_with_progress 40 60 "Aggiornamento librerie Python..." "$LOG_DIR/update_pip.log" \
-    "$BACKEND_DIR/venv/bin/python" -m pip install --quiet -r "$BACKEND_DIR/requirements.txt"
+    "$py_bin" -m pip install --quiet -r "$BACKEND_DIR/requirements.txt"
 
   run_with_progress 60 80 "Installazione moduli npm..." "$LOG_DIR/update_npm.log" \
     npm --prefix "$FRONTEND_DIR" install --prefer-offline --no-audit --no-fund
@@ -280,10 +381,10 @@ do_update() {
     npm --prefix "$FRONTEND_DIR" run build
 
   draw_bar 96 "Verifica integrita' backend..."
-  "$BACKEND_DIR/venv/bin/python" -c "import sys; sys.path.append('backend'); import app.main" > "$LOG_DIR/update_check.log" 2>&1
+  "$py_bin" -c "import sys; sys.path.append('backend'); import app.main" > "$LOG_DIR/update_check.log" 2>&1
 
   finish_bar "HiPlan aggiornato con successo!"
-  echo "  ${C_GRAY}Per riavviare il server: ./hiplan.sh start (o opzione 1 dal menu)${C_RESET}"
+  echo "  ${C_GRAY}Per riavviare il server: seleziona 1 dal menu (start)${C_RESET}"
   echo
 }
 
@@ -294,7 +395,9 @@ do_setup() {
   header "Configurazione Ambiente"
 
   advance_bar 0 15 "Verifica Python 3 e Node.js..."
-  if ! command -v python3 >/dev/null 2>&1; then
+  local sys_py
+  sys_py="$(get_sys_python)"
+  if ! command -v "$sys_py" >/dev/null 2>&1; then
     fail_bar 15 "Python 3 non trovato nel sistema"
     exit 1
   fi
@@ -307,16 +410,20 @@ do_setup() {
     cp "$BACKEND_DIR/.env.example" "$BACKEND_DIR/.env"
   fi
 
-  advance_bar 15 30 "Creazione venv Python..."
-  if [[ ! -x "$BACKEND_DIR/venv/bin/python" ]]; then
-    python3 -m venv "$BACKEND_DIR/venv" > "$LOG_DIR/setup.log" 2>&1
+  advance_bar 15 30 "Creazione virtualenv Python..."
+  if ! venv_python_valid; then
+    rm -rf "$BACKEND_DIR/venv" 2>/dev/null || true
+    "$sys_py" -m venv "$BACKEND_DIR/venv" > "$LOG_DIR/setup.log" 2>&1
   fi
-  
+
+  local py_bin
+  py_bin="$(get_venv_python)"
+
   run_with_progress 30 45 "Aggiornamento pip e wheel..." "$LOG_DIR/setup.log" \
-    "$BACKEND_DIR/venv/bin/python" -m pip install --quiet --upgrade pip setuptools wheel
+    "$py_bin" -m pip install --quiet --upgrade pip setuptools wheel
 
   run_with_progress 45 70 "Installazione librerie Python..." "$LOG_DIR/setup.log" \
-    "$BACKEND_DIR/venv/bin/python" -m pip install --quiet -r "$BACKEND_DIR/requirements.txt"
+    "$py_bin" -m pip install --quiet -r "$BACKEND_DIR/requirements.txt"
 
   run_with_progress 70 85 "Installazione pacchetti npm..." "$LOG_DIR/setup.log" \
     npm --prefix "$FRONTEND_DIR" install --prefer-offline --no-audit --no-fund
@@ -325,7 +432,7 @@ do_setup() {
     npm --prefix "$FRONTEND_DIR" run build
 
   finish_bar "Configurazione iniziale completata!"
-  echo "  ${C_GRAY}Puoi avviare il server eseguendo: ./hiplan.sh start${C_RESET}"
+  echo "  ${C_GRAY}Puoi avviare il server eseguendo l'opzione 1 (start)${C_RESET}"
   echo
 }
 
@@ -333,30 +440,32 @@ do_setup() {
 # MENU INTERATTIVO
 # ============================================================
 show_menu() {
-  clear 2>/dev/null || true
-  echo
-  echo "${C_CYAN}------------------------------------------------------------${C_RESET}"
-  echo "  ${C_BOLD}${C_WHITE}H I P L A N${C_RESET}  ${C_GRAY}|${C_RESET}  ${C_DIM}Pannello di Controllo${C_RESET}"
-  echo "${C_CYAN}------------------------------------------------------------${C_RESET}"
-  echo
-  echo "  ${C_CYAN}1${C_RESET})  ${C_WHITE}Avvia Server${C_RESET}       ${C_GRAY}(start)${C_RESET}"
-  echo "  ${C_CYAN}2${C_RESET})  ${C_WHITE}Arresta Server${C_RESET}     ${C_GRAY}(stop)${C_RESET}"
-  echo "  ${C_CYAN}3${C_RESET})  ${C_WHITE}Aggiorna Sistema${C_RESET}   ${C_GRAY}(update)${C_RESET}"
-  echo "  ${C_CYAN}4${C_RESET})  ${C_WHITE}Configurazione${C_RESET}     ${C_GRAY}(setup)${C_RESET}"
-  echo "  ${C_GRAY}0${C_RESET})  ${C_GRAY}Esci${C_RESET}"
-  echo
-  echo "${C_CYAN}------------------------------------------------------------${C_RESET}"
-  printf "  Scegli un'opzione [0-4]: "
-  read -r choice
-  echo
-  case "$choice" in
-    1|start|START) do_start ;;
-    2|stop|STOP) do_stop ;;
-    3|update|UPDATE) do_update ;;
-    4|setup|SETUP) do_setup ;;
-    0|q|Q|exit|EXIT) exit 0 ;;
-    *) echo "  ${C_RED}[!] Scelta non valida.${C_RESET}"; sleep 1; show_menu ;;
-  esac
+  while true; do
+    clear 2>/dev/null || true
+    echo
+    echo "${C_CYAN}------------------------------------------------------------${C_RESET}"
+    echo "  ${C_BOLD}${C_WHITE}H I P L A N${C_RESET}  ${C_GRAY}|${C_RESET}  ${C_DIM}Pannello di Controllo${C_RESET}"
+    echo "${C_CYAN}------------------------------------------------------------${C_RESET}"
+    echo
+    echo "  ${C_CYAN}1${C_RESET})  ${C_WHITE}Avvia Server${C_RESET}       ${C_GRAY}(start)${C_RESET}"
+    echo "  ${C_CYAN}2${C_RESET})  ${C_WHITE}Arresta Server${C_RESET}     ${C_GRAY}(stop)${C_RESET}"
+    echo "  ${C_CYAN}3${C_RESET})  ${C_WHITE}Aggiorna Sistema${C_RESET}   ${C_GRAY}(update)${C_RESET}"
+    echo "  ${C_CYAN}4${C_RESET})  ${C_WHITE}Configurazione${C_RESET}     ${C_GRAY}(setup)${C_RESET}"
+    echo "  ${C_GRAY}0${C_RESET})  ${C_GRAY}Esci${C_RESET}"
+    echo
+    echo "${C_CYAN}------------------------------------------------------------${C_RESET}"
+    printf "  Scegli un'opzione [0-4]: "
+    read -r choice || break
+    echo
+    case "$choice" in
+      1|start|START)   do_start ;;
+      2|stop|STOP)     do_stop; pause_return ;;
+      3|update|UPDATE) do_update; pause_return ;;
+      4|setup|SETUP)   do_setup; pause_return ;;
+      0|q|Q|exit|EXIT) exit 0 ;;
+      *) echo "  ${C_RED}[!] Scelta non valida.${C_RESET}"; sleep 1 ;;
+    esac
+  done
 }
 
 # Dispatcher argomenti o menu
