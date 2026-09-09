@@ -247,26 +247,43 @@ do_stop() {
 # ============================================================
 do_update() {
   header "Aggiornamento HiPlan"
-  
-  advance_bar 0 15 "Arresto servizi attivi..."
-  cleanup_processes
-  
-  advance_bar 15 30 "Backup di sicurezza database..."
-  if [[ -x "$BACKEND_DIR/venv/bin/python" ]]; then
-    "$BACKEND_DIR/venv/bin/python" -c "import sys; sys.path.append('backend'); from app.services.backup_service import run_backup; run_backup()" > "$LOG_DIR/backup.log" 2>&1 || true
+
+  if [[ ! -x "$BACKEND_DIR/venv/bin/python" || ! -d "$FRONTEND_DIR/node_modules" ]]; then
+    echo "  ${C_YELLOW}[i] Ambiente non configurato: avvio configurazione iniziale...${C_RESET}"
+    echo
+    do_setup
+    return 0
   fi
 
-  run_with_progress 30 55 "Aggiornamento librerie Python..." "$LOG_DIR/update_pip.log" \
+  if [[ ! -f "$BACKEND_DIR/.env" && -f "$BACKEND_DIR/.env.example" ]]; then
+    cp "$BACKEND_DIR/.env.example" "$BACKEND_DIR/.env"
+  fi
+
+  advance_bar 0 15 "Arresto servizi attivi..."
+  cleanup_processes
+
+  advance_bar 15 25 "Backup di sicurezza database..."
+  "$BACKEND_DIR/venv/bin/python" -c "import sys; sys.path.append('backend'); from app.services.backup_service import run_backup; run_backup()" > "$LOG_DIR/backup.log" 2>&1 || {
+    echo "  ${C_YELLOW}[!] Nota: Backup preventivo non eseguito o database non ancora presente.${C_RESET}"
+  }
+
+  run_with_progress 25 40 "Aggiornamento pip e wheel..." "$LOG_DIR/update_pip.log" \
+    "$BACKEND_DIR/venv/bin/python" -m pip install --quiet --upgrade pip setuptools wheel
+
+  run_with_progress 40 60 "Aggiornamento librerie Python..." "$LOG_DIR/update_pip.log" \
     "$BACKEND_DIR/venv/bin/python" -m pip install --quiet -r "$BACKEND_DIR/requirements.txt"
 
-  run_with_progress 55 80 "Installazione moduli npm..." "$LOG_DIR/update_npm.log" \
+  run_with_progress 60 80 "Installazione moduli npm..." "$LOG_DIR/update_npm.log" \
     npm --prefix "$FRONTEND_DIR" install --prefer-offline --no-audit --no-fund
 
-  run_with_progress 80 95 "Compilazione bundle frontend..." "$LOG_DIR/update_build.log" \
+  run_with_progress 80 92 "Compilazione bundle frontend..." "$LOG_DIR/update_build.log" \
     npm --prefix "$FRONTEND_DIR" run build
 
+  draw_bar 96 "Verifica integrita' backend..."
+  "$BACKEND_DIR/venv/bin/python" -c "import sys; sys.path.append('backend'); import app.main" > "$LOG_DIR/update_check.log" 2>&1
+
   finish_bar "HiPlan aggiornato con successo!"
-  echo "  ${C_GRAY}Per riavviare il server: ./hiplan.sh start${C_RESET}"
+  echo "  ${C_GRAY}Per riavviare il server: ./hiplan.sh start (o opzione 1 dal menu)${C_RESET}"
   echo
 }
 

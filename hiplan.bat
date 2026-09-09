@@ -229,45 +229,77 @@ rem ============================================================
 :cmd_update
 call :header "Aggiornamento HiPlan"
 
+if not exist "backend\venv\Scripts\python.exe" goto update_needs_setup
+if not exist "frontend\node_modules" goto update_needs_setup
+goto update_proceed
+
+:update_needs_setup
+echo   !C_YELLOW![i] Installazione incompleta rilevata: avvio configurazione...!C_RESET!
+echo.
+call :do_setup_core
+if errorlevel 1 goto error_exit
+pause
+exit /b 0
+
+:update_proceed
+if not exist "backend\.env" (
+    if exist "backend\.env.example" copy /Y "backend\.env.example" "backend\.env" >nul 2>&1
+)
+
 call :advance_bar 0 15 "Arresto servizi attivi..."
 call :do_stop_silent
 
-call :advance_bar 15 30 "Backup di sicurezza database..."
-if exist "backend\venv\Scripts\python.exe" (
-    pushd "backend"
-    venv\Scripts\python.exe -c "import sys; sys.path.append('.'); from app.services.backup_service import run_backup; run_backup()" > "..\logs\backup.log" 2>&1
-    popd
-)
+call :advance_bar 15 25 "Backup di sicurezza database..."
+pushd "backend"
+venv\Scripts\python.exe -c "import sys; sys.path.append('.'); from app.services.backup_service import run_backup; run_backup()" > "..\logs\backup.log" 2>&1
+popd
 
-call :draw_bar 35 "Aggiornamento librerie Python..."
-"backend\venv\Scripts\python.exe" -m pip install --quiet -r "backend\requirements.txt" > "logs\update_pip.log" 2>&1
+call :draw_bar 30 "Aggiornamento pip e wheel..."
+"backend\venv\Scripts\python.exe" -m pip install --quiet --upgrade pip setuptools wheel > "logs\update_pip.log" 2>&1
+
+call :draw_bar 45 "Aggiornamento librerie Python..."
+"backend\venv\Scripts\python.exe" -m pip install --quiet -r "backend\requirements.txt" >> "logs\update_pip.log" 2>&1
 if errorlevel 1 (
-    call :fail_bar 45 "Errore aggiornamento librerie Python"
+    call :fail_bar 55 "Errore aggiornamento librerie Python"
+    set "LAST_LOG=logs\update_pip.log"
     goto error_exit
 )
-call :advance_bar 35 60 "Librerie Python aggiornate"
+call :advance_bar 45 65 "Librerie Python aggiornate"
 
-call :draw_bar 65 "Installazione pacchetti npm..."
+call :draw_bar 70 "Installazione pacchetti npm..."
 pushd "frontend"
 call npm install --prefer-offline --no-audit --no-fund > "..\logs\update_npm.log" 2>&1
 if errorlevel 1 (
     popd
-    call :fail_bar 70 "Errore installazione pacchetti npm"
+    call :fail_bar 75 "Errore installazione pacchetti npm"
+    set "LAST_LOG=logs\update_npm.log"
     goto error_exit
 )
 popd
-call :advance_bar 65 80 "Pacchetti npm aggiornati"
+call :advance_bar 70 85 "Pacchetti npm aggiornati"
 
-call :draw_bar 85 "Compilazione bundle frontend..."
+call :draw_bar 88 "Compilazione bundle frontend..."
 pushd "frontend"
 call npm run build > "..\logs\update_build.log" 2>&1
 if errorlevel 1 (
     popd
     call :fail_bar 90 "Errore compilazione frontend"
+    set "LAST_LOG=logs\update_build.log"
     goto error_exit
 )
 popd
-call :advance_bar 85 95 "Compilazione completata"
+call :advance_bar 88 95 "Compilazione completata"
+
+call :draw_bar 97 "Verifica integrita' backend..."
+pushd "backend"
+venv\Scripts\python.exe -c "import sys; sys.path.append('.'); import app.main" > "..\logs\update_check.log" 2>&1
+if errorlevel 1 (
+    popd
+    call :fail_bar 97 "Errore verifica backend"
+    set "LAST_LOG=logs\update_check.log"
+    goto error_exit
+)
+popd
 
 call :finish_bar "HiPlan aggiornato con successo!"
 echo   !C_GRAY!Per riavviare il server: hiplan.bat start (o opzione 1 dal menu)!C_RESET!
@@ -380,7 +412,7 @@ exit /b 0
 :do_stop_silent
 call :do_stop_port 8000
 call :do_stop_port 5173
-powershell -NoProfile -Command "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*app.main:app*' -or $_.CommandLine -like '*vite*--port 5173*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*app.main:app*' -or $_.CommandLine -like '*vite*' -or $_.CommandLine -like '*npm run dev*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 taskkill /F /IM uvicorn.exe >nul 2>&1
 exit /b 0
 
@@ -471,6 +503,14 @@ exit /b 0
 :error_exit
 echo.
 echo   !C_RED![!] Operazione interrotta per un errore.!C_RESET!
+if defined LAST_LOG (
+    if exist "!LAST_LOG!" (
+        echo.
+        echo   !C_YELLOW!Ultime righe dal log !LAST_LOG!:!C_RESET!
+        powershell -NoProfile -Command "Get-Content '!LAST_LOG!' -Tail 8 | ForEach-Object { '    ' + $_ }"
+        echo.
+    )
+)
 echo   !C_GRAY!Consulta i file di log nella cartella logs\ per maggiori dettagli.!C_RESET!
 echo.
 pause
