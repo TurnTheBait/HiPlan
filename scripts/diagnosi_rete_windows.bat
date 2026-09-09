@@ -17,7 +17,7 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr /i ":5173" ^| findstr /i "LIS
 )
 if %FRONTEND_RUNNING%==0 (
     echo   [ERRORE] Il Frontend NON e' in ascolto sulla porta 5173!
-    echo            Avvia l'applicazione facendo doppio clic su "start_windows.bat".
+    echo            Avvia l'applicazione facendo doppio clic su "hiplan.bat" (o eseguendo "hiplan.bat start").
 )
 
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr /i ":8000" ^| findstr /i "LISTENING"') do (
@@ -26,7 +26,7 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr /i ":8000" ^| findstr /i "LIS
 )
 if %BACKEND_RUNNING%==0 (
     echo   [ERRORE] Il Backend NON e' in ascolto sulla porta 8000!
-    echo            Avvia l'applicazione facendo doppio clic su "start_windows.bat".
+    echo            Avvia l'applicazione facendo doppio clic su "hiplan.bat" (o eseguendo "hiplan.bat start").
 )
 
 echo.
@@ -56,7 +56,7 @@ echo =======================================================================
 echo Se il ping dal Mac funziona ma la pagina non si apre ancora:
 echo.
 echo 1) Assicurati che "Frontend in ascolto" sopra indichi [OK]. Se e' [ERRORE],
-echo    esegui "start_windows.bat".
+echo    esegui "hiplan.bat start" (oppure apri "hiplan.bat").
 echo 2) Se sopra e' comparsa la scritta [ALLERTA] con un Antivirus esterno
 echo    (es. McAfee, Norton, Kaspersky, Avast, ESET, Bitdefender),
 echo    quel programma ha un SUO FIREWALL INTERNO indipendente da Windows!

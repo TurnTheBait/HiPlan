@@ -90,31 +90,26 @@ Il frontend richiede Node.js `20.19` o successivo.
 
 > La configurazione Vite corrente non definisce un proxy `/api`: il client frontend contatta il backend usando la configurazione presente in `frontend/src/api/client.js`.
 
-## Avvio tramite script
+## Gestione tramite script unificati
 
-Il repository include script dedicati ai diversi sistemi:
+HiPlan include due soli script principali per la gestione completa (avvio, arresto, aggiornamento, setup):
 
-- configurazione macOS: `./setup_mac.sh`
-- avvio macOS con log nel terminale: `./start.sh`
-- avvio macOS come server LAN con log nella cartella `logs`: `./start_mac_server.sh`
-- configurazione Windows: `setup_windows.bat`
-- avvio Windows in background: `start_windows.bat`
-- arresto su Windows: `stop_windows.bat`
+- **Windows**: `hiplan.bat`
+- **macOS**: `./hiplan.sh`
 
-Gli script di avvio lanciano automaticamente il setup se mancano l'ambiente
-Python o i moduli frontend. Il setup usa `npm ci`, verifica Python 3.12+ e
-Node.js 20.19+, crea `backend/.env` se assente e compila il frontend.
+Avviando lo script senza parametri viene mostrato un menu interattivo con le opzioni:
+1. **start**: avvio coordinato di backend FastAPI e frontend Vite con apertura browser
+2. **stop**: arresto sicuro di tutti i servizi e processi attivi
+3. **update**: arresto, backup database SQLite, aggiornamento dipendenze e ricompilazione
+4. **setup**: verifica prerequisiti, creazione virtualenv e installazione dipendenze
 
-I dati dimostrativi non vengono più inseriti automaticamente. Per aggiungerli
-esplicitamente:
-
+È possibile anche passare direttamente il comando via terminale:
 ```bash
-./setup_mac.sh --seed
+./hiplan.sh start    # oppure stop / update / setup su macOS
+hiplan.bat start     # oppure stop / update / setup su Windows
 ```
 
-Su Windows usare `setup_windows.bat --seed`.
-
-Prima del primo avvio verificare le variabili generate in `backend/.env`.
+Gli script verificano automaticamente i requisiti ed eseguono la configurazione iniziale se necessario.
 
 ## Docker
 

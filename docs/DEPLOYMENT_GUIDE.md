@@ -51,50 +51,43 @@ Questa modalità utilizza Uvicorn e il server di sviluppo Vite. È adatta a test
 Preparare una volta ambiente, dipendenze e build:
 
 ```bash
-./setup_mac.sh
+./hiplan.sh setup
 ```
 
 Avviare poi dalla radice del repository:
 
 ```bash
-./start_mac_server.sh
+./hiplan.sh start    # oppure avviare ./hiplan.sh per aprire il menu interattivo
 ```
 
-In alternativa è disponibile `./start.sh`, che mantiene i log nel terminale.
-Entrambi i launcher eseguono automaticamente il setup se rilevano
-un'installazione incompleta.
-
-Per inserire anche i dati dimostrativi usare esplicitamente:
-
+Per eseguire setup, aggiornamento o arresto:
 ```bash
-./setup_mac.sh --seed
+./hiplan.sh stop
+./hiplan.sh update
+./hiplan.sh setup
 ```
 
 ### Windows
 
-Eseguire una volta:
+Avviare con doppio clic o da terminale:
 
-```text
-setup_windows.bat
+```cmd
+hiplan.bat
 ```
 
-Il setup verifica Python e Node.js, installa le dipendenze con `npm ci`, crea
-`backend\.env` se assente e verifica la build. I dati dimostrativi sono
-opzionali e si installano con:
+Verrà mostrato il menu interattivo con le opzioni:
+1. `start` - Avvio dei servizi con controllo porte e apertura del browser
+2. `stop` - Arresto sicuro di tutti i servizi
+3. `update` - Backup e aggiornamento
+4. `setup` - Configurazione iniziale dell'ambiente
 
-```text
-setup_windows.bat --seed
+È anche possibile invocare direttamente le azioni da riga di comando:
+```cmd
+hiplan.bat start
+hiplan.bat stop
+hiplan.bat update
+hiplan.bat setup
 ```
-
-Avviare quindi:
-
-```text
-start_windows.bat
-```
-
-I processi vengono eseguiti in background e scrivono nella cartella `logs`. Per arrestarli usare `stop_windows.bat`.
-All'avvio vengono inoltre controllate le porte `8000` e `5173` e la
-disponibilità effettiva di API e frontend prima di aprire il browser.
 
 ### Accesso dai client
 
