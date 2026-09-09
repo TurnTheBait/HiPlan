@@ -113,6 +113,31 @@ function Fail-Bar {
     Write-Host ""
 }
 
+function Invoke-Task {
+    param(
+        [string]$CommandLine,
+        [string]$LogFile,
+        [string]$WorkingDir = $RootDir
+    )
+    if (-not (Test-Path $LogsDir)) {
+        New-Item -ItemType Directory -Path $LogsDir -Force | Out-Null
+    }
+    $taskFile = Join-Path $LogsDir ("_task_" + [System.IO.Path]::GetRandomFileName() + ".cmd")
+    $cmdContent = "@echo off`r`ncd /d `"$WorkingDir`"`r`n$CommandLine > `"$LogFile`" 2>&1`r`nexit /b %ERRORLEVEL%`r`n"
+    [System.IO.File]::WriteAllText($taskFile, $cmdContent, [System.Text.Encoding]::ASCII)
+
+    $proc = Start-Process -FilePath "cmd.exe" `
+        -ArgumentList "/c `"$taskFile`"" `
+        -WorkingDirectory $WorkingDir `
+        -WindowStyle Hidden `
+        -Wait `
+        -PassThru
+
+    $exitCode = $proc.ExitCode
+    Remove-Item -Path $taskFile -Force -ErrorAction SilentlyContinue
+    return $exitCode
+}
+
 function Run-WithProgress {
     param(
         [int]$StartPct,
@@ -122,10 +147,16 @@ function Run-WithProgress {
         [string]$CommandLine,
         [string]$WorkingDir = $RootDir
     )
-    if (-not (Test-Path $LogsDir)) { New-Item -ItemType Directory -Path $LogsDir -Force | Out-Null }
-    
+    if (-not (Test-Path $LogsDir)) {
+        New-Item -ItemType Directory -Path $LogsDir -Force | Out-Null
+    }
+
+    $taskFile = Join-Path $LogsDir ("_task_" + [System.IO.Path]::GetRandomFileName() + ".cmd")
+    $cmdContent = "@echo off`r`ncd /d `"$WorkingDir`"`r`n$CommandLine > `"$LogFile`" 2>&1`r`nexit /b %ERRORLEVEL%`r`n"
+    [System.IO.File]::WriteAllText($taskFile, $cmdContent, [System.Text.Encoding]::ASCII)
+
     $proc = Start-Process -FilePath "cmd.exe" `
-        -ArgumentList "/c $CommandLine > `"$LogFile`" 2>&1" `
+        -ArgumentList "/c `"$taskFile`"" `
         -WorkingDirectory $WorkingDir `
         -WindowStyle Hidden `
         -PassThru
@@ -142,6 +173,8 @@ function Run-WithProgress {
     }
 
     $exitCode = $proc.ExitCode
+    Remove-Item -Path $taskFile -Force -ErrorAction SilentlyContinue
+
     if ($exitCode -ne 0) {
         Fail-Bar -Pct $cur -Text "$Text"
         Write-Host "  $C_YELLOW`Dettagli errore da log ($LogFile):$C_RESET"
@@ -328,13 +361,17 @@ function Start-HiPlan {
 
     Draw-Bar -Pct 45 -Text "Avvio Backend API..."
     $backendLog = Join-Path $LogsDir "backend_app.log"
-    $backendArgs = "/c `"`"$pythonExe`" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level info > `"$backendLog`" 2>&1`""
-    Start-Process -FilePath "cmd.exe" -ArgumentList $backendArgs -WorkingDirectory $BackendDir -WindowStyle Hidden
+    $backendRunner = Join-Path $LogsDir "run_backend.cmd"
+    $backendCmd = "@echo off`r`ncd /d `"$BackendDir`"`r`n`"$pythonExe`" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level info > `"$backendLog`" 2>&1`r`n"
+    [System.IO.File]::WriteAllText($backendRunner, $backendCmd, [System.Text.Encoding]::ASCII)
+    Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$backendRunner`"" -WindowStyle Hidden
 
     Draw-Bar -Pct 60 -Text "Avvio Frontend Vite..."
     $frontendLog = Join-Path $LogsDir "frontend_app.log"
-    $frontendArgs = "/c `"npm run dev -- --host 0.0.0.0 --port 5173 > `"$frontendLog`" 2>&1`""
-    Start-Process -FilePath "cmd.exe" -ArgumentList $frontendArgs -WorkingDirectory $FrontendDir -WindowStyle Hidden
+    $frontendRunner = Join-Path $LogsDir "run_frontend.cmd"
+    $frontendCmd = "@echo off`r`ncd /d `"$FrontendDir`"`r`ncall npm run dev -- --host 0.0.0.0 --port 5173 > `"$frontendLog`" 2>&1`r`n"
+    [System.IO.File]::WriteAllText($frontendRunner, $frontendCmd, [System.Text.Encoding]::ASCII)
+    Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$frontendRunner`"" -WindowStyle Hidden
 
     $ready = $false
     for ($i = 1; $i -le 40; $i++) {
@@ -397,6 +434,10 @@ function Update-HiPlan {
 
     $pythonExe = Join-Path $BackendDir "venv\Scripts\python.exe"
     $nodeModules = Join-Path $FrontendDir "node_modules"
+    $updateLog = Join-Path $LogsDir "update.log"
+
+    $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    [System.IO.File]::WriteAllText($updateLog, "[$stamp] Avvio procedura di aggiornamento HiPlan...`r`n", [System.Text.Encoding]::UTF8)
 
     if ((-not (Test-Path $pythonExe)) -or (-not (Test-Path $nodeModules))) {
         Write-Host "  $C_YELLOW[i] Ambiente non ancora configurato: avvio configurazione iniziale...$C_RESET"
@@ -414,41 +455,73 @@ function Update-HiPlan {
 
     Advance-Bar -FromPct 0 -ToPct 15 -Text "Arresto servizi attivi..."
     Stop-HiPlanProcesses
+    [System.IO.File]::AppendAllText($updateLog, "[$([DateTime]::Now.ToString('HH:mm:ss'))] Servizi arrestati.`r`n", [System.Text.Encoding]::UTF8)
 
     Advance-Bar -FromPct 15 -ToPct 25 -Text "Backup di sicurezza database..."
     $backupLog = Join-Path $LogsDir "backup.log"
-    $procBk = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"`"$pythonExe`" -c `"import sys; sys.path.append('backend'); from app.services.backup_service import run_backup; run_backup()`" > `"$backupLog`" 2>&1`"" -WorkingDirectory $RootDir -WindowStyle Hidden -Wait -PassThru
-    if ($procBk.ExitCode -ne 0) {
+    $bkCmd = "`"$pythonExe`" -c `"import sys; sys.path.append('backend'); from app.services.backup_service import run_backup; run_backup()`""
+    $bkCode = Invoke-Task -CommandLine $bkCmd -LogFile $backupLog
+    if ($bkCode -ne 0) {
         Write-Host "  $C_YELLOW[!] Nota: Backup preventivo non completato o database non presente.$C_RESET"
+        [System.IO.File]::AppendAllText($updateLog, "[$([DateTime]::Now.ToString('HH:mm:ss'))] Nota: Backup preventivo non completato o database non presente.`r`n", [System.Text.Encoding]::UTF8)
+    } else {
+        [System.IO.File]::AppendAllText($updateLog, "[$([DateTime]::Now.ToString('HH:mm:ss'))] Backup di sicurezza completato.`r`n", [System.Text.Encoding]::UTF8)
     }
 
     $pipLog = Join-Path $LogsDir "update_pip.log"
-    $ok = Run-WithProgress -StartPct 25 -TargetPct 40 -Text "Aggiornamento pip e wheel..." -LogFile $pipLog -CommandLine "`"$pythonExe`" -m pip install --quiet --upgrade pip setuptools wheel"
-    if (-not $ok) { return }
+    $pipCmd = "`"$pythonExe`" -m pip install --quiet --upgrade pip setuptools wheel"
+    $ok = Run-WithProgress -StartPct 25 -TargetPct 40 -Text "Aggiornamento pip e wheel..." -LogFile $pipLog -CommandLine $pipCmd
+    if (-not $ok) {
+        [System.IO.File]::AppendAllText($updateLog, "[$([DateTime]::Now.ToString('HH:mm:ss'))] [ERRORE] Aggiornamento pip e wheel fallito.`r`n", [System.Text.Encoding]::UTF8)
+        if (Test-Path $pipLog) { [System.IO.File]::AppendAllText($updateLog, (Get-Content $pipLog -Raw) + "`r`n", [System.Text.Encoding]::UTF8) }
+        return
+    }
 
-    $ok = Run-WithProgress -StartPct 40 -TargetPct 60 -Text "Aggiornamento librerie Python..." -LogFile $pipLog -CommandLine "`"$pythonExe`" -m pip install --quiet -r `"$BackendDir\requirements.txt`""
-    if (-not $ok) { return }
+    $reqFile = Join-Path $BackendDir "requirements.txt"
+    $reqCmd = "`"$pythonExe`" -m pip install --quiet -r `"$reqFile`""
+    $ok = Run-WithProgress -StartPct 40 -TargetPct 60 -Text "Aggiornamento librerie Python..." -LogFile $pipLog -CommandLine $reqCmd
+    if (-not $ok) {
+        [System.IO.File]::AppendAllText($updateLog, "[$([DateTime]::Now.ToString('HH:mm:ss'))] [ERRORE] Aggiornamento librerie Python fallito.`r`n", [System.Text.Encoding]::UTF8)
+        if (Test-Path $pipLog) { [System.IO.File]::AppendAllText($updateLog, (Get-Content $pipLog -Raw) + "`r`n", [System.Text.Encoding]::UTF8) }
+        return
+    }
+    [System.IO.File]::AppendAllText($updateLog, "[$([DateTime]::Now.ToString('HH:mm:ss'))] Librerie Python aggiornate con successo.`r`n", [System.Text.Encoding]::UTF8)
 
     $npmLog = Join-Path $LogsDir "update_npm.log"
-    $ok = Run-WithProgress -StartPct 60 -TargetPct 80 -Text "Installazione moduli npm..." -LogFile $npmLog -CommandLine "npm --prefix `"$FrontendDir`" install --prefer-offline --no-audit --no-fund"
-    if (-not $ok) { return }
+    $npmCmd = "call npm --prefix `"$FrontendDir`" install --prefer-offline --no-audit --no-fund"
+    $ok = Run-WithProgress -StartPct 60 -TargetPct 80 -Text "Installazione moduli npm..." -LogFile $npmLog -CommandLine $npmCmd
+    if (-not $ok) {
+        [System.IO.File]::AppendAllText($updateLog, "[$([DateTime]::Now.ToString('HH:mm:ss'))] [ERRORE] Installazione moduli npm fallita.`r`n", [System.Text.Encoding]::UTF8)
+        if (Test-Path $npmLog) { [System.IO.File]::AppendAllText($updateLog, (Get-Content $npmLog -Raw) + "`r`n", [System.Text.Encoding]::UTF8) }
+        return
+    }
+    [System.IO.File]::AppendAllText($updateLog, "[$([DateTime]::Now.ToString('HH:mm:ss'))] Moduli npm aggiornati con successo.`r`n", [System.Text.Encoding]::UTF8)
 
     $buildLog = Join-Path $LogsDir "update_build.log"
-    $ok = Run-WithProgress -StartPct 80 -TargetPct 92 -Text "Compilazione bundle frontend..." -LogFile $buildLog -CommandLine "npm --prefix `"$FrontendDir`" run build"
-    if (-not $ok) { return }
+    $buildCmd = "call npm --prefix `"$FrontendDir`" run build"
+    $ok = Run-WithProgress -StartPct 80 -TargetPct 92 -Text "Compilazione bundle frontend..." -LogFile $buildLog -CommandLine $buildCmd
+    if (-not $ok) {
+        [System.IO.File]::AppendAllText($updateLog, "[$([DateTime]::Now.ToString('HH:mm:ss'))] [ERRORE] Compilazione bundle frontend fallita.`r`n", [System.Text.Encoding]::UTF8)
+        if (Test-Path $buildLog) { [System.IO.File]::AppendAllText($updateLog, (Get-Content $buildLog -Raw) + "`r`n", [System.Text.Encoding]::UTF8) }
+        return
+    }
+    [System.IO.File]::AppendAllText($updateLog, "[$([DateTime]::Now.ToString('HH:mm:ss'))] Bundle frontend compilato con successo.`r`n", [System.Text.Encoding]::UTF8)
 
     Draw-Bar -Pct 96 -Text "Verifica integrita' backend..."
     $chkLog = Join-Path $LogsDir "update_check.log"
-    $procChk = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"`"$pythonExe`" -c `"import sys; sys.path.append('backend'); import app.main`" > `"$chkLog`" 2>&1`"" -WorkingDirectory $RootDir -WindowStyle Hidden -Wait -PassThru
-    if ($procChk.ExitCode -ne 0) {
+    $chkCmd = "`"$pythonExe`" -c `"import sys; sys.path.append('backend'); import app.main`""
+    $chkCode = Invoke-Task -CommandLine $chkCmd -LogFile $chkLog
+    if ($chkCode -ne 0) {
         Fail-Bar -Pct 96 -Text "Errore verifica integrita' backend"
         Write-Host "  $C_YELLOW`Dettagli errore da log ($chkLog):$C_RESET"
         if (Test-Path $chkLog) {
             Get-Content -Path $chkLog -Tail 8 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkYellow }
         }
         Write-Host ""
+        [System.IO.File]::AppendAllText($updateLog, "[$([DateTime]::Now.ToString('HH:mm:ss'))] [ERRORE] Verifica integrita backend fallita.`r`n", [System.Text.Encoding]::UTF8)
         return
     }
+    [System.IO.File]::AppendAllText($updateLog, "[$([DateTime]::Now.ToString('HH:mm:ss'))] Aggiornamento HiPlan completato con successo!`r`n", [System.Text.Encoding]::UTF8)
 
     Finish-Bar "HiPlan aggiornato con successo!"
     Write-Host "  $C_GRAY`Per riavviare il server: seleziona 1 dal menu (start)$C_RESET"
@@ -487,8 +560,9 @@ function Setup-HiPlan {
 
     Advance-Bar -FromPct 15 -ToPct 30 -Text "Creazione virtualenv Python..."
     if (-not (Test-Path $pythonExe)) {
-        $procVenv = Start-Process -FilePath "cmd.exe" -ArgumentList "/c $py -m venv `"$BackendDir\venv`" > `"$setupLog`" 2>&1" -WorkingDirectory $RootDir -WindowStyle Hidden -Wait -PassThru
-        if ($procVenv.ExitCode -ne 0) {
+        $venvCmd = "$py -m venv `"$BackendDir\venv`""
+        $venvCode = Invoke-Task -CommandLine $venvCmd -LogFile $setupLog
+        if ($venvCode -ne 0) {
             Fail-Bar -Pct 30 -Text "Errore creazione virtualenv Python"
             Write-Host "  $C_YELLOW`Dettagli errore da log ($setupLog):$C_RESET"
             if (Test-Path $setupLog) {
@@ -499,16 +573,21 @@ function Setup-HiPlan {
         }
     }
 
-    $ok = Run-WithProgress -StartPct 30 -TargetPct 50 -Text "Aggiornamento pip e wheel..." -LogFile $setupLog -CommandLine "`"$pythonExe`" -m pip install --quiet --upgrade pip setuptools wheel"
+    $pipCmd = "`"$pythonExe`" -m pip install --quiet --upgrade pip setuptools wheel"
+    $ok = Run-WithProgress -StartPct 30 -TargetPct 50 -Text "Aggiornamento pip e wheel..." -LogFile $setupLog -CommandLine $pipCmd
     if (-not $ok) { return $false }
 
-    $ok = Run-WithProgress -StartPct 50 -TargetPct 75 -Text "Installazione librerie Python..." -LogFile $setupLog -CommandLine "`"$pythonExe`" -m pip install --quiet -r `"$BackendDir\requirements.txt`""
+    $reqFile = Join-Path $BackendDir "requirements.txt"
+    $reqCmd = "`"$pythonExe`" -m pip install --quiet -r `"$reqFile`""
+    $ok = Run-WithProgress -StartPct 50 -TargetPct 75 -Text "Installazione librerie Python..." -LogFile $setupLog -CommandLine $reqCmd
     if (-not $ok) { return $false }
 
-    $ok = Run-WithProgress -StartPct 75 -TargetPct 90 -Text "Installazione moduli npm..." -LogFile $setupLog -CommandLine "npm --prefix `"$FrontendDir`" install --prefer-offline --no-audit --no-fund"
+    $npmCmd = "call npm --prefix `"$FrontendDir`" install --prefer-offline --no-audit --no-fund"
+    $ok = Run-WithProgress -StartPct 75 -TargetPct 90 -Text "Installazione moduli npm..." -LogFile $setupLog -CommandLine $npmCmd
     if (-not $ok) { return $false }
 
-    $ok = Run-WithProgress -StartPct 90 -TargetPct 98 -Text "Compilazione bundle frontend..." -LogFile $setupLog -CommandLine "npm --prefix `"$FrontendDir`" run build"
+    $buildCmd = "call npm --prefix `"$FrontendDir`" run build"
+    $ok = Run-WithProgress -StartPct 90 -TargetPct 98 -Text "Compilazione bundle frontend..." -LogFile $setupLog -CommandLine $buildCmd
     if (-not $ok) { return $false }
 
     Finish-Bar "Configurazione iniziale completata!"

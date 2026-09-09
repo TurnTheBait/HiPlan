@@ -56,7 +56,7 @@ def create_zip():
                     count += 1
                     
     print(f"Fatto! Il file {ZIP_NAME} e' stato creato correttamente con {count} file.")
-    print("Puoi caricarlo sul server, estrarlo per aggiornare i file e poi lanciare update_windows.bat.")
+    print("Puoi caricarlo sul server, estrarlo per aggiornare i file e poi lanciare hiplan.bat update (o scegliere 3 dal menu).")
 
 if __name__ == '__main__':
     create_zip()
