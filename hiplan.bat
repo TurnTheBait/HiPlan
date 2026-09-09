@@ -28,9 +28,6 @@ if defined ESC (
     set "C_GRAY="
 )
 
-rem Genera il carattere Carriage Return per sovrascrivere la barra in tempo reale sulla stessa riga
-for /f %%a in ('copy /z "%~f0" nul') do set "CR=%%a"
-
 rem Evita che variabili esterne interferiscano
 set "DEBUG="
 set "LAST_LOG="
@@ -54,7 +51,7 @@ if /I "%ACTION%"=="-h" goto cmd_help
 if "%ACTION%"=="" goto menu
 
 echo Opzione non riconosciuta: %ACTION%
-echo Uso: hiplan.bat [start ^| stop ^| update ^| setup]
+echo Uso: hiplan.bat [start - stop - update - setup]
 pause
 exit /b 1
 
@@ -78,24 +75,24 @@ echo !C_CYAN!------------------------------------------------------------!C_RESE
 set "CHOICE="
 set /p "CHOICE=  Scegli un'opzione [0-4]: "
 if defined CHOICE set "CHOICE=!CHOICE: =!"
-if "%CHOICE%"=="1" goto cmd_start
-if /I "%CHOICE%"=="start" goto cmd_start
-if "%CHOICE%"=="2" goto cmd_stop
-if /I "%CHOICE%"=="stop" goto cmd_stop
-if "%CHOICE%"=="3" goto cmd_update
-if /I "%CHOICE%"=="update" goto cmd_update
-if "%CHOICE%"=="4" goto cmd_setup
-if /I "%CHOICE%"=="setup" goto cmd_setup
-if "%CHOICE%"=="0" exit /b 0
-if /I "%CHOICE%"=="q" exit /b 0
-if /I "%CHOICE%"=="exit" exit /b 0
+if "!CHOICE!"=="1" goto cmd_start
+if /I "!CHOICE!"=="start" goto cmd_start
+if "!CHOICE!"=="2" goto cmd_stop
+if /I "!CHOICE!"=="stop" goto cmd_stop
+if "!CHOICE!"=="3" goto cmd_update
+if /I "!CHOICE!"=="update" goto cmd_update
+if "!CHOICE!"=="4" goto cmd_setup
+if /I "!CHOICE!"=="setup" goto cmd_setup
+if "!CHOICE!"=="0" exit /b 0
+if /I "!CHOICE!"=="q" exit /b 0
+if /I "!CHOICE!"=="exit" exit /b 0
 echo.
 echo   !C_RED![!] Scelta non valida.!C_RESET!
 timeout /t 1 /nobreak >nul
 goto menu
 
 :cmd_help
-echo Uso: hiplan.bat [start ^| stop ^| update ^| setup]
+echo Uso: hiplan.bat [start - stop - update - setup]
 pause
 exit /b 0
 
@@ -114,6 +111,7 @@ echo   !C_YELLOW![i] Installazione incompleta: avvio configurazione iniziale...!
 echo.
 call :do_setup_core
 if errorlevel 1 goto error_exit
+echo.
 
 :start_checks
 call :draw_bar 10 "Controllo porte di rete..."
@@ -204,10 +202,11 @@ if defined MY_IP (
 )
 echo   !C_GREEN!^>!C_RESET!  Documentazione:  !C_GRAY!http://localhost:8000/docs!C_RESET!
 echo !C_GREEN!------------------------------------------------------------!C_RESET!
-echo   !C_GRAY!Per arrestare: usa hiplan.bat stop (o opzione 2 dal menu)!C_RESET!
+echo   !C_GRAY!I servizi sono attivi in background.!C_RESET!
 echo.
-timeout /t 5 /nobreak >nul
-exit /b 0
+echo Premi un tasto per tornare al menu principale...
+pause >nul
+goto menu
 
 rem ============================================================
 rem AZIONE: STOP
@@ -222,8 +221,9 @@ call :draw_bar 90 "Pulizia processi residui..."
 powershell -NoProfile -Command "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*app.main:app*' -or $_.CommandLine -like '*vite*' -or $_.CommandLine -like '*npm run dev*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 taskkill /F /IM uvicorn.exe >nul 2>&1
 call :finish_bar "Tutti i servizi HiPlan sono stati arrestati!"
-timeout /t 2 /nobreak >nul
-exit /b 0
+echo Premi un tasto per tornare al menu...
+pause >nul
+goto menu
 
 rem ============================================================
 rem AZIONE: UPDATE
@@ -292,7 +292,7 @@ if errorlevel 1 (
 )
 
 call :finish_bar "HiPlan aggiornato con successo!"
-echo   !C_GRAY!Per riavviare il server: hiplan.bat start (o opzione 1 dal menu)!C_RESET!
+echo   !C_GRAY!Per riavviare il server: seleziona 1 dal menu (start)!C_RESET!
 echo.
 echo Premi un tasto per tornare al menu...
 pause >nul
@@ -321,8 +321,25 @@ if not defined PY_EXEC (
     if not errorlevel 1 set "PY_EXEC=python"
 )
 
+rem Controllo percorsi standard Windows se Python non e' nel PATH
 if not defined PY_EXEC (
-    call :fail_bar 15 "Python non trovato nel PATH di Windows"
+    for /d %%D in ("%LocalAppData%\Programs\Python\Python3*") do (
+        if exist "%%~D\python.exe" set "PY_EXEC="%%~D\python.exe""
+    )
+)
+if not defined PY_EXEC (
+    for /d %%D in ("%ProgramFiles%\Python3*") do (
+        if exist "%%~D\python.exe" set "PY_EXEC="%%~D\python.exe""
+    )
+)
+if not defined PY_EXEC (
+    for /d %%D in ("C:\Python3*") do (
+        if exist "%%~D\python.exe" set "PY_EXEC="%%~D\python.exe""
+    )
+)
+
+if not defined PY_EXEC (
+    call :fail_bar 15 "Python non trovato nel sistema"
     echo   !C_YELLOW!Installa Python 3.9+ da python.org spuntando 'Add python.exe to PATH'.!C_RESET!
     exit /b 1
 )
@@ -333,8 +350,17 @@ if errorlevel 1 (
     exit /b 1
 )
 
+set "NODE_EXEC="
 where node >nul 2>&1
-if errorlevel 1 (
+if not errorlevel 1 set "NODE_EXEC=node"
+if not defined NODE_EXEC (
+    if exist "%ProgramFiles%\nodejs\node.exe" (
+        set "NODE_EXEC="%ProgramFiles%\nodejs\node.exe""
+        set "PATH=%ProgramFiles%\nodejs;!PATH!"
+    )
+)
+
+if not defined NODE_EXEC (
     call :fail_bar 15 "Node.js non trovato nel PATH di Windows"
     echo   !C_YELLOW!Installa Node.js LTS da nodejs.org.!C_RESET!
     exit /b 1
@@ -342,8 +368,12 @@ if errorlevel 1 (
 
 where npm >nul 2>&1
 if errorlevel 1 (
-    call :fail_bar 15 "npm non trovato nel PATH di Windows"
-    exit /b 1
+    if exist "%ProgramFiles%\nodejs\npm.cmd" (
+        set "PATH=%ProgramFiles%\nodejs;!PATH!"
+    ) else (
+        call :fail_bar 15 "npm non trovato nel PATH di Windows"
+        exit /b 1
+    )
 )
 
 if not exist "backend\.env" (
@@ -431,9 +461,9 @@ if !PCT! LSS 100 set "SP=  "
 if !PCT! LSS 10 set "SP=   "
 
 if defined ESC (
-    <nul set /p "DUMMY=!CR!  !C_GRAY![!C_CYAN!!BAR_F!!C_GRAY!!BAR_E!]!C_RESET! !C_WHITE!!PCT!%%!C_RESET!!SP!!C_GRAY!!TEXT!!C_RESET!                                "
+    <nul set /p "=!ESC![2K!ESC![1G  !C_GRAY![!C_CYAN!!BAR_F!!C_GRAY!!BAR_E!]!C_RESET! !C_WHITE!!PCT!%%!C_RESET!!SP!!C_GRAY!!TEXT!!C_RESET!"
 ) else (
-    <nul set /p "DUMMY=!CR!  [!BAR_F!!BAR_E!] !PCT!%%!SP!!TEXT!                                "
+    echo   [!BAR_F!!BAR_E!] !PCT!%% !TEXT!
 )
 endlocal
 exit /b 0
@@ -444,9 +474,9 @@ set "TEXT=%~1"
 set "BAR_F="
 for /L %%x in (1,1,16) do set "BAR_F=!BAR_F!█"
 if defined ESC (
-    echo !CR!  !C_GRAY![!C_GREEN!!BAR_F!!C_GRAY!]!C_RESET! !C_BOLD!!C_GREEN!100%%!C_RESET!  !C_BOLD!!C_GREEN![OK] !TEXT!!C_RESET!                                
+    echo !ESC![2K!ESC![1G  !C_GRAY![!C_GREEN!!BAR_F!!C_GRAY!]!C_RESET! !C_BOLD!!C_GREEN!100%%!C_RESET!  !C_BOLD!!C_GREEN![OK] !TEXT!!C_RESET!
 ) else (
-    echo !CR!  [!BAR_F!] 100%%  [OK] !TEXT!                                
+    echo   [!BAR_F!] 100%%  [OK] !TEXT!
 )
 echo.
 endlocal
@@ -463,9 +493,9 @@ set "BAR_E="
 for /L %%x in (1,1,!NUM_F!) do set "BAR_F=!BAR_F!█"
 for /L %%x in (1,1,!NUM_E!) do set "BAR_E=!BAR_E!░"
 if defined ESC (
-    echo !CR!  !C_GRAY![!C_RED!!BAR_F!!C_GRAY!!BAR_E!]!C_RESET! !C_BOLD!!C_RED!!PCT!%%!C_RESET!  !C_BOLD!!C_RED![ERRORE] !TEXT!!C_RESET!                                
+    echo !ESC![2K!ESC![1G  !C_GRAY![!C_RED!!BAR_F!!C_GRAY!!BAR_E!]!C_RESET! !C_BOLD!!C_RED!!PCT!%%!C_RESET!  !C_BOLD!!C_RED![ERRORE] !TEXT!!C_RESET!
 ) else (
-    echo !CR!  [!BAR_F!!BAR_E!] !PCT!%%  [ERRORE] !TEXT!                                
+    echo   [!BAR_F!!BAR_E!] !PCT!%%  [ERRORE] !TEXT!
 )
 echo.
 endlocal
