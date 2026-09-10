@@ -647,6 +647,12 @@ async def add_articolo(
     if not richiesta:
         raise HTTPException(status_code=404, detail="Richiesta non trovata")
 
+    if richiesta.status == RichiestaStatus.APERTA:
+        raise HTTPException(
+            status_code=400,
+            detail="La richiesta deve essere presa in carico dall'Ufficio Acquisti prima di poter inserire articoli",
+        )
+
     if role != "admin" and richiesta.status != RichiestaStatus.IN_LAVORAZIONE:
         raise HTTPException(
             status_code=400,
@@ -694,6 +700,12 @@ async def update_articolo(
     richiesta = res_req.scalar_one_or_none()
     if not richiesta:
         raise HTTPException(status_code=404, detail="Richiesta non trovata")
+
+    if richiesta.status == RichiestaStatus.APERTA:
+        raise HTTPException(
+            status_code=400,
+            detail="La richiesta deve essere presa in carico dall'Ufficio Acquisti prima di poter modificare articoli",
+        )
 
     if role != "admin" and richiesta.status != RichiestaStatus.IN_LAVORAZIONE:
         raise HTTPException(
@@ -755,6 +767,12 @@ async def delete_articolo(
     if not richiesta:
         raise HTTPException(status_code=404, detail="Richiesta non trovata")
 
+    if richiesta.status == RichiestaStatus.APERTA:
+        raise HTTPException(
+            status_code=400,
+            detail="La richiesta deve essere presa in carico dall'Ufficio Acquisti prima di poter eliminare articoli",
+        )
+
     if role != "admin" and richiesta.status != RichiestaStatus.IN_LAVORAZIONE:
         raise HTTPException(
             status_code=400,
@@ -792,6 +810,12 @@ async def upload_attachments_articolo(
     richiesta = res_req.scalar_one_or_none()
     if not richiesta:
         raise HTTPException(status_code=404, detail="Richiesta non trovata")
+
+    if richiesta.status == RichiestaStatus.APERTA:
+        raise HTTPException(
+            status_code=400,
+            detail="La richiesta deve essere presa in carico dall'Ufficio Acquisti prima di poter caricare allegati",
+        )
 
     if role != "admin" and richiesta.status != RichiestaStatus.IN_LAVORAZIONE:
         raise HTTPException(

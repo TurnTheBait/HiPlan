@@ -812,7 +812,11 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
 
   if (!richiesta) return null;
 
-  const canAddArticoli = userRole === 'admin' || (userRole === 'acquisti' && richiesta.status === 'in_lavorazione');
+  const canAddArticoli = (
+    richiesta.status === 'in_lavorazione' && (userRole === 'acquisti' || userRole === 'admin')
+  ) || (
+    richiesta.status === 'manca_listino' && userRole === 'admin'
+  );
 
   return (
     <div className="rc-modal-overlay">
@@ -1053,7 +1057,11 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
             {richiesta.articoli?.length === 0 && !showArticoloForm && (
               <div className="empty-state" style={{ padding: '24px', border: '1px dashed var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
                 <div className="empty-state-icon"><AppIcon name="briefcase" size={26} /></div>
-                <p>Nessun articolo ancora compilato</p>
+                <p>
+                  {richiesta.status === 'aperta'
+                    ? "La richiesta deve essere presa in carico dall'Ufficio Acquisti prima di poter inserire gli articoli"
+                    : "Nessun articolo ancora compilato"}
+                </p>
               </div>
             )}
 
@@ -1238,7 +1246,7 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                           Listino: {formatCurrency(articolo.prezzo_listino)}
                         </span>
                       )}
-                      {(userRole === 'admin' || (userRole !== 'commerciale' && canAddArticoli)) && (
+                      {canAddArticoli && (
                         <>
                           <button className="btn btn-secondary btn-sm" onClick={() => setEditingArticolo(articolo)} title="Modifica">
                             <AppIcon name="edit" size={13} />
