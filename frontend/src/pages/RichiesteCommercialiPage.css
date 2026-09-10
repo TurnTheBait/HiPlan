@@ -43,12 +43,22 @@
 /* ── Command Bar / Filtri e Ricerca ───────────────────────── */
 .rc-command-bar {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+
+.rc-command-bar__row {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 10px 14px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
+}
+
+.rc-command-bar__row--bottom {
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.16));
 }
 
 .rc-filters {
@@ -121,14 +131,21 @@
   flex-shrink: 0;
 }
 
+.rc-command-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 .rc-search-box {
   position: relative;
   display: flex;
   align-items: center;
   min-width: 240px;
-  flex: 1 1 280px;
-  max-width: 420px;
-  margin-left: auto;
+  flex: 1 1 360px;
+  max-width: 480px;
 }
 
 .rc-search-icon {
@@ -159,6 +176,153 @@
   display: flex;
   align-items: center;
   padding: 2px;
+}
+
+/* ── View Switcher (Grid vs List) ────────────────────────── */
+.rc-view-switcher {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.rc-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.16s ease;
+  line-height: 1;
+}
+
+.rc-view-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.rc-view-btn.active {
+  background: var(--bg-card);
+  color: var(--accent-500);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+@media (max-width: 640px) {
+  .rc-view-btn__text {
+    display: none;
+  }
+}
+
+/* ── List / Table View ────────────────────────────────────── */
+.rc-list-card {
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.rc-table-responsive {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.rc-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.86rem;
+}
+
+.rc-table th {
+  padding: 12px 18px;
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.rc-table td {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+
+.rc-table-row {
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.rc-table-row:hover {
+  background: var(--bg-hover);
+}
+
+.rc-table-row:last-child td {
+  border-bottom: none;
+}
+
+.rc-table__title {
+  font-weight: 700;
+  font-size: 0.94rem;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.rc-table__sub {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.rc-table__sub-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rc-table__addetti-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.76rem;
+}
+
+.rc-table__addetto {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.rc-table__addetto-role {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.rc-table__addetto strong {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .rc-search-clear:hover {
@@ -934,4 +1098,27 @@
 
 .rc-card__status-select:hover {
   filter: brightness(1.08);
+}
+
+@media (max-width: 768px) {
+  .rc-command-bar__row--top {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .rc-command-bar__actions {
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+  .rc-command-bar__row--bottom {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .rc-search-box {
+    max-width: 100%;
+  }
+  .rc-view-switcher {
+    align-self: flex-end;
+  }
 }

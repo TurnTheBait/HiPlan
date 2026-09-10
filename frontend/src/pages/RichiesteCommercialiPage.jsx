@@ -1594,6 +1594,20 @@ export default function RichiesteCommercialiPage() {
   const [selectedRichiestaId, setSelectedRichiestaId] = useState(null);
   const [showTrashModal, setShowTrashModal] = useState(false);
   const [trashCount, setTrashCount] = useState(0);
+  const [viewMode, setViewMode] = useState(() => {
+    try {
+      return localStorage.getItem('rc_view_mode') || 'list';
+    } catch {
+      return 'list';
+    }
+  });
+
+  const handleViewModeChange = (mode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem('rc_view_mode', mode);
+    } catch {}
+  };
 
   const loadTrashCount = useCallback(async () => {
     try {
@@ -1728,85 +1742,104 @@ export default function RichiesteCommercialiPage() {
 
   return (
     <div className="rc-page animate-fadeIn">
-      {/* Header */}
-      <div className="rc-page__header">
-        <div>
-          <h1 className="rc-page__title">
-            <AppIcon name="briefcase" size={24} /> Preventivazione
-          </h1>
-          <p className="rc-page__subtitle">
-            Coordinamento tra Commerciale e Ufficio Acquisti
-            <span className="badge badge-planning" style={{ marginLeft: 10, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              <AppIcon name={userRole === 'admin' ? 'settings' : userRole === 'acquisti' ? 'shoppingBag' : 'user'} size={12} />
-              {userRole === 'admin' ? 'Amministratore' : userRole === 'acquisti' ? 'Ufficio Acquisti' : 'Commerciale'}
-            </span>
-          </p>
+      {/* Command Bar / Filtri, Ricerca e Azioni */}
+      <div className="rc-command-bar card">
+        {/* Riga Superiore: Filtri di stato a sinistra, Azioni principali a destra */}
+        <div className="rc-command-bar__row rc-command-bar__row--top">
+          <div className="rc-filters">
+            <button
+              className={`filter-chip ${filterStatus === null ? 'active' : ''}`}
+              onClick={() => setFilterStatus(null)}
+            >
+              <span>Tutte</span>
+              <span className="filter-chip-count">{richieste.length}</span>
+            </button>
+            {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
+              <button
+                key={key}
+                className={`filter-chip ${filterStatus === key ? 'active' : ''}`}
+                onClick={() => setFilterStatus(filterStatus === key ? null : key)}
+              >
+                <span className="rc-filter-dot" style={{ background: cfg.color }} />
+                <span>{cfg.label}</span>
+                <span className="filter-chip-count">{stats[key] || 0}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="rc-command-bar__actions">
+            {userRole === 'admin' && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowTrashModal(true)}
+                style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6, height: 36 }}
+                title="Cestino Preventivazione (conservazione per 90 giorni)"
+              >
+                <AppIcon name="trash" size={15} />
+                <span>Cestino</span>
+                {trashCount > 0 && (
+                  <span className="trash-badge-count">{trashCount}</span>
+                )}
+              </button>
+            )}
+
+            {(userRole === 'commerciale' || userRole === 'admin') && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setShowNuovaModal(true)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 36 }}
+              >
+                <AppIcon name="plus" size={15} />
+                <span>Nuova Richiesta</span>
+              </button>
+            )}
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {userRole === 'admin' && (
+
+        {/* Riga Inferiore: Ricerca a sinistra, Selettore Griglia/Elenco a destra */}
+        <div className="rc-command-bar__row rc-command-bar__row--bottom">
+          <div className="rc-search-box">
+            <span className="rc-search-icon"><AppIcon name="search" size={15} /></span>
+            <input
+              type="text"
+              className="input rc-search-input"
+              placeholder="Cerca per titolo, cliente, offerta o referente..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button type="button" className="rc-search-clear" onClick={() => setSearchQuery('')} aria-label="Cancella ricerca">
+                <AppIcon name="close" size={13} />
+              </button>
+            )}
+          </div>
+
+          <div className="rc-view-switcher" role="group" aria-label="Modalità visualizzazione">
             <button
               type="button"
-              className="btn btn-secondary"
-              onClick={() => setShowTrashModal(true)}
-              style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}
-              title="Cestino Preventivazione (conservazione per 90 giorni)"
+              className={`rc-view-btn ${viewMode === 'grid' ? 'active' : ''}`}
+              onClick={() => handleViewModeChange('grid')}
+              title="Visualizzazione a Griglia"
             >
-              <AppIcon name="trash" size={16} />
-              <span>Cestino</span>
-              {trashCount > 0 && (
-                <span className="trash-badge-count">{trashCount}</span>
-              )}
+              <AppIcon name="grid" size={15} />
+              <span className="rc-view-btn__text">Griglia</span>
             </button>
-          )}
-          {(userRole === 'commerciale' || userRole === 'admin') && (
-            <button className="btn btn-primary" onClick={() => setShowNuovaModal(true)}>
-              <AppIcon name="plus" size={16} /> Nuova Richiesta
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Command Bar / Filtri e Ricerca */}
-      <div className="rc-command-bar card">
-        <div className="rc-filters">
-          <button
-            className={`filter-chip ${filterStatus === null ? 'active' : ''}`}
-            onClick={() => setFilterStatus(null)}
-          >
-            <span>Tutte</span>
-            <span className="filter-chip-count">{richieste.length}</span>
-          </button>
-          {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
             <button
-              key={key}
-              className={`filter-chip ${filterStatus === key ? 'active' : ''}`}
-              onClick={() => setFilterStatus(filterStatus === key ? null : key)}
+              type="button"
+              className={`rc-view-btn ${viewMode === 'list' ? 'active' : ''}`}
+              onClick={() => handleViewModeChange('list')}
+              title="Visualizzazione a Elenco"
             >
-              <span className="rc-filter-dot" style={{ background: cfg.color }} />
-              <span>{cfg.label}</span>
-              <span className="filter-chip-count">{stats[key] || 0}</span>
+              <AppIcon name="list" size={15} />
+              <span className="rc-view-btn__text">Elenco</span>
             </button>
-          ))}
-        </div>
-
-        <div className="rc-search-box">
-          <span className="rc-search-icon"><AppIcon name="search" size={15} /></span>
-          <input
-            type="text"
-            className="input rc-search-input"
-            placeholder="Cerca per titolo, cliente, offerta o referente..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <button type="button" className="rc-search-clear" onClick={() => setSearchQuery('')} aria-label="Cancella ricerca">
-              <AppIcon name="close" size={13} />
-            </button>
-          )}
+          </div>
         </div>
       </div>
 
-      {/* Grid richieste o Empty State */}
+      {/* Grid o Elenco richieste oppure Empty State */}
       {filtered.length === 0 ? (
         <div className="empty-state card">
           <div className="empty-state-icon">
@@ -1823,6 +1856,110 @@ export default function RichiesteCommercialiPage() {
               <AppIcon name="plus" size={16} /> Crea la prima richiesta
             </button>
           )}
+        </div>
+      ) : viewMode === 'list' ? (
+        <div className="card rc-list-card">
+          <div className="rc-table-responsive">
+            <table className="rc-table">
+              <thead>
+                <tr>
+                  <th>Richiesta & Cliente</th>
+                  <th>Stato</th>
+                  <th>Addetti Coinvolti</th>
+                  <th>Articoli</th>
+                  <th>Data</th>
+                  <th style={{ textAlign: 'right' }}>Azioni</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((r) => (
+                  <tr
+                    key={r.id}
+                    className="rc-table-row"
+                    onClick={() => setSelectedRichiestaId(r.id)}
+                  >
+                    <td>
+                      <div className="rc-table__title">{r.title}</div>
+                      <div className="rc-table__sub">
+                        <span className="rc-table__sub-item">
+                          <AppIcon name="building" size={13} /> <strong>{r.cliente}</strong>
+                        </span>
+                        {r.numero_offerta && (
+                          <span className="rc-table__sub-item">
+                            <AppIcon name="ticket" size={13} /> Offerta: <strong>{r.numero_offerta}</strong>
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <StatusBadge status={r.status} />
+                    </td>
+                    <td>
+                      <div className="rc-table__addetti-list">
+                        <div className="rc-table__addetto" title="Aperta dal Commerciale">
+                          <span className="rc-table__addetto-role">Commerciale:</span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <AppIcon name="user" size={11} /> {r.author?.full_name || r.author?.username || '—'}
+                          </span>
+                        </div>
+                        {(r.articoli_inserted_by || r.articoli?.length > 0 || ['in_lavorazione', 'manca_listino', 'completata'].includes(r.status)) && (
+                          <div className="rc-table__addetto" title="Lavorata dall'Ufficio Acquisti">
+                            <span className="rc-table__addetto-role">Acquisti:</span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <AppIcon name="briefcase" size={11} />{' '}
+                              {r.articoli_inserted_by?.full_name || r.articoli_inserted_by?.username || r.articoli?.[0]?.author?.full_name || r.articoli?.[0]?.author?.username || (r.status === 'in_lavorazione' ? 'In lavorazione' : 'Acquisti')}
+                            </span>
+                          </div>
+                        )}
+                        {(r.listino_inserted_by || r.status === 'completata') && (
+                          <div className="rc-table__addetto" title="Listino inserito dall'Amministrazione">
+                            <span className="rc-table__addetto-role">Listino:</span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--success, #16a34a)' }}>
+                              <AppIcon name="tag" size={11} />{' '}
+                              {r.listino_inserted_by?.full_name || r.listino_inserted_by?.username || 'Admin'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 500, fontSize: '0.82rem' }}>
+                        <AppIcon name="list" size={13} /> {r.articoli?.length || 0}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        <AppIcon name="clock" size={12} /> {formatDate(r.created_at)}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }} onClick={(e) => e.stopPropagation()}>
+                        {userRole === 'admin' && (
+                          <button
+                            type="button"
+                            className="btn-icon btn-ghost text-danger"
+                            onClick={() => handleQuickDelete(r)}
+                            title="Sposta nel cestino per 90 giorni"
+                            style={{ width: 28, height: 28, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                          >
+                            <AppIcon name="trash" size={14} />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => setSelectedRichiestaId(r.id)}
+                          style={{ fontSize: '0.78rem', padding: '4px 10px' }}
+                        >
+                          Dettagli <AppIcon name="arrowRight" size={12} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : (
         <div className="rc-grid">
