@@ -1714,6 +1714,161 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* SEZIONE RICHIESTE COMMERCIALI */}
+      <RichiesteCommercialiAdminSection users={users} toast={toast} />
+
+    </div>
+  );
+}
+
+// ─── Componente Admin Sezione RC ──────────────────────────────────────────────
+
+function RichiesteCommercialiAdminSection({ users, toast }) {
+  const [commerciali, setCommerciali] = useState([]);
+  const [acquisti, setAcquisti] = useState([]);
+  const [admins, setAdmins] = useState([]);
+  const [emailEnabled, setEmailEnabled] = useState(true);
+  const [collapsed, setCollapsed] = useState(true);
+  const [saving, setSaving] = useState(false);
+  // api is imported at module level
+
+  useEffect(() => {
+    loadAll();
+  }, []);
+
+  async function loadAll() {
+    try {
+      const [c, a, adm, em] = await Promise.all([
+        api.get('/settings/richieste-commerciali/commerciale-users'),
+        api.get('/settings/richieste-commerciali/acquisti-users'),
+        api.get('/settings/richieste-commerciali/admin-users'),
+        api.get('/settings/richieste-commerciali/email-enabled'),
+      ]);
+      setCommerciali(c.data || []);
+      setAcquisti(a.data || []);
+      setAdmins(adm.data || []);
+      setEmailEnabled(em.data?.enabled ?? true);
+    } catch (e) {
+      console.error('[RC Admin]', e);
+    }
+  }
+
+  async function saveGroup(group, list) {
+    setSaving(true);
+    try {
+      await api.post(`/settings/richieste-commerciali/${group}-users`, { usernames: list });
+      toast.success(`Lista "${group}" aggiornata`);
+    } catch {
+      toast.error('Errore salvataggio');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleEmail(val) {
+    try {
+      await api.put('/settings/richieste-commerciali/email-enabled', { enabled: val });
+      setEmailEnabled(val);
+      toast.success(val ? 'Email abilitate' : 'Email disabilitate');
+    } catch {
+      toast.error('Errore aggiornamento');
+    }
+  }
+
+  function UserListEditor({ label, list, setList, group, color }) {
+    const available = users.filter(u => !list.includes(u.username));
+    const [sel, setSel] = useState('');
+
+    return (
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <span style={{ width: 10, height: 10, borderRadius: '50%', background: color, display: 'inline-block', boxShadow: `0 0 6px ${color}80` }} />
+          <strong style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>{label}</strong>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 4 }}>({list.length} utenti)</span>
+        </div>
+
+        {/* Lista corrente */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+          {list.map(u => (
+            <span key={u} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 20, background: `${color}18`, border: `1px solid ${color}45`, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+              <AppIcon name="user" size={13} />
+              {u}
+              <button
+                onClick={() => { const next = list.filter(x => x !== u); setList(next); saveGroup(group, next); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 0, display: 'inline-flex', alignItems: 'center' }}
+                title="Rimuovi"
+              >
+                <AppIcon name="close" size={12} />
+              </button>
+            </span>
+          ))}
+          {list.length === 0 && <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Nessun utente nella lista</span>}
+        </div>
+
+        {/* Aggiungi utente */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <select
+            className="input"
+            value={sel}
+            onChange={e => setSel(e.target.value)}
+            style={{ flex: 1, padding: '7px 12px', borderRadius: 8, fontSize: '0.875rem' }}
+          >
+            <option value="">Seleziona utente da aggiungere...</option>
+            {available.map(u => (
+              <option key={u.id} value={u.username}>{u.full_name || u.username} ({u.username})</option>
+            ))}
+          </select>
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={!sel || saving}
+            onClick={() => { if (!sel) return; const next = [...list, sel]; setList(next); saveGroup(group, next); setSel(''); }}
+          >
+            <AppIcon name="plus" size={13} /> Aggiungi
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`admin-section-card ${collapsed ? 'is-collapsed' : ''}`} style={{ marginBottom: 30 }}>
+      <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+        <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => setCollapsed(c => !c)}>
+          <h2><AppIcon name="briefcase" /> Preventivazione</h2>
+          <p className="admin-section-desc">Gestisci le liste utenti e le impostazioni email del modulo Preventivazione.</p>
+        </div>
+        <div style={{ cursor: 'pointer', color: 'var(--text-muted)', marginTop: 4 }} onClick={() => setCollapsed(c => !c)}>
+          <AppIcon name={collapsed ? 'chevronDown' : 'chevronUp'} size={18} />
+        </div>
+      </div>
+
+      {!collapsed && (
+        <div className="admin-section-body">
+          {/* Toggle email */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', background: emailEnabled ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)', borderRadius: 10, border: `1px solid ${emailEnabled ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`, marginBottom: 24 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', color: emailEnabled ? '#16a34a' : '#ef4444' }}>
+              <AppIcon name="mail" size={20} />
+            </span>
+            <div style={{ flex: 1 }}>
+              <strong style={{ fontSize: '0.9rem' }}>Notifiche Email</strong>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Abilita o disabilita l'invio di email per i cambiamenti di stato delle richieste</p>
+            </div>
+            <button
+              className={`btn btn-sm ${emailEnabled ? 'btn-danger' : 'btn-primary'}`}
+              onClick={() => toggleEmail(!emailEnabled)}
+            >
+              <AppIcon name="bell" size={13} /> {emailEnabled ? 'Disabilita' : 'Abilita'}
+            </button>
+            <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 700, background: emailEnabled ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', color: emailEnabled ? '#16a34a' : '#ef4444' }}>
+              {emailEnabled ? 'ABILITATE' : 'DISABILITATE'}
+            </span>
+          </div>
+
+          <UserListEditor label="Commerciali (possono aprire richieste)" list={commerciali} setList={setCommerciali} group="commerciale" color="#ec4899" />
+          <UserListEditor label="Ufficio Acquisti (ricevono e gestiscono le richieste)" list={acquisti} setList={setAcquisti} group="acquisti" color="#10b981" />
+          <UserListEditor label="Admin (prezzi di listino — gli admin di sistema sono inclusi di default)" list={admins} setList={setAdmins} group="admin" color="#6366f1" />
+        </div>
+      )}
     </div>
   );
 }

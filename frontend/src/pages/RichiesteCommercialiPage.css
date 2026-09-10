@@ -1,0 +1,937 @@
+/* ========================================================
+   RichiesteCommercialiPage.css
+   Stile integrato con il Design System di HiPlan
+   Supporta nativamente sia Dark Mode che Light Mode
+   ======================================================== */
+
+.rc-page {
+  padding: 24px;
+  width: min(100%, 1560px);
+  margin: 0 auto;
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+.rc-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.rc-page__title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rc-page__subtitle {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ── Command Bar / Filtri e Ricerca ───────────────────────── */
+.rc-command-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.rc-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.rc-filters .filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.rc-filters .filter-chip:hover {
+  border-color: var(--accent-color);
+  color: var(--text-primary);
+}
+
+.rc-filters .filter-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent-color);
+  color: var(--accent-700);
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.rc-filters .filter-chip .filter-chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-left: 4px;
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--text-secondary);
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.rc-filters .filter-chip:hover .filter-chip-count {
+  background: rgba(148, 163, 184, 0.26);
+  color: var(--text-primary);
+}
+
+.rc-filters .filter-chip.active .filter-chip-count {
+  background: rgba(7, 151, 211, 0.22) !important;
+  color: var(--accent-700) !important;
+}
+
+.rc-filter-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.rc-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 240px;
+  flex: 1 1 280px;
+  max-width: 420px;
+  margin-left: auto;
+}
+
+.rc-search-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+
+.rc-search-input {
+  width: 100%;
+  padding-left: 36px !important;
+  padding-right: 32px !important;
+  height: 36px !important;
+  font-size: 0.82rem !important;
+  border-radius: 20px !important;
+}
+
+.rc-search-clear {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+}
+
+.rc-search-clear:hover {
+  color: var(--text-primary);
+}
+
+/* ── Status Pill Badge ───────────────────────────────────── */
+.rc-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+}
+
+.rc-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Grid Richieste ───────────────────────────────────────── */
+.rc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.rc-card {
+  padding: 18px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.rc-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-500);
+  box-shadow: var(--shadow-md);
+}
+
+.rc-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rc-card__title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+.rc-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.rc-card__meta-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
+.rc-card__meta-item strong {
+  color: var(--text-primary);
+}
+
+/* ── Addetti nella card Kanban ────────────────────────────── */
+.rc-card__addetti {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 6px);
+  margin: 2px 0;
+}
+
+.rc-card__addetto {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.rc-card__addetto-label {
+  font-size: 0.69rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.rc-card__addetto-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--text-primary);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rc-card__addetto-name--listino {
+  color: var(--success, #16a34a);
+}
+
+.rc-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.76rem;
+  color: var(--text-tertiary);
+  margin-top: auto;
+}
+
+.rc-card__date {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.rc-card__action {
+  color: var(--accent-500);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Modal Dialogs ────────────────────────────────────────── */
+.rc-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn 0.2s ease;
+}
+
+.rc-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl, 0 20px 40px rgba(0,0,0,0.3));
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUp 0.25s ease;
+}
+
+.rc-modal--wide {
+  max-width: 1140px;
+  width: 95vw;
+}
+
+.rc-modal-overlay--confirm {
+  z-index: 1200;
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.rc-modal--confirm {
+  max-width: 480px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45);
+}
+
+.rc-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.rc-modal__title-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rc-modal__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rc-modal__body {
+  padding: 22px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.rc-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+/* ── Form Components in Modals ────────────────────────────── */
+.rc-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 600px) {
+  .rc-form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rc-form-group {
+  margin-bottom: 16px;
+}
+
+.rc-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.rc-label .required {
+  color: var(--danger, #ef4444);
+}
+
+.rc-checkboxes {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 6px 0;
+}
+
+.rc-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+/* ── Interactive Pill / Chip Toggle Groups ───────────────── */
+.rc-pill-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 4px 0 8px 0;
+}
+
+.rc-pill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 15px;
+  border-radius: 9999px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  border: 1.5px solid var(--border-default);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.16s ease-in-out;
+  user-select: none;
+  line-height: 1.2;
+}
+
+.rc-pill-chip:hover {
+  border-color: var(--text-tertiary);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  transform: translateY(-1px);
+}
+
+.rc-pill-chip__indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-subtle);
+  background: var(--bg-card);
+  transition: all 0.16s ease;
+  flex-shrink: 0;
+}
+
+.rc-pill-chip__indicator--radio {
+  border-radius: 50%;
+}
+
+.rc-pill-chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Tipologia: Standard */
+.rc-pill-chip--standard.is-active {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: #3b82f6;
+  color: #2563eb;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+.dark .rc-pill-chip--standard.is-active {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: #3b82f6;
+  color: #93c5fd;
+  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.25);
+}
+.rc-pill-chip--standard.is-active .rc-pill-chip__indicator {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+/* Tipologia: ATEX */
+.rc-pill-chip--atex.is-active {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: #f59e0b;
+  color: #b45309;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.15);
+}
+.dark .rc-pill-chip--atex.is-active {
+  background: rgba(245, 158, 11, 0.24);
+  border-color: #f59e0b;
+  color: #fbbf24;
+  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.25);
+}
+.rc-pill-chip--atex.is-active .rc-pill-chip__indicator {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: #ffffff;
+}
+
+/* Tipologia: Alimentare */
+.rc-pill-chip--alimentare.is-active {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: #10b981;
+  color: #047857;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15);
+}
+.dark .rc-pill-chip--alimentare.is-active {
+  background: rgba(16, 185, 129, 0.24);
+  border-color: #10b981;
+  color: #34d399;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.25);
+}
+.rc-pill-chip--alimentare.is-active .rc-pill-chip__indicator {
+  background: #10b981;
+  border-color: #10b981;
+  color: #ffffff;
+}
+
+/* Tipo Fornitura (Single select or none) */
+.rc-pill-chip--fornitura.is-active {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: #6366f1;
+  color: #4338ca;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+}
+.dark .rc-pill-chip--fornitura.is-active {
+  background: rgba(99, 102, 241, 0.22);
+  border-color: #6366f1;
+  color: #a5b4fc;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.25);
+}
+.rc-pill-chip--fornitura.is-active .rc-pill-chip__indicator--radio {
+  border-color: #6366f1;
+  background: transparent;
+  color: #6366f1;
+}
+.dark .rc-pill-chip--fornitura.is-active .rc-pill-chip__indicator--radio {
+  border-color: #818cf8;
+  color: #818cf8;
+}
+
+/* ── Dropzone ────────────────────────────────────────────── */
+.rc-dropzone {
+  border: 2px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-tertiary);
+  transition: all var(--transition-fast);
+}
+
+.rc-dropzone:hover,
+.rc-dropzone.dragover {
+  border-color: var(--accent-500);
+  background: var(--bg-hover);
+  color: var(--accent-500);
+}
+
+.rc-dropzone__icon {
+  color: var(--accent-500);
+}
+
+.rc-attachments-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.rc-attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.rc-attachment-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rc-attachment-link {
+  color: var(--accent-500);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rc-attachment-remove {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0;
+}
+
+.rc-attachment-remove:hover {
+  color: var(--danger, #ef4444);
+}
+
+/* ── Info Grid & Blocks in Dettaglio ────────────────────────── */
+.rc-info-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+  padding: 18px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 20px;
+}
+
+.rc-info-block {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rc-info-block:not(:last-child) {
+  border-right: 1px solid var(--border-subtle);
+  padding-right: 20px;
+}
+
+@media (max-width: 860px) {
+  .rc-info-block:not(:last-child) {
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    padding-right: 0;
+    padding-bottom: 14px;
+  }
+}
+
+.rc-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 18px;
+}
+
+.rc-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rc-info-item__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rc-info-item__value {
+  font-size: 0.94rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+.rc-info-item__value--strong {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.rc-info-item__value--date {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.rc-description-box {
+  margin: 0;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.rc-section-divider {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 20px 0;
+}
+
+/* ── Articoli Section ────────────────────────────────────── */
+.rc-articoli-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rc-articoli-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rc-articoli-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rc-articolo-card {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rc-articolo-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rc-articolo-card__title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.rc-price-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--success, #10b981);
+}
+
+.rc-articolo-card__tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ── Text Diff Styles ─────────────────────────────────────── */
+.rc-diff-original {
+  text-decoration: line-through;
+  color: var(--danger, #ef4444);
+  background: rgba(239, 68, 68, 0.1);
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-right: 6px;
+}
+
+.rc-diff-modified {
+  color: var(--success, #10b981);
+  background: rgba(16, 185, 129, 0.1);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* ── Loading Spinner ──────────────────────────────────────── */
+.rc-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.rc-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-default);
+  border-top-color: var(--accent-500);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* ── Admin Status Changer & Edit Form ─────────────────────── */
+.rc-admin-status-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rc-admin-status-select-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  padding: 3px 8px 3px 10px;
+  border-radius: 20px;
+  transition: border-color var(--transition-fast);
+}
+
+.rc-admin-status-select-wrap:hover {
+  border-color: var(--accent-color);
+}
+
+.rc-admin-status-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+}
+
+.rc-admin-status-select {
+  border: none !important;
+  background: transparent !important;
+  color: var(--text-primary);
+  font-size: 0.8rem !important;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px !important;
+  outline: none !important;
+}
+
+.rc-admin-status-select:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.rc-edit-richiesta-form {
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-subtle, var(--border-color));
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 18px;
+}
+
+.rc-card__status-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.rc-card__status-select {
+  border-radius: 20px !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  padding: 3px 8px !important;
+  cursor: pointer;
+  outline: none !important;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  transition: all var(--transition-fast);
+}
+
+.rc-card__status-select:hover {
+  filter: brightness(1.08);
+}

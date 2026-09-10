@@ -15,6 +15,7 @@ from app.models.todo import Todo
 from app.models.email_log import EmailLog
 from app.models.replan_log import ReplanLog, ReplanActionType
 from app.models.calendar_event import CalendarEvent
+from app.models.richiesta_commerciale import RichiestaCommerciale, ArticoloRichiesta, RichiestaStatus, TipoFornitura
 
 __all__ = [
     "Base", "engine", "AsyncSessionLocal",
@@ -32,5 +33,6 @@ __all__ = [
     "ActivityLog", "ActivityCategory",
     "Todo",
     "ReplanLog", "ReplanActionType",
-    "CalendarEvent"
+    "CalendarEvent",
+    "RichiestaCommerciale", "ArticoloRichiesta", "RichiestaStatus", "TipoFornitura",
 ]

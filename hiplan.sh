@@ -271,7 +271,7 @@ do_start() {
   (
     cd "$BACKEND_DIR"
     exec "$py_bin" -m uvicorn app.main:app \
-      --host 0.0.0.0 --port 8000 --log-level info
+      --host 0.0.0.0 --port 8000 --log-level info --reload --reload-dir "$BACKEND_DIR/app"
   ) >"$LOG_DIR/backend_app.log" 2>&1 &
   BACKEND_PID=$!
   advance_bar 40 50 "Backend API avviato"

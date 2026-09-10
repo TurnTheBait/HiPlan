@@ -176,3 +176,71 @@ async def send_calendar_reminder_email(
 
     return await send_email(to_addresses, subject, body_html, body_text)
 
+
+async def send_richiesta_commerciale_email(
+    to_addresses: List[str],
+    richiesta_title: str,
+    cliente: str,
+    author_name: str,
+    phase: str,  # "nuova_richiesta" | "manca_listino" | "completata"
+) -> bool:
+    """
+    Invia le email di notifica per il workflow Richieste Commerciali.
+    Phase:
+    - nuova_richiesta → a Acquisti: è arrivata una nuova richiesta
+    - manca_listino   → a Admin: serve il prezzo di listino
+    - completata      → a Commerciale: la richiesta è completata
+    """
+    if phase == "nuova_richiesta":
+        subject = f"HiPlan - Nuova Richiesta Commerciale: {richiesta_title}"
+        badge_color = "#ef4444"
+        badge_text = "🔴 NUOVA RICHIESTA"
+        intro = f"È stata aperta una nuova richiesta commerciale da <strong>{author_name}</strong> che richiede la vostra attenzione."
+        cta = "Accedi a HiPlan per prendere in carico la richiesta e compilare gli articoli."
+    elif phase == "manca_listino":
+        subject = f"HiPlan - Richiesta in attesa di Listino: {richiesta_title}"
+        badge_color = "#3b82f6"
+        badge_text = "🔵 MANCA LISTINO"
+        intro = f"L'ufficio acquisti ha compilato la richiesta <strong>{richiesta_title}</strong> per il cliente <strong>{cliente}</strong>. È necessario inserire il prezzo di listino."
+        cta = "Accedi a HiPlan per inserire i prezzi di listino e completare la richiesta."
+    else:  # completata
+        subject = f"HiPlan - Richiesta Commerciale Completata: {richiesta_title}"
+        badge_color = "#22c55e"
+        badge_text = "🟢 COMPLETATA"
+        intro = f"La richiesta commerciale <strong>{richiesta_title}</strong> per il cliente <strong>{cliente}</strong> è stata completata con i prezzi di listino."
+        cta = "Accedi a HiPlan per visualizzare il dettaglio completo della richiesta."
+
+    body_html = f"""
+    <html><body style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f9fafb; margin: 0; padding: 40px 20px;">
+        <div style="max-width: 650px; margin: auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden;">
+            <div style="background: linear-gradient(135deg, #185FA5, #2563eb); padding: 24px 32px;">
+                <h1 style="margin: 0; font-size: 1.5rem; font-weight: 600; letter-spacing: 0.5px; color: #ffffff;">HiPlan</h1>
+                <p style="margin: 6px 0 0 0; color: #bfdbfe; font-size: 0.9rem;">Richieste Commerciali</p>
+            </div>
+            <div style="padding: 24px 32px 32px 32px;">
+                <div style="display: inline-block; background-color: {badge_color}; color: #fff; padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; margin-bottom: 16px;">
+                    {badge_text}
+                </div>
+                <p style="font-size: 1.05rem; line-height: 1.6; margin-top: 0; margin-bottom: 8px;">{intro}</p>
+                <div style="background: #f8fafc; border-left: 5px solid {badge_color}; border-radius: 6px; padding: 20px; margin: 12px 0;">
+                    <p style="margin: 0 0 8px 0; font-size: 0.9rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Richiesta</p>
+                    <h2 style="margin: 0 0 8px 0; font-size: 1.2rem; color: #0f172a;">{richiesta_title}</h2>
+                    <p style="margin: 0; font-size: 0.95rem; color: #475569;"><strong>Cliente:</strong> {cliente}</p>
+                </div>
+                <p style="color: #64748b; font-size: 0.9rem; border-top: 1px solid #e2e8f0; padding-top: 20px; margin-bottom: 0;">{cta}</p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 20px 32px; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #64748b; line-height: 1.5; text-align: justify;">
+                <p style="margin: 0 0 8px 0; font-weight: bold; text-align: center; color: #475569;">
+                    ⚠️ Questa è un'email generata automaticamente, si prega di non rispondere.
+                </p>
+                <p style="margin: 0;">
+                    <strong>Informativa Privacy</strong> - Ai sensi del Regolamento (UE) 2016/679 si precisa che le informazioni contenute in questo messaggio sono riservate e ad uso esclusivo del destinatario. Qualora il messaggio in parola Le fosse pervenuto per errore, La preghiamo di eliminarlo senza copiarlo e di non inoltrarlo a terzi, dandocene gentilmente comunicazione. Grazie.
+                </p>
+            </div>
+        </div>
+    </body></html>
+    """
+
+    body_text = f"{intro}\n\nRichiesta: {richiesta_title}\nCliente: {cliente}\n\n{cta}"
+    return await send_email(to_addresses, subject, body_html, body_text)
+

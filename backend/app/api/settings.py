@@ -356,3 +356,104 @@ async def get_smtp_settings(
         smtp_from=app_settings.SMTP_FROM,
         smtp_use_tls=app_settings.SMTP_USE_TLS,
     )
+
+
+# ── Richieste Commerciali — Configurazione ────────────────────────────────────
+
+class RCUsersUpdate(BaseModel):
+    usernames: List[str]
+
+
+class RCEmailEnabledUpdate(BaseModel):
+    enabled: bool
+
+
+def _rc_setting_key(group: str) -> str:
+    return f"rc_{group}_users"
+
+
+@router.get("/richieste-commerciali/{group}-users", response_model=List[str])
+async def get_rc_users(
+    group: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Restituisce la lista utenti per il gruppo specificato del modulo RC.
+    group: commerciale | acquisti | admin
+    """
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin")
+    if group not in ("commerciale", "acquisti", "admin"):
+        raise HTTPException(status_code=400, detail="Gruppo non valido")
+
+    key = _rc_setting_key(group)
+    res = await db.execute(select(Setting).where(Setting.key == key))
+    setting = res.scalar_one_or_none()
+    if not setting or not setting.value:
+        return []
+    try:
+        return json.loads(setting.value)
+    except Exception:
+        return []
+
+
+@router.post("/richieste-commerciali/{group}-users", response_model=List[str])
+async def update_rc_users(
+    group: str,
+    data: RCUsersUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Aggiorna la lista utenti per il gruppo specificato del modulo RC."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin")
+    if group not in ("commerciale", "acquisti", "admin"):
+        raise HTTPException(status_code=400, detail="Gruppo non valido")
+
+    key = _rc_setting_key(group)
+    res = await db.execute(select(Setting).where(Setting.key == key))
+    setting = res.scalar_one_or_none()
+    value_str = json.dumps(data.usernames)
+    if setting:
+        setting.value = value_str
+    else:
+        setting = Setting(key=key, value=value_str)
+        db.add(setting)
+    await db.commit()
+    return data.usernames
+
+
+@router.get("/richieste-commerciali/email-enabled")
+async def get_rc_email_enabled(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Stato abilitazione email per il modulo RC."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin")
+    res = await db.execute(select(Setting).where(Setting.key == "rc_email_enabled"))
+    setting = res.scalar_one_or_none()
+    enabled = True if not setting else (setting.value != "false")
+    return {"enabled": enabled}
+
+
+@router.put("/richieste-commerciali/email-enabled")
+async def update_rc_email_enabled(
+    data: RCEmailEnabledUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Abilita o disabilita le email del modulo RC."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin")
+    res = await db.execute(select(Setting).where(Setting.key == "rc_email_enabled"))
+    setting = res.scalar_one_or_none()
+    value_str = "true" if data.enabled else "false"
+    if setting:
+        setting.value = value_str
+    else:
+        setting = Setting(key="rc_email_enabled", value=value_str)
+        db.add(setting)
+    await db.commit()
+    return {"enabled": data.enabled}

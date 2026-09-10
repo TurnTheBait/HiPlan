@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useToast } from '../../context/ToastContext';
 import api from '../../api/client';
+import { getMyRole } from '../../api/richiesteCommerciali';
 import './MainLayout.css';
 import GlobalSearch from './GlobalSearch';
 
@@ -108,6 +109,28 @@ function AppIcon({ name, size = 19 }) {
         <path d="M13 8v8M9 8v8" />
       </>
     ),
+    briefcase: (
+      <>
+        <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+      </>
+    ),
+    handshake: (
+      <>
+        <path d="M19 14l-4.5 4.5a2.12 2.12 0 0 1-3 0L7 14" />
+        <path d="m14 9 3.5-3.5a2.12 2.12 0 0 1 3 3L17 12" />
+        <path d="M3 10l3.5-3.5a2.12 2.12 0 0 1 3 0L14 11" />
+        <path d="m2 14 3.5 3.5a2.12 2.12 0 0 0 3 0L11 15" />
+      </>
+    ),
+    fileText: (
+      <>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+      </>
+    ),
     settings: (
       <>
         <circle cx="12" cy="12" r="3" />
@@ -184,6 +207,21 @@ export default function MainLayout() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [rcEnabled, setRcEnabled] = useState(() => user?.role === 'admin');
+
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      setRcEnabled(true);
+      return;
+    }
+    if (!user) {
+      setRcEnabled(false);
+      return;
+    }
+    getMyRole()
+      .then((res) => setRcEnabled(Boolean(res?.enabled)))
+      .catch(() => setRcEnabled(false));
+  }, [user]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -304,6 +342,7 @@ export default function MainLayout() {
       '/conflicts': { title: 'Panoramica addetti', subtitle: 'Carichi e sovrapposizioni' },
       '/replanning': { title: 'Rilevatore Conflitti', subtitle: 'Analisi e conflitti' },
       '/tickets': { title: 'Ticket', subtitle: 'Richieste e supporto operativo' },
+      '/richieste-commerciali': { title: 'Preventivazione', subtitle: 'Coordinamento commerciale e acquisti' },
       '/admin': { title: 'Amministrazione', subtitle: 'Utenti e configurazione' },
       '/me': { title: 'Il mio profilo', subtitle: 'Profilo, reparto e ferie' },
       '/chat': { title: 'HiPlan AI', subtitle: 'Assistente Virtuale' },
@@ -389,6 +428,15 @@ export default function MainLayout() {
             <span className="sidebar-link-icon"><AppIcon name="robot" /></span>
             {showSidebarText && <span>HiPlan AI</span>}
           </NavLink>
+          {rcEnabled && (
+            <>
+              <span className="sidebar-section-label">Coordinamento</span>
+              <NavLink to="/richieste-commerciali" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+                <span className="sidebar-link-icon"><AppIcon name="briefcase" /></span>
+                {showSidebarText && <span>Preventivazione</span>}
+              </NavLink>
+            </>
+          )}
           <span className="sidebar-section-label">Controllo</span>
           <NavLink to="/conflicts" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <span className="sidebar-link-icon"><AppIcon name="users" /></span>

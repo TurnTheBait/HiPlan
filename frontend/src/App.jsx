@@ -17,6 +17,7 @@ import ProfilePage from './pages/ProfilePage';
 import TicketsPage from './pages/TicketsPage';
 import TodoPage from './pages/TodoPage';
 import ChatPage from './pages/ChatPage';
+import RichiesteCommercialiPage from './pages/RichiesteCommercialiPage';
 import './index.css';
 import './workspace-restyle.css';
 
@@ -80,6 +81,7 @@ function AppRoutes() {
           }
         />
         <Route path="/chat" element={<ChatPage />} />
+        <Route path="/richieste-commerciali" element={<RichiesteCommercialiPage />} />
         <Route
           path="/admin"
           element={

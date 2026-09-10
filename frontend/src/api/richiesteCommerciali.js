@@ -1,0 +1,119 @@
+import api from './client';
+
+const BASE = '/richieste-commerciali';
+
+export async function getMyRole() {
+  const res = await api.get(`${BASE}/my-role`);
+  return res.data;
+}
+
+export async function listRichieste() {
+  const res = await api.get(`${BASE}/`, { params: { _t: Date.now() } });
+  return res.data;
+}
+
+export async function getRichiesta(id) {
+  const res = await api.get(`${BASE}/${id}`, { params: { _t: Date.now() } });
+  return res.data;
+}
+
+export async function createRichiesta(data) {
+  const res = await api.post(`${BASE}/`, data);
+  return res.data;
+}
+
+export async function updateRichiesta(id, data) {
+  const res = await api.put(`${BASE}/${id}`, data);
+  return res.data;
+}
+
+export async function deleteRichiesta(id) {
+  const res = await api.delete(`${BASE}/${id}`);
+  return res.data;
+}
+
+export async function getTrashRichieste() {
+  const res = await api.get(`${BASE}/trash`, { params: { _t: Date.now() } });
+  return res.data;
+}
+
+export async function restoreRichiesta(id) {
+  const res = await api.post(`${BASE}/trash/${id}/restore`);
+  return res.data;
+}
+
+export async function hardDeleteRichiesta(id) {
+  const res = await api.delete(`${BASE}/trash/${id}`);
+  return res.data;
+}
+
+export async function emptyTrashRichieste() {
+  const res = await api.delete(`${BASE}/trash/empty`);
+  return res.data;
+}
+
+export async function uploadAttachmentsRichiesta(richiestaId, files) {
+  const formData = new FormData();
+  files.forEach((f) => formData.append('files', f));
+  const res = await api.post(`${BASE}/${richiestaId}/attachments`, formData);
+  return res.data;
+}
+
+export async function prendiInCarico(id) {
+  const res = await api.put(`${BASE}/${id}/prendi-in-carico`);
+  return res.data;
+}
+
+export async function addArticolo(richiestaId, data) {
+  const res = await api.post(`${BASE}/${richiestaId}/articoli`, data);
+  return res.data;
+}
+
+export async function updateArticolo(richiestaId, articoloId, data) {
+  const res = await api.put(`${BASE}/${richiestaId}/articoli/${articoloId}`, data);
+  return res.data;
+}
+
+export async function deleteArticolo(richiestaId, articoloId) {
+  const res = await api.delete(`${BASE}/${richiestaId}/articoli/${articoloId}`);
+  return res.data;
+}
+
+export async function uploadAttachmentsArticolo(richiestaId, articoloId, files) {
+  const formData = new FormData();
+  files.forEach((f) => formData.append('files', f));
+  const res = await api.post(`${BASE}/${richiestaId}/articoli/${articoloId}/attachments`, formData);
+  return res.data;
+}
+
+export async function inviaAdAdmin(id) {
+  const res = await api.put(`${BASE}/${id}/invia-a-admin`, {});
+  return res.data;
+}
+
+export async function completaRichiesta(id, articoli) {
+  const res = await api.put(`${BASE}/${id}/completa`, { articoli });
+  return res.data;
+}
+
+// ── Settings RC ──────────────────────────────────────────────────────────────
+
+export async function getRCUsers(group) {
+  const res = await api.get(`/settings/richieste-commerciali/${group}-users`);
+  return res.data;
+}
+
+export async function updateRCUsers(group, usernames) {
+  const res = await api.post(`/settings/richieste-commerciali/${group}-users`, { usernames });
+  return res.data;
+}
+
+export async function getRCEmailEnabled() {
+  const res = await api.get('/settings/richieste-commerciali/email-enabled');
+  return res.data;
+}
+
+export async function updateRCEmailEnabled(enabled) {
+  const res = await api.put('/settings/richieste-commerciali/email-enabled', { enabled });
+  return res.data;
+}
