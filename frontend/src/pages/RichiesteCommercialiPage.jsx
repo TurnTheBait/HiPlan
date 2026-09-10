@@ -41,6 +41,40 @@ const TIPO_FORNITURA_LABELS = {
   compravendita: 'Compravendita',
 };
 
+const BACKEND_URL = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
+  : `http://${window.location.hostname}:8000`;
+
+function getAttachmentUrl(pathOrUrl) {
+  if (!pathOrUrl) return '';
+  if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+    return pathOrUrl;
+  }
+  const clean = pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`;
+  return `${BACKEND_URL}${clean}`;
+}
+
+function getAttachmentInfo(att) {
+  if (!att) return { name: '', url: '' };
+  if (typeof att === 'string') {
+    let name = att.split('/').pop() || att;
+    if (name.includes('_')) {
+      const parts = name.split('_');
+      if (parts[0].length <= 12) {
+        name = parts.slice(1).join('_');
+      }
+    }
+    return {
+      name: decodeURIComponent(name),
+      url: getAttachmentUrl(att),
+    };
+  }
+  return {
+    name: att.name || (att.url ? decodeURIComponent(att.url.split('/').pop()) : 'Allegato'),
+    url: getAttachmentUrl(att.url || att.path),
+  };
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }) {
@@ -131,12 +165,23 @@ function Dropzone({ files, onFilesChange, existingUrls = [] }) {
             </button>
           </div>
         ))}
-        {existingUrls.map((url, i) => (
-          <div key={`ex-${i}`} className="rc-attachment-chip">
-            <AppIcon name="fileText" size={14} />
-            <a href={url} target="_blank" rel="noopener noreferrer" className="rc-attachment-link">{url.split('/').pop()}</a>
-          </div>
-        ))}
+        {existingUrls.map((url, i) => {
+          const info = getAttachmentInfo(url);
+          return (
+            <div key={`ex-${i}`} className="rc-attachment-chip">
+              <AppIcon name="fileText" size={14} />
+              <a
+                href={info.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rc-attachment-link"
+                title={`Apri ${info.name} in una nuova scheda`}
+              >
+                {info.name}
+              </a>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -266,7 +311,7 @@ function NuovaRichiestaModal({ onClose, onCreated }) {
   return (
     <>
       <div className="rc-modal-overlay">
-        <div className="rc-modal">
+        <div className="rc-modal rc-modal--large">
           <div className="rc-modal__header">
             <h2 className="rc-modal__title">
               <AppIcon name="plus" size={20} /> Nuova Richiesta Preventivo
@@ -299,7 +344,7 @@ function NuovaRichiestaModal({ onClose, onCreated }) {
                   />
                 </div>
               </div>
-              <div className="rc-form-group">
+              <div className="rc-form-group" style={{ maxWidth: 420 }}>
                 <label className="rc-label"># Offerta</label>
                 <input
                   className="input"
@@ -318,7 +363,7 @@ function NuovaRichiestaModal({ onClose, onCreated }) {
                   rows={4}
                 />
               </div>
-              <div className="rc-form-group">
+              <div className="rc-form-group" style={{ marginBottom: 0 }}>
                 <label className="rc-label">Allegati</label>
                 <Dropzone files={files} onFilesChange={setFiles} />
               </div>
@@ -1018,12 +1063,23 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
             <div className="rc-form-group">
               <span className="rc-label">Allegati richiesta</span>
               <div className="rc-attachments-list">
-                {richiesta.attachments.map((url, i) => (
-                  <div key={i} className="rc-attachment-chip">
-                    <AppIcon name="fileText" size={14} />
-                    <a href={url} target="_blank" rel="noopener noreferrer" className="rc-attachment-link">{url.split('/').pop()}</a>
-                  </div>
-                ))}
+                {richiesta.attachments.map((att, i) => {
+                  const info = getAttachmentInfo(att);
+                  return (
+                    <div key={i} className="rc-attachment-chip">
+                      <AppIcon name="fileText" size={14} />
+                      <a
+                        href={info.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rc-attachment-link"
+                        title={`Apri ${info.name} in una nuova scheda`}
+                      >
+                        {info.name}
+                      </a>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1188,12 +1244,23 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
 
                     {articolo.attachments?.length > 0 && (
                       <div className="rc-attachments-list" style={{ marginTop: 10 }}>
-                        {articolo.attachments.map((url, i) => (
-                          <div key={i} className="rc-attachment-chip">
-                            <AppIcon name="fileText" size={14} />
-                            <a href={url} target="_blank" rel="noopener noreferrer" className="rc-attachment-link">{url.split('/').pop()}</a>
-                          </div>
-                        ))}
+                        {articolo.attachments.map((att, i) => {
+                          const info = getAttachmentInfo(att);
+                          return (
+                            <div key={i} className="rc-attachment-chip">
+                              <AppIcon name="fileText" size={14} />
+                              <a
+                                href={info.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rc-attachment-link"
+                                title={`Apri ${info.name} in una nuova scheda`}
+                              >
+                                {info.name}
+                              </a>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1228,6 +1295,27 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                         <span className="badge badge-low">{TIPO_FORNITURA_LABELS[articolo.tipo_fornitura] || articolo.tipo_fornitura}</span>
                       )}
                     </div>
+                    {articolo.attachments?.length > 0 && (
+                      <div className="rc-attachments-list" style={{ marginTop: 10 }}>
+                        {articolo.attachments.map((att, i) => {
+                          const info = getAttachmentInfo(att);
+                          return (
+                            <div key={i} className="rc-attachment-chip">
+                              <AppIcon name="fileText" size={14} />
+                              <a
+                                href={info.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rc-attachment-link"
+                                title={`Apri ${info.name} in una nuova scheda`}
+                              >
+                                {info.name}
+                              </a>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               }
@@ -1284,12 +1372,23 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                   </div>
                   {articolo.attachments?.length > 0 && (
                     <div className="rc-attachments-list" style={{ marginTop: 10 }}>
-                      {articolo.attachments.map((url, i) => (
-                        <div key={i} className="rc-attachment-chip">
-                          <AppIcon name="fileText" size={14} />
-                          <a href={url} target="_blank" rel="noopener noreferrer" className="rc-attachment-link">{url.split('/').pop()}</a>
-                        </div>
-                      ))}
+                      {articolo.attachments.map((att, i) => {
+                        const info = getAttachmentInfo(att);
+                        return (
+                          <div key={i} className="rc-attachment-chip">
+                            <AppIcon name="fileText" size={14} />
+                            <a
+                              href={info.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rc-attachment-link"
+                              title={`Apri ${info.name} in una nuova scheda`}
+                            >
+                              {info.name}
+                            </a>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

@@ -497,12 +497,17 @@
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl, 0 20px 40px rgba(0,0,0,0.3));
   width: 100%;
-  max-width: 600px;
+  max-width: 860px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   animation: slideUp 0.25s ease;
+}
+
+.rc-modal--large {
+  max-width: 880px;
+  width: 92vw;
 }
 
 .rc-modal--wide {
@@ -788,28 +793,44 @@
 .rc-attachment-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  border-radius: var(--radius-md);
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md, 8px);
   background: var(--bg-tertiary);
   border: 1px solid var(--border-subtle);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   color: var(--text-secondary);
+  transition: all 0.15s ease;
+}
+
+.rc-attachment-chip:hover {
+  background: var(--bg-secondary, rgba(148, 163, 184, 0.1));
+  border-color: var(--accent-color, #0284c7);
 }
 
 .rc-attachment-name {
-  max-width: 180px;
+  max-width: 340px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .rc-attachment-link {
-  color: var(--accent-500);
-  max-width: 180px;
+  color: var(--accent-600, #0284c7);
+  font-weight: 500;
+  text-decoration: none;
+  max-width: 360px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.15s ease;
+}
+
+.rc-attachment-link:hover {
+  text-decoration: underline;
+  color: var(--accent-700, #0369a1);
 }
 
 .rc-attachment-remove {
@@ -819,11 +840,13 @@
   cursor: pointer;
   display: flex;
   align-items: center;
-  padding: 0;
+  padding: 2px;
+  border-radius: 4px;
 }
 
 .rc-attachment-remove:hover {
   color: var(--danger, #ef4444);
+  background: rgba(239, 68, 68, 0.1);
 }
 
 /* ── Info Grid & Blocks in Dettaglio ────────────────────────── */

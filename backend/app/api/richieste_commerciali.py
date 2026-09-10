@@ -4,11 +4,12 @@ Coordina il workflow: Commerciale → Acquisti → Admin.
 """
 import json
 import os
+import re
 import shutil
 import uuid
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import List, Union
+from typing import List, Union, Dict, Any
 
 # pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
@@ -100,9 +101,25 @@ async def _get_user_emails_by_usernames(db: AsyncSession, usernames: List[str]) 
     return [str(u.email) for u in users if u.email]
 
 
-def _parse_attachments(attachments_str: str) -> List[str]:
+def _parse_attachments(attachments_str: str) -> List[Dict[str, str]]:
     try:
-        return json.loads(attachments_str) if attachments_str else []
+        raw = json.loads(attachments_str) if attachments_str else []
+        normalized = []
+        for item in raw:
+            if isinstance(item, dict):
+                normalized.append({
+                    "name": str(item.get("name") or "Allegato"),
+                    "url": str(item.get("url") or item.get("path") or ""),
+                })
+            elif isinstance(item, str) and item.strip():
+                filename = item.split("/")[-1]
+                # Se il file ha prefisso hex uuid es. a1b2c3d4_nome.ext, togliamo l'hash iniziale per visualizzare il nome originale
+                if "_" in filename and len(filename.split("_")[0]) <= 12:
+                    display_name = filename.split("_", 1)[1]
+                else:
+                    display_name = filename
+                normalized.append({"name": display_name, "url": item})
+        return normalized
     except Exception:
         return []
 
@@ -578,21 +595,26 @@ async def upload_attachments_richiesta(
     if role == "commerciale" and str(richiesta.author_id) != str(current_user.id):
         raise HTTPException(status_code=403, detail="Non autorizzato")
 
-    saved_paths = []
+    saved_entries = []
     folder = os.path.join(UPLOAD_DIR, richiesta_id)
     os.makedirs(folder, exist_ok=True)
 
     for file in files:
-        ext = os.path.splitext(file.filename or "file")[1]
-        filename = f"{uuid.uuid4()}{ext}"
+        original_name = file.filename or "allegato"
+        base, ext = os.path.splitext(original_name)
+        safe_base = re.sub(r'[^\w\.\-\_]', '_', base)[:60]
+        filename = f"{uuid.uuid4().hex[:8]}_{safe_base}{ext}"
         filepath = os.path.join(folder, filename)
         content = await file.read()
         with open(filepath, "wb") as f:
             f.write(content)
-        saved_paths.append(f"/uploads/richieste_commerciali/{richiesta_id}/{filename}")
+        saved_entries.append({
+            "name": original_name,
+            "url": f"/uploads/richieste_commerciali/{richiesta_id}/{filename}",
+        })
 
     current = _parse_attachments(str(richiesta.attachments))
-    current.extend(saved_paths)
+    current.extend(saved_entries)
     richiesta.attachments = json.dumps(current)  # type: ignore
     await db.commit()
 
@@ -833,23 +855,26 @@ async def upload_attachments_articolo(
     if not articolo:
         raise HTTPException(status_code=404, detail="Articolo non trovato")
 
-    saved_paths = []
+    saved_entries = []
     folder = os.path.join(UPLOAD_DIR, richiesta_id, "articoli", articolo_id)
     os.makedirs(folder, exist_ok=True)
 
     for file in files:
-        ext = os.path.splitext(file.filename or "file")[1]
-        filename = f"{uuid.uuid4()}{ext}"
+        original_name = file.filename or "allegato"
+        base, ext = os.path.splitext(original_name)
+        safe_base = re.sub(r'[^\w\.\-\_]', '_', base)[:60]
+        filename = f"{uuid.uuid4().hex[:8]}_{safe_base}{ext}"
         filepath = os.path.join(folder, filename)
         content = await file.read()
         with open(filepath, "wb") as f:
             f.write(content)
-        saved_paths.append(
-            f"/uploads/richieste_commerciali/{richiesta_id}/articoli/{articolo_id}/{filename}"
-        )
+        saved_entries.append({
+            "name": original_name,
+            "url": f"/uploads/richieste_commerciali/{richiesta_id}/articoli/{articolo_id}/{filename}",
+        })
 
     current = _parse_attachments(str(articolo.attachments))
-    current.extend(saved_paths)
+    current.extend(saved_entries)
     articolo.attachments = json.dumps(current)  # type: ignore
     await db.commit()
 
