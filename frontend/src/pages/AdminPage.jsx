@@ -1183,6 +1183,9 @@ export default function AdminPage() {
         )}
       </div>
 
+      {/* SEZIONE PREVENTIVAZIONE (RICHIESTE COMMERCIALI) */}
+      <RichiesteCommercialiAdminSection users={users} toast={toast} />
+
       {/* SEZIONE LOG EMAIL */}
       <div className={`admin-section-card ${collapsedSections.emails ? 'is-collapsed' : ''}`} style={{ marginTop: 32, marginBottom: 30 }}>
         <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
@@ -1714,9 +1717,6 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* SEZIONE RICHIESTE COMMERCIALI */}
-      <RichiesteCommercialiAdminSection users={users} toast={toast} />
-
     </div>
   );
 }
@@ -1969,7 +1969,7 @@ function RichiesteCommercialiAdminSection({ users, toast }) {
   }
 
   return (
-    <div className={`admin-section-card ${collapsed ? 'is-collapsed' : ''}`} style={{ marginBottom: 30 }}>
+    <div className={`admin-section-card ${collapsed ? 'is-collapsed' : ''}`} style={{ marginTop: 32 }}>
       <div className="admin-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
         <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => setCollapsed(c => !c)}>
           <h2><AppIcon name="briefcase" /> Preventivazione</h2>
