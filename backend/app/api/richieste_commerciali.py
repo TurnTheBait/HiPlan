@@ -57,25 +57,51 @@ async def _get_setting_list(db: AsyncSession, key: str) -> List[str]:
         return []
 
 
+async def _get_setting_bool(db: AsyncSession, key: str, default: bool = False) -> bool:
+    """Legge un booleano dalla tabella settings."""
+    res = await db.execute(select(Setting).where(Setting.key == key))
+    setting = res.scalar_one_or_none()
+    if not setting or setting.value is None:
+        return default
+    return str(setting.value).strip().lower() in ("true", "1", "yes")
+
+
 async def _get_role(db: AsyncSession, user: User) -> str:
     """
     Determina il ruolo dell'utente nel modulo richieste commerciali.
     Restituisce: 'admin' | 'acquisti' | 'commerciale' | 'none'
-    Precedenza: admin HiPlan (default) > rc_admin_users > rc_acquisti_users > rc_commerciale_users
+    Precedenza: admin HiPlan (default) > rc_admin_users / auto_dept admin > rc_acquisti_users / auto_dept acquisti > rc_commerciale_users / auto_dept commerciale
     """
     if user.role == UserRole.ADMIN or str(getattr(user.role, 'value', user.role)).lower() == 'admin':
         return "admin"
 
     username = str(user.username)
+    user_dept = str(user.department or "").strip().lower()
+
+    # Admin via impostazione di reparto o lista manuale
+    auto_admin = await _get_setting_bool(db, "rc_auto_admin_dept")
+    if auto_admin and user_dept in ("amministrazione", "admin"):
+        return "admin"
     admin_list = await _get_setting_list(db, "rc_admin_users")
     if username in admin_list:
         return "admin"
+
+    # Acquisti via impostazione di reparto o lista manuale
+    auto_acquisti = await _get_setting_bool(db, "rc_auto_acquisti_dept")
+    if auto_acquisti and user_dept in ("acquisti", "ufficio acquisti"):
+        return "acquisti"
     acquisti_list = await _get_setting_list(db, "rc_acquisti_users")
     if username in acquisti_list:
         return "acquisti"
+
+    # Commerciale via impostazione di reparto o lista manuale
+    auto_commerciale = await _get_setting_bool(db, "rc_auto_commerciale_dept")
+    if auto_commerciale and user_dept in ("commerciale", "ufficio commerciale"):
+        return "commerciale"
     commerciale_list = await _get_setting_list(db, "rc_commerciale_users")
     if username in commerciale_list:
         return "commerciale"
+
     return "none"
 
 
@@ -1017,9 +1043,24 @@ async def _notify_acquisti_nuova_richiesta(
         return
     try:
         from app.services.email_service import send_richiesta_commerciale_email
+        from sqlalchemy import or_
 
         acquisti_usernames = await _get_setting_list(db, "rc_acquisti_users")
-        emails = await _get_user_emails_by_usernames(db, acquisti_usernames)
+        conditions = []
+        if acquisti_usernames:
+            conditions.append(User.username.in_(acquisti_usernames))
+        auto_acquisti = await _get_setting_bool(db, "rc_auto_acquisti_dept")
+        if auto_acquisti:
+            conditions.append(User.department.in_(["acquisti", "ufficio acquisti"]))
+
+        if not conditions:
+            return
+
+        res = await db.execute(
+            select(User).where(or_(*conditions), User.is_active == True)
+        )
+        users = res.scalars().all()
+        emails = [str(u.email) for u in users if u.email]
         if emails:
             await send_richiesta_commerciale_email(
                 to_addresses=emails,
@@ -1042,12 +1083,16 @@ async def _notify_admin_manca_listino(
         return
     try:
         from app.services.email_service import send_richiesta_commerciale_email
+        from sqlalchemy import or_
 
         admin_usernames = await _get_setting_list(db, "rc_admin_users")
         conditions = [User.role == "admin"]
         if admin_usernames:
             conditions.append(User.username.in_(admin_usernames))
-        from sqlalchemy import or_
+        auto_admin = await _get_setting_bool(db, "rc_auto_admin_dept")
+        if auto_admin:
+            conditions.append(User.department.in_(["amministrazione", "admin"]))
+
         res = await db.execute(
             select(User).where(or_(*conditions), User.is_active == True)
         )

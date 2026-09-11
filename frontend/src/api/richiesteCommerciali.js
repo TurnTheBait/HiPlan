@@ -117,3 +117,13 @@ export async function updateRCEmailEnabled(enabled) {
   const res = await api.put('/settings/richieste-commerciali/email-enabled', { enabled });
   return res.data;
 }
+
+export async function getRCDeptDefaults() {
+  const res = await api.get('/settings/richieste-commerciali/dept-defaults');
+  return res.data;
+}
+
+export async function updateRCDeptDefaults(data) {
+  const res = await api.put('/settings/richieste-commerciali/dept-defaults', data);
+  return res.data;
+}

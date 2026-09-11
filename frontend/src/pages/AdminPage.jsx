@@ -1728,6 +1728,11 @@ function RichiesteCommercialiAdminSection({ users, toast }) {
   const [acquisti, setAcquisti] = useState([]);
   const [admins, setAdmins] = useState([]);
   const [emailEnabled, setEmailEnabled] = useState(true);
+  const [deptDefaults, setDeptDefaults] = useState({
+    commerciale: false,
+    acquisti: false,
+    admin: false,
+  });
   const [collapsed, setCollapsed] = useState(true);
   const [saving, setSaving] = useState(false);
   // api is imported at module level
@@ -1738,16 +1743,18 @@ function RichiesteCommercialiAdminSection({ users, toast }) {
 
   async function loadAll() {
     try {
-      const [c, a, adm, em] = await Promise.all([
+      const [c, a, adm, em, dd] = await Promise.all([
         api.get('/settings/richieste-commerciali/commerciale-users'),
         api.get('/settings/richieste-commerciali/acquisti-users'),
         api.get('/settings/richieste-commerciali/admin-users'),
         api.get('/settings/richieste-commerciali/email-enabled'),
+        api.get('/settings/richieste-commerciali/dept-defaults'),
       ]);
       setCommerciali(c.data || []);
       setAcquisti(a.data || []);
       setAdmins(adm.data || []);
       setEmailEnabled(em.data?.enabled ?? true);
+      setDeptDefaults(dd.data || { commerciale: false, acquisti: false, admin: false });
     } catch (e) {
       console.error('[RC Admin]', e);
     }
@@ -1775,55 +1782,186 @@ function RichiesteCommercialiAdminSection({ users, toast }) {
     }
   }
 
-  function UserListEditor({ label, list, setList, group, color }) {
-    const available = users.filter(u => !list.includes(u.username));
+  async function toggleDeptDefault(group, val) {
+    try {
+      setDeptDefaults(prev => ({ ...prev, [group]: val }));
+      await api.put('/settings/richieste-commerciali/dept-defaults', { [group]: val });
+      toast.success(val ? `Inclusione per reparto "${group}" abilitata` : `Inclusione per reparto "${group}" disabilitata`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Errore salvataggio impostazione reparto');
+      setDeptDefaults(prev => ({ ...prev, [group]: !val }));
+    }
+  }
+
+  function getDeptUsers(group) {
+    return users.filter(u => {
+      const dept = (u.department || '').toLowerCase().trim();
+      if (group === 'commerciale') return dept === 'commerciale';
+      if (group === 'acquisti') return dept === 'acquisti' || dept === 'ufficio_acquisti';
+      if (group === 'admin') return dept === 'amministrazione' || dept === 'admin';
+      return false;
+    });
+  }
+
+  function UserListEditor({ label, list, setList, group, color, deptCheckboxLabel }) {
+    const isDeptEnabled = !!deptDefaults[group];
+    const deptUsers = getDeptUsers(group);
+    const deptUsernames = deptUsers.map(u => u.username);
+
+    // Utenti effettivi: se abilitato, include gli addetti del reparto + gli utenti aggiunti manualmente
+    const effectiveUsernames = Array.from(new Set([
+      ...(isDeptEnabled ? deptUsernames : []),
+      ...list,
+    ]));
+
+    const available = users.filter(u => !effectiveUsernames.includes(u.username));
     const [sel, setSel] = useState('');
 
     return (
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <span style={{ width: 10, height: 10, borderRadius: '50%', background: color, display: 'inline-block', boxShadow: `0 0 6px ${color}80` }} />
-          <strong style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>{label}</strong>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 4 }}>({list.length} utenti)</span>
-        </div>
+      <div style={{ marginBottom: 14 }}>
+        {/* Header con titolo, contatore e checkbox per default reparto */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block', boxShadow: `0 0 5px ${color}80` }} />
+            <strong style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>{label}</strong>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>({effectiveUsernames.length} utenti)</span>
+          </div>
 
-        {/* Lista corrente */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-          {list.map(u => (
-            <span key={u} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 20, background: `${color}18`, border: `1px solid ${color}45`, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
-              <AppIcon name="user" size={13} />
-              {u}
-              <button
-                onClick={() => { const next = list.filter(x => x !== u); setList(next); saveGroup(group, next); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 0, display: 'inline-flex', alignItems: 'center' }}
-                title="Rimuovi"
-              >
-                <AppIcon name="close" size={12} />
-              </button>
+          {/* Checkbox aggiungi di default reparto */}
+          <label style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            cursor: 'pointer',
+            userSelect: 'none',
+            background: isDeptEnabled ? `${color}14` : 'var(--bg-secondary)',
+            border: `1px solid ${isDeptEnabled ? `${color}55` : 'var(--border)'}`,
+            padding: '3px 9px',
+            borderRadius: 6,
+            fontSize: '0.78rem',
+            color: isDeptEnabled ? 'var(--text-primary)' : 'var(--text-secondary)',
+            fontWeight: 500,
+            transition: 'all 0.15s ease',
+          }}>
+            <input
+              type="checkbox"
+              checked={isDeptEnabled}
+              onChange={e => toggleDeptDefault(group, e.target.checked)}
+              style={{ cursor: 'pointer', accentColor: color, margin: 0 }}
+            />
+            <span>{deptCheckboxLabel}</span>
+            <span style={{
+              fontSize: '0.72rem',
+              color: isDeptEnabled ? color : 'var(--text-muted)',
+              fontWeight: 600,
+            }}>
+              ({deptUsers.length})
             </span>
-          ))}
-          {list.length === 0 && <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Nessun utente nella lista</span>}
+          </label>
         </div>
 
-        {/* Aggiungi utente */}
-        <div style={{ display: 'flex', gap: 8 }}>
+        {/* Lista corrente (badge) */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+          {effectiveUsernames.map(u => {
+            const isAutoFromDept = isDeptEnabled && deptUsernames.includes(u);
+            const isManual = list.includes(u);
+            const matchedUser = users.find(x => x.username === u);
+            const displayName = matchedUser?.full_name ? `${matchedUser.full_name} (${u})` : u;
+
+            return (
+              <span
+                key={u}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '2px 8px',
+                  borderRadius: 16,
+                  background: `${color}16`,
+                  border: `1px solid ${color}40`,
+                  fontSize: '0.8rem',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                <AppIcon name="user" size={12} />
+                <span>{displayName}</span>
+                {isAutoFromDept && (
+                  <span
+                    style={{
+                      fontSize: '0.68rem',
+                      fontWeight: 600,
+                      padding: '1px 5px',
+                      borderRadius: 8,
+                      background: `${color}28`,
+                      color: color,
+                      marginLeft: 2,
+                    }}
+                    title="Incluso automaticamente tramite il reparto del profilo utente"
+                  >
+                    Reparto
+                  </span>
+                )}
+                {isManual && (
+                  <button
+                    onClick={() => {
+                      const next = list.filter(x => x !== u);
+                      setList(next);
+                      saveGroup(group, next);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--text-secondary)',
+                      padding: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      marginLeft: 2,
+                    }}
+                    title={isAutoFromDept ? "Rimuovi dalla lista manuale (rimane comunque incluso dal reparto)" : "Rimuovi"}
+                  >
+                    <AppIcon name="close" size={11} />
+                  </button>
+                )}
+              </span>
+            );
+          })}
+          {effectiveUsernames.length === 0 && (
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+              Nessun utente nella lista
+            </span>
+          )}
+        </div>
+
+        {/* Aggiungi utente manuale */}
+        <div style={{ display: 'flex', gap: 6 }}>
           <select
             className="input"
             value={sel}
             onChange={e => setSel(e.target.value)}
-            style={{ flex: 1, padding: '7px 12px', borderRadius: 8, fontSize: '0.875rem' }}
+            style={{ flex: 1, padding: '4px 10px', borderRadius: 6, fontSize: '0.82rem', height: '32px' }}
           >
             <option value="">Seleziona utente da aggiungere...</option>
             {available.map(u => (
-              <option key={u.id} value={u.username}>{u.full_name || u.username} ({u.username})</option>
+              <option key={u.id} value={u.username}>
+                {u.full_name || u.username} ({u.username}) {u.department ? `— [${u.department}]` : ''}
+              </option>
             ))}
           </select>
           <button
             className="btn btn-primary btn-sm"
             disabled={!sel || saving}
-            onClick={() => { if (!sel) return; const next = [...list, sel]; setList(next); saveGroup(group, next); setSel(''); }}
+            style={{ padding: '4px 12px', height: '32px', fontSize: '0.82rem' }}
+            onClick={() => {
+              if (!sel) return;
+              const next = [...list, sel];
+              setList(next);
+              saveGroup(group, next);
+              setSel('');
+            }}
           >
-            <AppIcon name="plus" size={13} /> Aggiungi
+            <AppIcon name="plus" size={12} /> Aggiungi
           </button>
         </div>
       </div>
@@ -1845,30 +1983,53 @@ function RichiesteCommercialiAdminSection({ users, toast }) {
       {!collapsed && (
         <div className="admin-section-body">
           {/* Toggle email */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', background: emailEnabled ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)', borderRadius: 10, border: `1px solid ${emailEnabled ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`, marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 14px', background: emailEnabled ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)', borderRadius: 8, border: `1px solid ${emailEnabled ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`, marginBottom: 14 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', color: emailEnabled ? '#16a34a' : '#ef4444' }}>
-              <AppIcon name="mail" size={20} />
+              <AppIcon name="mail" size={18} />
             </span>
             <div style={{ flex: 1 }}>
-              <strong style={{ fontSize: '0.9rem' }}>Notifiche Email</strong>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Abilita o disabilita l'invio di email per i cambiamenti di stato delle richieste</p>
+              <strong style={{ fontSize: '0.86rem' }}>Notifiche Email</strong>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Abilita o disabilita l'invio di email per i cambiamenti di stato delle richieste</p>
             </div>
             <button
               className={`btn btn-sm ${emailEnabled ? 'btn-danger' : 'btn-primary'}`}
+              style={{ padding: '4px 10px', height: '30px', fontSize: '0.8rem' }}
               onClick={() => toggleEmail(!emailEnabled)}
             >
-              <AppIcon name="bell" size={13} /> {emailEnabled ? 'Disabilita' : 'Abilita'}
+              <AppIcon name="bell" size={12} /> {emailEnabled ? 'Disabilita' : 'Abilita'}
             </button>
-            <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 700, background: emailEnabled ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', color: emailEnabled ? '#16a34a' : '#ef4444' }}>
+            <span style={{ padding: '2px 8px', borderRadius: 16, fontSize: '0.72rem', fontWeight: 700, background: emailEnabled ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', color: emailEnabled ? '#16a34a' : '#ef4444' }}>
               {emailEnabled ? 'ABILITATE' : 'DISABILITATE'}
             </span>
           </div>
 
-          <UserListEditor label="Commerciali (possono aprire richieste)" list={commerciali} setList={setCommerciali} group="commerciale" color="#ec4899" />
-          <UserListEditor label="Ufficio Acquisti (ricevono e gestiscono le richieste)" list={acquisti} setList={setAcquisti} group="acquisti" color="#10b981" />
-          <UserListEditor label="Admin (prezzi di listino — gli admin di sistema sono inclusi di default)" list={admins} setList={setAdmins} group="admin" color="#6366f1" />
+          <UserListEditor
+            label="Commerciali (possono aprire richieste)"
+            list={commerciali}
+            setList={setCommerciali}
+            group="commerciale"
+            color="#ec4899"
+            deptCheckboxLabel="Aggiungi di default gli addetti con reparto commerciale"
+          />
+          <UserListEditor
+            label="Ufficio Acquisti (ricevono e gestiscono le richieste)"
+            list={acquisti}
+            setList={setAcquisti}
+            group="acquisti"
+            color="#10b981"
+            deptCheckboxLabel="Aggiungi di default gli addetti con reparto acquisti"
+          />
+          <UserListEditor
+            label="Admin (prezzi di listino — gli admin di sistema sono inclusi di default)"
+            list={admins}
+            setList={setAdmins}
+            group="admin"
+            color="#6366f1"
+            deptCheckboxLabel="Aggiungi di default gli addetti con reparto amministrazione"
+          />
         </div>
       )}
     </div>
   );
 }
+

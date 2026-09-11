@@ -3,7 +3,7 @@ import os
 import uuid
 import tempfile
 from datetime import datetime, timedelta, timezone
-from typing import List
+from typing import List, Optional
 # pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 # pyrefly: ignore [missing-import]
@@ -368,6 +368,18 @@ class RCEmailEnabledUpdate(BaseModel):
     enabled: bool
 
 
+class RCDeptDefaults(BaseModel):
+    commerciale: bool = False
+    acquisti: bool = False
+    admin: bool = False
+
+
+class RCDeptDefaultsUpdate(BaseModel):
+    commerciale: Optional[bool] = None
+    acquisti: Optional[bool] = None
+    admin: Optional[bool] = None
+
+
 def _rc_setting_key(group: str) -> str:
     return f"rc_{group}_users"
 
@@ -457,3 +469,69 @@ async def update_rc_email_enabled(
         db.add(setting)
     await db.commit()
     return {"enabled": data.enabled}
+
+
+@router.get("/richieste-commerciali/dept-defaults", response_model=RCDeptDefaults)
+async def get_rc_dept_defaults(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Restituisce le impostazioni di aggiunta automatica degli addetti per reparto."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin")
+    res = await db.execute(
+        select(Setting).where(Setting.key.in_([
+            "rc_auto_commerciale_dept",
+            "rc_auto_acquisti_dept",
+            "rc_auto_admin_dept",
+        ]))
+    )
+    settings = {s.key: s.value for s in res.scalars().all()}
+    return RCDeptDefaults(
+        commerciale=settings.get("rc_auto_commerciale_dept") == "true",
+        acquisti=settings.get("rc_auto_acquisti_dept") == "true",
+        admin=settings.get("rc_auto_admin_dept") == "true",
+    )
+
+
+@router.put("/richieste-commerciali/dept-defaults", response_model=RCDeptDefaults)
+async def update_rc_dept_defaults(
+    data: RCDeptDefaultsUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Aggiorna le impostazioni di aggiunta automatica degli addetti per reparto."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo gli admin")
+
+    mapping = {
+        "commerciale": "rc_auto_commerciale_dept",
+        "acquisti": "rc_auto_acquisti_dept",
+        "admin": "rc_auto_admin_dept",
+    }
+    for field, key in mapping.items():
+        val = getattr(data, field)
+        if val is not None:
+            res = await db.execute(select(Setting).where(Setting.key == key))
+            setting = res.scalar_one_or_none()
+            val_str = "true" if val else "false"
+            if setting:
+                setting.value = val_str
+            else:
+                db.add(Setting(key=key, value=val_str))
+
+    await db.commit()
+
+    res = await db.execute(
+        select(Setting).where(Setting.key.in_([
+            "rc_auto_commerciale_dept",
+            "rc_auto_acquisti_dept",
+            "rc_auto_admin_dept",
+        ]))
+    )
+    settings = {s.key: s.value for s in res.scalars().all()}
+    return RCDeptDefaults(
+        commerciale=settings.get("rc_auto_commerciale_dept") == "true",
+        acquisti=settings.get("rc_auto_acquisti_dept") == "true",
+        admin=settings.get("rc_auto_admin_dept") == "true",
+    )
