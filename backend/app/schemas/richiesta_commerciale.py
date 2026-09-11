@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from app.models.richiesta_commerciale import RichiestaStatus, TipoFornitura
 
@@ -55,8 +55,12 @@ class ArticoloOut(BaseModel):
     tipo_fornitura: Optional[TipoFornitura] = None
     attachments: List[str] = []
     prezzo_listino: Optional[float] = None
+    testo_originale_commerciale: Optional[str] = None  # JSON string
     testo_originale_acquisti: Optional[str] = None  # JSON string
     note_admin: Optional[str] = None
+    author: Optional[AuthorOut] = None
+    updated_by: Optional[AuthorOut] = None
+    modifiche: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -68,12 +72,15 @@ class ArticoloOutCommerciale(BaseModel):
     """Vista ridotta per il commerciale: solo info essenziali + prezzo listino."""
     id: str
     author: Optional[AuthorOut] = None
+    updated_by: Optional[AuthorOut] = None
     titolo: str
     descrizione: Optional[str] = None
     tipo_fornitura: TipoFornitura
     prezzo_listino: Optional[float] = None
+    testo_originale_commerciale: Optional[str] = None  # JSON string
     note_admin: Optional[str] = None
     attachments: List[str] = []
+    modifiche: Optional[Dict[str, Any]] = None
 
     class Config:
         from_attributes = True
@@ -119,6 +126,7 @@ class RichiestaOut(BaseModel):
     articoli_inserted_by: Optional[AuthorOut] = None
     articoli_inserted_at: Optional[datetime] = None
     articoli: List[ArticoloOut] = []
+    modifiche: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -139,6 +147,7 @@ class RichiestaOutCommerciale(BaseModel):
     articoli_inserted_by: Optional[AuthorOut] = None
     articoli_inserted_at: Optional[datetime] = None
     articoli: List[ArticoloOutCommerciale] = []
+    modifiche: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -159,6 +168,7 @@ class RichiestaOutAcquisti(BaseModel):
     articoli_inserted_by: Optional[AuthorOut] = None
     articoli_inserted_at: Optional[datetime] = None
     articoli: List[ArticoloOut] = []
+    modifiche: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 

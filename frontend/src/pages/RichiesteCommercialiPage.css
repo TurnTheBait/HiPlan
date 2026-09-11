@@ -1207,11 +1207,18 @@
 .rc-diff-badges {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 5px;
   font-size: 0.8rem;
   line-height: 1.35;
+}
+
+.rc-diff-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
 }
 
 .rc-diff-original {
@@ -1237,6 +1244,22 @@
   word-break: break-word;
 }
 
+.rc-diff-meta {
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.rc-diff-arrow {
+  color: var(--text-tertiary);
+  font-size: 0.76rem;
+  font-weight: 600;
+  user-select: none;
+}
+
 .dark .rc-diff-original {
   color: #fca5a5;
   background: rgba(239, 68, 68, 0.22);
@@ -1245,6 +1268,11 @@
 .dark .rc-diff-modified {
   color: #6ee7b7;
   background: rgba(16, 185, 129, 0.22);
+}
+
+.dark .rc-diff-meta,
+.dark .rc-diff-arrow {
+  color: var(--text-tertiary);
 }
 
 /* ── Loading Spinner ──────────────────────────────────────── */

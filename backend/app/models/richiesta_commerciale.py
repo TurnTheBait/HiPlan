@@ -29,6 +29,7 @@ class RichiestaCommerciale(Base, TimestampMixin):
     numero_offerta = Column(String(100), nullable=True)
     cliente = Column(String(255), nullable=False)
     attachments = Column(Text, default="[]", nullable=False)  # JSON list of file paths
+    modifiche = Column(Text, default="{}", nullable=False)  # JSON dict modifiche per campo: {field: {old, new, author, ...}}
     deleted_at = Column(DateTime, nullable=True, default=None)
 
     author_id = Column(uuid_fk(), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
@@ -85,6 +86,10 @@ class ArticoloRichiesta(Base, TimestampMixin):
     # Campi compilati dall'admin nella fase finale
     prezzo_listino = Column(Float, nullable=True)
 
+    # Snapshot testo originale commerciale (per diff quando ufficio acquisti modifica tipologia/descrizione)
+    # JSON: {"titolo": "...", "descrizione": "...", "is_standard": bool, "is_atex": bool, "is_alimentare": bool, "tipo_fornitura": "..."}
+    testo_originale_commerciale = Column(Text, nullable=True)
+
     # Snapshot testo originale acquisti (per diff evidenziazione in fase admin)
     # JSON: {"titolo": "...", "descrizione": "...", "note_acquisti": "..."}
     testo_originale_acquisti = Column(Text, nullable=True)
@@ -92,8 +97,13 @@ class ArticoloRichiesta(Base, TimestampMixin):
     # Note aggiuntive admin
     note_admin = Column(Text, nullable=True)
 
+    # Modifiche per campo: {field: {old, new, author, ...}}
+    modifiche = Column(Text, default="{}", nullable=False)
+
     author_id = Column(uuid_fk(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_by_id = Column(uuid_fk(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     # Relazioni
     richiesta = relationship("RichiestaCommerciale", back_populates="articoli")
     author = relationship("User", foreign_keys=[author_id])
+    updated_by = relationship("User", foreign_keys=[updated_by_id])

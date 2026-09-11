@@ -165,13 +165,166 @@ def _richiesta_options():
         selectinload(RichiestaCommerciale.articoli_inserted_by),
         selectinload(RichiestaCommerciale.listino_inserted_by),
         selectinload(RichiestaCommerciale.articoli).selectinload(ArticoloRichiesta.author),
+        selectinload(RichiestaCommerciale.articoli).selectinload(ArticoloRichiesta.updated_by),
     ]
+
+
+# ─── Gestione Modifiche Campi (Tracciamento e Visibilità) ─────────────────────
+
+def _parse_json_dict(val) -> dict:
+    if not val:
+        return {}
+    if isinstance(val, dict):
+        return val
+    try:
+        res = json.loads(val)
+        return res if isinstance(res, dict) else {}
+    except Exception:
+        return {}
+
+
+def _format_tipologia(is_std, is_atex, is_alim) -> str:
+    parts = []
+    if is_std:
+        parts.append("Standard")
+    if is_atex:
+        parts.append("ATEX")
+    if is_alim:
+        parts.append("Alimentare")
+    return " + ".join(parts) if parts else "Nessuna tipologia"
+
+
+def _format_tipo_fornitura(tf) -> str:
+    if not tf:
+        return ""
+    val = tf.value if hasattr(tf, "value") else str(tf)
+    labels = {
+        "materie_prime": "Materie Prime",
+        "mp_lavorazione": "MP + Lavorazione",
+        "compravendita": "Compravendita",
+    }
+    return labels.get(val, val)
+
+
+def _record_field_modification(
+    modifiche_dict: dict,
+    field_name: str,
+    label: str,
+    old_val,
+    new_val,
+    current_user: User,
+    old_author_name: Optional[str] = None,
+    old_created_at: Optional[str] = None,
+    initial_val: Optional[Any] = None,
+):
+    """Registra la modifica di un campo mantenendo traccia di tutti i passaggi (history chain)."""
+    old_str = str(old_val).strip() if old_val is not None else ""
+    new_str = str(new_val).strip() if new_val is not None else ""
+    if old_str == new_str:
+        return
+
+    now_iso = _to_utc_iso(datetime.now(timezone.utc))
+    curr_user_name = current_user.full_name or current_user.username
+    curr_user_id = str(current_user.id)
+
+    prev_mod = modifiche_dict.get(field_name, {})
+    existing_steps = prev_mod.get("steps")
+
+    if existing_steps and isinstance(existing_steps, list):
+        steps = [dict(s) for s in existing_steps]
+    elif prev_mod.get("old_value") or prev_mod.get("new_value"):
+        steps = [
+            {
+                "value": prev_mod.get("old_value", old_str),
+                "author_name": prev_mod.get("old_author_name") or old_author_name or "Commerciale",
+                "created_at": prev_mod.get("old_created_at") or old_created_at or now_iso,
+                "author_id": "",
+            },
+            {
+                "value": prev_mod.get("new_value", old_str),
+                "author_name": prev_mod.get("author_name") or old_author_name or "Commerciale",
+                "created_at": prev_mod.get("updated_at") or now_iso,
+                "author_id": prev_mod.get("author_id", ""),
+            },
+        ]
+    else:
+        init_str = str(initial_val).strip() if initial_val is not None else ""
+        if init_str and init_str != old_str:
+            steps = [
+                {
+                    "value": init_str,
+                    "author_name": old_author_name or "Commerciale",
+                    "created_at": old_created_at or now_iso,
+                    "author_id": "",
+                },
+                {
+                    "value": old_str,
+                    "author_name": "Ufficio Tecnico / Acquisti",
+                    "created_at": now_iso,
+                    "author_id": "",
+                }
+            ]
+        else:
+            steps = [
+                {
+                    "value": old_str,
+                    "author_name": old_author_name or "Commerciale",
+                    "created_at": old_created_at or now_iso,
+                    "author_id": "",
+                }
+            ]
+
+    # Se l'ultimo step ha già lo stesso valore, non duplicarlo
+    if steps and steps[-1]["value"] == new_str:
+        return
+
+    steps.append({
+        "value": new_str,
+        "author_name": curr_user_name,
+        "created_at": now_iso,
+        "author_id": curr_user_id,
+    })
+
+    modifiche_dict[field_name] = {
+        "field": field_name,
+        "label": label,
+        "steps": steps,
+        "old_value": steps[0]["value"],
+        "new_value": steps[-1]["value"],
+        "old_author_name": steps[0]["author_name"],
+        "old_created_at": steps[0]["created_at"],
+        "author_id": curr_user_id,
+        "author_name": curr_user_name,
+        "updated_at": now_iso,
+    }
+
+
+def _filter_visible_modifiche(modifiche_dict: dict, role: str, current_user: Optional[User]) -> dict:
+    """Filtra le modifiche: visibili solo all'admin e a chi ha fatto la modifica."""
+    visible = {}
+    user_id = str(current_user.id) if current_user else None
+    for k, m in modifiche_dict.items():
+        if not isinstance(m, dict):
+            continue
+        if role == "admin":
+            visible[k] = m
+            continue
+        if user_id:
+            is_author = str(m.get("author_id", "")) == user_id
+            if not is_author and "steps" in m and isinstance(m["steps"], list):
+                for s in m["steps"]:
+                    if str(s.get("author_id", "")) == user_id:
+                        is_author = True
+                        break
+            if is_author:
+                visible[k] = m
+    return visible
 
 
 # ─── Serializzatori per ruolo ─────────────────────────────────────────────────
 
-def _serialize_richiesta(richiesta: RichiestaCommerciale, role: str) -> dict:
-    """Serializza una richiesta adattando i dati al ruolo."""
+def _serialize_richiesta(richiesta: RichiestaCommerciale, role: str, current_user: Optional[User] = None) -> dict:
+    """Serializza una richiesta adattando i dati al ruolo e filtrando le modifiche visibili."""
     articoli_inserted_by_user = richiesta.articoli_inserted_by
     articoli_inserted_at_dt = richiesta.articoli_inserted_at
     listino_inserted_by_user = richiesta.listino_inserted_by
@@ -185,6 +338,38 @@ def _serialize_richiesta(richiesta: RichiestaCommerciale, role: str) -> dict:
                 break
     if not articoli_inserted_at_dt and richiesta.articoli:
         articoli_inserted_at_dt = richiesta.articoli[-1].created_at or richiesta.updated_at
+
+    modifiche_richiesta = _parse_json_dict(getattr(richiesta, "modifiche", None))
+    for k, m in modifiche_richiesta.items():
+        if isinstance(m, dict) and "steps" not in m and m.get("old_value") and m.get("new_value"):
+            m["steps"] = [
+                {"value": m["old_value"], "author_name": m.get("old_author_name", "Commerciale"), "created_at": m.get("old_created_at", ""), "author_id": ""},
+                {"value": m["new_value"], "author_name": m.get("author_name", "Utente"), "created_at": m.get("updated_at", ""), "author_id": m.get("author_id", "")},
+            ]
+    if "description" not in modifiche_richiesta and getattr(richiesta, "description_originale", None):
+        orig_d = (richiesta.description_originale or "").strip()
+        curr_d = (richiesta.description or "").strip()
+        if orig_d and orig_d != curr_d:
+            comm_author = (richiesta.author.full_name or richiesta.author.username) if richiesta.author else "Commerciale"
+            comm_date = _to_utc_iso(richiesta.created_at)
+            acq_author = (richiesta.articoli_inserted_by.full_name or richiesta.articoli_inserted_by.username) if richiesta.articoli_inserted_by else "Ufficio Tecnico / Acquisti"
+            acq_date = _to_utc_iso(richiesta.articoli_inserted_at or richiesta.updated_at)
+            acq_id = str(richiesta.articoli_inserted_by_id) if richiesta.articoli_inserted_by_id else ""
+            modifiche_richiesta["description"] = {
+                "field": "description",
+                "label": "Descrizione Richiesta",
+                "steps": [
+                    {"value": orig_d, "author_name": comm_author, "created_at": comm_date, "author_id": ""},
+                    {"value": curr_d, "author_name": acq_author, "created_at": acq_date, "author_id": acq_id},
+                ],
+                "old_value": orig_d,
+                "new_value": curr_d,
+                "old_author_name": comm_author,
+                "old_created_at": comm_date,
+                "author_id": acq_id,
+                "author_name": acq_author,
+                "updated_at": acq_date,
+            }
 
     base = {
         "id": richiesta.id,
@@ -211,26 +396,29 @@ def _serialize_richiesta(richiesta: RichiestaCommerciale, role: str) -> dict:
             "full_name": listino_inserted_by_user.full_name if listino_inserted_by_user else "Amministrazione",
         } if (listino_inserted_by_user or richiesta.status == RichiestaStatus.COMPLETATA) else None,
         "listino_inserted_at": _to_utc_iso(listino_inserted_at_dt or (richiesta.updated_at if richiesta.status == RichiestaStatus.COMPLETATA else None)),
+        "modifiche": _filter_visible_modifiche(modifiche_richiesta, role, current_user),
         "created_at": _to_utc_iso(richiesta.created_at),
         "updated_at": _to_utc_iso(richiesta.updated_at),
     }
 
     if role == "admin":
         base["description_originale"] = getattr(richiesta, "description_originale", None)
-        # Admin vede tutto
-        base["articoli"] = [_serialize_articolo(a, "admin") for a in richiesta.articoli]
+        base["articoli"] = [_serialize_articolo(a, "admin", current_user, richiesta) for a in richiesta.articoli]
     elif role == "acquisti":
-        # Acquisti: tutti i campi tranne prezzo_listino
-        base["articoli"] = [_serialize_articolo(a, "acquisti") for a in richiesta.articoli]
+        base["articoli"] = [_serialize_articolo(a, "acquisti", current_user, richiesta) for a in richiesta.articoli]
     else:
-        # Commerciale: solo info essenziali + prezzo listino (quando completata)
-        base["articoli"] = [_serialize_articolo(a, "commerciale") for a in richiesta.articoli]
+        base["articoli"] = [_serialize_articolo(a, "commerciale", current_user, richiesta) for a in richiesta.articoli]
 
     return base
 
 
-def _serialize_articolo(articolo: ArticoloRichiesta, role: str) -> dict:
-    """Serializza un articolo adattando i campi al ruolo."""
+def _serialize_articolo(
+    articolo: ArticoloRichiesta,
+    role: str,
+    current_user: Optional[User] = None,
+    richiesta: Optional[RichiestaCommerciale] = None,
+) -> dict:
+    """Serializza un articolo adattando i campi al ruolo e filtrando le modifiche visibili."""
     author_info = None
     try:
         insp = inspect(articolo)
@@ -244,10 +432,131 @@ def _serialize_articolo(articolo: ArticoloRichiesta, role: str) -> dict:
     except Exception:
         author_info = None
 
+    updated_by_info = None
+    try:
+        insp = inspect(articolo)
+        if "updated_by" in insp.dict and insp.dict["updated_by"] is not None:
+            a_upd = insp.dict["updated_by"]
+            updated_by_info = {
+                "id": a_upd.id,
+                "username": a_upd.username,
+                "full_name": a_upd.full_name,
+            }
+    except Exception:
+        updated_by_info = None
+
+    # Modifiche per articolo
+    modifiche = _parse_json_dict(getattr(articolo, "modifiche", None))
+    for k, m in modifiche.items():
+        if isinstance(m, dict) and "steps" not in m and m.get("old_value") and m.get("new_value"):
+            m["steps"] = [
+                {"value": m["old_value"], "author_name": m.get("old_author_name", "Commerciale"), "created_at": m.get("old_created_at", ""), "author_id": ""},
+                {"value": m["new_value"], "author_name": m.get("author_name", "Utente"), "created_at": m.get("updated_at", ""), "author_id": m.get("author_id", "")},
+            ]
+
+    snap_comm = _parse_json_dict(getattr(articolo, "testo_originale_commerciale", None))
+    snap_acq = _parse_json_dict(getattr(articolo, "testo_originale_acquisti", None))
+
+    comm_author = snap_comm.get("author_name") or (
+        (richiesta.author.full_name or richiesta.author.username) if (richiesta and richiesta.author) else "Commerciale"
+    )
+    comm_date = snap_comm.get("created_at") or (
+        _to_utc_iso(richiesta.created_at) if richiesta else _to_utc_iso(articolo.created_at)
+    )
+
+    acq_author = (
+        (articolo.updated_by.full_name or articolo.updated_by.username) if getattr(articolo, "updated_by", None)
+        else ((richiesta.articoli_inserted_by.full_name or richiesta.articoli_inserted_by.username) if (richiesta and getattr(richiesta, "articoli_inserted_by", None))
+        else (snap_acq.get("author_name") if snap_acq else "Ufficio Tecnico / Acquisti"))
+    )
+    acq_author_id = (
+        str(articolo.updated_by_id) if getattr(articolo, "updated_by_id", None)
+        else (str(richiesta.articoli_inserted_by_id) if (richiesta and getattr(richiesta, "articoli_inserted_by_id", None)) else "")
+    )
+    acq_date = _to_utc_iso(articolo.updated_at or articolo.created_at)
+
+    # Sintesi Titolo per record storici
+    if "titolo" not in modifiche and snap_comm.get("titolo") and snap_comm["titolo"].strip() != (articolo.titolo or "").strip():
+        modifiche["titolo"] = {
+            "field": "titolo",
+            "label": "Titolo Articolo",
+            "steps": [
+                {"value": snap_comm["titolo"].strip(), "author_name": comm_author, "created_at": comm_date, "author_id": ""},
+                {"value": (articolo.titolo or "").strip(), "author_name": acq_author, "created_at": acq_date, "author_id": acq_author_id},
+            ],
+            "old_value": snap_comm["titolo"].strip(),
+            "new_value": (articolo.titolo or "").strip(),
+            "old_author_name": comm_author,
+            "old_created_at": comm_date,
+            "author_id": acq_author_id,
+            "author_name": acq_author,
+            "updated_at": acq_date,
+        }
+
+    # Sintesi Descrizione per record storici
+    old_desc = (snap_comm.get("descrizione") or "").strip()
+    curr_desc = (articolo.descrizione or "").strip()
+    if "descrizione" not in modifiche and old_desc and old_desc != curr_desc:
+        modifiche["descrizione"] = {
+            "field": "descrizione",
+            "label": "Descrizione Articolo",
+            "steps": [
+                {"value": old_desc, "author_name": comm_author, "created_at": comm_date, "author_id": ""},
+                {"value": curr_desc, "author_name": acq_author, "created_at": acq_date, "author_id": acq_author_id},
+            ],
+            "old_value": old_desc,
+            "new_value": curr_desc,
+            "old_author_name": comm_author,
+            "old_created_at": comm_date,
+            "author_id": acq_author_id,
+            "author_name": acq_author,
+            "updated_at": acq_date,
+        }
+
+    # Sintesi Tipologia per record storici
+    if "tipologia" not in modifiche and snap_comm:
+        old_tip = _format_tipologia(snap_comm.get("is_standard"), snap_comm.get("is_atex"), snap_comm.get("is_alimentare"))
+        curr_tip = _format_tipologia(articolo.is_standard, articolo.is_atex, articolo.is_alimentare)
+        if old_tip and old_tip != curr_tip:
+            modifiche["tipologia"] = {
+                "field": "tipologia",
+                "label": "Tipologia Prodotto",
+                "steps": [
+                    {"value": old_tip, "author_name": comm_author, "created_at": comm_date, "author_id": ""},
+                    {"value": curr_tip, "author_name": acq_author, "created_at": acq_date, "author_id": acq_author_id},
+                ],
+                "old_value": old_tip,
+                "new_value": curr_tip,
+                "old_author_name": comm_author,
+                "old_created_at": comm_date,
+                "author_id": acq_author_id,
+                "author_name": acq_author,
+                "updated_at": acq_date,
+            }
+
+    # Sintesi Note Admin per record storici
+    if "note_admin" not in modifiche and snap_acq and snap_acq.get("note_admin") and snap_acq["note_admin"].strip() != (articolo.note_admin or "").strip():
+        modifiche["note_admin"] = {
+            "field": "note_admin",
+            "label": "Note Admin",
+            "steps": [
+                {"value": snap_acq["note_admin"].strip(), "author_name": snap_acq.get("author_name") or "Ufficio Acquisti", "created_at": snap_acq.get("created_at") or acq_date, "author_id": ""},
+                {"value": (articolo.note_admin or "").strip(), "author_name": (articolo.updated_by.full_name or articolo.updated_by.username) if getattr(articolo, "updated_by", None) else "Admin", "created_at": acq_date, "author_id": str(articolo.updated_by_id) if getattr(articolo, "updated_by_id", None) else ""},
+            ],
+            "old_value": snap_acq["note_admin"].strip(),
+            "new_value": (articolo.note_admin or "").strip(),
+            "old_author_name": snap_acq.get("author_name") or "Ufficio Acquisti",
+            "old_created_at": snap_acq.get("created_at") or acq_date,
+            "author_id": str(articolo.updated_by_id) if getattr(articolo, "updated_by_id", None) else "",
+            "author_name": (articolo.updated_by.full_name or articolo.updated_by.username) if getattr(articolo, "updated_by", None) else "Admin",
+            "updated_at": acq_date,
+        }
+
     base = {
         "id": articolo.id,
         "richiesta_id": articolo.richiesta_id,
         "author": author_info,
+        "updated_by": updated_by_info,
         "titolo": articolo.titolo,
         "descrizione": articolo.descrizione,
         "is_standard": articolo.is_standard,
@@ -255,6 +564,8 @@ def _serialize_articolo(articolo: ArticoloRichiesta, role: str) -> dict:
         "is_alimentare": articolo.is_alimentare,
         "tipo_fornitura": articolo.tipo_fornitura,
         "attachments": _parse_attachments(str(articolo.attachments)),
+        "testo_originale_commerciale": getattr(articolo, "testo_originale_commerciale", None),
+        "modifiche": _filter_visible_modifiche(modifiche, role, current_user),
         "created_at": _to_utc_iso(articolo.created_at),
         "updated_at": _to_utc_iso(articolo.updated_at),
     }
@@ -313,7 +624,7 @@ async def list_richieste(
 
     res = await db.execute(query)
     richieste = res.scalars().all()
-    return [_serialize_richiesta(r, role) for r in richieste]
+    return [_serialize_richiesta(r, role, current_user) for r in richieste]
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
@@ -342,6 +653,16 @@ async def create_richiesta(
             titolo = (art_data.titolo or "").strip()
             if not titolo:
                 continue
+            snap_comm = {
+                "titolo": titolo,
+                "descrizione": art_data.descrizione or "",
+                "is_standard": art_data.is_standard,
+                "is_atex": art_data.is_atex,
+                "is_alimentare": art_data.is_alimentare,
+                "tipo_fornitura": art_data.tipo_fornitura.value if hasattr(art_data.tipo_fornitura, "value") else art_data.tipo_fornitura,
+                "author_name": current_user.full_name or current_user.username,
+                "created_at": _to_utc_iso(datetime.now(timezone.utc)),
+            }
             articolo = ArticoloRichiesta(
                 richiesta_id=richiesta.id,
                 author_id=current_user.id,
@@ -353,6 +674,7 @@ async def create_richiesta(
                 is_alimentare=art_data.is_alimentare,
                 tipo_fornitura=art_data.tipo_fornitura,
                 attachments="[]",
+                testo_originale_commerciale=json.dumps(snap_comm),
             )
             db.add(articolo)
 
@@ -372,7 +694,7 @@ async def create_richiesta(
     # Email notifica agli acquisti
     await _notify_acquisti_nuova_richiesta(db, richiesta, current_user)
 
-    return _serialize_richiesta(richiesta, role)
+    return _serialize_richiesta(richiesta, role, current_user)
 
 
 # ─── Cestino (Trash - Solo Admin) ─────────────────────────────────────────────
@@ -474,7 +796,7 @@ async def restore_richiesta(
         .where(RichiestaCommerciale.id == richiesta_id)
     )
     richiesta = res.scalar_one()
-    return _serialize_richiesta(richiesta, "admin")
+    return _serialize_richiesta(richiesta, "admin", current_user)
 
 
 @router.delete("/trash/empty")
@@ -552,7 +874,7 @@ async def get_richiesta(
     if role == "commerciale" and str(richiesta.author_id) != str(current_user.id):
         raise HTTPException(status_code=403, detail="Non autorizzato")
 
-    return _serialize_richiesta(richiesta, role)
+    return _serialize_richiesta(richiesta, role, current_user)
 
 
 @router.put("/{richiesta_id}")
@@ -592,21 +914,36 @@ async def update_richiesta(
         if data.status is not None and data.status != richiesta.status:
             raise HTTPException(status_code=403, detail="Non hai i permessi per modificare lo stato")
 
-    if data.title is not None:
-        richiesta.title = data.title  # type: ignore
-    if data.descrizione is not None:
-        richiesta.description = data.descrizione  # type: ignore
-    if data.numero_offerta is not None:
-        richiesta.numero_offerta = data.numero_offerta  # type: ignore
-    if data.cliente is not None:
-        richiesta.cliente = data.cliente  # type: ignore
+    mod_dict = _parse_json_dict(getattr(richiesta, "modifiche", None))
+    orig_author = (richiesta.author.full_name or richiesta.author.username) if richiesta.author else "Commerciale"
+    orig_date = _to_utc_iso(richiesta.created_at)
+
+    if data.title is not None and data.title.strip() != richiesta.title.strip():
+        _record_field_modification(mod_dict, "title", "Titolo Richiesta", richiesta.title, data.title.strip(), current_user, orig_author, orig_date)
+        richiesta.title = data.title.strip()  # type: ignore
+
+    if data.descrizione is not None and (data.descrizione.strip() or "") != (richiesta.description or "").strip():
+        if not getattr(richiesta, "description_originale", None) and richiesta.description:
+            richiesta.description_originale = richiesta.description  # type: ignore
+        _record_field_modification(mod_dict, "description", "Descrizione Richiesta", richiesta.description or "", data.descrizione.strip(), current_user, orig_author, orig_date)
+        richiesta.description = data.descrizione.strip() or None  # type: ignore
+
+    if data.numero_offerta is not None and (data.numero_offerta.strip() or "") != (richiesta.numero_offerta or "").strip():
+        _record_field_modification(mod_dict, "numero_offerta", "Numero Offerta", richiesta.numero_offerta or "", data.numero_offerta.strip(), current_user, orig_author, orig_date)
+        richiesta.numero_offerta = data.numero_offerta.strip() or None  # type: ignore
+
+    if data.cliente is not None and data.cliente.strip() != richiesta.cliente.strip():
+        _record_field_modification(mod_dict, "cliente", "Cliente", richiesta.cliente, data.cliente.strip(), current_user, orig_author, orig_date)
+        richiesta.cliente = data.cliente.strip()  # type: ignore
+
     if role == "admin" and data.status is not None:
         richiesta.status = data.status  # type: ignore
 
+    richiesta.modifiche = json.dumps(mod_dict)  # type: ignore
     richiesta.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(richiesta)
-    return _serialize_richiesta(richiesta, role)
+    return _serialize_richiesta(richiesta, role, current_user)
 
 
 @router.delete("/{richiesta_id}")
@@ -707,7 +1044,7 @@ async def prendi_in_carico(
     await db.commit()
     await db.refresh(richiesta)
 
-    return _serialize_richiesta(richiesta, role)
+    return _serialize_richiesta(richiesta, role, current_user)
 
 
 @router.post("/{richiesta_id}/articoli", status_code=status.HTTP_201_CREATED)
@@ -739,6 +1076,16 @@ async def add_articolo(
             detail="Puoi aggiungere articoli solo quando la richiesta è IN LAVORAZIONE",
         )
 
+    snap_comm = {
+        "titolo": data.titolo,
+        "descrizione": data.descrizione or "",
+        "is_standard": data.is_standard,
+        "is_atex": data.is_atex,
+        "is_alimentare": data.is_alimentare,
+        "tipo_fornitura": data.tipo_fornitura.value if hasattr(data.tipo_fornitura, "value") else data.tipo_fornitura,
+        "author_name": current_user.full_name or current_user.username,
+        "created_at": _to_utc_iso(datetime.now(timezone.utc)),
+    }
     articolo = ArticoloRichiesta(
         richiesta_id=richiesta_id,
         author_id=current_user.id,
@@ -752,6 +1099,7 @@ async def add_articolo(
         prezzo_listino=data.prezzo_listino if role == "admin" else None,
         note_admin=data.note_admin if role == "admin" else None,
         attachments="[]",
+        testo_originale_commerciale=json.dumps(snap_comm),
     )
     richiesta.articoli_inserted_by_id = current_user.id
     richiesta.articoli_inserted_at = datetime.now(timezone.utc)
@@ -765,7 +1113,7 @@ async def add_articolo(
     )
     articolo = res_reloaded.scalar_one_or_none()
 
-    return _serialize_articolo(articolo, role)
+    return _serialize_articolo(articolo, role, current_user, richiesta)
 
 
 @router.put("/{richiesta_id}/articoli/{articolo_id}")
@@ -780,7 +1128,9 @@ async def update_articolo(
     role = await _require_role(db, current_user, ["acquisti", "admin"])
 
     res_req = await db.execute(
-        select(RichiestaCommerciale).where(RichiestaCommerciale.id == richiesta_id)
+        select(RichiestaCommerciale)
+        .options(*_richiesta_options())
+        .where(RichiestaCommerciale.id == richiesta_id)
     )
     richiesta = res_req.scalar_one_or_none()
     if not richiesta:
@@ -808,36 +1158,80 @@ async def update_articolo(
     if not articolo:
         raise HTTPException(status_code=404, detail="Articolo non trovato")
 
-    if data.titolo is not None:
-        articolo.titolo = data.titolo  # type: ignore
-    if data.costo is not None:
+    if not getattr(articolo, "testo_originale_commerciale", None):
+        orig_author = None
+        if getattr(articolo, "author", None):
+            orig_author = articolo.author.full_name or articolo.author.username
+        snap_comm = {
+            "titolo": articolo.titolo,
+            "descrizione": articolo.descrizione or "",
+            "is_standard": bool(articolo.is_standard),
+            "is_atex": bool(articolo.is_atex),
+            "is_alimentare": bool(articolo.is_alimentare),
+            "tipo_fornitura": articolo.tipo_fornitura.value if hasattr(articolo.tipo_fornitura, "value") else articolo.tipo_fornitura,
+            "author_name": orig_author or (current_user.full_name or current_user.username),
+            "created_at": _to_utc_iso(articolo.created_at) if articolo.created_at else _to_utc_iso(datetime.now(timezone.utc)),
+        }
+        articolo.testo_originale_commerciale = json.dumps(snap_comm)
+
+    articolo.updated_by_id = current_user.id
+    mod_dict = _parse_json_dict(getattr(articolo, "modifiche", None))
+    snap_comm = _parse_json_dict(getattr(articolo, "testo_originale_commerciale", None))
+    orig_author = snap_comm.get("author_name") or "Commerciale"
+    orig_date = snap_comm.get("created_at") or _to_utc_iso(articolo.created_at)
+
+    if data.titolo is not None and data.titolo.strip() != articolo.titolo.strip():
+        _record_field_modification(mod_dict, "titolo", "Titolo Articolo", articolo.titolo, data.titolo.strip(), current_user, orig_author, orig_date)
+        articolo.titolo = data.titolo.strip()  # type: ignore
+
+    if data.costo is not None and data.costo != articolo.costo:
+        old_costo_str = f"{articolo.costo:.2f} €" if articolo.costo is not None else "0.00 €"
+        new_costo_str = f"{data.costo:.2f} €"
+        _record_field_modification(mod_dict, "costo", "Costo Acquisti", old_costo_str, new_costo_str, current_user, orig_author, orig_date)
         articolo.costo = data.costo  # type: ignore
-    if data.descrizione is not None:
-        articolo.descrizione = data.descrizione  # type: ignore
-    if data.is_standard is not None:
-        articolo.is_standard = data.is_standard  # type: ignore
-    if data.is_atex is not None:
-        articolo.is_atex = data.is_atex  # type: ignore
-    if data.is_alimentare is not None:
-        articolo.is_alimentare = data.is_alimentare  # type: ignore
-    if "tipo_fornitura" in data.model_fields_set:
+
+    if data.descrizione is not None and (data.descrizione.strip() or "") != (articolo.descrizione or "").strip():
+        _record_field_modification(mod_dict, "descrizione", "Descrizione Articolo", articolo.descrizione or "", data.descrizione.strip(), current_user, orig_author, orig_date)
+        articolo.descrizione = data.descrizione.strip() or None  # type: ignore
+
+    old_tip = _format_tipologia(articolo.is_standard, articolo.is_atex, articolo.is_alimentare)
+    new_std = data.is_standard if data.is_standard is not None else articolo.is_standard
+    new_atex = data.is_atex if data.is_atex is not None else articolo.is_atex
+    new_alim = data.is_alimentare if data.is_alimentare is not None else articolo.is_alimentare
+    new_tip = _format_tipologia(new_std, new_atex, new_alim)
+    if old_tip != new_tip:
+        _record_field_modification(mod_dict, "tipologia", "Tipologia Prodotto", old_tip, new_tip, current_user, orig_author, orig_date)
+        articolo.is_standard = new_std  # type: ignore
+        articolo.is_atex = new_atex  # type: ignore
+        articolo.is_alimentare = new_alim  # type: ignore
+
+    if "tipo_fornitura" in data.model_fields_set and data.tipo_fornitura != articolo.tipo_fornitura:
+        old_tf = _format_tipo_fornitura(articolo.tipo_fornitura)
+        new_tf = _format_tipo_fornitura(data.tipo_fornitura)
+        _record_field_modification(mod_dict, "tipo_fornitura", "Tipo Fornitura", old_tf, new_tf, current_user, orig_author, orig_date)
         articolo.tipo_fornitura = data.tipo_fornitura  # type: ignore
 
     # Campi solo admin
     if role == "admin":
-        if data.prezzo_listino is not None:
+        if data.prezzo_listino is not None and data.prezzo_listino != articolo.prezzo_listino:
+            old_pl = f"{articolo.prezzo_listino:.2f} €" if articolo.prezzo_listino is not None else "0.00 €"
+            new_pl = f"{data.prezzo_listino:.2f} €"
+            _record_field_modification(mod_dict, "prezzo_listino", "Prezzo Listino", old_pl, new_pl, current_user, orig_author, orig_date)
             articolo.prezzo_listino = data.prezzo_listino  # type: ignore
-        if data.note_admin is not None:
-            articolo.note_admin = data.note_admin  # type: ignore
+        if data.note_admin is not None and (data.note_admin.strip() or "") != (articolo.note_admin or "").strip():
+            _record_field_modification(mod_dict, "note_admin", "Note Admin", articolo.note_admin or "", data.note_admin.strip(), current_user, orig_author, orig_date)
+            articolo.note_admin = data.note_admin.strip() or None  # type: ignore
 
+    articolo.modifiche = json.dumps(mod_dict)  # type: ignore
+    richiesta.updated_at = datetime.now(timezone.utc)
     await db.commit()
     res_reloaded = await db.execute(
         select(ArticoloRichiesta)
-        .options(selectinload(ArticoloRichiesta.author))
+        .options(selectinload(ArticoloRichiesta.author), selectinload(ArticoloRichiesta.updated_by))
         .where(ArticoloRichiesta.id == articolo_id)
     )
     articolo = res_reloaded.scalar_one_or_none()
-    return _serialize_articolo(articolo, role)
+    return _serialize_articolo(articolo, role, current_user, richiesta)
 
 
 @router.delete("/{richiesta_id}/articoli/{articolo_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -981,27 +1375,82 @@ async def salva_articoli_bulk(
         for art_in in data.articoli:
             art = art_map.get(art_in.id)
             if art:
-                if art_in.titolo is not None and art_in.titolo.strip():
+                if not getattr(art, "testo_originale_commerciale", None):
+                    orig_author = None
+                    if getattr(art, "author", None):
+                        orig_author = art.author.full_name or art.author.username
+                    snap_comm = {
+                        "titolo": art.titolo,
+                        "descrizione": art.descrizione or "",
+                        "is_standard": bool(art.is_standard),
+                        "is_atex": bool(art.is_atex),
+                        "is_alimentare": bool(art.is_alimentare),
+                        "tipo_fornitura": art.tipo_fornitura.value if hasattr(art.tipo_fornitura, "value") else art.tipo_fornitura,
+                        "author_name": orig_author or (current_user.full_name or current_user.username),
+                        "created_at": _to_utc_iso(art.created_at) if art.created_at else _to_utc_iso(datetime.now(timezone.utc)),
+                    }
+                    art.testo_originale_commerciale = json.dumps(snap_comm)
+
+                art.updated_by_id = current_user.id
+                mod_dict = _parse_json_dict(getattr(art, "modifiche", None))
+                snap_comm = _parse_json_dict(getattr(art, "testo_originale_commerciale", None))
+                orig_author = snap_comm.get("author_name") or "Commerciale"
+                orig_date = snap_comm.get("created_at") or _to_utc_iso(art.created_at)
+
+                if art_in.titolo is not None and art_in.titolo.strip() != art.titolo.strip():
+                    _record_field_modification(mod_dict, "titolo", "Titolo Articolo", art.titolo, art_in.titolo.strip(), current_user, orig_author, orig_date)
                     art.titolo = art_in.titolo.strip()
-                if art_in.costo is not None:
+                if art_in.costo is not None and art_in.costo != art.costo:
+                    old_costo_str = f"{art.costo:.2f} €" if art.costo is not None else "0.00 €"
+                    new_costo_str = f"{art_in.costo:.2f} €"
+                    _record_field_modification(mod_dict, "costo", "Costo Acquisti", old_costo_str, new_costo_str, current_user, orig_author, orig_date)
                     art.costo = art_in.costo
-                if art_in.descrizione is not None:
+                if art_in.descrizione is not None and (art_in.descrizione.strip() or "") != (art.descrizione or "").strip():
+                    _record_field_modification(mod_dict, "descrizione", "Descrizione Articolo", art.descrizione or "", art_in.descrizione.strip(), current_user, orig_author, orig_date)
                     art.descrizione = art_in.descrizione.strip() or None
-                if art_in.is_standard is not None:
-                    art.is_standard = art_in.is_standard
-                if art_in.is_atex is not None:
-                    art.is_atex = art_in.is_atex
-                if art_in.is_alimentare is not None:
-                    art.is_alimentare = art_in.is_alimentare
-                if "tipo_fornitura" in art_in.model_fields_set:
+
+                old_tip = _format_tipologia(art.is_standard, art.is_atex, art.is_alimentare)
+                new_std = art_in.is_standard if art_in.is_standard is not None else art.is_standard
+                new_atex = art_in.is_atex if art_in.is_atex is not None else art.is_atex
+                new_alim = art_in.is_alimentare if art_in.is_alimentare is not None else art.is_alimentare
+                new_tip = _format_tipologia(new_std, new_atex, new_alim)
+                if old_tip != new_tip:
+                    _record_field_modification(mod_dict, "tipologia", "Tipologia Prodotto", old_tip, new_tip, current_user, orig_author, orig_date)
+                    art.is_standard = new_std
+                    art.is_atex = new_atex
+                    art.is_alimentare = new_alim
+
+                if "tipo_fornitura" in art_in.model_fields_set and art_in.tipo_fornitura != art.tipo_fornitura:
+                    old_tf = _format_tipo_fornitura(art.tipo_fornitura)
+                    new_tf = _format_tipo_fornitura(art_in.tipo_fornitura)
+                    _record_field_modification(mod_dict, "tipo_fornitura", "Tipo Fornitura", old_tf, new_tf, current_user, orig_author, orig_date)
                     art.tipo_fornitura = art_in.tipo_fornitura
+
                 if role == "admin":
-                    if art_in.prezzo_listino is not None:
+                    if art_in.prezzo_listino is not None and art_in.prezzo_listino != art.prezzo_listino:
+                        old_pl = f"{art.prezzo_listino:.2f} €" if art.prezzo_listino is not None else "0.00 €"
+                        new_pl = f"{art_in.prezzo_listino:.2f} €"
+                        _record_field_modification(mod_dict, "prezzo_listino", "Prezzo Listino", old_pl, new_pl, current_user, orig_author, orig_date)
                         art.prezzo_listino = art_in.prezzo_listino
-                    if art_in.note_admin is not None:
+                    if art_in.note_admin is not None and (art_in.note_admin.strip() or "") != (art.note_admin or "").strip():
+                        _record_field_modification(mod_dict, "note_admin", "Note Admin", art.note_admin or "", art_in.note_admin.strip(), current_user, orig_author, orig_date)
                         art.note_admin = art_in.note_admin.strip() or None
 
-        if role == "admin" and data.descrizione is not None:
+                art.modifiche = json.dumps(mod_dict)
+
+        if role == "admin" and data.descrizione is not None and (data.descrizione.strip() or "") != (richiesta.description or "").strip():
+            r_mod = _parse_json_dict(getattr(richiesta, "modifiche", None))
+            _record_field_modification(
+                r_mod,
+                "description",
+                "Descrizione Richiesta",
+                richiesta.description or "",
+                data.descrizione.strip(),
+                current_user,
+                old_author_name=(richiesta.author.full_name or richiesta.author.username) if richiesta.author else "Commerciale",
+                old_created_at=_to_utc_iso(richiesta.created_at),
+            )
+            richiesta.modifiche = json.dumps(r_mod)
             if not getattr(richiesta, "description_originale", None) and richiesta.description:
                 richiesta.description_originale = richiesta.description
             richiesta.description = data.descrizione.strip() or None
@@ -1015,7 +1464,7 @@ async def salva_articoli_bulk(
         .where(RichiestaCommerciale.id == richiesta_id)
     )
     richiesta = res_reloaded.scalar_one_or_none()
-    return _serialize_richiesta(richiesta, role)
+    return _serialize_richiesta(richiesta, role, current_user)
 
 
 @router.put("/{richiesta_id}/invia-a-admin")
@@ -1062,20 +1511,58 @@ async def invia_a_admin(
         for art_in in data.articoli:
             art = art_map.get(art_in.id)
             if art:
-                if art_in.titolo is not None and art_in.titolo.strip():
+                if not getattr(art, "testo_originale_commerciale", None):
+                    orig_author = None
+                    if getattr(art, "author", None):
+                        orig_author = art.author.full_name or art.author.username
+                    snap_comm = {
+                        "titolo": art.titolo,
+                        "descrizione": art.descrizione or "",
+                        "is_standard": bool(art.is_standard),
+                        "is_atex": bool(art.is_atex),
+                        "is_alimentare": bool(art.is_alimentare),
+                        "tipo_fornitura": art.tipo_fornitura.value if hasattr(art.tipo_fornitura, "value") else art.tipo_fornitura,
+                        "author_name": orig_author or (current_user.full_name or current_user.username),
+                        "created_at": _to_utc_iso(art.created_at) if art.created_at else _to_utc_iso(datetime.now(timezone.utc)),
+                    }
+                    art.testo_originale_commerciale = json.dumps(snap_comm)
+
+                art.updated_by_id = current_user.id
+                mod_dict = _parse_json_dict(getattr(art, "modifiche", None))
+                snap_comm = _parse_json_dict(getattr(art, "testo_originale_commerciale", None))
+                orig_author = snap_comm.get("author_name") or "Commerciale"
+                orig_date = snap_comm.get("created_at") or _to_utc_iso(art.created_at)
+
+                if art_in.titolo is not None and art_in.titolo.strip() != art.titolo.strip():
+                    _record_field_modification(mod_dict, "titolo", "Titolo Articolo", art.titolo, art_in.titolo.strip(), current_user, orig_author, orig_date)
                     art.titolo = art_in.titolo.strip()
-                if art_in.costo is not None:
+                if art_in.costo is not None and art_in.costo != art.costo:
+                    old_costo_str = f"{art.costo:.2f} €" if art.costo is not None else "0.00 €"
+                    new_costo_str = f"{art_in.costo:.2f} €"
+                    _record_field_modification(mod_dict, "costo", "Costo Acquisti", old_costo_str, new_costo_str, current_user, orig_author, orig_date)
                     art.costo = art_in.costo
-                if art_in.descrizione is not None:
+                if art_in.descrizione is not None and (art_in.descrizione.strip() or "") != (art.descrizione or "").strip():
+                    _record_field_modification(mod_dict, "descrizione", "Descrizione Articolo", art.descrizione or "", art_in.descrizione.strip(), current_user, orig_author, orig_date)
                     art.descrizione = art_in.descrizione.strip() or None
-                if art_in.is_standard is not None:
-                    art.is_standard = art_in.is_standard
-                if art_in.is_atex is not None:
-                    art.is_atex = art_in.is_atex
-                if art_in.is_alimentare is not None:
-                    art.is_alimentare = art_in.is_alimentare
-                if "tipo_fornitura" in art_in.model_fields_set:
+
+                old_tip = _format_tipologia(art.is_standard, art.is_atex, art.is_alimentare)
+                new_std = art_in.is_standard if art_in.is_standard is not None else art.is_standard
+                new_atex = art_in.is_atex if art_in.is_atex is not None else art.is_atex
+                new_alim = art_in.is_alimentare if art_in.is_alimentare is not None else art.is_alimentare
+                new_tip = _format_tipologia(new_std, new_atex, new_alim)
+                if old_tip != new_tip:
+                    _record_field_modification(mod_dict, "tipologia", "Tipologia Prodotto", old_tip, new_tip, current_user, orig_author, orig_date)
+                    art.is_standard = new_std
+                    art.is_atex = new_atex
+                    art.is_alimentare = new_alim
+
+                if "tipo_fornitura" in art_in.model_fields_set and art_in.tipo_fornitura != art.tipo_fornitura:
+                    old_tf = _format_tipo_fornitura(art.tipo_fornitura)
+                    new_tf = _format_tipo_fornitura(art_in.tipo_fornitura)
+                    _record_field_modification(mod_dict, "tipo_fornitura", "Tipo Fornitura", old_tf, new_tf, current_user, orig_author, orig_date)
                     art.tipo_fornitura = art_in.tipo_fornitura
+
+                art.modifiche = json.dumps(mod_dict)
         await db.flush()
 
     # Valida che tutti gli articoli abbiano un costo valido > 0
@@ -1088,13 +1575,32 @@ async def invia_a_admin(
 
     # Salva snapshot testo originale acquisti per ogni articolo
     for articolo in richiesta.articoli:
+        if not getattr(articolo, "testo_originale_commerciale", None):
+            orig_author = None
+            if getattr(articolo, "author", None):
+                orig_author = articolo.author.full_name or articolo.author.username
+            snap_comm = {
+                "titolo": articolo.titolo,
+                "descrizione": articolo.descrizione or "",
+                "is_standard": bool(articolo.is_standard),
+                "is_atex": bool(articolo.is_atex),
+                "is_alimentare": bool(articolo.is_alimentare),
+                "tipo_fornitura": articolo.tipo_fornitura.value if hasattr(articolo.tipo_fornitura, "value") else articolo.tipo_fornitura,
+                "author_name": orig_author or (current_user.full_name or current_user.username),
+                "created_at": _to_utc_iso(articolo.created_at) if articolo.created_at else _to_utc_iso(datetime.now(timezone.utc)),
+            }
+            articolo.testo_originale_commerciale = json.dumps(snap_comm)
+
         snapshot = {
             "titolo": articolo.titolo,
             "descrizione": articolo.descrizione or "",
             "costo": articolo.costo,
             "note_admin": articolo.note_admin or "",
+            "author_name": current_user.full_name or current_user.username,
+            "created_at": _to_utc_iso(datetime.now(timezone.utc)),
         }
         articolo.testo_originale_acquisti = json.dumps(snapshot)  # type: ignore
+        articolo.updated_by_id = current_user.id
 
     if not getattr(richiesta, "description_originale", None) and richiesta.description:
         richiesta.description_originale = richiesta.description  # type: ignore
@@ -1117,7 +1623,7 @@ async def invia_a_admin(
     # Email notifica agli admin
     await _notify_admin_manca_listino(db, richiesta, current_user)
 
-    return _serialize_richiesta(richiesta, "acquisti")
+    return _serialize_richiesta(richiesta, "acquisti", current_user)
 
 
 @router.put("/{richiesta_id}/completa")
@@ -1156,15 +1662,46 @@ async def completa_richiesta(
         articolo = articolo_map.get(item.id)
         if not articolo:
             continue
-        articolo.prezzo_listino = item.prezzo_listino  # type: ignore
-        if item.titolo is not None:
-            articolo.titolo = item.titolo  # type: ignore
-        if item.descrizione is not None:
-            articolo.descrizione = item.descrizione  # type: ignore
-        if item.note_admin is not None:
-            articolo.note_admin = item.note_admin  # type: ignore
+        art_mod = _parse_json_dict(getattr(articolo, "modifiche", None))
+        orig_author = None
+        if getattr(articolo, "author", None):
+            orig_author = articolo.author.full_name or articolo.author.username
+        old_created = _to_utc_iso(articolo.created_at)
 
-    if data.descrizione is not None:
+        if item.prezzo_listino is not None and item.prezzo_listino != articolo.prezzo_listino:
+            old_pl = f"{articolo.prezzo_listino:.2f} €" if articolo.prezzo_listino is not None else "0.00 €"
+            new_pl = f"{item.prezzo_listino:.2f} €"
+            _record_field_modification(art_mod, "prezzo_listino", "Prezzo Listino", old_pl, new_pl, current_user, orig_author, old_created)
+            articolo.prezzo_listino = item.prezzo_listino  # type: ignore
+
+        if item.note_admin is not None and (item.note_admin.strip() or "") != (articolo.note_admin or "").strip():
+            _record_field_modification(art_mod, "note_admin", "Note Admin", articolo.note_admin or "", item.note_admin.strip(), current_user, orig_author, old_created)
+            articolo.note_admin = item.note_admin.strip() or None  # type: ignore
+
+        if item.titolo is not None and item.titolo.strip() != articolo.titolo.strip():
+            _record_field_modification(art_mod, "titolo", "Titolo Articolo", articolo.titolo, item.titolo.strip(), current_user, orig_author, old_created)
+            articolo.titolo = item.titolo.strip()  # type: ignore
+
+        if item.descrizione is not None and (item.descrizione.strip() or "") != (articolo.descrizione or "").strip():
+            _record_field_modification(art_mod, "descrizione", "Descrizione Articolo", articolo.descrizione or "", item.descrizione.strip(), current_user, orig_author, old_created)
+            articolo.descrizione = item.descrizione.strip() or None  # type: ignore
+
+        articolo.modifiche = json.dumps(art_mod)  # type: ignore
+        articolo.updated_by_id = current_user.id  # type: ignore
+
+    if data.descrizione is not None and (data.descrizione.strip() or "") != (richiesta.description or "").strip():
+        r_mod = _parse_json_dict(getattr(richiesta, "modifiche", None))
+        _record_field_modification(
+            r_mod,
+            "description",
+            "Descrizione Richiesta",
+            richiesta.description or "",
+            data.descrizione.strip(),
+            current_user,
+            old_author_name=(richiesta.author.full_name or richiesta.author.username) if richiesta.author else "Commerciale",
+            old_created_at=_to_utc_iso(richiesta.created_at),
+        )
+        richiesta.modifiche = json.dumps(r_mod)  # type: ignore
         if not getattr(richiesta, "description_originale", None) and richiesta.description:
             richiesta.description_originale = richiesta.description  # type: ignore
         richiesta.description = data.descrizione.strip() or None  # type: ignore
@@ -1178,7 +1715,7 @@ async def completa_richiesta(
     # Email notifica al commerciale
     await _notify_commerciale_completata(db, richiesta, current_user)
 
-    return _serialize_richiesta(richiesta, "admin")
+    return _serialize_richiesta(richiesta, "admin", current_user)
 
 
 # ─── Funzioni di notifica email ───────────────────────────────────────────────

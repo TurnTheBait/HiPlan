@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -117,26 +117,154 @@ function formatCurrency(v) {
   return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(v);
 }
 
-/** Visualizza i badge diff (vecchio testo sbarrato in rosso, nuovo testo in verde) solo se c'è una modifica effettiva. */
-function TextDiffBadges({ original, current }) {
-  const origTrimmed = (original || '').trim();
-  const currTrimmed = (current || '').trim();
-  if (!origTrimmed || !currTrimmed || origTrimmed === currTrimmed) {
+function formatStepDate(d) {
+  if (!d) return '';
+  if (d === 'Adesso') return 'Adesso';
+  if (typeof d === 'string' && (d.includes('T') || d.includes('-'))) {
+    return formatDate(d);
+  }
+  return String(d);
+}
+
+/** Visualizza i badge diff per una sequenza di passaggi (step 0 -> step 1 -> ... -> step N) */
+function TextDiffBadges({ original, current, origAuthor, origDate, currAuthor, currDate, steps }) {
+  let stepList = [];
+  if (Array.isArray(steps) && steps.length > 0) {
+    stepList = steps.map(s => ({
+      value: String(s.value !== undefined && s.value !== null ? s.value : '').trim(),
+      author: s.author_name || s.author || '',
+      date: formatStepDate(s.created_at || s.updated_at || s.date || ''),
+    })).filter(s => s.value !== '');
+  } else {
+    const origTrimmed = (original || '').trim();
+    const currTrimmed = (current || '').trim();
+    if (!origTrimmed || !currTrimmed || origTrimmed === currTrimmed) {
+      return null;
+    }
+    stepList = [
+      { value: origTrimmed, author: origAuthor, date: formatStepDate(origDate) },
+      { value: currTrimmed, author: currAuthor, date: formatStepDate(currDate) },
+    ];
+  }
+
+  if (stepList.length < 2) {
     return null;
   }
+  const firstVal = stepList[0].value;
+  if (stepList.every(s => s.value === firstVal)) {
+    return null;
+  }
+
   return (
-    <div className="rc-diff-badges">
-      <span className="rc-diff-original" title="Testo originale precedente">{origTrimmed}</span>
-      <span className="rc-diff-modified" title="Testo modificato">{currTrimmed}</span>
+    <div className="rc-diff-badges" style={{ flexWrap: 'wrap' }}>
+      {stepList.map((st, idx) => {
+        const isLast = idx === stepList.length - 1;
+        const meta = [st.author, st.date].filter(Boolean).join(' • ');
+        return (
+          <Fragment key={idx}>
+            {idx > 0 && <span className="rc-diff-arrow">→</span>}
+            <span className="rc-diff-item">
+              <span
+                className={isLast ? "rc-diff-modified" : "rc-diff-original"}
+                title={isLast ? "Valore attuale modificato" : `Passaggio #${idx + 1}`}
+              >
+                {st.value}
+              </span>
+              {meta && <span className="rc-diff-meta">({meta})</span>}
+            </span>
+          </Fragment>
+        );
+      })}
     </div>
   );
 }
 
-function TextDiff({ original, current }) {
+/** Visualizza il diff di un campo basandosi sulla sequenza completa di passaggi o modifiche locali in corso */
+function FieldDiffBadge({ mod, origFallback, currentVal, isDirty, dirtyAuthor, dirtyDate }) {
+  if (!isDirty && !mod) return null;
+
+  let steps = [];
+  if (mod && Array.isArray(mod.steps) && mod.steps.length > 0) {
+    steps = mod.steps.map(s => ({
+      value: s.value,
+      author_name: s.author_name,
+      created_at: s.created_at || s.updated_at,
+    }));
+  } else if (mod && (mod.old_value || mod.new_value)) {
+    steps = [
+      {
+        value: mod.old_value,
+        author_name: mod.old_author_name || 'Commerciale',
+        created_at: mod.old_created_at,
+      },
+      {
+        value: mod.new_value,
+        author_name: mod.author_name || 'Utente',
+        created_at: mod.updated_at,
+      },
+    ];
+  } else if (origFallback) {
+    steps = [
+      {
+        value: origFallback,
+        author_name: 'Commerciale',
+        created_at: '',
+      },
+    ];
+  }
+
+  if (isDirty && currentVal !== undefined && currentVal !== null) {
+    const trimmedDirty = String(currentVal).trim();
+    if (steps.length === 0) {
+      if (origFallback && String(origFallback).trim() !== trimmedDirty) {
+        steps = [
+          { value: origFallback, author_name: 'Commerciale', created_at: '' },
+          { value: trimmedDirty, author_name: dirtyAuthor || 'Tu', created_at: dirtyDate || 'Adesso' },
+        ];
+      }
+    } else {
+      const lastVal = String(steps[steps.length - 1].value || '').trim();
+      if (lastVal !== trimmedDirty) {
+        steps.push({
+          value: trimmedDirty,
+          author_name: dirtyAuthor || 'Tu',
+          created_at: dirtyDate || 'Adesso',
+        });
+      }
+    }
+  }
+
+  if (steps.length < 2) return null;
+  const firstVal = String(steps[0].value || '').trim();
+  if (steps.every(s => String(s.value || '').trim() === firstVal)) return null;
+
+  return <TextDiffBadges steps={steps} />;
+}
+
+function TextDiff({ original, current, origAuthor, origDate, currAuthor, currDate }) {
   if (!original || original === current) {
     return <span>{current || '—'}</span>;
   }
-  return <TextDiffBadges original={original} current={current} />;
+  return (
+    <TextDiffBadges
+      original={original}
+      current={current}
+      origAuthor={origAuthor}
+      origDate={origDate}
+      currAuthor={currAuthor}
+      currDate={currDate}
+    />
+  );
+}
+
+function formatTipologiaLabel(tip) {
+  if (!tip) return '';
+  const parts = [];
+  if (tip.is_standard) parts.push('Standard');
+  if (tip.is_atex) parts.push('ATEX');
+  if (tip.is_alimentare) parts.push('Alimentare');
+  if (parts.length === 0) return 'Nessuna tipologia';
+  return parts.join(' + ');
 }
 
 // ─── Dropzone Component ───────────────────────────────────────────────────────
@@ -743,14 +871,53 @@ function ArticoloForm({ richiestaId, articolo, userRole, status, index = 0, onSa
   const [files, setFiles] = useState([]);
   const [saving, setSaving] = useState(false);
   const { showToast } = useToast();
+  const { user } = useAuth();
 
   let originalSnap = null;
   if (userRole === 'admin' && articolo?.testo_originale_acquisti) {
     try { originalSnap = JSON.parse(articolo.testo_originale_acquisti); } catch { originalSnap = null; }
   }
-  const origTitolo = (originalSnap && originalSnap.titolo !== undefined) ? originalSnap.titolo : (articolo?.titolo || '');
-  const origDesc = (originalSnap && originalSnap.descrizione !== undefined) ? originalSnap.descrizione : (articolo?.descrizione || '');
+  let origComm = null;
+  if (articolo?.testo_originale_commerciale) {
+    try { origComm = JSON.parse(articolo.testo_originale_commerciale); } catch { origComm = null; }
+  }
+  const isMancaListinoAdmin = userRole === 'admin' && status === 'manca_listino';
+  const origTitolo = isMancaListinoAdmin
+    ? ((originalSnap && originalSnap.titolo !== undefined) ? originalSnap.titolo : (articolo?.titolo || ''))
+    : ((origComm && origComm.titolo !== undefined) ? origComm.titolo : (articolo?.titolo || ''));
+  const origDesc = isMancaListinoAdmin
+    ? ((originalSnap && originalSnap.descrizione !== undefined) ? originalSnap.descrizione : (articolo?.descrizione || ''))
+    : ((origComm && origComm.descrizione !== undefined) ? origComm.descrizione : (articolo?.descrizione || ''));
   const origNote = (originalSnap && originalSnap.note_admin !== undefined) ? originalSnap.note_admin : (articolo?.note_admin || '');
+
+  const origCommTip = origComm ? {
+    is_standard: Boolean(origComm.is_standard),
+    is_atex: Boolean(origComm.is_atex),
+    is_alimentare: Boolean(origComm.is_alimentare),
+  } : {
+    is_standard: Boolean(articolo?.is_standard),
+    is_atex: Boolean(articolo?.is_atex),
+    is_alimentare: Boolean(articolo?.is_alimentare),
+  };
+  const origTipLabel = formatTipologiaLabel(origCommTip);
+  const currTipLabel = formatTipologiaLabel(form);
+
+  const origAuthorName = isMancaListinoAdmin
+    ? (originalSnap?.author_name || (originalSnap ? 'Ufficio Acquisti' : (articolo?.author?.full_name || articolo?.author?.name || articolo?.author?.username || 'Commerciale')))
+    : (origComm?.author_name || articolo?.author?.full_name || articolo?.author?.name || articolo?.author?.username || 'Commerciale');
+
+  const origDateStr = isMancaListinoAdmin
+    ? (originalSnap?.created_at ? formatDate(originalSnap.created_at) : (articolo?.created_at ? formatDate(articolo.created_at) : ''))
+    : (origComm?.created_at ? formatDate(origComm.created_at) : (articolo?.created_at ? formatDate(articolo.created_at) : ''));
+
+  const currAuthorName = user?.full_name || user?.username || 'Tu';
+  const currDateStr = 'Adesso';
+
+  const origNoteAuthor = originalSnap?.author_name || 'Ufficio Acquisti';
+  const origNoteDate = originalSnap?.created_at ? formatDate(originalSnap.created_at) : '';
+
+  const origTipAuthor = origComm?.author_name || articolo?.author?.full_name || articolo?.author?.name || articolo?.author?.username || 'Commerciale';
+  const origTipDate = origComm?.created_at ? formatDate(origComm.created_at) : (articolo?.created_at ? formatDate(articolo.created_at) : '');
 
   const handleToggleTipologia = (type) => {
     if (type === 'standard') {
@@ -842,7 +1009,13 @@ function ArticoloForm({ richiestaId, articolo, userRole, status, index = 0, onSa
 
       <div className="rc-form-group" style={{ marginBottom: 0 }}>
         <label className="rc-label">Titolo Articolo <span className="required">*</span></label>
-        {userRole === 'admin' && <TextDiffBadges original={origTitolo} current={form.titolo} />}
+        <FieldDiffBadge
+          mod={articolo?.modifiche?.titolo}
+          origFallback={origTitolo}
+          currentVal={form.titolo}
+          isDirty={form.titolo.trim() !== (articolo?.titolo || '').trim()}
+          dirtyAuthor={currAuthorName}
+        />
         <input
           className="input"
           style={{ fontWeight: 600 }}
@@ -856,7 +1029,13 @@ function ArticoloForm({ richiestaId, articolo, userRole, status, index = 0, onSa
 
       <div className="rc-form-group" style={{ marginTop: 6 }}>
         <label className="rc-label">Descrizione</label>
-        {userRole === 'admin' && <TextDiffBadges original={origDesc} current={form.descrizione} />}
+        <FieldDiffBadge
+          mod={articolo?.modifiche?.descrizione}
+          origFallback={origDesc}
+          currentVal={form.descrizione}
+          isDirty={(form.descrizione || '').trim() !== (articolo?.descrizione || '').trim()}
+          dirtyAuthor={currAuthorName}
+        />
         <textarea
           className="input"
           rows={2}
@@ -869,6 +1048,13 @@ function ArticoloForm({ richiestaId, articolo, userRole, status, index = 0, onSa
       <div className="rc-form-row">
         <div className="rc-form-group" style={{ minWidth: 170 }}>
           <label className="rc-label">Costo Acquisti (€) <span className="required">*</span></label>
+          <FieldDiffBadge
+            mod={articolo?.modifiche?.costo}
+            origFallback={articolo?.costo != null ? `${articolo.costo} €` : ''}
+            currentVal={form.costo ? `${form.costo} €` : ''}
+            isDirty={form.costo !== '' && String(form.costo) !== String(articolo?.costo || '')}
+            dirtyAuthor={currAuthorName}
+          />
           <input
             className="input"
             type="number"
@@ -883,6 +1069,13 @@ function ArticoloForm({ richiestaId, articolo, userRole, status, index = 0, onSa
 
         <div className="rc-form-group" style={{ flex: 2 }}>
           <label className="rc-label">Tipologia Prodotto</label>
+          <FieldDiffBadge
+            mod={articolo?.modifiche?.tipologia}
+            origFallback={origTipLabel}
+            currentVal={currTipLabel}
+            isDirty={origTipLabel !== currTipLabel}
+            dirtyAuthor={currAuthorName}
+          />
           <div className="rc-pill-group" style={{ padding: '2px 0' }}>
             <button
               type="button"
@@ -924,6 +1117,13 @@ function ArticoloForm({ richiestaId, articolo, userRole, status, index = 0, onSa
         <div className="rc-form-row" style={{ marginTop: 6 }}>
           <div className="rc-form-group" style={{ marginBottom: 0, flex: 1 }}>
             <label className="rc-label">Prezzo Listino (€)</label>
+            <FieldDiffBadge
+              mod={articolo?.modifiche?.prezzo_listino}
+              origFallback={articolo?.prezzo_listino != null ? `${articolo.prezzo_listino} €` : ''}
+              currentVal={form.prezzo_listino ? `${form.prezzo_listino} €` : ''}
+              isDirty={form.prezzo_listino !== '' && String(form.prezzo_listino) !== String(articolo?.prezzo_listino || '')}
+              dirtyAuthor={currAuthorName}
+            />
             <input
               className="input"
               type="number"
@@ -935,7 +1135,13 @@ function ArticoloForm({ richiestaId, articolo, userRole, status, index = 0, onSa
           </div>
           <div className="rc-form-group" style={{ marginBottom: 0, flex: 2 }}>
             <label className="rc-label">Note Admin (visibili al commerciale)</label>
-            {userRole === 'admin' && <TextDiffBadges original={origNote} current={form.note_admin} />}
+            <FieldDiffBadge
+              mod={articolo?.modifiche?.note_admin}
+              origFallback={origNote}
+              currentVal={form.note_admin}
+              isDirty={(form.note_admin || '').trim() !== (articolo?.note_admin || '').trim()}
+              dirtyAuthor={currAuthorName}
+            />
             <input
               className="input"
               value={form.note_admin}
@@ -954,6 +1160,13 @@ function ArticoloForm({ richiestaId, articolo, userRole, status, index = 0, onSa
             (opzionale: clicca per selezionare o deselezionare)
           </span>
         </div>
+        <FieldDiffBadge
+          mod={articolo?.modifiche?.tipo_fornitura}
+          origFallback={TIPO_FORNITURA_LABELS[articolo?.tipo_fornitura] || ''}
+          currentVal={TIPO_FORNITURA_LABELS[form.tipo_fornitura] || ''}
+          isDirty={form.tipo_fornitura !== (articolo?.tipo_fornitura || null)}
+          dirtyAuthor={currAuthorName}
+        />
         <div className="rc-pill-group" style={{ padding: '2px 0' }}>
           {Object.entries(TIPO_FORNITURA_LABELS).map(([val, lab]) => {
             const isSelected = form.tipo_fornitura === val;
@@ -1028,6 +1241,7 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
   const [savingRichiesta, setSavingRichiesta] = useState(false);
   const [confirmModal, setConfirmModal] = useState(null);
   const { showToast } = useToast();
+  const { user } = useAuth();
 
   const load = useCallback(async () => {
     try {
@@ -1426,7 +1640,10 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
               <StatusBadge status={richiesta.status} />
             )}
             {!isEditingRichiesta ? (
-              <h2 className="rc-modal__title">{richiesta.title}</h2>
+              <div>
+                <FieldDiffBadge mod={richiesta.modifiche?.title} currentVal={richiesta.title} />
+                <h2 className="rc-modal__title">{richiesta.title}</h2>
+              </div>
             ) : (
               <span className="badge badge-standard" style={{ fontSize: '0.85rem' }}>Modalità Modifica Dati</span>
             )}
@@ -1455,6 +1672,13 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
             <form onSubmit={handleSaveRichiesta} className="rc-edit-richiesta-form">
               <div className="rc-form-group">
                 <label className="rc-label">Titolo Richiesta <span className="required">*</span></label>
+                <FieldDiffBadge
+                  mod={richiesta.modifiche?.title}
+                  origFallback={richiesta.title}
+                  currentVal={editRichiestaForm.title}
+                  isDirty={editRichiestaForm.title.trim() !== (richiesta.title || '').trim()}
+                  dirtyAuthor={user?.full_name || 'Tu'}
+                />
                 <input
                   className="input"
                   value={editRichiestaForm.title}
@@ -1467,6 +1691,13 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
               <div className="rc-form-row">
                 <div className="rc-form-group" style={{ flex: 1 }}>
                   <label className="rc-label">Cliente <span className="required">*</span></label>
+                  <FieldDiffBadge
+                    mod={richiesta.modifiche?.cliente}
+                    origFallback={richiesta.cliente}
+                    currentVal={editRichiestaForm.cliente}
+                    isDirty={editRichiestaForm.cliente.trim() !== (richiesta.cliente || '').trim()}
+                    dirtyAuthor={user?.full_name || 'Tu'}
+                  />
                   <input
                     className="input"
                     value={editRichiestaForm.cliente}
@@ -1477,6 +1708,13 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                 </div>
                 <div className="rc-form-group" style={{ flex: 1 }}>
                   <label className="rc-label"># Offerta</label>
+                  <FieldDiffBadge
+                    mod={richiesta.modifiche?.numero_offerta}
+                    origFallback={richiesta.numero_offerta}
+                    currentVal={editRichiestaForm.numero_offerta}
+                    isDirty={editRichiestaForm.numero_offerta.trim() !== (richiesta.numero_offerta || '').trim()}
+                    dirtyAuthor={user?.full_name || 'Tu'}
+                  />
                   <input
                     className="input"
                     value={editRichiestaForm.numero_offerta}
@@ -1488,6 +1726,13 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
 
               <div className="rc-form-group">
                 <label className="rc-label">Descrizione</label>
+                <FieldDiffBadge
+                  mod={richiesta.modifiche?.description}
+                  origFallback={richiesta.description}
+                  currentVal={editRichiestaForm.description}
+                  isDirty={editRichiestaForm.description.trim() !== (richiesta.description || '').trim()}
+                  dirtyAuthor={user?.full_name || 'Tu'}
+                />
                 <textarea
                   className="input"
                   rows={3}
@@ -1525,10 +1770,12 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                 <div className="rc-info-block">
                   <div className="rc-info-item">
                     <span className="rc-info-item__label"><AppIcon name="building" size={13} /> Cliente</span>
+                    <FieldDiffBadge mod={richiesta.modifiche?.cliente} currentVal={richiesta.cliente} />
                     <span className="rc-info-item__value rc-info-item__value--strong">{richiesta.cliente}</span>
                   </div>
                   <div className="rc-info-item">
                     <span className="rc-info-item__label"><AppIcon name="ticket" size={13} /> # Offerta</span>
+                    <FieldDiffBadge mod={richiesta.modifiche?.numero_offerta} currentVal={richiesta.numero_offerta} />
                     <span className="rc-info-item__value">{richiesta.numero_offerta || '—'}</span>
                   </div>
                 </div>
@@ -1585,9 +1832,12 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
               {userRole === 'admin' && richiesta.status === 'manca_listino' ? (
                 <div className="rc-form-group">
                   <label className="rc-label">Descrizione Richiesta</label>
-                  <TextDiffBadges
-                    original={richiesta.description_originale || richiesta.description}
-                    current={descrizioneRichiestaAdmin}
+                  <FieldDiffBadge
+                    mod={richiesta.modifiche?.description}
+                    origFallback={richiesta.description_originale || richiesta.description}
+                    currentVal={descrizioneRichiestaAdmin}
+                    isDirty={descrizioneRichiestaAdmin !== (richiesta.description || '')}
+                    dirtyAuthor={user?.full_name || 'Tu'}
                   />
                   <textarea
                     className="input"
@@ -1601,12 +1851,10 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                 richiesta.description && (
                   <div className="rc-form-group">
                     <span className="rc-label">Descrizione</span>
-                    {userRole === 'admin' && richiesta.description_originale && (
-                      <TextDiffBadges
-                        original={richiesta.description_originale}
-                        current={richiesta.description}
-                      />
-                    )}
+                    <FieldDiffBadge
+                      mod={richiesta.modifiche?.description}
+                      currentVal={richiesta.description}
+                    />
                     <p className="rc-description-box">
                       {richiesta.description}
                     </p>
@@ -1703,6 +1951,28 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                 let originalSnap = null;
                 try { originalSnap = articolo.testo_originale_acquisti ? JSON.parse(articolo.testo_originale_acquisti) : null; }
                 catch { originalSnap = null; }
+                let origComm = null;
+                if (articolo.testo_originale_commerciale) {
+                  try { origComm = JSON.parse(articolo.testo_originale_commerciale); }
+                  catch { origComm = null; }
+                }
+                const origCommTip = origComm ? {
+                  is_standard: Boolean(origComm.is_standard),
+                  is_atex: Boolean(origComm.is_atex),
+                  is_alimentare: Boolean(origComm.is_alimentare),
+                } : null;
+                const origCommTipLabel = origCommTip ? formatTipologiaLabel(origCommTip) : '';
+                const currTipLabel = formatTipologiaLabel(articolo);
+
+                const origAuthorName = originalSnap?.author_name || richiesta.articoli_inserted_by?.full_name || richiesta.articoli_inserted_by?.name || 'Ufficio Acquisti';
+                const origDateStr = originalSnap?.created_at ? formatDate(originalSnap.created_at) : formatDate(richiesta.articoli_inserted_at || articolo.created_at);
+
+                const currentUserName = user?.full_name || user?.username || 'Tu';
+                const currAuthorName = articolo.updated_by?.full_name || articolo.updated_by?.name || currentUserName;
+
+                const titoloIsDirty = titoliAdmin[articolo.id] !== undefined && titoliAdmin[articolo.id] !== (originalSnap?.titolo || articolo.titolo || '');
+                const descIsDirty = descrizioniAdmin[articolo.id] !== undefined && descrizioniAdmin[articolo.id] !== (originalSnap?.descrizione !== undefined ? originalSnap.descrizione : (articolo.descrizione || ''));
+                const noteIsDirty = noteAdmin[articolo.id] !== undefined && noteAdmin[articolo.id] !== (originalSnap?.note_admin !== undefined ? originalSnap.note_admin : (articolo.note_admin || ''));
 
                 return (
                   <div key={articolo.id} className="rc-articolo-card rc-articolo-card--editable" data-theme={index % 6}>
@@ -1734,9 +2004,12 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
 
                     <div className="rc-form-group" style={{ marginBottom: 4 }}>
                       <label className="rc-label">Titolo</label>
-                      <TextDiffBadges
-                        original={originalSnap?.titolo || articolo.titolo}
-                        current={titoliAdmin[articolo.id]}
+                      <FieldDiffBadge
+                        mod={articolo.modifiche?.titolo}
+                        origFallback={originalSnap?.titolo || origComm?.titolo || articolo.titolo}
+                        currentVal={titoliAdmin[articolo.id]}
+                        isDirty={titoloIsDirty}
+                        dirtyAuthor={currentUserName}
                       />
                       <input
                         className="input"
@@ -1747,9 +2020,12 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
 
                     <div className="rc-form-group">
                       <label className="rc-label">Descrizione</label>
-                      <TextDiffBadges
-                        original={originalSnap?.descrizione !== undefined ? originalSnap.descrizione : (articolo.descrizione || '')}
-                        current={descrizioniAdmin[articolo.id]}
+                      <FieldDiffBadge
+                        mod={articolo.modifiche?.descrizione}
+                        origFallback={originalSnap?.descrizione !== undefined ? originalSnap.descrizione : (origComm?.descrizione !== undefined ? origComm.descrizione : (articolo.descrizione || ''))}
+                        currentVal={descrizioniAdmin[articolo.id]}
+                        isDirty={descIsDirty}
+                        dirtyAuthor={currentUserName}
                       />
                       <textarea
                         className="input"
@@ -1762,12 +2038,23 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                     <div className="rc-form-row">
                       <div className="rc-form-group">
                         <label className="rc-label">Costo Acquisti</label>
+                        <FieldDiffBadge
+                          mod={articolo.modifiche?.costo}
+                          currentVal={formatCurrency(articolo.costo)}
+                        />
                         <div className="input" style={{ background: 'var(--bg-tertiary)', cursor: 'default', color: 'var(--success)', fontWeight: 700 }}>
                           {formatCurrency(articolo.costo)}
                         </div>
                       </div>
                       <div className="rc-form-group">
                         <label className="rc-label">Prezzo Listino (€) <span className="required">*</span></label>
+                        <FieldDiffBadge
+                          mod={articolo.modifiche?.prezzo_listino}
+                          origFallback={articolo.prezzo_listino != null ? `${articolo.prezzo_listino} €` : ''}
+                          currentVal={prezziListino[articolo.id] ? `${prezziListino[articolo.id]} €` : ''}
+                          isDirty={prezziListino[articolo.id] !== undefined && String(prezziListino[articolo.id]) !== (articolo.prezzo_listino != null ? String(articolo.prezzo_listino) : '')}
+                          dirtyAuthor={currentUserName}
+                        />
                         <input
                           className="input"
                           type="number"
@@ -1782,9 +2069,12 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
 
                     <div className="rc-form-group">
                       <label className="rc-label">Note Admin (per il commerciale)</label>
-                      <TextDiffBadges
-                        original={originalSnap?.note_admin !== undefined ? originalSnap.note_admin : (articolo.note_admin || '')}
-                        current={noteAdmin[articolo.id]}
+                      <FieldDiffBadge
+                        mod={articolo.modifiche?.note_admin}
+                        origFallback={originalSnap?.note_admin !== undefined ? originalSnap.note_admin : (articolo.note_admin || '')}
+                        currentVal={noteAdmin[articolo.id]}
+                        isDirty={noteIsDirty}
+                        dirtyAuthor={currentUserName}
                       />
                       <textarea
                         className="input"
@@ -1796,6 +2086,15 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                     </div>
 
                     <div className="rc-articolo-card__tags">
+                      <FieldDiffBadge
+                        mod={articolo.modifiche?.tipologia}
+                        origFallback={origCommTipLabel}
+                        currentVal={currTipLabel}
+                      />
+                      <FieldDiffBadge
+                        mod={articolo.modifiche?.tipo_fornitura}
+                        currentVal={TIPO_FORNITURA_LABELS[articolo.tipo_fornitura] || articolo.tipo_fornitura}
+                      />
                       {articolo.is_standard && <span className="badge badge-standard">Standard</span>}
                       {articolo.is_atex && <span className="badge badge-atex">ATEX</span>}
                       {articolo.is_alimentare && <span className="badge badge-alimentare">Alimentare</span>}
@@ -1836,6 +2135,36 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                   ? tipoFornituraAcquisti[articolo.id]
                   : (articolo.tipo_fornitura || null);
 
+                let origComm = null;
+                if (articolo.testo_originale_commerciale) {
+                  try { origComm = JSON.parse(articolo.testo_originale_commerciale); }
+                  catch { origComm = null; }
+                }
+                const origCommTitolo = (origComm && origComm.titolo !== undefined) ? origComm.titolo : (articolo.titolo || '');
+                const origCommDesc = (origComm && origComm.descrizione !== undefined) ? origComm.descrizione : (articolo.descrizione || '');
+                const origCommTip = origComm ? {
+                  is_standard: Boolean(origComm.is_standard),
+                  is_atex: Boolean(origComm.is_atex),
+                  is_alimentare: Boolean(origComm.is_alimentare),
+                } : {
+                  is_standard: Boolean(articolo.is_standard),
+                  is_atex: Boolean(articolo.is_atex),
+                  is_alimentare: Boolean(articolo.is_alimentare),
+                };
+
+                const currentTitolo = titoliAcquisti[articolo.id] !== undefined ? titoliAcquisti[articolo.id] : (articolo.titolo || '');
+                const currentDesc = descrizioniAcquisti[articolo.id] !== undefined ? descrizioniAcquisti[articolo.id] : (articolo.descrizione || '');
+                const origCommTipLabel = formatTipologiaLabel(origCommTip);
+                const currTipLabel = formatTipologiaLabel(tip);
+
+                const currentUserName = user?.full_name || user?.username || 'Tu';
+                const commAuthorName = origComm?.author_name || articolo.author?.full_name || articolo.author?.name || 'Commerciale';
+                const commDateStr = origComm?.created_at ? formatDate(origComm.created_at) : formatDate(articolo.created_at);
+
+                const titoloDirty = titoliAcquisti[articolo.id] !== undefined && titoliAcquisti[articolo.id] !== origCommTitolo;
+                const descDirty = descrizioniAcquisti[articolo.id] !== undefined && descrizioniAcquisti[articolo.id] !== origCommDesc;
+                const tipDirty = origCommTipLabel !== currTipLabel;
+
                 return (
                   <div key={articolo.id} className="rc-articolo-card rc-articolo-card--editable" data-theme={index % 6}>
                     {/* Barra superiore con Badge numerato e Azioni */}
@@ -1858,10 +2187,17 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
 
                     <div className="rc-form-group" style={{ marginBottom: 0 }}>
                       <label className="rc-label">Titolo Articolo <span className="required">*</span></label>
+                      <FieldDiffBadge
+                        mod={articolo.modifiche?.titolo}
+                        origFallback={origCommTitolo}
+                        currentVal={currentTitolo}
+                        isDirty={titoloDirty}
+                        dirtyAuthor={currentUserName}
+                      />
                       <input
                         className="input"
                         style={{ fontWeight: 600 }}
-                        value={titoliAcquisti[articolo.id] !== undefined ? titoliAcquisti[articolo.id] : (articolo.titolo || '')}
+                        value={currentTitolo}
                         onChange={(e) => setTitoliAcquisti({ ...titoliAcquisti, [articolo.id]: e.target.value })}
                         placeholder="Titolo articolo *"
                       />
@@ -1869,10 +2205,17 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
 
                     <div className="rc-form-group" style={{ marginTop: 6 }}>
                       <label className="rc-label">Descrizione</label>
+                      <FieldDiffBadge
+                        mod={articolo.modifiche?.descrizione}
+                        origFallback={origCommDesc}
+                        currentVal={currentDesc}
+                        isDirty={descDirty}
+                        dirtyAuthor={currentUserName}
+                      />
                       <textarea
                         className="input"
                         rows={2}
-                        value={descrizioniAcquisti[articolo.id] !== undefined ? descrizioniAcquisti[articolo.id] : (articolo.descrizione || '')}
+                        value={currentDesc}
                         onChange={(e) => setDescrizioniAcquisti({ ...descrizioniAcquisti, [articolo.id]: e.target.value })}
                         placeholder="Descrizione tecnica, specifiche o note per l'articolo..."
                       />
@@ -1881,6 +2224,13 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                     <div className="rc-form-row">
                       <div className="rc-form-group" style={{ minWidth: 170 }}>
                         <label className="rc-label">Costo Acquisti (€) <span className="required">*</span></label>
+                        <FieldDiffBadge
+                          mod={articolo.modifiche?.costo}
+                          origFallback={articolo.costo != null ? `${articolo.costo} €` : ''}
+                          currentVal={costiAcquisti[articolo.id] !== undefined ? `${costiAcquisti[articolo.id]} €` : ''}
+                          isDirty={costiAcquisti[articolo.id] !== undefined && String(costiAcquisti[articolo.id]) !== (articolo.costo != null ? String(articolo.costo) : '')}
+                          dirtyAuthor={currentUserName}
+                        />
                         <input
                           className="input"
                           type="number"
@@ -1894,6 +2244,13 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
 
                       <div className="rc-form-group" style={{ flex: 2 }}>
                         <label className="rc-label">Tipologia Prodotto</label>
+                        <FieldDiffBadge
+                          mod={articolo.modifiche?.tipologia}
+                          origFallback={origCommTipLabel}
+                          currentVal={currTipLabel}
+                          isDirty={tipDirty}
+                          dirtyAuthor={currentUserName}
+                        />
                         <div className="rc-pill-group" style={{ padding: '2px 0' }}>
                           <button
                             type="button"
@@ -1939,6 +2296,13 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                           (opzionale: clicca per selezionare o deselezionare)
                         </span>
                       </div>
+                      <FieldDiffBadge
+                        mod={articolo.modifiche?.tipo_fornitura}
+                        origFallback={TIPO_FORNITURA_LABELS[articolo.tipo_fornitura] || ''}
+                        currentVal={TIPO_FORNITURA_LABELS[tipoForn] || ''}
+                        isDirty={tipoForn !== (articolo.tipo_fornitura || null)}
+                        dirtyAuthor={currentUserName}
+                      />
                       <div className="rc-pill-group" style={{ padding: '2px 0' }}>
                         {Object.entries(TIPO_FORNITURA_LABELS).map(([val, lab]) => {
                           const isSelected = tipoForn === val;
@@ -2044,9 +2408,31 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                 try { originalSnap = JSON.parse(articolo.testo_originale_acquisti); }
                 catch { originalSnap = null; }
               }
+              let origComm = null;
+              if (articolo.testo_originale_commerciale) {
+                try { origComm = JSON.parse(articolo.testo_originale_commerciale); }
+                catch { origComm = null; }
+              }
               const origTitolo = (originalSnap && originalSnap.titolo !== undefined) ? originalSnap.titolo : null;
               const origDesc = (originalSnap && originalSnap.descrizione !== undefined) ? originalSnap.descrizione : null;
               const origNote = (originalSnap && originalSnap.note_admin !== undefined) ? originalSnap.note_admin : null;
+
+              const origCommTip = origComm ? {
+                is_standard: Boolean(origComm.is_standard),
+                is_atex: Boolean(origComm.is_atex),
+                is_alimentare: Boolean(origComm.is_alimentare),
+              } : null;
+              const origCommTipLabel = origCommTip ? formatTipologiaLabel(origCommTip) : '';
+              const currTipLabel = formatTipologiaLabel(articolo);
+
+              const origAcquistiAuthor = originalSnap?.author_name || richiesta.articoli_inserted_by?.full_name || richiesta.articoli_inserted_by?.name || 'Ufficio Acquisti';
+              const origAcquistiDate = originalSnap?.created_at ? formatDate(originalSnap.created_at) : formatDate(richiesta.articoli_inserted_at || articolo.created_at);
+
+              const origCommAuthor = origComm?.author_name || articolo.author?.full_name || articolo.author?.name || 'Commerciale';
+              const origCommDate = origComm?.created_at ? formatDate(origComm.created_at) : formatDate(articolo.created_at);
+
+              const currAuthorName = articolo.updated_by?.full_name || articolo.updated_by?.name || (userRole === 'admin' ? 'Admin' : 'Ufficio Acquisti');
+              const currDateStr = formatDate(articolo.updated_at || articolo.created_at);
 
               return (
                 <div key={articolo.id} className="rc-articolo-card">
@@ -2057,17 +2443,26 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       {userRole === 'admin' && (
-                        <span className="rc-price-tag">Costo: {formatCurrency(articolo.costo)}</span>
+                        <div>
+                          <FieldDiffBadge mod={articolo.modifiche?.costo} currentVal={formatCurrency(articolo.costo)} />
+                          <span className="rc-price-tag">Costo: {formatCurrency(articolo.costo)}</span>
+                        </div>
                       )}
                       {articolo.costo != null && articolo.costo > 0 && userRole !== 'admin' ? (
-                        <span className="rc-price-tag">Costo: {formatCurrency(articolo.costo)}</span>
+                        <div>
+                          <FieldDiffBadge mod={articolo.modifiche?.costo} currentVal={formatCurrency(articolo.costo)} />
+                          <span className="rc-price-tag">Costo: {formatCurrency(articolo.costo)}</span>
+                        </div>
                       ) : (
                         userRole !== 'admin' && <span className="badge badge-pending" style={{ fontSize: '0.8rem' }}>Costo da definire</span>
                       )}
                       {articolo.prezzo_listino != null && (
-                        <span className="badge badge-active" style={{ fontSize: '0.85rem' }}>
-                          Listino: {formatCurrency(articolo.prezzo_listino)}
-                        </span>
+                        <div>
+                          <FieldDiffBadge mod={articolo.modifiche?.prezzo_listino} currentVal={formatCurrency(articolo.prezzo_listino)} />
+                          <span className="badge badge-active" style={{ fontSize: '0.85rem' }}>
+                            Listino: {formatCurrency(articolo.prezzo_listino)}
+                          </span>
+                        </div>
                       )}
                       {canAddArticoli && (
                         <>
@@ -2082,28 +2477,24 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                     </div>
                   </div>
                   <div style={{ margin: '4px 0 2px 0' }}>
-                    {userRole === 'admin' && origTitolo && (
-                      <TextDiffBadges original={origTitolo} current={articolo.titolo} />
-                    )}
+                    <FieldDiffBadge mod={articolo.modifiche?.titolo} currentVal={articolo.titolo} />
                     <h4 className="rc-articolo-card__title" style={{ margin: 0 }}>{articolo.titolo}</h4>
                   </div>
                   {articolo.descrizione && (
                     <div style={{ margin: '4px 0 8px 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      {userRole === 'admin' && origDesc && (
-                        <TextDiffBadges original={origDesc} current={articolo.descrizione} />
-                      )}
+                      <FieldDiffBadge mod={articolo.modifiche?.descrizione} currentVal={articolo.descrizione} />
                       <p style={{ margin: 0 }}>{articolo.descrizione}</p>
                     </div>
                   )}
                   {articolo.note_admin && (
                     <div style={{ margin: '4px 0 8px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                      {userRole === 'admin' && origNote && (
-                        <TextDiffBadges original={origNote} current={articolo.note_admin} />
-                      )}
+                      <FieldDiffBadge mod={articolo.modifiche?.note_admin} currentVal={articolo.note_admin} />
                       <p style={{ margin: 0 }}>Note Admin: {articolo.note_admin}</p>
                     </div>
                   )}
                   <div className="rc-articolo-card__tags">
+                    <FieldDiffBadge mod={articolo.modifiche?.tipologia} currentVal={currTipLabel} />
+                    <FieldDiffBadge mod={articolo.modifiche?.tipo_fornitura} currentVal={TIPO_FORNITURA_LABELS[articolo.tipo_fornitura] || articolo.tipo_fornitura} />
                     {articolo.is_standard && <span className="badge badge-standard">Standard</span>}
                     {articolo.is_atex && <span className="badge badge-atex">ATEX</span>}
                     {articolo.is_alimentare && <span className="badge badge-alimentare">Alimentare</span>}
