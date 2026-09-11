@@ -1,8 +1,8 @@
-# HiPlan — pianificazione commesse e risorse
+# HiPlan — pianificazione commesse, risorse e intelligenza artificiale
 
-HiPlan è una piattaforma web multiutente per pianificare commesse, fasi operative e carichi di lavoro. Riunisce diagrammi di Gantt, calendario, consuntivazione ore, ferie, ticket, TODO e strumenti di collaborazione in un'unica applicazione.
+HiPlan è una piattaforma web multiutente avanzata per pianificare commesse, fasi operative e carichi di lavoro, potenziata da una suite integrata di **Intelligenza Artificiale (HiPlan AI)**. Riunisce diagrammi di Gantt interattivi, calendario, consuntivazione ore, ferie, ticket, TODO e strumenti di collaborazione con potenti capacità AI: audit e riprogrammazione operativa in tempo reale, verifiche di conformità normativa (ATEX e MOCA), reportistica esecutiva per la direzione, assistente virtuale conversazionale Text-to-SQL e rilevatore proattivo di conflitti e anomalie.
 
-Il progetto usa un backend asincrono **FastAPI + SQLAlchemy** e una SPA **React + Vite**. In sviluppo può utilizzare SQLite; il deployment Docker include PostgreSQL e Nginx.
+Il progetto usa un backend asincrono FastAPI + SQLAlchemy e una SPA React + Vite. In sviluppo può utilizzare SQLite; il deployment Docker include PostgreSQL e Nginx.
 
 ## Funzionalità disponibili
 
@@ -18,6 +18,16 @@ Il progetto usa un backend asincrono **FastAPI + SQLAlchemy** e una SPA **React 
 - Checklist, commenti, menzioni e notifiche contestuali alla singola fase.
 - Allegati e note di commessa.
 - Registro attività delle modifiche rilevanti.
+
+### Richieste Commerciali e Budgeting
+
+- Workflow coordinato a tre ruoli: **Commerciale → Ufficio Acquisti → Amministrazione**.
+- Creazione rapida di richieste commerciali con articoli preliminari e specifiche tecniche da parte dei commerciali.
+- Lavorazione acquisti diretta e intuitiva: inserimento rapido dei costi fornitore, tipologia prodotto (**Standard**, **ATEX**, **Alimentare**), tipologia fornitura (**Materie Prime**, **MP + Lavorazione**, **Compravendita**) e allegati per articolo.
+- Salvataggio automatico all'invio a listino (**Consegna**): validazione istantanea, snapshot storico per diff e notifica automatica all'amministrazione.
+- Definizione prezzi di listino e completamento preventivi con diff testuale tra proposta acquisti e revisione finale.
+- Assegnazione automatica per reparto con spunte predefinite per addetti commerciali e acquisti.
+- Cestino richieste con eliminazione logica e ripristino entro 90 giorni.
 
 ### Risorse e avanzamento
 

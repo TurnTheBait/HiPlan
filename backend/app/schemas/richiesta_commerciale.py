@@ -81,11 +81,21 @@ class ArticoloOutCommerciale(BaseModel):
 
 # ─── Richiesta ───────────────────────────────────────────────────────────────
 
+class ArticoloInitialCreate(BaseModel):
+    titolo: str
+    descrizione: Optional[str] = None
+    is_standard: bool = False
+    is_atex: bool = False
+    is_alimentare: bool = False
+    tipo_fornitura: Optional[TipoFornitura] = None
+
+
 class RichiestaCreate(BaseModel):
     title: str
     descrizione: Optional[str] = None
     numero_offerta: Optional[str] = None
     cliente: str
+    articoli: Optional[List[ArticoloInitialCreate]] = []
 
 
 class RichiestaUpdate(BaseModel):
@@ -100,6 +110,7 @@ class RichiestaOut(BaseModel):
     id: str
     title: str
     description: Optional[str] = None
+    description_originale: Optional[str] = None
     numero_offerta: Optional[str] = None
     cliente: str
     attachments: List[str] = []
@@ -155,6 +166,26 @@ class RichiestaOutAcquisti(BaseModel):
         from_attributes = True
 
 
+# ─── Invio ad Admin (Acquisti) ──────────────────────────────────────────────
+
+class InviaAdAdminArticoloIn(BaseModel):
+    id: str
+    costo: Optional[float] = None
+    titolo: Optional[str] = None
+    descrizione: Optional[str] = None
+    is_standard: Optional[bool] = None
+    is_atex: Optional[bool] = None
+    is_alimentare: Optional[bool] = None
+    tipo_fornitura: Optional[TipoFornitura] = None
+    prezzo_listino: Optional[float] = None
+    note_admin: Optional[str] = None
+
+
+class InviaAdAdminIn(BaseModel):
+    articoli: Optional[List[InviaAdAdminArticoloIn]] = None
+    descrizione: Optional[str] = None
+
+
 # ─── Completamento Admin ─────────────────────────────────────────────────────
 
 class CompletaArticoloIn(BaseModel):
@@ -167,3 +198,5 @@ class CompletaArticoloIn(BaseModel):
 
 class CompletaRichiestaIn(BaseModel):
     articoli: List[CompletaArticoloIn]
+    descrizione: Optional[str] = None
+

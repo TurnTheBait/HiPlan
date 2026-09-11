@@ -193,10 +193,10 @@ async def send_richiesta_commerciale_email(
     """
     if phase == "nuova_richiesta":
         subject = f"HiPlan - Nuova Richiesta Commerciale: {richiesta_title}"
-        badge_color = "#ef4444"
-        badge_text = "🔴 NUOVA RICHIESTA"
-        intro = f"È stata aperta una nuova richiesta commerciale da <strong>{author_name}</strong> che richiede la vostra attenzione."
-        cta = "Accedi a HiPlan per prendere in carico la richiesta e compilare gli articoli."
+        badge_color = "#f59e0b"
+        badge_text = "🟡 IN LAVORAZIONE"
+        intro = f"È stata inserita una nuova richiesta commerciale da <strong>{author_name}</strong> già in lavorazione."
+        cta = "Accedi a HiPlan per verificare la richiesta, compilare i costi degli articoli o aggiungerne di nuovi."
     elif phase == "manca_listino":
         subject = f"HiPlan - Richiesta in attesa di Listino: {richiesta_title}"
         badge_color = "#3b82f6"

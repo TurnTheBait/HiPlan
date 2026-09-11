@@ -20,6 +20,7 @@ import {
   deleteArticolo,
   uploadAttachmentsArticolo,
   inviaAdAdmin,
+  salvaArticoli,
   completaRichiesta,
   getMyRole,
   getRCUsers,
@@ -40,6 +41,12 @@ const TIPO_FORNITURA_LABELS = {
   mp_lavorazione: 'MP + Lavorazione',
   compravendita: 'Compravendita',
 };
+
+const STATUS_FILTER_TABS = [
+  { key: 'in_lavorazione', label: 'In Lavorazione', color: '#f59e0b' },
+  { key: 'manca_listino', label: 'Manca Listino', color: '#3b82f6' },
+  { key: 'completata', label: 'Completate', color: '#10b981' },
+];
 
 const BACKEND_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
@@ -110,17 +117,26 @@ function formatCurrency(v) {
   return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(v);
 }
 
-/** Diff testuale semplice: restituisce elementi React evidenziando le differenze. */
+/** Visualizza i badge diff (vecchio testo sbarrato in rosso, nuovo testo in verde) solo se c'è una modifica effettiva. */
+function TextDiffBadges({ original, current }) {
+  const origTrimmed = (original || '').trim();
+  const currTrimmed = (current || '').trim();
+  if (!origTrimmed || !currTrimmed || origTrimmed === currTrimmed) {
+    return null;
+  }
+  return (
+    <div className="rc-diff-badges">
+      <span className="rc-diff-original" title="Testo originale precedente">{origTrimmed}</span>
+      <span className="rc-diff-modified" title="Testo modificato">{currTrimmed}</span>
+    </div>
+  );
+}
+
 function TextDiff({ original, current }) {
   if (!original || original === current) {
     return <span>{current || '—'}</span>;
   }
-  return (
-    <span>
-      <span className="rc-diff-original">{original}</span>
-      <span className="rc-diff-modified">{current}</span>
-    </span>
-  );
+  return <TextDiffBadges original={original} current={current} />;
 }
 
 // ─── Dropzone Component ───────────────────────────────────────────────────────
@@ -183,6 +199,108 @@ function Dropzone({ files, onFilesChange, existingUrls = [] }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function ArticleDropzone({ existingAttachments = [], pendingFiles = [], onUpload, onRemovePending, isUploading }) {
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef();
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragging(false);
+    const dropped = Array.from(e.dataTransfer.files);
+    if (dropped.length > 0 && onUpload) {
+      onUpload(dropped);
+    }
+  };
+
+  return (
+    <div className="rc-article-dropzone-box">
+      <div
+        className={`rc-dropzone rc-dropzone--article${dragging ? ' dragover' : ''}${isUploading ? ' is-uploading' : ''}`}
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragging(true); }}
+        onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragging(false); }}
+        onDrop={handleDrop}
+        onClick={() => !isUploading && inputRef.current?.click()}
+      >
+        <span className="rc-dropzone__icon">
+          <AppIcon name="paperclip" size={17} />
+        </span>
+        <span className="rc-dropzone__text">
+          {isUploading ? (
+            'Caricamento allegati in corso...'
+          ) : (
+            <>
+              <strong>Trascina i file qui</strong> oppure <span className="rc-dropzone__link">clicca per selezionare allegati</span>
+            </>
+          )}
+        </span>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const files = Array.from(e.target.files);
+            if (files.length > 0 && onUpload) onUpload(files);
+            e.target.value = '';
+          }}
+        />
+      </div>
+
+      {/* Allegati esistenti sul server */}
+      {existingAttachments?.length > 0 && (
+        <div className="rc-attachments-list" style={{ marginTop: 8 }}>
+          {existingAttachments.map((att, i) => {
+            const info = getAttachmentInfo(att);
+            return (
+              <div key={i} className="rc-attachment-chip">
+                <AppIcon name="fileText" size={13} />
+                <a
+                  href={info.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rc-attachment-link"
+                  title={`Apri ${info.name} in una nuova scheda`}
+                >
+                  {info.name}
+                </a>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* File locali in attesa di caricamento / salvataggio */}
+      {pendingFiles?.length > 0 && (
+        <div className="rc-attachments-list" style={{ marginTop: 8 }}>
+          {pendingFiles.map((file, i) => (
+            <div key={`pending-${i}`} className="rc-attachment-chip rc-attachment-chip--pending">
+              <AppIcon name="fileText" size={13} />
+              <span className="rc-attachment-name" style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>
+                {file.name}
+              </span>
+              {onRemovePending && (
+                <button
+                  type="button"
+                  className="btn-icon btn-ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemovePending(i);
+                  }}
+                  style={{ padding: 2, marginLeft: 4 }}
+                  title="Rimuovi file selezionato"
+                >
+                  <AppIcon name="close" size={11} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -272,12 +390,62 @@ function ConfirmActionModal({
 
 // ─── Modal Nuova Richiesta ────────────────────────────────────────────────────
 
+// ─── Modal Nuova Richiesta ────────────────────────────────────────────────────
+
 function NuovaRichiestaModal({ onClose, onCreated }) {
   const [form, setForm] = useState({ title: '', descrizione: '', numero_offerta: '', cliente: '' });
+  const [articoli, setArticoli] = useState([]);
   const [files, setFiles] = useState([]);
   const [saving, setSaving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const { showToast } = useToast();
+
+  const handleAddArticolo = () => {
+    setArticoli(prev => [
+      ...prev,
+      {
+        id: Date.now() + Math.random(),
+        titolo: '',
+        descrizione: '',
+        is_standard: false,
+        is_atex: false,
+        is_alimentare: false,
+        tipo_fornitura: null,
+      },
+    ]);
+  };
+
+  const handleRemoveArticolo = (index) => {
+    setArticoli(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateArticoloField = (index, field, value) => {
+    setArticoli(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
+  const handleToggleArticoloTipologia = (index, type) => {
+    setArticoli(prev => {
+      const next = [...prev];
+      const art = { ...next[index] };
+      if (type === 'standard') {
+        art.is_standard = !art.is_standard;
+        art.is_atex = false;
+        art.is_alimentare = false;
+      } else if (type === 'atex') {
+        art.is_atex = !art.is_atex;
+        art.is_standard = false;
+      } else if (type === 'alimentare') {
+        art.is_alimentare = !art.is_alimentare;
+        art.is_standard = false;
+      }
+      next[index] = art;
+      return next;
+    });
+  };
 
   const handlePreSubmit = (e) => {
     e.preventDefault();
@@ -285,13 +453,23 @@ function NuovaRichiestaModal({ onClose, onCreated }) {
       showToast('Titolo e Cliente sono obbligatori', 'error');
       return;
     }
+    for (let i = 0; i < articoli.length; i++) {
+      if (!articoli[i].titolo.trim()) {
+        showToast(`Inserisci il titolo per l'Articolo #${i + 1}`, 'error');
+        return;
+      }
+    }
     setShowConfirm(true);
   };
 
   const handleConfirmCreate = async () => {
     setSaving(true);
     try {
-      const created = await createRichiesta(form);
+      const payload = {
+        ...form,
+        articoli: articoli.map(({ id, ...rest }) => rest),
+      };
+      const created = await createRichiesta(payload);
       if (files.length > 0 && created?.id) {
         await uploadAttachmentsRichiesta(created.id, files);
       }
@@ -308,6 +486,10 @@ function NuovaRichiestaModal({ onClose, onCreated }) {
     }
   };
 
+  const confirmArticlesText = articoli.length > 0
+    ? ` con ${articoli.length} ${articoli.length === 1 ? 'articolo specificato' : 'articoli specificati'}`
+    : '';
+
   return (
     <>
       <div className="rc-modal-overlay">
@@ -320,7 +502,7 @@ function NuovaRichiestaModal({ onClose, onCreated }) {
               <AppIcon name="close" size={18} />
             </button>
           </div>
-          <form onSubmit={handlePreSubmit}>
+          <form onSubmit={handlePreSubmit} className="rc-modal-form">
             <div className="rc-modal__body">
               <div className="rc-form-row">
                 <div className="rc-form-group">
@@ -329,7 +511,7 @@ function NuovaRichiestaModal({ onClose, onCreated }) {
                     className="input"
                     value={form.title}
                     onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    placeholder="Es. Richiesta componenti linea X"
+                    placeholder="Titolo richiesta"
                     required
                   />
                 </div>
@@ -350,7 +532,7 @@ function NuovaRichiestaModal({ onClose, onCreated }) {
                   className="input"
                   value={form.numero_offerta}
                   onChange={(e) => setForm({ ...form, numero_offerta: e.target.value })}
-                  placeholder="Es. OFF-2026-001"
+                  placeholder="Numero offerta"
                 />
               </div>
               <div className="rc-form-group">
@@ -360,9 +542,154 @@ function NuovaRichiestaModal({ onClose, onCreated }) {
                   value={form.descrizione}
                   onChange={(e) => setForm({ ...form, descrizione: e.target.value })}
                   placeholder="Descrizione dettagliata della richiesta..."
-                  rows={4}
+                  rows={3}
                 />
               </div>
+
+              {/* ── Articoli da Preventivare (opzionale per il commerciale) ── */}
+              <div style={{ marginTop: 18, marginBottom: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                  <div>
+                    <label className="rc-label" style={{ marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <AppIcon name="list" size={15} />
+                      Articoli da Preventivare {articoli.length > 0 && `(${articoli.length})`}
+                    </label>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                      Puoi indicare gli articoli richiesti (i costi saranno inseriti dall'Ufficio Acquisti).
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleAddArticolo}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', height: 30, fontSize: '0.8rem' }}
+                  >
+                    <AppIcon name="plus" size={12} /> Aggiungi Articolo
+                  </button>
+                </div>
+
+                {articoli.length === 0 ? (
+                  <div
+                    onClick={handleAddArticolo}
+                    style={{
+                      padding: '14px 16px',
+                      border: '1px dashed var(--border)',
+                      borderRadius: 8,
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      background: 'var(--bg-secondary)',
+                      transition: 'all 0.15s ease',
+                    }}
+                    title="Clicca per aggiungere un articolo"
+                  >
+                    <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                      Nessun articolo aggiunto. <strong style={{ color: 'var(--accent-500)' }}>+ Clicca qui per aggiungere un articolo</strong>
+                    </span>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {articoli.map((art, idx) => (
+                      <div
+                        key={art.id}
+                        style={{
+                          background: 'var(--bg-secondary)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 8,
+                          padding: '12px 14px',
+                        }}
+                      >
+                        {/* Header articolo */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-500)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--accent-500)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem' }}>
+                              {idx + 1}
+                            </span>
+                            Articolo #{idx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            className="btn-icon btn-ghost text-danger"
+                            onClick={() => handleRemoveArticolo(idx)}
+                            style={{ padding: 3 }}
+                            title="Rimuovi questo articolo"
+                          >
+                            <AppIcon name="close" size={13} />
+                          </button>
+                        </div>
+
+                        {/* Titolo articolo */}
+                        <div className="rc-form-group" style={{ marginBottom: 8 }}>
+                          <label className="rc-label" style={{ fontSize: '0.8rem' }}>Titolo Articolo <span className="required">*</span></label>
+                          <input
+                            className="input"
+                            value={art.titolo}
+                            onChange={(e) => handleUpdateArticoloField(idx, 'titolo', e.target.value)}
+                            placeholder="Es. Motoriduttore, Pompa, Sensore..."
+                            style={{ fontSize: '0.85rem', padding: '5px 10px', height: 32 }}
+                            required
+                          />
+                        </div>
+
+                        {/* Descrizione articolo */}
+                        <div className="rc-form-group" style={{ marginBottom: 8 }}>
+                          <label className="rc-label" style={{ fontSize: '0.8rem' }}>Specifiche / Note per Acquisti</label>
+                          <textarea
+                            className="input"
+                            rows={2}
+                            value={art.descrizione}
+                            onChange={(e) => handleUpdateArticoloField(idx, 'descrizione', e.target.value)}
+                            placeholder="Codice fornitore, dimensioni o specifiche tecniche..."
+                            style={{ fontSize: '0.82rem', padding: '6px 10px' }}
+                          />
+                        </div>
+
+                        {/* Tipologia Prodotto e Tipo Fornitura */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center' }}>
+                          <div>
+                            <span style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Tipologia Prodotto</span>
+                            <div className="rc-pill-group">
+                              <button
+                                type="button"
+                                className={`rc-pill-chip rc-pill-chip--standard ${art.is_standard ? 'is-active' : ''}`}
+                                onClick={() => handleToggleArticoloTipologia(idx, 'standard')}
+                                style={{ padding: '2px 8px', fontSize: '0.76rem' }}
+                              >
+                                <span className={`rc-pill-chip__indicator ${art.is_standard ? 'is-active' : ''}`}>
+                                  {art.is_standard && <AppIcon name="check" size={10} />}
+                                </span>
+                                <span>Standard</span>
+                              </button>
+                              <button
+                                type="button"
+                                className={`rc-pill-chip rc-pill-chip--atex ${art.is_atex ? 'is-active' : ''}`}
+                                onClick={() => handleToggleArticoloTipologia(idx, 'atex')}
+                                style={{ padding: '2px 8px', fontSize: '0.76rem' }}
+                              >
+                                <span className={`rc-pill-chip__indicator ${art.is_atex ? 'is-active' : ''}`}>
+                                  {art.is_atex && <AppIcon name="check" size={10} />}
+                                </span>
+                                <span>ATEX</span>
+                              </button>
+                              <button
+                                type="button"
+                                className={`rc-pill-chip rc-pill-chip--alimentare ${art.is_alimentare ? 'is-active' : ''}`}
+                                onClick={() => handleToggleArticoloTipologia(idx, 'alimentare')}
+                                style={{ padding: '2px 8px', fontSize: '0.76rem' }}
+                              >
+                                <span className={`rc-pill-chip__indicator ${art.is_alimentare ? 'is-active' : ''}`}>
+                                  {art.is_alimentare && <AppIcon name="check" size={10} />}
+                                </span>
+                                <span>Alimentare</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="rc-form-group" style={{ marginBottom: 0 }}>
                 <label className="rc-label">Allegati</label>
                 <Dropzone files={files} onFilesChange={setFiles} />
@@ -381,7 +708,7 @@ function NuovaRichiestaModal({ onClose, onCreated }) {
       <ConfirmActionModal
         isOpen={showConfirm}
         title="Conferma Creazione Richiesta"
-        message={`Sei sicuro di voler creare e inviare la richiesta di preventivo per il cliente "${form.cliente}"? L'ufficio acquisti riceverà una notifica via email.`}
+        message={`Sei sicuro di voler creare e inviare la richiesta di preventivo per il cliente "${form.cliente}"${confirmArticlesText}? L'ufficio acquisti riceverà una notifica via email.`}
         confirmLabel="Crea Richiesta"
         confirmIcon="plus"
         confirmVariant="primary"
@@ -395,10 +722,10 @@ function NuovaRichiestaModal({ onClose, onCreated }) {
 
 // ─── Form Articolo (acquisti) ─────────────────────────────────────────────────
 
-function ArticoloForm({ richiestaId, articolo, userRole, onSaved, onCancel }) {
+function ArticoloForm({ richiestaId, articolo, userRole, status, index = 0, onSaved, onCancel }) {
   const [form, setForm] = useState(articolo ? {
     titolo: articolo.titolo || '',
-    costo: articolo.costo != null ? articolo.costo : '',
+    costo: (articolo.costo != null && articolo.costo > 0) ? articolo.costo : '',
     descrizione: articolo.descrizione || '',
     is_standard: Boolean(articolo.is_standard),
     is_atex: Boolean(articolo.is_atex),
@@ -416,6 +743,14 @@ function ArticoloForm({ richiestaId, articolo, userRole, onSaved, onCancel }) {
   const [files, setFiles] = useState([]);
   const [saving, setSaving] = useState(false);
   const { showToast } = useToast();
+
+  let originalSnap = null;
+  if (userRole === 'admin' && articolo?.testo_originale_acquisti) {
+    try { originalSnap = JSON.parse(articolo.testo_originale_acquisti); } catch { originalSnap = null; }
+  }
+  const origTitolo = (originalSnap && originalSnap.titolo !== undefined) ? originalSnap.titolo : (articolo?.titolo || '');
+  const origDesc = (originalSnap && originalSnap.descrizione !== undefined) ? originalSnap.descrizione : (articolo?.descrizione || '');
+  const origNote = (originalSnap && originalSnap.note_admin !== undefined) ? originalSnap.note_admin : (articolo?.note_admin || '');
 
   const handleToggleTipologia = (type) => {
     if (type === 'standard') {
@@ -473,7 +808,8 @@ function ArticoloForm({ richiestaId, articolo, userRole, onSaved, onCancel }) {
         saved = await addArticolo(richiestaId, payload);
       }
       if (files.length > 0) {
-        await uploadAttachmentsArticolo(richiestaId, saved.id, files);
+        const withAttachments = await uploadAttachmentsArticolo(richiestaId, saved.id, files);
+        if (withAttachments) saved = withAttachments;
       }
       showToast(articolo ? 'Articolo modificato con successo' : 'Articolo aggiunto con successo', 'success');
       onSaved(saved);
@@ -485,20 +821,107 @@ function ArticoloForm({ richiestaId, articolo, userRole, onSaved, onCancel }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="rc-articolo-card">
-      <div className="rc-form-row">
-        <div className="rc-form-group" style={{ marginBottom: 0, flex: 2 }}>
-          <label className="rc-label">Titolo <span className="required">*</span></label>
-          <input className="input" value={form.titolo} onChange={e => setForm({ ...form, titolo: e.target.value })} placeholder="Nome articolo/prodotto" required />
+    <form onSubmit={handleSubmit} className="rc-articolo-card rc-articolo-card--editable" data-theme={index % 6}>
+      {/* Barra superiore con Badge numerato e Azioni */}
+      <div className="rc-articolo-card__topbar">
+        <div className="rc-articolo-card__badge">
+          <AppIcon name="package" size={13} />
+          <span>Articolo #{index + 1}</span>
         </div>
-        <div className="rc-form-group" style={{ marginBottom: 0, flex: 1 }}>
-          <label className="rc-label">Costo (€) <span className="required">*</span></label>
-          <input className="input" type="number" step="0.01" value={form.costo} onChange={e => setForm({ ...form, costo: e.target.value })} placeholder="0.00" required />
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={onCancel}
+            title="Annulla inserimento articolo"
+          >
+            <AppIcon name="close" size={13} /> Annulla
+          </button>
         </div>
       </div>
 
-      {userRole === 'admin' && (
-        <div className="rc-form-row" style={{ marginTop: 12 }}>
+      <div className="rc-form-group" style={{ marginBottom: 0 }}>
+        <label className="rc-label">Titolo Articolo <span className="required">*</span></label>
+        {userRole === 'admin' && <TextDiffBadges original={origTitolo} current={form.titolo} />}
+        <input
+          className="input"
+          style={{ fontWeight: 600 }}
+          value={form.titolo}
+          onChange={e => setForm({ ...form, titolo: e.target.value })}
+          placeholder="Titolo articolo *"
+          required
+          autoFocus
+        />
+      </div>
+
+      <div className="rc-form-group" style={{ marginTop: 6 }}>
+        <label className="rc-label">Descrizione</label>
+        {userRole === 'admin' && <TextDiffBadges original={origDesc} current={form.descrizione} />}
+        <textarea
+          className="input"
+          rows={2}
+          value={form.descrizione}
+          onChange={e => setForm({ ...form, descrizione: e.target.value })}
+          placeholder="Descrizione tecnica, specifiche o note per l'articolo..."
+        />
+      </div>
+
+      <div className="rc-form-row">
+        <div className="rc-form-group" style={{ minWidth: 170 }}>
+          <label className="rc-label">Costo Acquisti (€) <span className="required">*</span></label>
+          <input
+            className="input"
+            type="number"
+            step="0.01"
+            style={{ borderColor: 'var(--primary-500)', fontWeight: 700, fontSize: '0.95rem' }}
+            value={form.costo}
+            onChange={e => setForm({ ...form, costo: e.target.value })}
+            placeholder="0.00 *"
+            required
+          />
+        </div>
+
+        <div className="rc-form-group" style={{ flex: 2 }}>
+          <label className="rc-label">Tipologia Prodotto</label>
+          <div className="rc-pill-group" style={{ padding: '2px 0' }}>
+            <button
+              type="button"
+              className={`rc-pill-chip rc-pill-chip--standard ${form.is_standard ? 'is-active' : ''}`}
+              onClick={() => handleToggleTipologia('standard')}
+            >
+              <span className={`rc-pill-chip__indicator ${form.is_standard ? 'is-active' : ''}`}>
+                {form.is_standard && <AppIcon name="check" size={11} />}
+              </span>
+              <span>Standard</span>
+            </button>
+
+            <button
+              type="button"
+              className={`rc-pill-chip rc-pill-chip--atex ${form.is_atex ? 'is-active' : ''}`}
+              onClick={() => handleToggleTipologia('atex')}
+            >
+              <span className={`rc-pill-chip__indicator ${form.is_atex ? 'is-active' : ''}`}>
+                {form.is_atex && <AppIcon name="check" size={11} />}
+              </span>
+              <span>ATEX</span>
+            </button>
+
+            <button
+              type="button"
+              className={`rc-pill-chip rc-pill-chip--alimentare ${form.is_alimentare ? 'is-active' : ''}`}
+              onClick={() => handleToggleTipologia('alimentare')}
+            >
+              <span className={`rc-pill-chip__indicator ${form.is_alimentare ? 'is-active' : ''}`}>
+                {form.is_alimentare && <AppIcon name="check" size={11} />}
+              </span>
+              <span>Alimentare</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {userRole === 'admin' && status === 'manca_listino' && (
+        <div className="rc-form-row" style={{ marginTop: 6 }}>
           <div className="rc-form-group" style={{ marginBottom: 0, flex: 1 }}>
             <label className="rc-label">Prezzo Listino (€)</label>
             <input
@@ -512,6 +935,7 @@ function ArticoloForm({ richiestaId, articolo, userRole, onSaved, onCancel }) {
           </div>
           <div className="rc-form-group" style={{ marginBottom: 0, flex: 2 }}>
             <label className="rc-label">Note Admin (visibili al commerciale)</label>
+            {userRole === 'admin' && <TextDiffBadges original={origNote} current={form.note_admin} />}
             <input
               className="input"
               value={form.note_admin}
@@ -522,53 +946,7 @@ function ArticoloForm({ richiestaId, articolo, userRole, onSaved, onCancel }) {
         </div>
       )}
 
-      <div className="rc-form-group" style={{ marginTop: 12 }}>
-        <label className="rc-label">Descrizione</label>
-        <textarea className="input" rows={3} value={form.descrizione} onChange={e => setForm({ ...form, descrizione: e.target.value })} placeholder="Specifiche tecniche, note, ecc..." />
-      </div>
-
-      {/* Tipologia Prodotto: Standard esclusivo OPPURE combinazione ATEX / Alimentare */}
-      <div className="rc-form-group">
-        <label className="rc-label">
-          Tipologia Prodotto
-        </label>
-        <div className="rc-pill-group">
-          <button
-            type="button"
-            className={`rc-pill-chip rc-pill-chip--standard ${form.is_standard ? 'is-active' : ''}`}
-            onClick={() => handleToggleTipologia('standard')}
-          >
-            <span className={`rc-pill-chip__indicator ${form.is_standard ? 'is-active' : ''}`}>
-              {form.is_standard && <AppIcon name="check" size={11} />}
-            </span>
-            <span>Standard</span>
-          </button>
-
-          <button
-            type="button"
-            className={`rc-pill-chip rc-pill-chip--atex ${form.is_atex ? 'is-active' : ''}`}
-            onClick={() => handleToggleTipologia('atex')}
-          >
-            <span className={`rc-pill-chip__indicator ${form.is_atex ? 'is-active' : ''}`}>
-              {form.is_atex && <AppIcon name="check" size={11} />}
-            </span>
-            <span>ATEX</span>
-          </button>
-
-          <button
-            type="button"
-            className={`rc-pill-chip rc-pill-chip--alimentare ${form.is_alimentare ? 'is-active' : ''}`}
-            onClick={() => handleToggleTipologia('alimentare')}
-          >
-            <span className={`rc-pill-chip__indicator ${form.is_alimentare ? 'is-active' : ''}`}>
-              {form.is_alimentare && <AppIcon name="check" size={11} />}
-            </span>
-            <span>Alimentare</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Tipo Fornitura: Solo una opzione o nessuna */}
+      {/* Tipo Fornitura (Acquisti / Admin) */}
       <div className="rc-form-group">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
           <label className="rc-label" style={{ marginBottom: 0 }}>Tipo Fornitura</label>
@@ -576,7 +954,7 @@ function ArticoloForm({ richiestaId, articolo, userRole, onSaved, onCancel }) {
             (opzionale: clicca per selezionare o deselezionare)
           </span>
         </div>
-        <div className="rc-pill-group">
+        <div className="rc-pill-group" style={{ padding: '2px 0' }}>
           {Object.entries(TIPO_FORNITURA_LABELS).map(([val, lab]) => {
             const isSelected = form.tipo_fornitura === val;
             return (
@@ -595,14 +973,24 @@ function ArticoloForm({ richiestaId, articolo, userRole, onSaved, onCancel }) {
           })}
         </div>
       </div>
-      <div className="rc-form-group">
-        <label className="rc-label">Allegati</label>
-        <Dropzone files={files} onFilesChange={setFiles} existingUrls={articolo?.attachments || []} />
+
+      {/* Allegati dell'articolo con Drag and Drop */}
+      <div className="rc-form-group" style={{ marginTop: 6, marginBottom: 0 }}>
+        <label className="rc-label" style={{ marginBottom: 6 }}>Allegati Articolo</label>
+        <ArticleDropzone
+          existingAttachments={articolo?.attachments || []}
+          pendingFiles={files}
+          onUpload={(newFiles) => setFiles(prev => [...prev, ...newFiles])}
+          onRemovePending={(fileIdx) => setFiles(prev => prev.filter((_, i) => i !== fileIdx))}
+        />
       </div>
-      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={onCancel}>Annulla</button>
+
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 14, paddingTop: 10, borderTop: '1px solid var(--border-subtle)' }}>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={onCancel}>
+          Annulla
+        </button>
         <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
-          {saving ? 'Salvataggio...' : (articolo ? <><AppIcon name="save" size={14} /> Salva</> : <><AppIcon name="plus" size={14} /> Aggiungi</>)}
+          {saving ? 'Salvataggio...' : (articolo ? <><AppIcon name="save" size={14} /> Salva Modifiche</> : <><AppIcon name="plus" size={14} /> Aggiungi Articolo</>)}
         </button>
       </div>
     </form>
@@ -620,6 +1008,14 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
   const [noteAdmin, setNoteAdmin] = useState({});
   const [titoliAdmin, setTitoliAdmin] = useState({});
   const [descrizioniAdmin, setDescrizioniAdmin] = useState({});
+  const [costiAcquisti, setCostiAcquisti] = useState({});
+  const [titoliAcquisti, setTitoliAcquisti] = useState({});
+  const [descrizioniAcquisti, setDescrizioniAcquisti] = useState({});
+  const [tipologiaAcquisti, setTipologiaAcquisti] = useState({});
+  const [tipoFornituraAcquisti, setTipoFornituraAcquisti] = useState({});
+  const [descrizioneRichiestaAdmin, setDescrizioneRichiestaAdmin] = useState('');
+  const [savingArticoli, setSavingArticoli] = useState(false);
+  const [uploadingAttArtId, setUploadingAttArtId] = useState(null);
   const [sending, setSending] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
   const [isEditingRichiesta, setIsEditingRichiesta] = useState(false);
@@ -637,18 +1033,36 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
     try {
       const data = await getRichiesta(richiestaId);
       setRichiesta(data);
+      setDescrizioneRichiestaAdmin(data.description || '');
       // Precompila i campi admin con i valori attuali
       const pInit = {}, nInit = {}, tInit = {}, dInit = {};
+      const cInit = {}, tAcqInit = {}, dAcqInit = {}, tipInit = {}, tfInit = {};
       data.articoli?.forEach(a => {
         pInit[a.id] = a.prezzo_listino != null ? a.prezzo_listino : '';
         nInit[a.id] = a.note_admin || '';
         tInit[a.id] = a.titolo || '';
         dInit[a.id] = a.descrizione || '';
+
+        cInit[a.id] = (a.costo != null && a.costo > 0) ? a.costo : '';
+        tAcqInit[a.id] = a.titolo || '';
+        dAcqInit[a.id] = a.descrizione || '';
+        tipInit[a.id] = {
+          is_standard: Boolean(a.is_standard),
+          is_atex: Boolean(a.is_atex),
+          is_alimentare: Boolean(a.is_alimentare),
+        };
+        tfInit[a.id] = a.tipo_fornitura || null;
       });
       setPrezziListino(pInit);
       setNoteAdmin(nInit);
       setTitoliAdmin(tInit);
       setDescrizioniAdmin(dInit);
+
+      setCostiAcquisti(cInit);
+      setTitoliAcquisti(tAcqInit);
+      setDescrizioniAcquisti(dAcqInit);
+      setTipologiaAcquisti(tipInit);
+      setTipoFornituraAcquisti(tfInit);
       return data;
     } catch (err) {
       showToast(getErrorMessage(err, 'Errore nel caricamento del dettaglio'), 'error');
@@ -737,25 +1151,146 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
     });
   };
 
+  const handleToggleTipologiaAcquisti = (artId, type) => {
+    setTipologiaAcquisti(prev => {
+      const current = prev[artId] || { is_standard: false, is_atex: false, is_alimentare: false };
+      if (type === 'standard') {
+        return {
+          ...prev,
+          [artId]: {
+            is_standard: !current.is_standard,
+            is_atex: false,
+            is_alimentare: false,
+          },
+        };
+      } else if (type === 'atex') {
+        return {
+          ...prev,
+          [artId]: {
+            ...current,
+            is_atex: !current.is_atex,
+            is_standard: false,
+          },
+        };
+      } else if (type === 'alimentare') {
+        return {
+          ...prev,
+          [artId]: {
+            ...current,
+            is_alimentare: !current.is_alimentare,
+            is_standard: false,
+          },
+        };
+      }
+      return prev;
+    });
+  };
+
+  const handleToggleTipoFornituraAcquisti = (artId, val) => {
+    setTipoFornituraAcquisti(prev => ({
+      ...prev,
+      [artId]: prev[artId] === val ? null : val,
+    }));
+  };
+
+  const handleUploadArticoloAttachments = async (artId, fileList) => {
+    if (!fileList || fileList.length === 0) return;
+    setUploadingAttArtId(artId);
+    try {
+      await uploadAttachmentsArticolo(richiestaId, artId, Array.from(fileList));
+      showToast('Allegati caricati con successo', 'success');
+      await load();
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Errore nel caricamento allegati articolo'), 'error');
+    } finally {
+      setUploadingAttArtId(null);
+    }
+  };
+
+  const buildAcquistiArticoliPayload = () => {
+    return (richiesta?.articoli || []).map(a => {
+      const tip = tipologiaAcquisti[a.id] || {
+        is_standard: Boolean(a.is_standard),
+        is_atex: Boolean(a.is_atex),
+        is_alimentare: Boolean(a.is_alimentare),
+      };
+      const rawCosto = costiAcquisti[a.id];
+      const parsedCosto = rawCosto !== undefined && rawCosto !== '' ? parseFloat(rawCosto) : (a.costo || 0);
+      return {
+        id: a.id,
+        titolo: (titoliAcquisti[a.id] !== undefined ? titoliAcquisti[a.id] : a.titolo)?.trim(),
+        costo: isNaN(parsedCosto) ? 0 : parsedCosto,
+        descrizione: (descrizioniAcquisti[a.id] !== undefined ? descrizioniAcquisti[a.id] : (a.descrizione || '')).trim(),
+        is_standard: Boolean(tip.is_standard),
+        is_atex: Boolean(tip.is_atex),
+        is_alimentare: Boolean(tip.is_alimentare),
+        tipo_fornitura: tipoFornituraAcquisti[a.id] !== undefined ? tipoFornituraAcquisti[a.id] : (a.tipo_fornitura || null),
+      };
+    });
+  };
+
+  const handleSaveAllArticoli = async () => {
+    if (!richiesta?.articoli?.length) return;
+    const isMancaListinoAdmin = userRole === 'admin' && richiesta.status === 'manca_listino';
+    const payloadArticoli = isMancaListinoAdmin
+      ? (richiesta.articoli || []).map(a => ({
+          id: a.id,
+          titolo: (titoliAdmin[a.id] !== undefined ? titoliAdmin[a.id] : a.titolo)?.trim(),
+          descrizione: (descrizioniAdmin[a.id] !== undefined ? descrizioniAdmin[a.id] : (a.descrizione || '')).trim(),
+          costo: a.costo,
+          prezzo_listino: prezziListino[a.id] !== '' && prezziListino[a.id] != null ? parseFloat(prezziListino[a.id]) : null,
+          note_admin: (noteAdmin[a.id] !== undefined ? noteAdmin[a.id] : (a.note_admin || '')).trim() || null,
+        }))
+      : buildAcquistiArticoliPayload();
+
+    setSavingArticoli(true);
+    try {
+      const updated = await salvaArticoli(richiestaId, payloadArticoli, isMancaListinoAdmin ? descrizioneRichiestaAdmin : null);
+      showToast('Modifiche salvate con successo', 'success');
+      if (updated) setRichiesta(updated);
+      await load();
+      if (onUpdated) await onUpdated(updated);
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Errore nel salvataggio degli articoli'), 'error');
+    } finally {
+      setSavingArticoli(false);
+    }
+  };
+
   const handleInviaAdAdminClick = () => {
     if (!richiesta?.articoli?.length) {
       showToast('Aggiungi almeno un articolo prima di inviare', 'error');
       return;
     }
+
+    const payloadArticoli = buildAcquistiArticoliPayload();
+
+    const missingTitle = payloadArticoli.find(a => !a.titolo);
+    if (missingTitle) {
+      showToast('Tutti gli articoli devono avere un titolo', 'error');
+      return;
+    }
+
+    const missingCosto = payloadArticoli.find(a => !a.costo || a.costo <= 0);
+    if (missingCosto) {
+      showToast(`Inserisci un costo valido per tutti gli articoli prima di inviare (manca su "${missingCosto.titolo || 'Articolo'}")`, 'error');
+      return;
+    }
+
     const isAcquisti = userRole === 'acquisti';
     setConfirmModal({
       title: isAcquisti ? 'Conferma Consegna Preventivo' : 'Conferma Invio a Listino',
       message: isAcquisti
-        ? 'Sei sicuro di voler consegnare questo preventivo con gli articoli inseriti? La richiesta passerà allo stato "Manca Listino" e verrà notificato l\'amministratore.'
-        : 'Sei sicuro di voler inviare questo preventivo alla fase "Manca Listino"?',
+        ? 'Tutte le modifiche agli articoli verranno salvate automaticamente. La richiesta passerà allo stato "Manca Listino" e verrà notificato l\'amministratore.'
+        : 'Tutte le modifiche agli articoli verranno salvate automaticamente e la richiesta passerà alla fase "Manca Listino".',
       confirmLabel: isAcquisti ? 'Consegna' : 'Invia a Listino',
       confirmIcon: 'send',
       confirmVariant: 'primary',
       action: async () => {
         setSending(true);
         try {
-          const updated = await inviaAdAdmin(richiestaId);
-          showToast('Richiesta inviata all\'admin! Verranno notificati via email.', 'success');
+          const updated = await inviaAdAdmin(richiestaId, { articoli: payloadArticoli });
+          showToast('Preventivo consegnato con successo! Articoli salvati e inviati all\'amministrazione.', 'success');
           if (updated) setRichiesta(updated);
           await load();
           if (onUpdated) await onUpdated(updated);
@@ -773,9 +1308,9 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
     const articoliPayload = richiesta.articoli.map(a => ({
       id: a.id,
       prezzo_listino: parseFloat(prezziListino[a.id]) || 0,
-      titolo: titoliAdmin[a.id] || a.titolo,
-      descrizione: descrizioniAdmin[a.id] || a.descrizione,
-      note_admin: noteAdmin[a.id] || '',
+      titolo: (titoliAdmin[a.id] !== undefined ? titoliAdmin[a.id] : a.titolo)?.trim(),
+      descrizione: (descrizioniAdmin[a.id] !== undefined ? descrizioniAdmin[a.id] : (a.descrizione || '')).trim(),
+      note_admin: (noteAdmin[a.id] !== undefined ? noteAdmin[a.id] : (a.note_admin || '')).trim(),
     }));
     if (articoliPayload.some(a => !a.prezzo_listino)) {
       showToast('Inserisci il prezzo di listino per tutti gli articoli', 'error');
@@ -790,7 +1325,7 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
       action: async () => {
         setSending(true);
         try {
-          const updated = await completaRichiesta(richiestaId, articoliPayload);
+          const updated = await completaRichiesta(richiestaId, articoliPayload, descrizioneRichiestaAdmin);
           showToast('Richiesta completata! Il commerciale è stato notificato via email.', 'success');
           if (updated) setRichiesta(updated);
           await load();
@@ -860,8 +1395,8 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
   const canAddArticoli = (
     richiesta.status === 'in_lavorazione' && (userRole === 'acquisti' || userRole === 'admin')
   ) || (
-    richiesta.status === 'manca_listino' && userRole === 'admin'
-  );
+      richiesta.status === 'manca_listino' && userRole === 'admin'
+    );
 
   return (
     <div className="rc-modal-overlay">
@@ -946,7 +1481,7 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                     className="input"
                     value={editRichiestaForm.numero_offerta}
                     onChange={(e) => setEditRichiestaForm({ ...editRichiestaForm, numero_offerta: e.target.value })}
-                    placeholder="Es. OFF-2026-089"
+                    placeholder="Numero offerta"
                   />
                 </div>
               </div>
@@ -1047,13 +1582,36 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                 )}
               </div>
 
-              {richiesta.description && (
+              {userRole === 'admin' && richiesta.status === 'manca_listino' ? (
                 <div className="rc-form-group">
-                  <span className="rc-label">Descrizione</span>
-                  <p className="rc-description-box">
-                    {richiesta.description}
-                  </p>
+                  <label className="rc-label">Descrizione Richiesta</label>
+                  <TextDiffBadges
+                    original={richiesta.description_originale || richiesta.description}
+                    current={descrizioneRichiestaAdmin}
+                  />
+                  <textarea
+                    className="input"
+                    rows={4}
+                    value={descrizioneRichiestaAdmin}
+                    onChange={(e) => setDescrizioneRichiestaAdmin(e.target.value)}
+                    placeholder="Descrizione della richiesta commerciale..."
+                  />
                 </div>
+              ) : (
+                richiesta.description && (
+                  <div className="rc-form-group">
+                    <span className="rc-label">Descrizione</span>
+                    {userRole === 'admin' && richiesta.description_originale && (
+                      <TextDiffBadges
+                        original={richiesta.description_originale}
+                        current={richiesta.description}
+                      />
+                    )}
+                    <p className="rc-description-box">
+                      {richiesta.description}
+                    </p>
+                  </div>
+                )
               )}
             </>
           )}
@@ -1104,6 +1662,8 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
               <ArticoloForm
                 richiestaId={richiestaId}
                 userRole={userRole}
+                status={richiesta.status}
+                index={richiesta.articoli?.length || 0}
                 onSaved={handleArticoloSaved}
                 onCancel={() => setShowArticoloForm(false)}
               />
@@ -1121,7 +1681,7 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
               </div>
             )}
 
-            {richiesta.articoli?.map((articolo) => {
+            {richiesta.articoli?.map((articolo, index) => {
               const isEditing = editingArticolo?.id === articolo.id;
               if (isEditing) {
                 return (
@@ -1130,6 +1690,8 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                     richiestaId={richiestaId}
                     articolo={editingArticolo}
                     userRole={userRole}
+                    status={richiesta.status}
+                    index={index}
                     onSaved={handleArticoloSaved}
                     onCancel={() => setEditingArticolo(null)}
                   />
@@ -1143,20 +1705,12 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                 catch { originalSnap = null; }
 
                 return (
-                  <div key={articolo.id} className="rc-articolo-card">
-                    <div className="rc-articolo-card__header">
-                      <div style={{ flex: 1 }}>
-                        <div className="rc-form-group" style={{ marginBottom: 10 }}>
-                          <label className="rc-label">Titolo</label>
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
-                            <TextDiff original={originalSnap?.titolo !== titoliAdmin[articolo.id] ? originalSnap?.titolo : null} current={titoliAdmin[articolo.id]} />
-                          </div>
-                          <input
-                            className="input"
-                            value={titoliAdmin[articolo.id] || ''}
-                            onChange={(e) => setTitoliAdmin({ ...titoliAdmin, [articolo.id]: e.target.value })}
-                          />
-                        </div>
+                  <div key={articolo.id} className="rc-articolo-card rc-articolo-card--editable" data-theme={index % 6}>
+                    {/* Barra superiore con Badge numerato e Azioni */}
+                    <div className="rc-articolo-card__topbar">
+                      <div className="rc-articolo-card__badge">
+                        <AppIcon name="package" size={13} />
+                        <span>Articolo #{index + 1}</span>
                       </div>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         <button
@@ -1171,20 +1725,32 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                           type="button"
                           className="btn btn-secondary btn-sm text-danger"
                           onClick={() => handleDeleteArticolo(articolo.id)}
-                          title="Elimina articolo"
+                          title={`Elimina articolo #${index + 1}`}
                         >
                           <AppIcon name="trash" size={13} />
                         </button>
                       </div>
                     </div>
 
+                    <div className="rc-form-group" style={{ marginBottom: 4 }}>
+                      <label className="rc-label">Titolo</label>
+                      <TextDiffBadges
+                        original={originalSnap?.titolo || articolo.titolo}
+                        current={titoliAdmin[articolo.id]}
+                      />
+                      <input
+                        className="input"
+                        value={titoliAdmin[articolo.id] || ''}
+                        onChange={(e) => setTitoliAdmin({ ...titoliAdmin, [articolo.id]: e.target.value })}
+                      />
+                    </div>
+
                     <div className="rc-form-group">
                       <label className="rc-label">Descrizione</label>
-                      {originalSnap?.descrizione && originalSnap.descrizione !== descrizioniAdmin[articolo.id] && (
-                        <div style={{ fontSize: '0.8rem', marginBottom: 4 }}>
-                          <TextDiff original={originalSnap.descrizione} current={descrizioniAdmin[articolo.id]} />
-                        </div>
-                      )}
+                      <TextDiffBadges
+                        original={originalSnap?.descrizione !== undefined ? originalSnap.descrizione : (articolo.descrizione || '')}
+                        current={descrizioniAdmin[articolo.id]}
+                      />
                       <textarea
                         className="input"
                         rows={3}
@@ -1216,6 +1782,10 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
 
                     <div className="rc-form-group">
                       <label className="rc-label">Note Admin (per il commerciale)</label>
+                      <TextDiffBadges
+                        original={originalSnap?.note_admin !== undefined ? originalSnap.note_admin : (articolo.note_admin || '')}
+                        current={noteAdmin[articolo.id]}
+                      />
                       <textarea
                         className="input"
                         rows={2}
@@ -1242,25 +1812,169 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                       )}
                     </div>
 
-                    {articolo.attachments?.length > 0 && (
-                      <div className="rc-attachments-list" style={{ marginTop: 10 }}>
-                        {articolo.attachments.map((att, i) => {
-                          const info = getAttachmentInfo(att);
+                    {/* Allegati articolo con Drag and Drop */}
+                    <div className="rc-form-group" style={{ marginTop: 6, marginBottom: 0 }}>
+                      <label className="rc-label" style={{ marginBottom: 6 }}>Allegati Articolo</label>
+                      <ArticleDropzone
+                        existingAttachments={articolo.attachments || []}
+                        onUpload={(files) => handleUploadArticoloAttachments(articolo.id, files)}
+                        isUploading={uploadingAttArtId === articolo.id}
+                      />
+                    </div>
+                  </div>
+                );
+              }
+
+              // Vista Acquisti / Admin (fase IN_LAVORAZIONE): modifica diretta di costi, dettagli, tipologia e tipo fornitura
+              if ((userRole === 'acquisti' || userRole === 'admin') && richiesta.status === 'in_lavorazione') {
+                const tip = tipologiaAcquisti[articolo.id] || {
+                  is_standard: Boolean(articolo.is_standard),
+                  is_atex: Boolean(articolo.is_atex),
+                  is_alimentare: Boolean(articolo.is_alimentare),
+                };
+                const tipoForn = tipoFornituraAcquisti[articolo.id] !== undefined
+                  ? tipoFornituraAcquisti[articolo.id]
+                  : (articolo.tipo_fornitura || null);
+
+                return (
+                  <div key={articolo.id} className="rc-articolo-card rc-articolo-card--editable" data-theme={index % 6}>
+                    {/* Barra superiore con Badge numerato e Azioni */}
+                    <div className="rc-articolo-card__topbar">
+                      <div className="rc-articolo-card__badge">
+                        <AppIcon name="package" size={13} />
+                        <span>Articolo #{index + 1}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm text-danger"
+                          onClick={() => handleDeleteArticolo(articolo.id)}
+                          title={`Elimina articolo #${index + 1}`}
+                        >
+                          <AppIcon name="trash" size={13} /> Elimina
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="rc-form-group" style={{ marginBottom: 0 }}>
+                      <label className="rc-label">Titolo Articolo <span className="required">*</span></label>
+                      <input
+                        className="input"
+                        style={{ fontWeight: 600 }}
+                        value={titoliAcquisti[articolo.id] !== undefined ? titoliAcquisti[articolo.id] : (articolo.titolo || '')}
+                        onChange={(e) => setTitoliAcquisti({ ...titoliAcquisti, [articolo.id]: e.target.value })}
+                        placeholder="Titolo articolo *"
+                      />
+                    </div>
+
+                    <div className="rc-form-group" style={{ marginTop: 6 }}>
+                      <label className="rc-label">Descrizione</label>
+                      <textarea
+                        className="input"
+                        rows={2}
+                        value={descrizioniAcquisti[articolo.id] !== undefined ? descrizioniAcquisti[articolo.id] : (articolo.descrizione || '')}
+                        onChange={(e) => setDescrizioniAcquisti({ ...descrizioniAcquisti, [articolo.id]: e.target.value })}
+                        placeholder="Descrizione tecnica, specifiche o note per l'articolo..."
+                      />
+                    </div>
+
+                    <div className="rc-form-row">
+                      <div className="rc-form-group" style={{ minWidth: 170 }}>
+                        <label className="rc-label">Costo Acquisti (€) <span className="required">*</span></label>
+                        <input
+                          className="input"
+                          type="number"
+                          step="0.01"
+                          style={{ borderColor: 'var(--primary-500)', fontWeight: 700, fontSize: '0.95rem' }}
+                          value={costiAcquisti[articolo.id] !== undefined ? costiAcquisti[articolo.id] : (articolo.costo > 0 ? articolo.costo : '')}
+                          onChange={(e) => setCostiAcquisti({ ...costiAcquisti, [articolo.id]: e.target.value })}
+                          placeholder="0.00 *"
+                        />
+                      </div>
+
+                      <div className="rc-form-group" style={{ flex: 2 }}>
+                        <label className="rc-label">Tipologia Prodotto</label>
+                        <div className="rc-pill-group" style={{ padding: '2px 0' }}>
+                          <button
+                            type="button"
+                            className={`rc-pill-chip rc-pill-chip--standard ${tip.is_standard ? 'is-active' : ''}`}
+                            onClick={() => handleToggleTipologiaAcquisti(articolo.id, 'standard')}
+                          >
+                            <span className={`rc-pill-chip__indicator ${tip.is_standard ? 'is-active' : ''}`}>
+                              {tip.is_standard && <AppIcon name="check" size={11} />}
+                            </span>
+                            <span>Standard</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className={`rc-pill-chip rc-pill-chip--atex ${tip.is_atex ? 'is-active' : ''}`}
+                            onClick={() => handleToggleTipologiaAcquisti(articolo.id, 'atex')}
+                          >
+                            <span className={`rc-pill-chip__indicator ${tip.is_atex ? 'is-active' : ''}`}>
+                              {tip.is_atex && <AppIcon name="check" size={11} />}
+                            </span>
+                            <span>ATEX</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className={`rc-pill-chip rc-pill-chip--alimentare ${tip.is_alimentare ? 'is-active' : ''}`}
+                            onClick={() => handleToggleTipologiaAcquisti(articolo.id, 'alimentare')}
+                          >
+                            <span className={`rc-pill-chip__indicator ${tip.is_alimentare ? 'is-active' : ''}`}>
+                              {tip.is_alimentare && <AppIcon name="check" size={11} />}
+                            </span>
+                            <span>Alimentare</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tipo Fornitura (Acquisti / Admin) */}
+                    <div className="rc-form-group">
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <label className="rc-label" style={{ marginBottom: 0 }}>Tipo Fornitura</label>
+                        <span style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)' }}>
+                          (opzionale: clicca per selezionare o deselezionare)
+                        </span>
+                      </div>
+                      <div className="rc-pill-group" style={{ padding: '2px 0' }}>
+                        {Object.entries(TIPO_FORNITURA_LABELS).map(([val, lab]) => {
+                          const isSelected = tipoForn === val;
                           return (
-                            <div key={i} className="rc-attachment-chip">
-                              <AppIcon name="fileText" size={14} />
-                              <a
-                                href={info.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="rc-attachment-link"
-                                title={`Apri ${info.name} in una nuova scheda`}
-                              >
-                                {info.name}
-                              </a>
-                            </div>
+                            <button
+                              key={val}
+                              type="button"
+                              className={`rc-pill-chip rc-pill-chip--fornitura ${isSelected ? 'is-active' : ''}`}
+                              onClick={() => handleToggleTipoFornituraAcquisti(articolo.id, val)}
+                            >
+                              <span className={`rc-pill-chip__indicator rc-pill-chip__indicator--radio ${isSelected ? 'is-active' : ''}`}>
+                                {isSelected && <span className="rc-pill-chip__dot" />}
+                              </span>
+                              <span>{lab}</span>
+                            </button>
                           );
                         })}
+                      </div>
+                    </div>
+
+                    {/* Allegati dell'articolo con Drag and Drop */}
+                    <div className="rc-form-group" style={{ marginTop: 6, marginBottom: 0 }}>
+                      <label className="rc-label" style={{ marginBottom: 6 }}>Allegati Articolo</label>
+                      <ArticleDropzone
+                        existingAttachments={articolo.attachments || []}
+                        onUpload={(files) => handleUploadArticoloAttachments(articolo.id, files)}
+                        isUploading={uploadingAttArtId === articolo.id}
+                      />
+                    </div>
+
+                    {articolo.created_at && (
+                      <div style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <AppIcon name="clock" size={12} /> {formatDate(articolo.created_at)}
+                        {(articolo.author?.full_name || articolo.author?.username) && (
+                          <span>({articolo.author.full_name || articolo.author.username})</span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1270,15 +1984,19 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
               // Vista Commerciale (solo completate)
               if (userRole === 'commerciale') {
                 return (
-                  <div key={articolo.id} className="rc-articolo-card">
-                    <div className="rc-articolo-card__header">
-                      <h4 className="rc-articolo-card__title">{articolo.titolo}</h4>
+                  <div key={articolo.id} className="rc-articolo-card rc-articolo-card--editable" data-theme={index % 6}>
+                    <div className="rc-articolo-card__topbar">
+                      <div className="rc-articolo-card__badge">
+                        <AppIcon name="package" size={13} />
+                        <span>Articolo #{index + 1}</span>
+                      </div>
                       {articolo.prezzo_listino != null && (
                         <span className="badge badge-active" style={{ fontSize: '0.85rem' }}>
                           Listino: {formatCurrency(articolo.prezzo_listino)}
                         </span>
                       )}
                     </div>
+                    <h4 className="rc-articolo-card__title" style={{ margin: '4px 0 2px 0' }}>{articolo.titolo}</h4>
                     {articolo.descrizione && (
                       <p style={{ margin: '4px 0 8px 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{articolo.descrizione}</p>
                     )}
@@ -1321,13 +2039,30 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
               }
 
               // Vista standard (acquisti + admin non in fase manca_listino)
+              let originalSnap = null;
+              if (userRole === 'admin' && articolo.testo_originale_acquisti) {
+                try { originalSnap = JSON.parse(articolo.testo_originale_acquisti); }
+                catch { originalSnap = null; }
+              }
+              const origTitolo = (originalSnap && originalSnap.titolo !== undefined) ? originalSnap.titolo : null;
+              const origDesc = (originalSnap && originalSnap.descrizione !== undefined) ? originalSnap.descrizione : null;
+              const origNote = (originalSnap && originalSnap.note_admin !== undefined) ? originalSnap.note_admin : null;
+
               return (
                 <div key={articolo.id} className="rc-articolo-card">
-                  <div className="rc-articolo-card__header">
-                    <h4 className="rc-articolo-card__title">{articolo.titolo}</h4>
+                  <div className="rc-articolo-card__topbar">
+                    <div className="rc-articolo-card__badge">
+                      <AppIcon name="package" size={13} />
+                      <span>Articolo #{index + 1}</span>
+                    </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      {articolo.costo != null && (
+                      {userRole === 'admin' && (
                         <span className="rc-price-tag">Costo: {formatCurrency(articolo.costo)}</span>
+                      )}
+                      {articolo.costo != null && articolo.costo > 0 && userRole !== 'admin' ? (
+                        <span className="rc-price-tag">Costo: {formatCurrency(articolo.costo)}</span>
+                      ) : (
+                        userRole !== 'admin' && <span className="badge badge-pending" style={{ fontSize: '0.8rem' }}>Costo da definire</span>
                       )}
                       {articolo.prezzo_listino != null && (
                         <span className="badge badge-active" style={{ fontSize: '0.85rem' }}>
@@ -1346,13 +2081,27 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
                       )}
                     </div>
                   </div>
+                  <div style={{ margin: '4px 0 2px 0' }}>
+                    {userRole === 'admin' && origTitolo && (
+                      <TextDiffBadges original={origTitolo} current={articolo.titolo} />
+                    )}
+                    <h4 className="rc-articolo-card__title" style={{ margin: 0 }}>{articolo.titolo}</h4>
+                  </div>
                   {articolo.descrizione && (
-                    <p style={{ margin: '4px 0 8px 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{articolo.descrizione}</p>
+                    <div style={{ margin: '4px 0 8px 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                      {userRole === 'admin' && origDesc && (
+                        <TextDiffBadges original={origDesc} current={articolo.descrizione} />
+                      )}
+                      <p style={{ margin: 0 }}>{articolo.descrizione}</p>
+                    </div>
                   )}
                   {articolo.note_admin && (
-                    <p style={{ margin: '4px 0 8px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                      Note Admin: {articolo.note_admin}
-                    </p>
+                    <div style={{ margin: '4px 0 8px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                      {userRole === 'admin' && origNote && (
+                        <TextDiffBadges original={origNote} current={articolo.note_admin} />
+                      )}
+                      <p style={{ margin: 0 }}>Note Admin: {articolo.note_admin}</p>
+                    </div>
                   )}
                   <div className="rc-articolo-card__tags">
                     {articolo.is_standard && <span className="badge badge-standard">Standard</span>}
@@ -1414,16 +2163,22 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
 
           <button className="btn btn-secondary" onClick={onClose}>Chiudi</button>
 
-          {/* Acquisti: prendi in carico */}
-          {userRole === 'acquisti' && richiesta.status === 'aperta' && (
-            <button className="btn btn-primary" onClick={handlePrendiInCaricoClick} disabled={sending}>
-              <AppIcon name="check" size={16} /> Prendi in Carico
+          {/* Acquisti / Admin in_lavorazione: Salva Modifiche (senza inviare) */}
+          {(userRole === 'acquisti' || userRole === 'admin') && richiesta.status === 'in_lavorazione' && richiesta.articoli?.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleSaveAllArticoli}
+              disabled={sending || savingArticoli}
+              title="Salva le modifiche agli articoli senza inviare ad amministrazione"
+            >
+              <AppIcon name="save" size={15} /> {savingArticoli ? 'Salvataggio...' : 'Salva Modifiche'}
             </button>
           )}
 
           {/* Acquisti: invia ad admin (Consegna) */}
           {userRole === 'acquisti' && richiesta.status === 'in_lavorazione' && (
-            <button className="btn btn-primary" onClick={handleInviaAdAdminClick} disabled={sending}>
+            <button className="btn btn-primary" onClick={handleInviaAdAdminClick} disabled={sending || savingArticoli}>
               <AppIcon name="send" size={16} /> Consegna
             </button>
           )}
@@ -1437,8 +2192,21 @@ function DettaglioModal({ richiestaId, userRole, onClose, onUpdated, onDeleted }
 
           {/* Admin: invia ad admin (se in lavorazione) */}
           {userRole === 'admin' && richiesta.status === 'in_lavorazione' && (
-            <button className="btn btn-primary" onClick={handleInviaAdAdminClick} disabled={sending}>
+            <button className="btn btn-primary" onClick={handleInviaAdAdminClick} disabled={sending || savingArticoli}>
               <AppIcon name="send" size={16} /> Invia a Listino
+            </button>
+          )}
+
+          {/* Admin in manca_listino: Salva Modifiche (bozza senza completare) */}
+          {userRole === 'admin' && richiesta.status === 'manca_listino' && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleSaveAllArticoli}
+              disabled={sending || savingArticoli}
+              title="Salva le modifiche ai testi e prezzi senza completare la richiesta"
+            >
+              <AppIcon name="save" size={15} /> {savingArticoli ? 'Salvataggio...' : 'Salva Modifiche'}
             </button>
           )}
 
@@ -1713,7 +2481,7 @@ export default function RichiesteCommercialiPage() {
     setViewMode(mode);
     try {
       localStorage.setItem('rc_view_mode', mode);
-    } catch {}
+    } catch { }
   };
 
   const loadTrashCount = useCallback(async () => {
@@ -1814,9 +2582,18 @@ export default function RichiesteCommercialiPage() {
     return acc;
   }, {});
 
+  // Conteggio richieste attive per la vista "Tutte" (escluse le completate)
+  const activeCount = richieste.filter(r => r.status !== 'completata').length;
+
   // Filtra richieste
   const filtered = richieste.filter(r => {
-    if (filterStatus && r.status !== filterStatus) return false;
+    if (filterStatus) {
+      if (r.status !== filterStatus) return false;
+    } else {
+      // Nella vista "Tutte", nascondi le richieste completate
+      if (r.status === 'completata') return false;
+    }
+
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       return (
@@ -1857,19 +2634,20 @@ export default function RichiesteCommercialiPage() {
             <button
               className={`filter-chip ${filterStatus === null ? 'active' : ''}`}
               onClick={() => setFilterStatus(null)}
+              title="Mostra tutte le richieste aperte (in lavorazione e manca listino)"
             >
-              <span>Tutte</span>
-              <span className="filter-chip-count">{richieste.length}</span>
+              <span>Aperte</span>
+              <span className="filter-chip-count">{activeCount}</span>
             </button>
-            {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
+            {STATUS_FILTER_TABS.map((tab) => (
               <button
-                key={key}
-                className={`filter-chip ${filterStatus === key ? 'active' : ''}`}
-                onClick={() => setFilterStatus(filterStatus === key ? null : key)}
+                key={tab.key}
+                className={`filter-chip ${filterStatus === tab.key ? 'active' : ''}`}
+                onClick={() => setFilterStatus(filterStatus === tab.key ? null : tab.key)}
               >
-                <span className="rc-filter-dot" style={{ background: cfg.color }} />
-                <span>{cfg.label}</span>
-                <span className="filter-chip-count">{stats[key] || 0}</span>
+                <span className="rc-filter-dot" style={{ background: tab.color }} />
+                <span>{tab.label}</span>
+                <span className="filter-chip-count">{stats[tab.key] || 0}</span>
               </button>
             ))}
           </div>
@@ -1952,16 +2730,33 @@ export default function RichiesteCommercialiPage() {
           <div className="empty-state-icon">
             <AppIcon name={searchQuery || filterStatus ? 'search' : 'briefcase'} size={42} />
           </div>
-          <h3>{searchQuery || filterStatus ? 'Nessuna richiesta trovata' : 'Nessuna richiesta ancora'}</h3>
+          <h3>
+            {searchQuery || filterStatus
+              ? 'Nessuna richiesta trovata'
+              : richieste.length > 0
+              ? 'Nessuna richiesta aperta'
+              : 'Nessuna richiesta ancora'}
+          </h3>
           <p>
             {searchQuery || filterStatus
               ? 'Nessuna richiesta corrisponde ai filtri o al termine di ricerca.'
+              : richieste.length > 0
+              ? 'Tutte le richieste registrate sono state completate. Clicca su "Completate" per visualizzarle.'
               : 'Non ci sono ancora richieste registrate. Creane una nuova per iniziare il coordinamento commerciale e acquisti.'}
           </p>
-          {(userRole === 'commerciale' || userRole === 'admin') && !searchQuery && !filterStatus && (
-            <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setShowNuovaModal(true)}>
-              <AppIcon name="plus" size={16} /> Crea la prima richiesta
-            </button>
+          {!searchQuery && !filterStatus && (
+            <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {richieste.length > 0 && (
+                <button type="button" className="btn btn-secondary" onClick={() => setFilterStatus('completata')}>
+                  <AppIcon name="check" size={16} /> Mostra completate ({stats['completata'] || 0})
+                </button>
+              )}
+              {(userRole === 'commerciale' || userRole === 'admin') && (
+                <button type="button" className="btn btn-primary" onClick={() => setShowNuovaModal(true)}>
+                  <AppIcon name="plus" size={16} /> {richieste.length > 0 ? 'Nuova Richiesta' : 'Crea la prima richiesta'}
+                </button>
+              )}
+            </div>
           )}
         </div>
       ) : viewMode === 'list' ? (

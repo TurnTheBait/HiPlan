@@ -9,7 +9,7 @@ import shutil
 import uuid
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import List, Union, Dict, Any
+from typing import List, Union, Dict, Any, Optional
 
 # pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from sqlalchemy.ext.asyncio import AsyncSession
 # pyrefly: ignore [missing-import]
 from sqlalchemy.future import select
-# pyrefly: ignore [missing-import]
+from sqlalchemy import inspect
 from sqlalchemy.orm import selectinload
 
 from app.core.dependencies import get_db, get_current_user
@@ -32,6 +32,7 @@ from app.schemas.richiesta_commerciale import (
     RichiestaOutAcquisti,
     ArticoloCreate,
     ArticoloUpdate,
+    InviaAdAdminIn,
     CompletaRichiestaIn,
 )
 
@@ -215,6 +216,7 @@ def _serialize_richiesta(richiesta: RichiestaCommerciale, role: str) -> dict:
     }
 
     if role == "admin":
+        base["description_originale"] = getattr(richiesta, "description_originale", None)
         # Admin vede tutto
         base["articoli"] = [_serialize_articolo(a, "admin") for a in richiesta.articoli]
     elif role == "acquisti":
@@ -229,14 +231,23 @@ def _serialize_richiesta(richiesta: RichiestaCommerciale, role: str) -> dict:
 
 def _serialize_articolo(articolo: ArticoloRichiesta, role: str) -> dict:
     """Serializza un articolo adattando i campi al ruolo."""
+    author_info = None
+    try:
+        insp = inspect(articolo)
+        if "author" in insp.dict and insp.dict["author"] is not None:
+            a_author = insp.dict["author"]
+            author_info = {
+                "id": a_author.id,
+                "username": a_author.username,
+                "full_name": a_author.full_name,
+            }
+    except Exception:
+        author_info = None
+
     base = {
         "id": articolo.id,
         "richiesta_id": articolo.richiesta_id,
-        "author": {
-            "id": articolo.author.id,
-            "username": articolo.author.username,
-            "full_name": articolo.author.full_name,
-        } if getattr(articolo, 'author', None) else None,
+        "author": author_info,
         "titolo": articolo.titolo,
         "descrizione": articolo.descrizione,
         "is_standard": articolo.is_standard,
@@ -321,9 +332,30 @@ async def create_richiesta(
         cliente=data.cliente,
         attachments="[]",
         author_id=current_user.id,
-        status=RichiestaStatus.APERTA,
+        status=RichiestaStatus.IN_LAVORAZIONE,
     )
     db.add(richiesta)
+    await db.flush()
+
+    if data.articoli:
+        for art_data in data.articoli:
+            titolo = (art_data.titolo or "").strip()
+            if not titolo:
+                continue
+            articolo = ArticoloRichiesta(
+                richiesta_id=richiesta.id,
+                author_id=current_user.id,
+                titolo=titolo,
+                costo=0.0,
+                descrizione=art_data.descrizione,
+                is_standard=art_data.is_standard,
+                is_atex=art_data.is_atex,
+                is_alimentare=art_data.is_alimentare,
+                tipo_fornitura=art_data.tipo_fornitura,
+                attachments="[]",
+            )
+            db.add(articolo)
+
     await db.commit()
     await db.refresh(richiesta)
 
@@ -555,8 +587,8 @@ async def update_richiesta(
     if role == "commerciale":
         if str(richiesta.author_id) != str(current_user.id):
             raise HTTPException(status_code=403, detail="Non puoi modificare richieste di altri utenti")
-        if richiesta.status != RichiestaStatus.APERTA:
-            raise HTTPException(status_code=400, detail="Puoi modificare la richiesta solo finché è in stato Aperta")
+        if richiesta.status not in (RichiestaStatus.APERTA, RichiestaStatus.IN_LAVORAZIONE):
+            raise HTTPException(status_code=400, detail="Non puoi modificare la richiesta: è già stata inviata a listino o completata")
         if data.status is not None and data.status != richiesta.status:
             raise HTTPException(status_code=403, detail="Non hai i permessi per modificare lo stato")
 
@@ -726,7 +758,12 @@ async def add_articolo(
     richiesta.updated_at = datetime.now(timezone.utc)
     db.add(articolo)
     await db.commit()
-    await db.refresh(articolo)
+    res_reloaded = await db.execute(
+        select(ArticoloRichiesta)
+        .options(selectinload(ArticoloRichiesta.author))
+        .where(ArticoloRichiesta.id == articolo.id)
+    )
+    articolo = res_reloaded.scalar_one_or_none()
 
     return _serialize_articolo(articolo, role)
 
@@ -794,7 +831,12 @@ async def update_articolo(
             articolo.note_admin = data.note_admin  # type: ignore
 
     await db.commit()
-    await db.refresh(articolo)
+    res_reloaded = await db.execute(
+        select(ArticoloRichiesta)
+        .options(selectinload(ArticoloRichiesta.author))
+        .where(ArticoloRichiesta.id == articolo_id)
+    )
+    articolo = res_reloaded.scalar_one_or_none()
     return _serialize_articolo(articolo, role)
 
 
@@ -907,14 +949,85 @@ async def upload_attachments_articolo(
     return {"attachments": current}
 
 
+@router.put("/{richiesta_id}/articoli-bulk")
+async def salva_articoli_bulk(
+    richiesta_id: str,
+    data: InviaAdAdminIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Acquisti o Admin salva le modifiche di più articoli contemporaneamente senza cambiare lo stato della richiesta.
+    """
+    role = await _require_role(db, current_user, ["acquisti", "admin"])
+
+    res = await db.execute(
+        select(RichiestaCommerciale)
+        .options(*_richiesta_options())
+        .where(RichiestaCommerciale.id == richiesta_id)
+    )
+    richiesta = res.scalar_one_or_none()
+    if not richiesta:
+        raise HTTPException(status_code=404, detail="Richiesta non trovata")
+
+    if role != "admin" and richiesta.status != RichiestaStatus.IN_LAVORAZIONE:
+        raise HTTPException(
+            status_code=400,
+            detail="Puoi modificare gli articoli solo quando la richiesta è IN LAVORAZIONE",
+        )
+
+    if data.articoli:
+        art_map = {a.id: a for a in richiesta.articoli}
+        for art_in in data.articoli:
+            art = art_map.get(art_in.id)
+            if art:
+                if art_in.titolo is not None and art_in.titolo.strip():
+                    art.titolo = art_in.titolo.strip()
+                if art_in.costo is not None:
+                    art.costo = art_in.costo
+                if art_in.descrizione is not None:
+                    art.descrizione = art_in.descrizione.strip() or None
+                if art_in.is_standard is not None:
+                    art.is_standard = art_in.is_standard
+                if art_in.is_atex is not None:
+                    art.is_atex = art_in.is_atex
+                if art_in.is_alimentare is not None:
+                    art.is_alimentare = art_in.is_alimentare
+                if "tipo_fornitura" in art_in.model_fields_set:
+                    art.tipo_fornitura = art_in.tipo_fornitura
+                if role == "admin":
+                    if art_in.prezzo_listino is not None:
+                        art.prezzo_listino = art_in.prezzo_listino
+                    if art_in.note_admin is not None:
+                        art.note_admin = art_in.note_admin.strip() or None
+
+        if role == "admin" and data.descrizione is not None:
+            if not getattr(richiesta, "description_originale", None) and richiesta.description:
+                richiesta.description_originale = richiesta.description
+            richiesta.description = data.descrizione.strip() or None
+
+    richiesta.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    res_reloaded = await db.execute(
+        select(RichiestaCommerciale)
+        .options(*_richiesta_options())
+        .where(RichiestaCommerciale.id == richiesta_id)
+    )
+    richiesta = res_reloaded.scalar_one_or_none()
+    return _serialize_richiesta(richiesta, role)
+
+
 @router.put("/{richiesta_id}/invia-a-admin")
 async def invia_a_admin(
     richiesta_id: str,
+    data: Optional[InviaAdAdminIn] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Acquisti invia la richiesta all'admin per il prezzo di listino.
+    Salva automaticamente le modifiche inviate agli articoli.
     Salva lo snapshot del testo originale acquisti per il diff.
     (IN_LAVORAZIONE → MANCA_LISTINO)
     """
@@ -943,14 +1056,48 @@ async def invia_a_admin(
             detail="Aggiungi almeno un articolo prima di inviare all'admin",
         )
 
+    # Se passati articoli nel payload, aggiornali prima della transizione
+    if data and data.articoli:
+        art_map = {a.id: a for a in richiesta.articoli}
+        for art_in in data.articoli:
+            art = art_map.get(art_in.id)
+            if art:
+                if art_in.titolo is not None and art_in.titolo.strip():
+                    art.titolo = art_in.titolo.strip()
+                if art_in.costo is not None:
+                    art.costo = art_in.costo
+                if art_in.descrizione is not None:
+                    art.descrizione = art_in.descrizione.strip() or None
+                if art_in.is_standard is not None:
+                    art.is_standard = art_in.is_standard
+                if art_in.is_atex is not None:
+                    art.is_atex = art_in.is_atex
+                if art_in.is_alimentare is not None:
+                    art.is_alimentare = art_in.is_alimentare
+                if "tipo_fornitura" in art_in.model_fields_set:
+                    art.tipo_fornitura = art_in.tipo_fornitura
+        await db.flush()
+
+    # Valida che tutti gli articoli abbiano un costo valido > 0
+    for art in richiesta.articoli:
+        if art.costo is None or art.costo <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Inserisci un costo valido per l'articolo '{art.titolo}' prima di inviare",
+            )
+
     # Salva snapshot testo originale acquisti per ogni articolo
     for articolo in richiesta.articoli:
         snapshot = {
             "titolo": articolo.titolo,
             "descrizione": articolo.descrizione or "",
             "costo": articolo.costo,
+            "note_admin": articolo.note_admin or "",
         }
         articolo.testo_originale_acquisti = json.dumps(snapshot)  # type: ignore
+
+    if not getattr(richiesta, "description_originale", None) and richiesta.description:
+        richiesta.description_originale = richiesta.description  # type: ignore
 
     richiesta.status = RichiestaStatus.MANCA_LISTINO  # type: ignore
     if not richiesta.articoli_inserted_by_id:
@@ -959,7 +1106,13 @@ async def invia_a_admin(
         richiesta.articoli_inserted_at = datetime.now(timezone.utc)
     richiesta.updated_at = datetime.now(timezone.utc)
     await db.commit()
-    await db.refresh(richiesta)
+
+    res_reloaded = await db.execute(
+        select(RichiestaCommerciale)
+        .options(*_richiesta_options())
+        .where(RichiestaCommerciale.id == richiesta_id)
+    )
+    richiesta = res_reloaded.scalar_one_or_none()
 
     # Email notifica agli admin
     await _notify_admin_manca_listino(db, richiesta, current_user)
@@ -1010,6 +1163,11 @@ async def completa_richiesta(
             articolo.descrizione = item.descrizione  # type: ignore
         if item.note_admin is not None:
             articolo.note_admin = item.note_admin  # type: ignore
+
+    if data.descrizione is not None:
+        if not getattr(richiesta, "description_originale", None) and richiesta.description:
+            richiesta.description_originale = richiesta.description  # type: ignore
+        richiesta.description = data.descrizione.strip() or None  # type: ignore
 
     richiesta.status = RichiestaStatus.COMPLETATA  # type: ignore
     richiesta.listino_inserted_by_id = current_user.id  # type: ignore

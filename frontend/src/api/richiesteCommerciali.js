@@ -86,13 +86,22 @@ export async function uploadAttachmentsArticolo(richiestaId, articoloId, files) 
   return res.data;
 }
 
-export async function inviaAdAdmin(id) {
-  const res = await api.put(`${BASE}/${id}/invia-a-admin`, {});
+export async function inviaAdAdmin(id, data = {}) {
+  const res = await api.put(`${BASE}/${id}/invia-a-admin`, data);
   return res.data;
 }
 
-export async function completaRichiesta(id, articoli) {
-  const res = await api.put(`${BASE}/${id}/completa`, { articoli });
+export async function salvaArticoli(id, articoli, descrizione = null) {
+  const payload = { articoli };
+  if (descrizione !== null) payload.descrizione = descrizione;
+  const res = await api.put(`${BASE}/${id}/articoli-bulk`, payload);
+  return res.data;
+}
+
+export async function completaRichiesta(id, articoli, descrizione = null) {
+  const payload = { articoli };
+  if (descrizione !== null) payload.descrizione = descrizione;
+  const res = await api.put(`${BASE}/${id}/completa`, payload);
   return res.data;
 }
 

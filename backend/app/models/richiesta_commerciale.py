@@ -25,6 +25,7 @@ class RichiestaCommerciale(Base, TimestampMixin):
     id = uuid_pk()
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
+    description_originale = Column(Text, nullable=True)  # Snapshot descrizione originale (visibile diff solo admin)
     numero_offerta = Column(String(100), nullable=True)
     cliente = Column(String(255), nullable=False)
     attachments = Column(Text, default="[]", nullable=False)  # JSON list of file paths

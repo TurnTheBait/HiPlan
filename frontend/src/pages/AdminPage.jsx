@@ -2004,7 +2004,7 @@ function RichiesteCommercialiAdminSection({ users, toast }) {
           </div>
 
           <UserListEditor
-            label="Commerciali (possono aprire richieste)"
+            label="Commerciali"
             list={commerciali}
             setList={setCommerciali}
             group="commerciale"
@@ -2012,7 +2012,7 @@ function RichiesteCommercialiAdminSection({ users, toast }) {
             deptCheckboxLabel="Aggiungi di default gli addetti con reparto commerciale"
           />
           <UserListEditor
-            label="Ufficio Acquisti (ricevono e gestiscono le richieste)"
+            label="Ufficio acquisti"
             list={acquisti}
             setList={setAcquisti}
             group="acquisti"
@@ -2020,7 +2020,7 @@ function RichiesteCommercialiAdminSection({ users, toast }) {
             deptCheckboxLabel="Aggiungi di default gli addetti con reparto acquisti"
           />
           <UserListEditor
-            label="Admin (prezzi di listino — gli admin di sistema sono inclusi di default)"
+            label="Admin"
             list={admins}
             setList={setAdmins}
             group="admin"
